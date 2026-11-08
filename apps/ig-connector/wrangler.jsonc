@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // The Instagram connector (OP-168): a small MCP server that claude.ai reaches as a custom connector.
+  // Its own Worker, apart from the park: no routes on the park's domain, no bindings, only workers.dev.
+  "name": "owl-park-ig-connector",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  // Secrets, set with `wrangler secret put`, never written here (README.md):
+  //   IG_ACCESS_TOKEN  the Instagram account's long-lived token (60 days; refresh steps in the README)
+  //   CONNECTOR_KEY    the secret path segment: /mcp/<CONNECTOR_KEY> (32+ random characters)
+  //   APPROVAL_KEY     signs the approval ids that prepare_reel hands out and publish_reel checks
+  // They are typed as optional in src/env.ts; with one missing, the tools that need it refuse.
+  // Off: Workers Logs and traces record each request's URL, and the URL carries CONNECTOR_KEY. The code
+  // itself logs nothing, so neither the key nor the token is written anywhere.
+  "observability": { "enabled": false }
+}

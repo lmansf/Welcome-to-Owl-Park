@@ -1,0 +1,7461 @@
+{
+  "schema": 1,
+  "source": "apps/park/src/game/art.ts",
+  "keys": {
+    "hub": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "hub-west": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "hub-east": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "commons-west": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "commons": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "commons-east": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "hub-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "grove": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "grove-west": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "grove-east": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "grove-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "grove-west-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "market": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "market-east": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "market-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "market-east-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "lobby": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "lobby-west": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "homes-west": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "homes": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "nest": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "arcade": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "arcade-mid": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "arcade-end": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "arcade-title-hoot-hop": {
+      "w": 364,
+      "h": 114,
+      "kind": "arcade",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "arcade-title-moon-flap": {
+      "w": 251,
+      "h": 115,
+      "kind": "arcade",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "arcade-title-talon-toss": {
+      "w": 280,
+      "h": 110,
+      "kind": "arcade",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "arcade-hop-bg": {
+      "w": 480,
+      "h": 640,
+      "kind": "arcade",
+      "format": "webp",
+      "with_2x": true
+    },
+    "arcade-hop-drone": {
+      "w": 44,
+      "h": 36,
+      "kind": "arcade",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "arcade-hop-cart": {
+      "w": 96,
+      "h": 84,
+      "kind": "arcade",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "arcade-hop-bat": {
+      "w": 40,
+      "h": 34,
+      "kind": "arcade",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "arcade-hop-log": {
+      "w": 112,
+      "h": 40,
+      "kind": "arcade",
+      "key_colour": "#00FF00",
+      "format": "webp",
+      "with_2x": true
+    },
+    "arcade-hop-river": {
+      "w": 320,
+      "h": 80,
+      "kind": "arcade",
+      "key_colour": "#00FF00",
+      "format": "webp",
+      "with_2x": true
+    },
+    "arcade-flap-bg": {
+      "w": 480,
+      "h": 640,
+      "kind": "arcade",
+      "format": "webp",
+      "with_2x": true
+    },
+    "arcade-flap-branch": {
+      "w": 128,
+      "h": 575,
+      "kind": "arcade",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "arcade-flap-ground": {
+      "w": 180,
+      "h": 40,
+      "kind": "arcade",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "arcade-knock-bg": {
+      "w": 480,
+      "h": 640,
+      "kind": "arcade",
+      "format": "webp",
+      "with_2x": true
+    },
+    "arcade-knock-sling": {
+      "w": 60,
+      "h": 120,
+      "kind": "arcade",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "arcade-knock-crate": {
+      "w": 36,
+      "h": 36,
+      "kind": "arcade",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "arcade-knock-stand": {
+      "w": 72,
+      "h": 72,
+      "kind": "arcade",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "arcade-knock-plank": {
+      "w": 144,
+      "h": 16,
+      "kind": "arcade",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "arcade-knock-nest": {
+      "w": 60,
+      "h": 24,
+      "kind": "arcade",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "guardian": {
+      "w": 720,
+      "h": 820,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "robot-owl": {
+      "w": 900,
+      "h": 900,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "glass-idol": {
+      "w": 520,
+      "h": 416,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "blockade-not-yet-fledged": {
+      "w": 300,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "blockade-hatching-soon": {
+      "w": 300,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "decor-rug": {
+      "w": 240,
+      "h": 100,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "decor-armchair": {
+      "w": 150,
+      "h": 150,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "decor-bookshelf": {
+      "w": 150,
+      "h": 230,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "decor-lamp": {
+      "w": 120,
+      "h": 210,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "decor-potted-fern": {
+      "w": 130,
+      "h": 150,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "decor-mushroom-stool": {
+      "w": 120,
+      "h": 100,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "decor-quilt-bed": {
+      "w": 260,
+      "h": 170,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "decor-acorn-bowl": {
+      "w": 120,
+      "h": 90,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "decor-teapot-table": {
+      "w": 170,
+      "h": 140,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "decor-wall-clock": {
+      "w": 100,
+      "h": 140,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "decor-framed-leaf": {
+      "w": 110,
+      "h": 140,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "decor-window-box": {
+      "w": 180,
+      "h": 110,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "decor-lantern-string": {
+      "w": 180,
+      "h": 100,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "decor-moss-rug": {
+      "w": 220,
+      "h": 100,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "decor-stump-table": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "decor-feather-mobile": {
+      "w": 110,
+      "h": 160,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "owl-body": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-master",
+      "with_2x": true
+    },
+    "owl-belly": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-master",
+      "with_2x": true
+    },
+    "owl-accent": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-master",
+      "with_2x": true
+    },
+    "owl-face": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-master",
+      "with_2x": true
+    },
+    "owl-blink": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-master",
+      "with_2x": true
+    },
+    "owl-barn-body": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-barn-master",
+      "with_2x": true
+    },
+    "owl-barn-belly": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-barn-master",
+      "with_2x": true
+    },
+    "owl-barn-accent": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-barn-master",
+      "with_2x": true
+    },
+    "owl-barn-face": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-barn-master",
+      "with_2x": true
+    },
+    "owl-barn-blink": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-barn-master",
+      "with_2x": true
+    },
+    "owl-burrowing-body": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-burrowing-master",
+      "with_2x": true
+    },
+    "owl-burrowing-belly": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-burrowing-master",
+      "with_2x": true
+    },
+    "owl-burrowing-accent": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-burrowing-master",
+      "with_2x": true
+    },
+    "owl-burrowing-face": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-burrowing-master",
+      "with_2x": true
+    },
+    "owl-burrowing-blink": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-burrowing-master",
+      "with_2x": true
+    },
+    "owl-snowy-body": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-snowy-master",
+      "with_2x": true
+    },
+    "owl-snowy-belly": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-snowy-master",
+      "with_2x": true
+    },
+    "owl-snowy-accent": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-snowy-master",
+      "with_2x": true
+    },
+    "owl-snowy-face": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-snowy-master",
+      "with_2x": true
+    },
+    "owl-snowy-blink": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-snowy-master",
+      "with_2x": true
+    },
+    "owl-screech-body": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-screech-master",
+      "with_2x": true
+    },
+    "owl-screech-belly": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-screech-master",
+      "with_2x": true
+    },
+    "owl-screech-accent": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-screech-master",
+      "with_2x": true
+    },
+    "owl-screech-face": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-screech-master",
+      "with_2x": true
+    },
+    "owl-screech-blink": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-screech-master",
+      "with_2x": true
+    },
+    "owl-flight-body": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-flight-master",
+      "with_2x": true
+    },
+    "owl-flight-belly": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-flight-master",
+      "with_2x": true
+    },
+    "owl-flight-accent": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-flight-master",
+      "with_2x": true
+    },
+    "owl-barn-flight-body": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-barn-flight-master",
+      "with_2x": true
+    },
+    "owl-barn-flight-belly": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-barn-flight-master",
+      "with_2x": true
+    },
+    "owl-barn-flight-accent": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-barn-flight-master",
+      "with_2x": true
+    },
+    "owl-burrowing-flight-body": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-burrowing-flight-master",
+      "with_2x": true
+    },
+    "owl-burrowing-flight-belly": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-burrowing-flight-master",
+      "with_2x": true
+    },
+    "owl-burrowing-flight-accent": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-burrowing-flight-master",
+      "with_2x": true
+    },
+    "owl-snowy-flight-body": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-snowy-flight-master",
+      "with_2x": true
+    },
+    "owl-snowy-flight-belly": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-snowy-flight-master",
+      "with_2x": true
+    },
+    "owl-snowy-flight-accent": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-snowy-flight-master",
+      "with_2x": true
+    },
+    "owl-screech-flight-body": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-screech-flight-master",
+      "with_2x": true
+    },
+    "owl-screech-flight-belly": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-screech-flight-master",
+      "with_2x": true
+    },
+    "owl-screech-flight-accent": {
+      "w": 200,
+      "h": 240,
+      "kind": "owl",
+      "from": "owl-screech-flight-master",
+      "with_2x": true
+    },
+    "owl-wing-body": {
+      "w": 200,
+      "h": 120,
+      "kind": "owl",
+      "from": "owl-wing-right",
+      "with_2x": true
+    },
+    "owl-wing-accent": {
+      "w": 200,
+      "h": 120,
+      "kind": "owl",
+      "from": "owl-wing-right",
+      "with_2x": true
+    },
+    "item-witch-hat": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-top-hat": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-wizard-hat": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-beanie": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-crown": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-flower-crown": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-leaf-crown": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-propeller-cap": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-chef-hat": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-party-hat": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-beret": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-cowboy-hat": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-tricorn": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-horned-helmet": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-halo": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-mushroom-cap": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-acorn-cap": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-ribbon-bow": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-bobble-hat": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-pith-helmet": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-jester-hat": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-laurel-wreath": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-sailor-cap": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-mortarboard": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-bucket-hat": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-tiara": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-pumpkin-hat": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-snowflake-crown": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-candle-crown": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-moon-circlet": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-round-glasses": {
+      "w": 120,
+      "h": 60,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-star-shades": {
+      "w": 120,
+      "h": 60,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-heart-glasses": {
+      "w": 120,
+      "h": 60,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-monocle": {
+      "w": 120,
+      "h": 60,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-aviator-goggles": {
+      "w": 120,
+      "h": 60,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-masquerade-mask": {
+      "w": 120,
+      "h": 60,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-cat-eye-glasses": {
+      "w": 120,
+      "h": 60,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-brass-goggles": {
+      "w": 120,
+      "h": 60,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-pixel-shades": {
+      "w": 120,
+      "h": 60,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-half-moon-specs": {
+      "w": 120,
+      "h": 60,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-knit-scarf": {
+      "w": 130,
+      "h": 80,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-bow-tie": {
+      "w": 130,
+      "h": 80,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-bandana": {
+      "w": 130,
+      "h": 80,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-moon-pendant": {
+      "w": 130,
+      "h": 80,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-flower-lei": {
+      "w": 130,
+      "h": 80,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-bell-collar": {
+      "w": 130,
+      "h": 80,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-cape": {
+      "w": 130,
+      "h": 80,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-ruffle-collar": {
+      "w": 130,
+      "h": 80,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-pearl-necklace": {
+      "w": 130,
+      "h": 80,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-medal-ribbon": {
+      "w": 130,
+      "h": 80,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-mouse": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-snake": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-grasshopper": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "item-ladybug": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-beetle": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-snail": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-moth": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-firefly": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-frog": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "item-bat": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-hedgehog": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-caterpillar": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "item-cricket": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-butterfly": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-spider": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-dragonfly": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-salamander": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-mole": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-tiny-dragon": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "item-star-beetle": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-bat-headband": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-candy-corn-cap": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-earmuffs": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-holly-crown": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "item-mummy-wrap": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-jack-o-lantern-shades": {
+      "w": 120,
+      "h": 60,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-candy-necklace": {
+      "w": 130,
+      "h": 80,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-vampire-collar": {
+      "w": 130,
+      "h": 80,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-ghost": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-pumpkin-sprite": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "item-painted-egg": {
+      "w": 90,
+      "h": 90,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-rainbow-bunny": {
+      "w": 90,
+      "h": 90,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-painted-egg-crack-light": {
+      "w": 90,
+      "h": 90,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-painted-egg-crack-heavy": {
+      "w": 90,
+      "h": 90,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-rainbow-bunny-hop": {
+      "w": 90,
+      "h": 90,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-painted-egg-hatch-1": {
+      "w": 90,
+      "h": 90,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-painted-egg-hatch-2": {
+      "w": 90,
+      "h": 90,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-painted-egg-hatch-3": {
+      "w": 90,
+      "h": 90,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-snow-bunny": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-black-kitten": {
+      "w": 90,
+      "h": 90,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-aura": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-sparkle": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-eye-flames": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-ember-trail": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-frost-breath": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-snowfall": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-fireflies": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-hearts": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-music-notes": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-star-halo": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-moon-halo": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-leaf-swirl": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-petal-swirl": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-bubbles": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-smoke-wisps": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-rainbow-trail": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-lightning": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-neon-outline": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-shadow-aura": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-sunbeam": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-confetti": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-comet-tail": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-rune-ring": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-glitch": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-hoot": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-flap": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-spin": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-hop": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-tilt": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-bow": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-wave": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-dance": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-sleep": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-heart": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-surprise": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-laugh": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-shiver": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-puff": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-wink": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-nod": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-headshake": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-twirl": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-flip": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-stomp": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-preen": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-stretch": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-sneeze": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "icon-peek": {
+      "w": 64,
+      "h": 64,
+      "kind": "icon",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "glass": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "glass-east": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "climb-sky": {
+      "w": 480,
+      "h": 900,
+      "kind": "climb",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "climb-column": {
+      "w": 240,
+      "h": 900,
+      "kind": "climb",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "climb-ledge-a": {
+      "w": 160,
+      "h": 40,
+      "kind": "climb",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "climb-ledge-b": {
+      "w": 240,
+      "h": 60,
+      "kind": "climb",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "climb-balcony": {
+      "w": 480,
+      "h": 120,
+      "kind": "climb",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "climb-cloud-cap": {
+      "w": 480,
+      "h": 220,
+      "kind": "climb",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "item-glass-circlet": {
+      "w": 140,
+      "h": 100,
+      "kind": "item",
+      "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "tree-l1-0-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l1-0-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l1-0-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l1-w1-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l1-w1-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l1-w1-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l1-e1-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l1-e1-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l1-e1-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l1-e2-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l1-e2-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l1-e2-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l1-w1-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l1-0-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l1-e1-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l1-e2-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l4-0-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l4-0-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l4-0-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l4-0-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l4-0-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l4-0-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l4-e1-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l4-e1-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l4-e1-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l4-e1-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l4-e1-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l4-e1-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l3-0-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l3-0-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l3-0-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l3-0-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l3-0-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l3-0-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l3-e1-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l3-e1-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l3-e1-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l3-e1-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l3-e1-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l3-e1-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l3-e2-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l3-e2-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l3-e2-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l3-e2-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l3-e2-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l3-e2-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l2-0-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l2-0-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l2-0-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l2-0-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l2-0-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l2-0-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l2-w1-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l2-w1-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l2-w1-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l2-w1-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l2-w1-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l2-w1-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l2-w2-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l2-w2-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l2-w2-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l2-w2-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l2-w2-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l2-w2-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-w2-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l5-w2-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-w2-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-w2-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-w2-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-w2-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-w1-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l5-w1-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-w1-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-w1-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-w1-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-w1-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-0-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l5-0-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-0-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-0-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-0-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-0-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-e1-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l5-e1-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-e1-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-e1-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-e1-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-e1-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-e2-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l5-e2-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-e2-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-e2-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-e2-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-e2-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-e3-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l5-e3-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-e3-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-e3-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-e3-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l5-e3-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-w1-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l0-w1-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-w1-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-w1-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-w1-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-w1-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-0-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l0-0-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-0-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-0-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-0-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-0-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-c0-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l0-c0-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-c0-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-c0-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-c0-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-c0-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-c1-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l0-c1-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-c1-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-c1-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-c1-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-c1-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-c2-bg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room"
+    },
+    "tree-l0-c2-mid": {
+      "w": 800,
+      "h": 450,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-c2-back": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-c2-play": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-c2-front": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "tree-l0-c2-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#FF00FF",
+      "format": "webp"
+    },
+    "kit-tex-bark": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-inner-wood": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-planks": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-moss": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-leaves": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-rope": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-stone": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-earth": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-roots": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-cloth": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-branch-cap-left": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-branch-mid": {
+      "w": 320,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-branch-cap-right": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-branch-thin-cap-left": {
+      "w": 160,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-branch-thin-mid": {
+      "w": 320,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-branch-thin-cap-right": {
+      "w": 160,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-branch-slope-up": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-branch-slope-down": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-branch-stub": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-branch-knob": {
+      "w": 160,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-branch-fork": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-branch-wide": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-plank-cap-left": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-plank-mid": {
+      "w": 320,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-plank-cap-right": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-plank-thin-cap-left": {
+      "w": 160,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-plank-thin-mid": {
+      "w": 320,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-plank-thin-cap-right": {
+      "w": 160,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-plank-slope-up": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-plank-slope-down": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-plank-single": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-plank-railed-mid": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-plank-bridge-mid": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-plank-end-post": {
+      "w": 160,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stone-cap-left": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stone-mid": {
+      "w": 320,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stone-cap-right": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stone-thin-cap-left": {
+      "w": 160,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stone-thin-mid": {
+      "w": 320,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stone-thin-cap-right": {
+      "w": 160,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stone-slope-up": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stone-slope-down": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stone-single": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stone-mossy-mid": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stone-step": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stone-ledge-end": {
+      "w": 160,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-trim-moss-a": {
+      "w": 320,
+      "h": 80,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-trim-moss-b": {
+      "w": 320,
+      "h": 80,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-trim-grass": {
+      "w": 320,
+      "h": 80,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-trim-moss-hanging": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-trim-leaves": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-trim-roots": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-trim-plank-edge": {
+      "w": 320,
+      "h": 80,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-trim-stone-edge": {
+      "w": 320,
+      "h": 80,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-trim-bark-edge": {
+      "w": 320,
+      "h": 80,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-trim-rope": {
+      "w": 320,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-lantern-string-3": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-lantern-string-5": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stair-wood-right": {
+      "w": 400,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stair-wood-left": {
+      "w": 400,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stair-stone-right": {
+      "w": 400,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stair-stone-left": {
+      "w": 400,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-step-wood": {
+      "w": 200,
+      "h": 100,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-step-stone": {
+      "w": 200,
+      "h": 100,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stair-spiral": {
+      "w": 400,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ladder-wood": {
+      "w": 160,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ladder-rope": {
+      "w": 160,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stair-rail-right": {
+      "w": 400,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stair-rail-left": {
+      "w": 400,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-landing": {
+      "w": 400,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-door-round-closed": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-door-round-open": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-door-plank": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-doorway-stone": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-doorway-knothole": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-hatch-down": {
+      "w": 240,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-arch-portal-bare": {
+      "w": 360,
+      "h": 420,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-arch-portal-boarded": {
+      "w": 360,
+      "h": 420,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-arch-portal-open": {
+      "w": 360,
+      "h": 420,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-arch-small": {
+      "w": 240,
+      "h": 280,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-arch-top": {
+      "w": 360,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-arch-pillar": {
+      "w": 120,
+      "h": 420,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-gate-locked": {
+      "w": 300,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-barrier-rope": {
+      "w": 300,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-barrier-branch": {
+      "w": 300,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-barrier-boards": {
+      "w": 300,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-post-lantern": {
+      "w": 120,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-rope-coil": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-fence-section": {
+      "w": 300,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-fence-post": {
+      "w": 80,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-wall-low-stone": {
+      "w": 300,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-hedge": {
+      "w": 300,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-log-pile": {
+      "w": 300,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-boulder": {
+      "w": 300,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-bench-wood": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-bench-stone": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-seat-log": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stool": {
+      "w": 120,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-table-round": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-table-long": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-shelf-goods": {
+      "w": 240,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-shelf-empty": {
+      "w": 240,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-crate-stack": {
+      "w": 240,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-barrel": {
+      "w": 160,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-sack-pile": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-shelf-hanging": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-signpost": {
+      "w": 160,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-sign-hanging": {
+      "w": 240,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-sign-arrow": {
+      "w": 240,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-notice-board": {
+      "w": 240,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-lamp-post": {
+      "w": 160,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-lamp-hook": {
+      "w": 160,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stall-awning": {
+      "w": 480,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stall-counter": {
+      "w": 480,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-booth-ticket": {
+      "w": 480,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-turnstile": {
+      "w": 240,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stall-roof": {
+      "w": 480,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cart": {
+      "w": 480,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-branch-slope-gentle-up": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-branch-slope-gentle-down": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-branch-slope-steep-up": {
+      "w": 320,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-branch-slope-steep-down": {
+      "w": 320,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-branch-crest": {
+      "w": 320,
+      "h": 180,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-branch-dip": {
+      "w": 320,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-earth-slope-gentle-up": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-earth-slope-gentle-down": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-earth-slope-steep-up": {
+      "w": 320,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-earth-slope-steep-down": {
+      "w": 320,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-earth-crest": {
+      "w": 320,
+      "h": 180,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-earth-dip": {
+      "w": 320,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stone-slope-gentle-up": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stone-slope-gentle-down": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stone-slope-steep-up": {
+      "w": 320,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stone-slope-steep-down": {
+      "w": 320,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stone-crest": {
+      "w": 320,
+      "h": 180,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-stone-dip": {
+      "w": 320,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-roots-slope-gentle-up": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-roots-slope-gentle-down": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-roots-slope-steep-up": {
+      "w": 320,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-roots-slope-steep-down": {
+      "w": 320,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-roots-crest": {
+      "w": 320,
+      "h": 180,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-roots-dip": {
+      "w": 320,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-tex-entrance-shop-wood": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-entrance-plaza-stone": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-entrance-awning-cloth": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-entrance-shop-shelf-hats": {
+      "w": 240,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-entrance-shop-counter-glass": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-entrance-shop-stand": {
+      "w": 160,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-entrance-shop-gift-stack": {
+      "w": 160,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-entrance-shop-banner-bare": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-entrance-shop-lantern-cluster": {
+      "w": 160,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-entrance-ticket-window": {
+      "w": 320,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-entrance-turnstile-brass": {
+      "w": 240,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-entrance-queue-posts": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-entrance-welcome-mat": {
+      "w": 240,
+      "h": 80,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-entrance-easel-blank": {
+      "w": 160,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-entrance-planter-tree": {
+      "w": 160,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-entrance-plaza-bench": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-entrance-bird-bath": {
+      "w": 200,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-entrance-pennant-pole": {
+      "w": 120,
+      "h": 420,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-entrance-lantern-garland": {
+      "w": 480,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-entrance-map-board": {
+      "w": 240,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-entrance-stair-head": {
+      "w": 320,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-entrance-sky-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-entrance-sky-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-hero-plaza-far-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-hero-plaza-mid-a": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-hero-l4-far-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-entrance-far-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-entrance-far-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-entrance-mid-a": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-entrance-mid-b": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-entrance-mid-c": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-tex-clearing-fern-floor": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-clearing-hollow-wood": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-clearing-leaf-canopy": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-clearing-idol-pedestal": {
+      "w": 240,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-hammock": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-hut-small": {
+      "w": 320,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-rope-swing": {
+      "w": 160,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-mushroom-cluster": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-fern-clump": {
+      "w": 200,
+      "h": 140,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-updraft-vent": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-trunk-entrance": {
+      "w": 320,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-fungus-shelf": {
+      "w": 240,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-log-bridge": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-vine-curtain": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-beehive-lantern": {
+      "w": 120,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-leaf-platform": {
+      "w": 320,
+      "h": 100,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-acorn-cap": {
+      "w": 160,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-bough-end-perch": {
+      "w": 240,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-cocoon-bare": {
+      "w": 160,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-feather-lost": {
+      "w": 80,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-finish-shrine": {
+      "w": 320,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-sky-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-clearing-sky-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-clearing-far-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-clearing-far-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-clearing-mid-a": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-clearing-mid-b": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-clearing-mid-c": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-tex-glass-glass-panes": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-glass-pale-stone": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-glass-lead-lattice": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-glass-idol-pedestal": {
+      "w": 240,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-glass-lantern": {
+      "w": 120,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-stone-bench": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-rose-window": {
+      "w": 240,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-glass-planter": {
+      "w": 160,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-kiosk": {
+      "w": 320,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-lift-car": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-lift-rail": {
+      "w": 80,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-window-arch": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-buttress": {
+      "w": 160,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-glass-bridge": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-finial": {
+      "w": 120,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-door-glass-closed": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-door-glass-open": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-chandelier": {
+      "w": 240,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-feather-lost": {
+      "w": 80,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-finish-shrine": {
+      "w": 320,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-weathervane": {
+      "w": 160,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-sky-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-glass-sky-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-glass-far-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-glass-far-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-glass-mid-a": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-glass-mid-b": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-glass-mid-c": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-tex-neon-neon-brick": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-neon-wet-pavement": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-neon-corrugated-tin": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-neon-idol-pedestal": {
+      "w": 240,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-noodle-stall": {
+      "w": 320,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-paper-lantern-string": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-vending-machine": {
+      "w": 160,
+      "h": 280,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-neon-arrow-sign": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-robot-plinth": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-sign-platform": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-water-tank": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-air-unit": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-antenna-mast": {
+      "w": 120,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-fire-escape": {
+      "w": 240,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-rooftop-ledge": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-billboard-blank": {
+      "w": 400,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-satellite-dish": {
+      "w": 160,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-chimney-stack": {
+      "w": 160,
+      "h": 280,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-skylight": {
+      "w": 240,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-feather-lost": {
+      "w": 80,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-finish-shrine": {
+      "w": 320,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-sky-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-neon-sky-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-neon-far-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-neon-far-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-neon-mid-a": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-neon-mid-b": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-neon-mid-c": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-tex-canopy-woven-wicker": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-canopy-leaf-tops": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-canopy-twig-thatch": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-canopy-door-nest-closed": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-door-nest-open": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-nest-lantern": {
+      "w": 120,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-nest-window": {
+      "w": 160,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-woven-rail-mid": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-sign-board": {
+      "w": 240,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-twig-bench": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-leaf-perch": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-leaf-cluster": {
+      "w": 240,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-barrier-nest": {
+      "w": 320,
+      "h": 280,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-nest-roof": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-planter-wicker": {
+      "w": 160,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-rail-post": {
+      "w": 80,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-lantern-string": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-bough-tip": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-rope-coil": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-hanging-basket": {
+      "w": 160,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-woven-bridge-mid": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-canopy-sky-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-canopy-sky-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-canopy-far-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-canopy-far-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-canopy-mid-a": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-canopy-mid-b": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-canopy-mid-c": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-tex-high-lichen-bark": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-high-cloud-bank": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-high-silvered-planks": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-high-bough-mid": {
+      "w": 400,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-bough-end": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-rope-rail-mid": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-rope-rail-post": {
+      "w": 80,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-hook-lantern": {
+      "w": 120,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-mist-platform": {
+      "w": 400,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-knothole-door-closed": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-knothole-door-open": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-sign-board": {
+      "w": 160,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-rope-barrier": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-lantern-pole": {
+      "w": 120,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-cloud-bench": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-rope-ladder": {
+      "w": 120,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-lantern-string": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-hanging-moss": {
+      "w": 160,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-leaf-cluster": {
+      "w": 240,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-wind-chime": {
+      "w": 120,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-cloud-tuft": {
+      "w": 240,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-high-sky-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-high-sky-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-high-far-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-high-far-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-high-mid-a": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-high-mid-b": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-high-mid-c": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-tex-low-bough-bark": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-low-walkway-planks": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-low-lichen-moss": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-low-walkway-mid": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-walkway-cap-left": {
+      "w": 240,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-walkway-cap-right": {
+      "w": 240,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-rope-rail-mid": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-rope-rail-post": {
+      "w": 80,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-branch-lantern": {
+      "w": 160,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-bark-ledge-mid": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-bark-ledge-end": {
+      "w": 240,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-knothole-door-closed": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-knothole-door-open": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-bough-stub": {
+      "w": 160,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-leaf-clump": {
+      "w": 240,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-rope-ladder": {
+      "w": 120,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-rope-barrier": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-log-bench": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-signpost-blank": {
+      "w": 160,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-pulley-bucket": {
+      "w": 160,
+      "h": 280,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-hanging-basket": {
+      "w": 120,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-low-sky-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-low-sky-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-low-far-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-low-far-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-low-mid-a": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-low-mid-b": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-low-mid-c": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-tex-ground-forest-floor": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-ground-cobble-path": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-ground-fern-fronds": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-ground-gate-post": {
+      "w": 160,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-lantern-post": {
+      "w": 120,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-gate-arch": {
+      "w": 400,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-stone-step": {
+      "w": 240,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-bench": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-rope-barrier": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-market-stall": {
+      "w": 400,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-sign-board": {
+      "w": 160,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-lantern-garland": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-crate-stack": {
+      "w": 160,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-hand-cart": {
+      "w": 240,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-water-barrel": {
+      "w": 120,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-fallen-branch": {
+      "w": 400,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-fern-clump": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-mossy-boulder": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-stepping-stones": {
+      "w": 400,
+      "h": 80,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-tree-stump": {
+      "w": 200,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-roof-ridge": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ground-sky-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-ground-sky-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-ground-far-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-ground-far-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-ground-mid-a": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-ground-mid-b": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-ground-mid-c": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-tex-under-packed-earth": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-under-root-mat": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-under-cave-stone": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-under-lantern-post": {
+      "w": 120,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-root-arch": {
+      "w": 320,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-stair-root-right": {
+      "w": 240,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-stair-root-left": {
+      "w": 240,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-root-ledge-mid": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-boulder-flat": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-root-hang": {
+      "w": 160,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-stone-pile": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-root-knot": {
+      "w": 200,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-sign-root": {
+      "w": 240,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-barrier-roots": {
+      "w": 320,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-lantern-hang": {
+      "w": 120,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-root-buttress-left": {
+      "w": 320,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-root-buttress-right": {
+      "w": 320,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-mushroom-cluster": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-stone-pillar": {
+      "w": 120,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-stalactites": {
+      "w": 240,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-earth-mound": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-under-sky-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-under-sky-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-under-far-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-under-far-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-under-mid-a": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-under-mid-b": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-under-mid-c": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-tex-ink-paper-grain": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-ink-ink-stone": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-ink-woven-reed": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-ink-idol-pedestal": {
+      "w": 240,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-paper-lantern": {
+      "w": 120,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-tea-stall": {
+      "w": 320,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-scroll-stand": {
+      "w": 160,
+      "h": 280,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-ink-bench": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-stone-lantern": {
+      "w": 160,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-brush-stone": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-paper-cliff": {
+      "w": 320,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-reed-tuft": {
+      "w": 120,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-bamboo-span": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-temple-eave": {
+      "w": 400,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-rock-pillar": {
+      "w": 160,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-moon-gate": {
+      "w": 320,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-easel-blank": {
+      "w": 200,
+      "h": 280,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-ferry-raft": {
+      "w": 400,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-pine-bough": {
+      "w": 240,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-feather-lost": {
+      "w": 80,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-finish-shrine": {
+      "w": 320,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-sky-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-ink-sky-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-ink-far-a": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-ink-far-b": {
+      "w": 1600,
+      "h": 900,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-ink-mid-a": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-ink-mid-b": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-ink-mid-c": {
+      "w": 800,
+      "h": 450,
+      "kind": "layer",
+      "format": "webp",
+      "with_2x": false,
+      "key_colour": "#FF00FF"
+    },
+    "kit-clearing-thorn-roots": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-bramble-patch": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-vine-shortcut": {
+      "w": 120,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-log-shortcut": {
+      "w": 400,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-bough-perch": {
+      "w": 320,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-gust-leaves": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-checkpoint-bench": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-hut-door-closed": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-hut-door-open": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-deck-rail": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-fern-tall": {
+      "w": 160,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-root-shelf": {
+      "w": 320,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-neon-tube-hazard": {
+      "w": 80,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-rooftop-door-closed": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-rooftop-door-open": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-checkpoint-bench": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-cable-span": {
+      "w": 400,
+      "h": 80,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-rooftop-garden": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-tank-ladder": {
+      "w": 120,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-sign-hazard": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-pigeon-coop": {
+      "w": 240,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-rooftop-tent": {
+      "w": 320,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-sky-bridge-mid": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-rooftop-stair": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-glass-rung": {
+      "w": 160,
+      "h": 80,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-frail-glass-mid": {
+      "w": 400,
+      "h": 80,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-thorn-bed": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-moth-lantern": {
+      "w": 160,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-band-ledge": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-cloud-ledge": {
+      "w": 320,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-door-pane-closed": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-door-pane-open": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-checkpoint-bench": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-thorn-ceiling": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-act-arch": {
+      "w": 320,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-strand-rail": {
+      "w": 120,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-bridge-stroke": {
+      "w": 400,
+      "h": 80,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-tread-stroke": {
+      "w": 160,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-seal-red": {
+      "w": 120,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-bamboo-tall": {
+      "w": 120,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-eave-shelter": {
+      "w": 400,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-waterfall-curtain": {
+      "w": 240,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-door-paper-closed": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-door-paper-open": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-checkpoint-bench": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-lotus-pads": {
+      "w": 320,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-crane-perch": {
+      "w": 120,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-ink-pond-edge": {
+      "w": 400,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-landmark-idol-owl-wood": {
+      "w": 320,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-landmark-hut-lookout": {
+      "w": 400,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-landmark-door-root-tiny": {
+      "w": 160,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-landmark-cabinet-miniature": {
+      "w": 160,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-landmark-bell-hanging": {
+      "w": 120,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-landmark-telescope-brass": {
+      "w": 160,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-landmark-idol-owl-glass": {
+      "w": 320,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-landmark-lamp-moth": {
+      "w": 120,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-landmark-pane-cracked": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-landmark-lever-brass": {
+      "w": 120,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-landmark-switch-lift": {
+      "w": 120,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-landmark-idol-owl-neon": {
+      "w": 320,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-landmark-robot-owl": {
+      "w": 320,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-landmark-arcade-door": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-landmark-copy-stage": {
+      "w": 240,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-landmark-idol-owl-ink": {
+      "w": 320,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-landmark-crane-paper": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-landmark-heron-ink": {
+      "w": 200,
+      "h": 280,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-landmark-scroll-tower": {
+      "w": 240,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-landmark-pavilion-summit": {
+      "w": 400,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-plank-cap-left": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-plank-cap-right": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-plank-mid-320": {
+      "w": 320,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-plank-mid-480": {
+      "w": 480,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-plank-mid-640": {
+      "w": 640,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-plank-thin-cap-left": {
+      "w": 160,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-plank-thin-cap-right": {
+      "w": 160,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-plank-thin-mid-320": {
+      "w": 320,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-plank-thin-mid-480": {
+      "w": 480,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-plank-thin-mid-640": {
+      "w": 640,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-plank-rail-cap-left": {
+      "w": 160,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-plank-rail-cap-right": {
+      "w": 160,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-plank-rail-mid-320": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-plank-rail-mid-480": {
+      "w": 480,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-plank-rail-mid-640": {
+      "w": 640,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-branch-cap-left": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-branch-cap-right": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-branch-mid-320": {
+      "w": 320,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-branch-mid-480": {
+      "w": 480,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-branch-mid-640": {
+      "w": 640,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-branch-thin-cap-left": {
+      "w": 160,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-branch-thin-cap-right": {
+      "w": 160,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-branch-thin-mid-320": {
+      "w": 320,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-branch-thin-mid-480": {
+      "w": 480,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-branch-thin-mid-640": {
+      "w": 640,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-branch-mossy-cap-left": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-branch-mossy-cap-right": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-branch-mossy-mid-320": {
+      "w": 320,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-branch-mossy-mid-480": {
+      "w": 480,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-branch-mossy-mid-640": {
+      "w": 640,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-stone-cap-left": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-stone-cap-right": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-stone-mid-320": {
+      "w": 320,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-stone-mid-480": {
+      "w": 480,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-stone-mid-640": {
+      "w": 640,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-stone-thin-cap-left": {
+      "w": 160,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-stone-thin-cap-right": {
+      "w": 160,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-stone-thin-mid-320": {
+      "w": 320,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-stone-thin-mid-480": {
+      "w": 480,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-stone-thin-mid-640": {
+      "w": 640,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-stone-mossy-cap-left": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-stone-mossy-cap-right": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-stone-mossy-mid-320": {
+      "w": 320,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-stone-mossy-mid-480": {
+      "w": 480,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-stone-mossy-mid-640": {
+      "w": 640,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-puzzle-lock-closed": {
+      "w": 64,
+      "h": 112,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-puzzle-lock-open": {
+      "w": 64,
+      "h": 112,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-puzzle-carving": {
+      "w": 64,
+      "h": 64,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-puzzle-key": {
+      "w": 48,
+      "h": 48,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-puzzle-symbol-moon": {
+      "w": 64,
+      "h": 64,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-puzzle-symbol-leaf": {
+      "w": 64,
+      "h": 64,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-puzzle-symbol-feather": {
+      "w": 64,
+      "h": 64,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-puzzle-symbol-acorn": {
+      "w": 64,
+      "h": 64,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-puzzle-symbol-star": {
+      "w": 64,
+      "h": 64,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-puzzle-symbol-mushroom": {
+      "w": 64,
+      "h": 64,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-earth-cap-left": {
+      "w": 160,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-earth-cap-right": {
+      "w": 160,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-earth-mid-320": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-earth-mid-480": {
+      "w": 480,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-earth-mid-640": {
+      "w": 640,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-earth-thin-cap-left": {
+      "w": 160,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-earth-thin-cap-right": {
+      "w": 160,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-earth-thin-mid-320": {
+      "w": 320,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-earth-thin-mid-480": {
+      "w": 480,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-earth-thin-mid-640": {
+      "w": 640,
+      "h": 60,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-earth-path-cap-left": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-earth-path-cap-right": {
+      "w": 160,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-earth-path-mid-320": {
+      "w": 320,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-earth-path-mid-480": {
+      "w": 480,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-earth-path-mid-640": {
+      "w": 640,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-plank-corner-in": {
+      "w": 160,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-plank-corner-out": {
+      "w": 160,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-plank-to-earth": {
+      "w": 320,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-plank-to-stone": {
+      "w": 320,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-plank-slope-join-up": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-plank-slope-join-down": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-branch-corner-in": {
+      "w": 160,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-branch-corner-out": {
+      "w": 160,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-branch-to-plank": {
+      "w": 320,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-branch-to-earth": {
+      "w": 320,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-branch-slope-join-up": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-branch-slope-join-down": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-stone-corner-in": {
+      "w": 160,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-stone-corner-out": {
+      "w": 160,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-stone-to-earth": {
+      "w": 320,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-earth-corner-in": {
+      "w": 160,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-earth-corner-out": {
+      "w": 160,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-earth-slope-join": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-trunk-edge-left": {
+      "w": 160,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-trunk-edge-right": {
+      "w": 160,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-trunk-mid": {
+      "w": 320,
+      "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-trunk-taper": {
+      "w": 320,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-trunk-flare": {
+      "w": 400,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-trunk-knothole-frame": {
+      "w": 240,
+      "h": 320,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-bough-edge-left": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-bough-edge-right": {
+      "w": 240,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-bough-mid": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-bough-taper": {
+      "w": 320,
+      "h": 160,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-bough-flare": {
+      "w": 320,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-cut-bough-fork": {
+      "w": 320,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    }
+  },
+  "helpers": {
+    "tree-master": {
+      "role": "tree signature anchor",
+      "ref": "refs/tree-master.png"
+    },
+    "owl-master": {
+      "role": "colour-coded owl layer master",
+      "key_colour": "#FF00FF"
+    },
+    "owl-blink-src": {
+      "role": "edit of the owl master with closed eyes",
+      "key_colour": "#FF00FF"
+    },
+    "owl-barn-master": {
+      "role": "colour-coded barn owl layer master (an edit of the owl master)",
+      "key_colour": "#FF00FF"
+    },
+    "owl-burrowing-master": {
+      "role": "colour-coded burrowing owl layer master (an edit of the owl master)",
+      "key_colour": "#FF00FF"
+    },
+    "owl-snowy-master": {
+      "role": "colour-coded snowy owl layer master (an edit of the owl master)",
+      "key_colour": "#FF00FF"
+    },
+    "owl-screech-master": {
+      "role": "colour-coded screech owl layer master (an edit of the owl master)",
+      "key_colour": "#FF00FF"
+    },
+    "owl-wing-right": {
+      "role": "colour-coded right wing of the owls, spread (an edit of the owl master), split into the owl-wing layers",
+      "key_colour": "#FF00FF"
+    }
+  }
+}

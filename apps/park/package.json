@@ -1,0 +1,29 @@
+{
+  "name": "@owl-park/park",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview --host",
+    "typecheck": "tsc -p tsconfig.json",
+    "e2e": "playwright test",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@heycatch/sdk": "0.8.5",
+    "@owl-park/shared": "workspace:*",
+    "matter-js": "0.20.0",
+    "phaser": "3.90.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "@types/matter-js": "0.20.2",
+    "@types/node": "^22.20.5",
+    "typescript": "5.9.3",
+    "vite": "8.3.4",
+    "vitest": "5.0.5"
+  }
+}

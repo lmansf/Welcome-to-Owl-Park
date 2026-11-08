@@ -1,0 +1,208 @@
+# Deploys the park (client + room server) to Cloudflare Workers on every push to main.
+# One-time setup (all free):
+#   1. Create a Cloudflare account and an API token with "Edit Cloudflare Workers" permissions.
+#   2. Repository Settings -> Secrets and variables -> Actions:
+#        secrets:   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
+#        variables: CLOUDFLARE_DEPLOY=true   (the switch that enables this workflow)
+#                   VITE_SHOP_URL            (optional gift shop link)
+#                   VITE_SITE_URL            (optional: the park's https origin, for link previews)
+#                   VITE_TICKETS_URL         (optional: the store's ticket page; defaults to the Day Ticket's page, OP-170)
+#   3. The Worker's own secrets, PASS_SIGNING_KEY (32+ random characters) and ADMIN_KEY (16+), can be
+#      added as repository secrets too: the workflow uploads each one it finds to the Worker after the
+#      deploy. Or set them once from a machine with wrangler logged in:  wrangler secret put <NAME>
+#      PASS_SIGNING_KEY must be a repository secret (OP-209): without one the run stops before it
+#      deploys, since a Worker without its signing key refuses every pass and room socket.
+#      The store's go up the same way: SHOPIFY_SHOP with the app's SHOPIFY_CLIENT_ID and
+#      SHOPIFY_CLIENT_SECRET (or an older app's SHOPIFY_ADMIN_TOKEN), and SHOPIFY_WEBHOOK_SECRET;
+#      and for opening night, OPENING_PASS_CODE (the code that takes half off the annual pass).
+#      The collection log (OP-107) goes up with PARK_LOG_URL, FRAUD_SCORE_KEY and FRAUD_HASH_SALT
+#      (apps/park-log/README.md). Accounts (OP-139) need ACCOUNT_SECRET (32+ random characters, never
+#      changed once owls are protected) and the mail sender, RESEND_API_KEY and MAIL_FROM.
+#      Every deploy ends by listing the Worker's secret names (never their values).
+#      See docs/DEPLOY.md for the first deploy and for selling tickets.
+name: Deploy to Cloudflare
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ vars.CLOUDFLARE_DEPLOY == 'true' }}
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      PASS_SIGNING_KEY: ${{ secrets.PASS_SIGNING_KEY }}
+      ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
+      SHOPIFY_SHOP: ${{ secrets.SHOPIFY_SHOP }}
+      SHOPIFY_CLIENT_ID: ${{ secrets.SHOPIFY_CLIENT_ID }}
+      SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
+      SHOPIFY_ADMIN_TOKEN: ${{ secrets.SHOPIFY_ADMIN_TOKEN }}
+      SHOPIFY_WEBHOOK_SECRET: ${{ secrets.SHOPIFY_WEBHOOK_SECRET }}
+      OPENING_PASS_CODE: ${{ secrets.OPENING_PASS_CODE }}
+      PARK_LOG_URL: ${{ secrets.PARK_LOG_URL }}
+      FRAUD_SCORE_KEY: ${{ secrets.FRAUD_SCORE_KEY }}
+      FRAUD_HASH_SALT: ${{ secrets.FRAUD_HASH_SALT }}
+      ACCOUNT_SECRET: ${{ secrets.ACCOUNT_SECRET }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      MAIL_FROM: ${{ secrets.MAIL_FROM }}
+    steps:
+      # OP-209: a Worker without its signing key refuses every visitor, so never deploy one that might
+      # lack it. Says only whether the secret is there and long enough, never its value.
+      - name: Check PASS_SIGNING_KEY is there to upload
+        run: |
+          if [ -z "$PASS_SIGNING_KEY" ]; then
+            echo "::error::The Actions secret PASS_SIGNING_KEY is not available to this workflow, so it cannot be uploaded. Add it under Settings -> Secrets and variables -> Actions (32+ random characters), then run this workflow again. Nothing was deployed."
+            exit 1
+          fi
+          if [ "${#PASS_SIGNING_KEY}" -lt 16 ]; then
+            echo "::error::The Actions secret PASS_SIGNING_KEY is shorter than 16 characters: the Worker would refuse it. Replace it with 32+ random characters, then run this workflow again. Nothing was deployed."
+            exit 1
+          fi
+          echo "PASS_SIGNING_KEY is set."
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build the client for the room server
+        run: pnpm build
+        env:
+          VITE_TRANSPORT: edge
+          VITE_SHOP_URL: ${{ vars.VITE_SHOP_URL }}
+          VITE_SITE_URL: ${{ vars.VITE_SITE_URL }}
+          # The booth's Get a ticket button (OP-170): the store's Day Ticket page unless the repository variable says otherwise.
+          # The booth offers it only while the gate takes tickets (the opening switch on /admin/gate).
+          VITE_TICKETS_URL: ${{ vars.VITE_TICKETS_URL || 'https://nvzhyb-kr.myshopify.com/products/day-ticket' }}
+      - name: Check the page holds no database client or key (OP-150)
+        run: pnpm security:bundle
+      - name: Deploy Worker, Durable Object and static assets
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/edge
+          command: deploy
+      # Each step below but the signing key's runs only when its repository secret exists; wrangler-action uploads the
+      # secret, then lists the Worker's secret names (never values) as confirmation.
+      # Always: the first step stopped the run if the secret was missing (OP-209).
+      - name: Upload PASS_SIGNING_KEY to the Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/edge
+          command: secret list
+          secrets: |
+            PASS_SIGNING_KEY
+      - name: Upload ADMIN_KEY to the Worker
+        if: env.ADMIN_KEY != ''
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/edge
+          command: secret list
+          secrets: |
+            ADMIN_KEY
+      - name: Upload the store's app to the Worker
+        if: env.SHOPIFY_SHOP != '' && env.SHOPIFY_CLIENT_ID != '' && env.SHOPIFY_CLIENT_SECRET != ''
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/edge
+          command: secret list
+          secrets: |
+            SHOPIFY_SHOP
+            SHOPIFY_CLIENT_ID
+            SHOPIFY_CLIENT_SECRET
+      - name: Upload the store's admin token to the Worker (an app made in the store's admin)
+        if: env.SHOPIFY_SHOP != '' && env.SHOPIFY_ADMIN_TOKEN != ''
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/edge
+          command: secret list
+          secrets: |
+            SHOPIFY_SHOP
+            SHOPIFY_ADMIN_TOKEN
+      - name: Upload the store's webhook key to the Worker
+        if: env.SHOPIFY_WEBHOOK_SECRET != ''
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/edge
+          command: secret list
+          secrets: |
+            SHOPIFY_WEBHOOK_SECRET
+      - name: Upload opening night's pass code to the Worker
+        if: env.OPENING_PASS_CODE != ''
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/edge
+          command: secret list
+          secrets: |
+            OPENING_PASS_CODE
+      - name: Upload the collection log's address, key and salt to the Worker
+        if: env.PARK_LOG_URL != '' && env.FRAUD_SCORE_KEY != '' && env.FRAUD_HASH_SALT != ''
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/edge
+          command: secret list
+          secrets: |
+            PARK_LOG_URL
+            FRAUD_SCORE_KEY
+            FRAUD_HASH_SALT
+      - name: Upload the accounts' secret to the Worker
+        if: env.ACCOUNT_SECRET != ''
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/edge
+          command: secret list
+          secrets: |
+            ACCOUNT_SECRET
+      - name: Upload the accounts' mail sender to the Worker
+        if: env.RESEND_API_KEY != '' && env.MAIL_FROM != ''
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/edge
+          command: secret list
+          secrets: |
+            RESEND_API_KEY
+            MAIL_FROM
+      # The SEO audit: tell search engines which pages changed (tools/indexnow.mjs). Never fails the deploy.
+      - name: Tell search engines the pages changed (IndexNow)
+        continue-on-error: true
+        run: node tools/indexnow.mjs
+      # Whichever way the secrets were set (repository secrets above, or wrangler secret put), the
+      # Worker's secret names as they stand after the deploy.
+      - name: List the Worker's secret names
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/edge
+          command: secret list

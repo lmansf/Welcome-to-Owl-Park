@@ -1,0 +1,40 @@
+{
+  "experiment": "clock-skew",
+  "n": 6,
+  "name": "A visitor's clock 10 minutes fast",
+  "run_id": "2026-10-30-clock-skew-2",
+  "git": {
+    "park": "0d2cec62b83bb64087542a6ff62b9bee895f607f",
+    "harness": "0d2cec62b83bb64087542a6ff62b9bee895f607f"
+  },
+  "dirty": false,
+  "environment": "this machine: the park under wrangler dev on port 8797, the stand-in store on port 8791",
+  "hypothesis": "A page whose clock runs 10 minutes fast comes into the hub with its pass, and draws the other owls walking as a page on the right time does, never jumping to where they are going.",
+  "blast_radius": "Two scripted pages in the throwaway park, one after the other: one on the right time, one with its own clock set ahead.",
+  "abort_rule": "Any steady-state check failing for more than 30 s during the experiment ends it and runs the rollback; the harness never leaves a fault injected.",
+  "start": "2026-10-30T08:43:24.806Z",
+  "end": "2026-10-30T08:44:09.240Z",
+  "verdict": "held",
+  "abort_fired": false,
+  "rollback_confirmed": true,
+  "observations": [
+    {
+      "what": "a page 10 minutes fast, into the hub by address",
+      "value": "online in 1130 ms, its clock 600 s ahead",
+      "ok": true,
+      "component": "page",
+      "fix": "take the pass as the park gives it, whatever the page clock says: refresh it by the time left as the park reckoned it",
+      "at": "2026-10-30T08:43:55.246Z"
+    },
+    {
+      "what": "the others' walks as the fast page draws them",
+      "value": "fast page: 162 looks at an owl mid-walk, 0 jumps in 48 looks; a page on the right time: 140 and 0 in 48",
+      "ok": true,
+      "component": "page",
+      "fix": "reckon the others' walks against the room server's clock (the edge transport's offset), never the page's own",
+      "at": "2026-10-30T08:44:03.357Z"
+    }
+  ],
+  "filed": [],
+  "proposed": 0
+}

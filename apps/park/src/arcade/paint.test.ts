@@ -1,0 +1,109 @@
+import { describe, expect, it } from 'vitest';
+import { FIELD_H, FIELD_W } from './field';
+import { BRANCH_W, GROUND_Y as FLAP_GROUND } from './flap';
+import { runRandom } from './field';
+import { levelLanes } from './hop';
+import { CRATE, PIECE_SIZE } from './knock';
+import { BRANCH_ART, GAME_ART, GROUND_TILE_W, HOP_BANK, HOP_KERB, HOP_PIECES, HOP_WATER, KNOCK_PIECES, STAND_ART, branchHalves, groundTiles, laneCuts, paintable, solidFit, standPieces } from './paint';
+
+describe("the arcade's games in their paintings", () => {
+  it('paint each field whole, and each piece at the size the game plays it', () => {
+    for (const key of ['arcade-hop-bg', 'arcade-flap-bg', 'arcade-knock-bg']) {
+      const field = Object.values(GAME_ART).find((g) => key in g)![key];
+      expect(field, key).toEqual({ w: FIELD_W, h: FIELD_H });
+    }
+    // Hoot & Hop's carts, drones and bats as wide as the game plays them; its logs stretched to theirs.
+    const lanes = [1, 2, 3, 4, 5].flatMap((seed) => [1, 4, 8, 12, 20].flatMap((level) => levelLanes(level, runRandom(seed, `level ${level}`))));
+    const items = lanes.flatMap((l) => l.items);
+    for (const kind of ['cart', 'drone', 'bat'] as const) {
+      expect(new Set(items.filter((it) => it.kind === kind).map((it) => it.w)), kind).toEqual(new Set([GAME_ART.crossing[HOP_PIECES[kind]]!.w]));
+    }
+    expect(items.some((it) => it.kind === 'log')).toBe(true);
+    expect(GAME_ART.crossing[HOP_PIECES.log]).toBeDefined();
+    // A river's water, twice across its lane (the second mirrored), covers a row of the field.
+    expect(GAME_ART.crossing[HOP_WATER]!.h).toBe(80);
+    expect(2 * GAME_ART.crossing[HOP_WATER]!.w).toBeGreaterThanOrEqual(FIELD_W);
+    expect(new Set(lanes.map((l) => l.kind))).toEqual(new Set(['safe', 'road', 'air', 'river']));
+    // Talon Toss's crates, plank and nest at the size the game plays them (OP-137).
+    for (const kind of ['crate', 'plank', 'nest'] as const) expect(GAME_ART.sling[KNOCK_PIECES[kind]], kind).toEqual(PIECE_SIZE[kind]);
+    expect(PIECE_SIZE.crate).toEqual({ w: CRATE, h: CRATE });
+    // A painting is stretched so its solid part covers the body, turning about the body's centre.
+    expect(solidFit({ w: 60, h: 24 }, [10, 4, 40, 16], { w: 60, h: 24 })).toEqual({ w: 90, h: 36, ox: 0.5, oy: 0.5 });
+    expect(solidFit({ w: 144, h: 16 }, [0, 2, 144, 12], { w: 144, h: 16 })).toEqual({ w: 144, h: 64 / 3, ox: 0.5, oy: 0.5 });
+    expect(solidFit({ w: 36, h: 36 }, [0, 0, 36, 32], { w: 36, h: 36 })).toEqual({ w: 36, h: 40.5, ox: 0.5, oy: 16 / 36 });
+    expect(solidFit({ w: 36, h: 36 }, undefined, { w: 36, h: 36 })).toEqual({ w: 36, h: 36, ox: 0.5, oy: 0.5 });
+    // Two crates wide, the stand's painting is stretched (cut in nine) to every stand.
+    expect(STAND_ART.w).toBe(2 * CRATE);
+  });
+
+  it("lay a level's pavements and rivers' banks from the street's own kerb, mirrored at a lane's foot (OP-137)", () => {
+    expect(laneCuts('safe', 300)).toEqual([
+      { cut: 'kerb', y: 260, flip: false },
+      { cut: 'kerb', y: 300, flip: true },
+    ]);
+    expect(laneCuts('river', 300)).toEqual([
+      { cut: 'bank', y: 260, flip: false },
+      { cut: 'bank', y: 330, flip: true },
+    ]);
+    expect(laneCuts('road', 300)).toEqual([]);
+    expect(laneCuts('air', 300)).toEqual([]);
+    // A pavement's two halves make its lane; a river's banks leave its logs the water between them.
+    expect(2 * HOP_KERB.h).toBe(80);
+    expect(80 - 2 * HOP_BANK.h).toBeGreaterThanOrEqual(GAME_ART.crossing[HOP_PIECES.log]!.h);
+    // Both cuts are of the street's near kerb, on the painted field.
+    for (const band of [HOP_KERB, HOP_BANK]) expect(band.y + band.h).toBeLessThanOrEqual(FIELD_H);
+  });
+
+  it('paint a game only once all of its pieces are there', () => {
+    const loaded = new Set([...Object.keys(GAME_ART.crossing), 'arcade-flap-bg', 'arcade-flap-branch']);
+    expect(paintable('crossing', (k) => loaded.has(k))).toBe(true);
+    // The street alone, before the level's pieces (OP-137) ship: Hoot & Hop stays in neon.
+    expect(paintable('crossing', (k) => ['arcade-hop-bg', 'arcade-hop-drone', 'arcade-hop-cart'].includes(k))).toBe(false);
+    expect(paintable('flight', (k) => loaded.has(k))).toBe(false);
+    expect(paintable('sling', (k) => loaded.has(k))).toBe(false);
+  });
+
+  it("put a branch's trunk over the branch the game plays, its halves at the gap's edges", () => {
+    const { left, topY, bottomY } = branchHalves(300, 330, 170);
+    // Mirrored, the trunk's middle is trunkX in from the painting's right edge.
+    expect(left + BRANCH_ART.w - BRANCH_ART.trunkX).toBe(300);
+    expect(topY + BRANCH_ART.h).toBe(330 - 85);
+    expect(bottomY).toBe(330 + 85);
+    // The painting is long enough for the longest half: from the highest gap's top edge up off the
+    // field, and from the lowest gap's bottom edge down to the ground.
+    expect(BRANCH_ART.h).toBeGreaterThanOrEqual(FLAP_GROUND - (150 + 150 / 2));
+    expect(BRANCH_ART.h).toBeGreaterThanOrEqual(490 - 150 / 2);
+    // Nothing of a branch is left on the field once the game drops it, past x = -BRANCH_W.
+    expect(branchHalves(-BRANCH_W, 330, 170).left + BRANCH_ART.w).toBeLessThan(0);
+  });
+
+  it('tile the ground across the whole field as it scrolls, every other tile mirrored, each keeping its side', () => {
+    for (const offset of [0, 1, 179, 180, 359.5, 4321]) {
+      const tiles = groundTiles(offset);
+      expect(tiles[0]!.x, `offset ${offset}`).toBeLessThanOrEqual(0);
+      expect(tiles.at(-1)!.x + GROUND_TILE_W, `offset ${offset}`).toBeGreaterThanOrEqual(FIELD_W);
+      tiles.slice(1).forEach((t, i) => {
+        expect(t.x - tiles[i]!.x).toBe(GROUND_TILE_W);
+        expect(t.flip).toBe(!tiles[i]!.flip);
+      });
+    }
+    // A tile 180 px on keeps its mirroring: the second tile at the start is the first a tile later.
+    expect(groundTiles(0)[1]).toEqual({ x: GROUND_TILE_W, flip: true });
+    expect(groundTiles(GROUND_TILE_W)[0]).toEqual({ x: 0, flip: true });
+  });
+
+  it("cut a stand's painting in nine that cover the stand edge to edge, the corners at their own size", () => {
+    const box = { x: 330, y: 470, w: 72, h: 90 };
+    const pieces = standPieces(box);
+    expect(pieces).toHaveLength(9);
+    expect(pieces.reduce((a, p) => a + p.dst.w * p.dst.h, 0)).toBe(box.w * box.h);
+    expect(pieces.reduce((a, p) => a + p.src.w * p.src.h, 0)).toBe(STAND_ART.w * STAND_ART.h);
+    for (const corner of [0, 2, 6, 8]) {
+      expect(pieces[corner]!.dst.w).toBe(pieces[corner]!.src.w);
+      expect(pieces[corner]!.dst.h).toBe(pieces[corner]!.src.h);
+    }
+    // The widest and the shortest stands of the ten stacks still have a middle.
+    expect(standPieces({ x: 290, y: 480, w: 5 * 36, h: 80 })[4]!.dst.w).toBeGreaterThan(0);
+    expect(standPieces({ x: 290, y: 500, w: 72, h: 60 })[4]!.dst.h).toBeGreaterThan(0);
+  });
+});

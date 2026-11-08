@@ -1,0 +1,89 @@
+/**
+ * Structural validation for anything that arrives from another visitor. Peers share public
+ * channels, so every field is untrusted until it has the expected shape and range.
+ */
+import { EMOTE_IDS, isWear } from './collectibles';
+import { MAX_AIR_Z, checkAir } from './flight';
+import { isHexColour, isPledge } from './look';
+import { isPhrase } from './phrases';
+import { isSpecies } from './species';
+import type { OwlLook, ParkMessage, PlayerState, Vec2, Walk } from './protocol';
+import { ROOM_MAX_H, ROOM_MAX_W } from './room';
+
+export const MAX_ID_LENGTH = 64;
+
+export function isObj(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === 'object' && !Array.isArray(v);
+}
+
+export function isId(v: unknown): v is string {
+  return typeof v === 'string' && v.length > 0 && v.length <= MAX_ID_LENGTH;
+}
+
+/** A point in room pixels: finite, and inside the biggest room there may be. */
+export function isVec2(v: unknown, maxX = ROOM_MAX_W, maxY = ROOM_MAX_H): v is Vec2 {
+  return (
+    isObj(v) &&
+    typeof v['x'] === 'number' &&
+    typeof v['y'] === 'number' &&
+    Number.isFinite(v['x']) &&
+    Number.isFinite(v['y']) &&
+    v['x'] >= 0 &&
+    v['x'] <= maxX &&
+    v['y'] >= 0 &&
+    v['y'] <= maxY
+  );
+}
+
+export function isLook(v: unknown): v is OwlLook {
+  return (
+    isObj(v) &&
+    isHexColour(v['body']) &&
+    isHexColour(v['belly']) &&
+    isHexColour(v['accent']) &&
+    (v['pledge'] === undefined || isPledge(v['pledge'])) &&
+    (v['wear'] === undefined || isWear(v['wear'])) &&
+    (v['species'] === undefined || isSpecies(v['species']))
+  );
+}
+
+export function isEmoteId(v: unknown): v is string {
+  return typeof v === 'string' && EMOTE_IDS.includes(v);
+}
+
+export function isWalk(v: unknown): v is Walk {
+  return isObj(v) && isVec2(v['from']) && isVec2(v['to']) && typeof v['startedAt'] === 'number' && Number.isFinite(v['startedAt']);
+}
+
+export function isPlayerState(v: unknown): v is PlayerState {
+  return isObj(v) && isId(v['id']) && isLook(v['look']) && isVec2(v['pos']) && (v['walk'] === null || isWalk(v['walk'])) && (v['air'] === undefined || isAirAt(v['air']));
+}
+
+/** An air state with the time it began (OP-084), as another page sends it. */
+function isAirAt(v: unknown): boolean {
+  return isObj(v) && typeof v['at'] === 'number' && Number.isFinite(v['at']) && checkAir(v, MAX_AIR_Z, null) !== null;
+}
+
+export function isParkMessage(value: unknown): value is ParkMessage {
+  if (!isObj(value)) return false;
+  switch (value['t']) {
+    case 'hello':
+    case 'state':
+      return isPlayerState(value['state']);
+    case 'move':
+      return isId(value['id']) && isWalk(value['walk']);
+    case 'bye':
+      return isId(value['id']);
+    case 'emote':
+      return isId(value['id']) && isEmoteId(value['e']);
+    case 'say':
+      // A phrase this page does not know is dropped: there is nothing to show for it.
+      return isId(value['id']) && isPhrase(value['n']);
+    case 'rest':
+      return isId(value['id']) && typeof value['asleep'] === 'boolean';
+    case 'air':
+      return isId(value['id']) && checkAir(value['air'], MAX_AIR_Z, null) !== null && typeof value['at'] === 'number' && Number.isFinite(value['at']);
+    default:
+      return false;
+  }
+}

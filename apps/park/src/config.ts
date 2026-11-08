@@ -1,0 +1,153 @@
+/**
+ * Runtime configuration. Everything here is public: it ships in the browser bundle.
+ * Query-string overrides exist for tests and demos (e.g. ?transport=local&room=grove).
+ */
+import { PHONE_ROOM_BUDGET } from './game/artFiles';
+import { sizeBoxesWanted } from './game/sizeBoxes';
+import { skinTrialWanted } from './game/skinTrial';
+
+/**
+ * How the page reaches other owls: the room server, or tabs on this device. The page holds no key to
+ * any database (OP-150): the Supabase transport it once had for a start without a server is gone, and
+ * CI checks the built page for any client or key of one (tools/security/bundle-check.mjs).
+ */
+export type TransportKind = 'local' | 'edge';
+
+/** A count of seconds from the page's address, or the default when it is missing or not a positive number. */
+function seconds(v: string | null, fallback: number): number {
+  const n = Number(v);
+  return v !== null && Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+export interface ParkConfig {
+  transport: TransportKind;
+  /** Base URL of the room server; empty means same origin as the page. */
+  edgeUrl: string;
+  shopUrl: string;
+  /** The store's ticket page; empty until tickets go on sale (the turnstiles fall back to it when they cannot make an owl's cart link). */
+  ticketsUrl: string;
+  /**
+   * The home screen comes first (OP-065), and Play goes on to the owl's own nest (OP-105); an
+   * address that names a room (tests, the art preview) or says `home=0` goes straight into the park.
+   */
+  home: boolean;
+  /** Where an address that goes straight in starts, from the query string: the lobby unless it names a room. */
+  room: string;
+  spawn: string | undefined;
+  /** Fixed player id for tests; otherwise a fresh id is generated per page load. */
+  id: string | undefined;
+  /** "body,belly,accent" hex colours for tests. */
+  look: string | undefined;
+  /** Local mode only: a fixed collector id (tests share or separate collections with it). */
+  collector: string | undefined;
+  /** The climb's night in the local mode and the browser tests only (`?night=<key>`); the room server decides its own. */
+  night: string | undefined;
+  /** Local mode only: the home time zone to use instead of the device's (tests). */
+  tz: string | undefined;
+  debug: boolean;
+  /** Draw at devicePixelRatio for crisp phones (capped). */
+  pixelRatio: number;
+  /** Max texture pixels per room pixel for rooms and big set pieces (GPU memory cap). */
+  artScaleMax: number;
+  /** Decoded bytes one room's big art may take; a wide room that would pass it at 2x loads its 1x copies. */
+  roomArtBudget: number;
+  /**
+   * An idle owl (OP-126): how long with no key, touch, click, scroll, walk or held stick before it
+   * falls asleep; how long asleep before "Still here?" (never in its own nest); how long that waits
+   * for an answer before the owl leaves the room. Milliseconds; `?sleep=`, `?away=` and `?answer=`
+   * (seconds) set them for a visit, as the browser tests do.
+   */
+  sleepAfterMs: number;
+  awayAskMs: number;
+  awayAnswerMs: number;
+  /**
+   * The fit overlay (OP-127, `?boxes=1`): every interactable's trigger box, what each sprite draws,
+   * its centre and its marker's place, for checking the fit by eye. Development builds, and a build
+   * with VITE_BOXES=on (a preview for QA); never the live park, where players would see it.
+   */
+  boxes: boolean;
+  /**
+   * The position overlay (OP-138, `?pos=1`): where the room says the own owl stands beside where it is
+   * drawn, and every jump. It shows only once the keepers' key it asks for checks out with the room server.
+   */
+  pos: boolean;
+  /**
+   * Ask for a keeper's token (OP-156, `?keeper=1`): the page asks for the keepers' key and trades it
+   * for a token that lets this tab's owl into the tree (map 2, `?room=l1`) while it is dark.
+   */
+  keeper: boolean;
+  /**
+   * The ledge painter (OP-156, `?paint=1`) over a room of the tree, for a tab that holds a keeper's
+   * token (`?keeper=1`, now or earlier in the tab): game/ledgePainter.ts.
+   */
+  paint: boolean;
+  /**
+   * Rooms built from the art kit (OP-234): a painted room that has a kit room standing in for it
+   * (KIT_DEMOS, packages/shared/rooms/kit.ts: every room of the tree) is drawn from the kit. The room's
+   * layout is the same, so only the look changes. On for every visitor since the whole tree map was
+   * built in the kit (the owner's rule: all rooms switch together); `?kit=0` shows the painted rooms.
+   */
+  kit: boolean;
+  /**
+   * The new map (map 3): the park laid out as one tree, from the Treetop Commons down past the realms to
+   * the ground (packages/shared/rooms/index.ts, NEW_MAP). Every owl the tree takes walks it; a keeper's
+   * tab (`?keeper=1`, now or earlier in the tab) walks it from the first room with `?newmap=1`.
+   */
+  newMap: boolean;
+  /** `?newmap=0`: an owl the tree takes walks the tree as it was (map 2), not the new map. */
+  oldMap: boolean;
+  /**
+   * Size boxes (`?sizes=1`, kept for the tab until `?sizes=0`): the map's art drawn as plain boxes
+   * labelled with each piece's name, its size in the game and the size to deliver (game/sizeBoxes.ts).
+   */
+  sizes: boolean;
+  /**
+   * A skin trial (`?skin=<name>`, kept for the tab until `?skin=0`): a realm artist's skin sheet, cut
+   * by tools/kit/skin_sheet.py, drawn in place of the realm's kit slots (game/skinTrial.ts). Null for every visitor.
+   */
+  skin: string | null;
+}
+
+export function readConfig(): ParkConfig {
+  const q = new URLSearchParams(globalThis.location?.search ?? '');
+  const env = import.meta.env;
+  const requested = q.get('transport') ?? (env.VITE_TRANSPORT as string | undefined)?.trim();
+  const edgeUrl = ((env.VITE_EDGE_URL as string | undefined) ?? '').trim();
+  let transport: TransportKind;
+  if (requested === 'local') transport = 'local';
+  else if (requested === 'edge') transport = 'edge';
+  else if (edgeUrl) transport = 'edge';
+  else transport = 'local';
+  const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+  return {
+    transport,
+    edgeUrl,
+    shopUrl: ((env.VITE_SHOP_URL as string | undefined) ?? '').trim(),
+    ticketsUrl: ((env.VITE_TICKETS_URL as string | undefined) ?? '').trim(),
+    home: !q.has('room') && q.get('home') !== '0',
+    room: q.get('room') ?? 'lobby',
+    spawn: q.get('spawn') ?? undefined,
+    id: q.get('id') ?? undefined,
+    look: q.get('look') ?? undefined,
+    collector: q.get('collector') ?? undefined,
+    night: q.get('night') ?? undefined,
+    tz: q.get('tz') ?? undefined,
+    debug: q.get('debug') === '1',
+    pixelRatio: Math.min(2, Math.max(1, dpr)),
+    artScaleMax: Math.min(2, Math.max(1, Number(env.VITE_ART_SCALE_MAX) || 1.5)),
+    // Phones and tablets (a coarse pointer) keep what a one-screen room costs today; computers get three times that.
+    roomArtBudget: (Number(env.VITE_ROOM_ART_BUDGET_MB) * 1024 * 1024) || PHONE_ROOM_BUDGET * (globalThis.matchMedia?.('(pointer: coarse)').matches ? 1 : 3),
+    sleepAfterMs: seconds(q.get('sleep'), 45) * 1000,
+    awayAskMs: seconds(q.get('away'), 10 * 60) * 1000,
+    awayAnswerMs: seconds(q.get('answer'), 60) * 1000,
+    boxes: q.get('boxes') === '1' && (env.DEV || ((env.VITE_BOXES as string | undefined) ?? '').trim() === 'on'),
+    pos: q.get('pos') === '1',
+    keeper: q.get('keeper') === '1',
+    paint: q.get('paint') === '1',
+    kit: q.get('kit') !== '0',
+    newMap: q.get('newmap') === '1',
+    oldMap: q.get('newmap') === '0',
+    sizes: sizeBoxesWanted(q.get('sizes')),
+    skin: skinTrialWanted(q.get('skin')),
+  };
+}

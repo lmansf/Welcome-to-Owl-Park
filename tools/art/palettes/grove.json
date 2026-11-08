@@ -1,0 +1,9 @@
+{
+  "realm": "grove",
+  "anchors": ["#2B1F3D", "#3B2A4A", "#4A3F6B", "#6C5B8F", "#E08A2E", "#F2B45A", "#FFD36A", "#C9A227", "#D8E26A", "#3E6B48", "#5F8A52", "#8B5A2B"],
+  "black": "#1E1530",
+  "white": "#FFF1C9",
+  "strength": 0.35,
+  "chroma_boost": 1.08,
+  "levels_percentiles": [0.5, 99.5]
+}

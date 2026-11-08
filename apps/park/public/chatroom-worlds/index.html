@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>A small, safe chatroom world in your browser - Owl Park</title>
+    <meta name="description" content="Owl Park is a small, safe chatroom world: no typed chat, no downloads, one park. What it keeps from the old chatroom worlds, and what it does differently." />
+    <link rel="canonical" href="https://exploreowlpark.com/chatroom-worlds/" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <!-- HeyCatch analytics (heycatch.ai/agents.md), as on the park's page (src/main.ts); a page of its own, so events go out at once. -->
+    <script type="module">
+      import { analytics } from 'https://esm.sh/@heycatch/sdk@0.8.5';
+      analytics.init({ projectKey: 'hck_pk_um42q9Cyv2nIM-aHBobpaoE1rupLU1dm', site: 'landing', requestBatching: false, install: { framework: 'web', agent: 'claude-code' } });
+    </script>
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Owl Park" />
+    <meta property="og:title" content="A small, safe chatroom world" />
+    <meta property="og:description" content="Owl Park is a small, safe chatroom world: no typed chat, no downloads, one park." />
+    <meta property="og:image" content="https://exploreowlpark.com/og-image.jpg" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          { "@type": "Organization", "@id": "https://exploreowlpark.com/#org", "name": "Owl Park", "url": "https://exploreowlpark.com/", "logo": "https://exploreowlpark.com/apple-touch-icon.png" },
+          {
+            "@type": "Article",
+            "@id": "https://exploreowlpark.com/chatroom-worlds/#article",
+            "headline": "A small, safe chatroom world",
+            "description": "Owl Park is a small, safe chatroom world: no typed chat, no downloads, one park. What it keeps from the old chatroom worlds, and what it does differently.",
+            "url": "https://exploreowlpark.com/chatroom-worlds/",
+            "mainEntityOfPage": "https://exploreowlpark.com/chatroom-worlds/",
+            "image": { "@type": "ImageObject", "url": "https://exploreowlpark.com/og-image.jpg", "width": 1200, "height": 630 },
+            "author": { "@type": "Organization", "@id": "https://exploreowlpark.com/#org", "name": "Owl Park", "url": "https://exploreowlpark.com/" },
+            "publisher": { "@id": "https://exploreowlpark.com/#org" },
+            "datePublished": "2026-11-05",
+            "dateModified": "2026-11-05"
+          }
+        ]
+      }
+    </script>
+    <style>
+      :root { color-scheme: dark; }
+      body { margin: 0; background: #0C1E36; color: #F6F1E3; font: 17px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+      main { max-width: 640px; margin: 0 auto; padding: 32px 16px 48px; }
+      h1 { color: #FFD36A; font-size: 34px; line-height: 1.15; margin: 0 0 8px; }
+      h2 { color: #FFD36A; font-size: 21px; margin: 32px 0 8px; }
+      p, li { margin: 0 0 12px; }
+      ul { padding-left: 22px; }
+      a { color: #FFD36A; }
+      nav { display: flex; gap: 16px; flex-wrap: wrap; margin: 0 0 24px; }
+      .play { display: inline-block; margin: 8px 0 0; padding: 12px 22px; border-radius: 999px; background: #C9A227; color: #0C1E36; font-weight: 800; text-decoration: none; }
+      figure { margin: 20px 0 8px; }
+      figure img { display: block; width: 100%; height: auto; border-radius: 12px; }
+      figcaption { margin: 6px 0 0; font-size: 15px; opacity: .8; }
+      footer { margin: 40px 0 0; padding: 16px 0 0; border-top: 1px solid rgba(246, 241, 227, .2); font-size: 15px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <nav aria-label="Owl Park"><a href="/">Play Owl Park</a><a href="/about/">About</a><a href="/about/#questions">Questions</a><a href="/changelog/">What's new</a></nav>
+      <h1>A small, safe chatroom world</h1>
+      <p>Owl Park is a small, safe chatroom world: no typed chat, no downloads, one park. You visit it in your browser as an owl, alongside everyone else who is here right now.</p>
+      <p><a class="play" href="/">Make your owl</a></p>
+
+      <h2>What is a chatroom world?</h2>
+      <p>A chatroom world is a place you visit as a character, where you see everyone else who is there at the same time. You walk around, say hello, play small games, and make a corner of it your own.</p>
+
+      <h2>What does Owl Park keep from the old chatroom worlds?</h2>
+      <p>Owl Park keeps the shared place, the small games and a home of your own. Built for anyone who misses the old chatroom worlds.</p>
+      <p>You wander the park as an owl with everyone who is in it at the same time. There are quests from the park’s owls, quick arcade games, fishing, the stage quiz and leaf piles to jump in, and a nest of your own to decorate and open to visitors.</p>
+      <p>Other visitors show up as owls, in the park with you right now. When one hops or says hello, you see it as it happens.</p>
+
+      <h2>What does Owl Park do differently?</h2>
+      <p>Owl Park changes four things from the old chatroom worlds:</p>
+      <ul>
+        <li>No typed chat. Owls talk only with the 24 set phrases on the Say wheel, so nobody can type a message to anyone in the park.</li>
+        <li>No download and no account. The park opens in your browser, on a computer or a phone, and the owl lives in that browser.</li>
+        <li>Free to look around. Guests come in free and keep nothing they win; ticketed owls keep everything.</li>
+        <li>Nothing is sold inside the park. A Day Ticket is bought in the store’s checkout, which Shopify runs.</li>
+      </ul>
+      <p>Shopify says its checkout is <a href="https://www.shopify.com/security/pci-compliant">certified Level 1 PCI DSS compliant</a>, the card industry’s security standard, so the park never sees a card number.</p>
+
+      <h2>How do owls talk without typed chat?</h2>
+      <p>Owls talk by picking a phrase from the Say wheel, and the phrase shows in a bubble over the owl. The wheel holds 24 phrases in six groups of four.</p>
+      <figure>
+        <img src="/chatroom-worlds/say-wheel.webp" width="1200" height="780" loading="lazy" alt="Diagram of the Say wheel: six groups of four set phrases, numbered 1 to 24. Hello: Hi!, Hoot hoot!, Nice to meet you!, Good night!. Thanks and cheers: Thank you!, Great job!, Nice owl!, Well played!. Together: Follow me!, Let's go!, Wait for me!, Over here!. Things to do: Let's light the lanterns!, Fishing?, Quiz time!, Arcade?. Feelings: I'm happy!, So cosy., Sleepy..., Wow!. Help and goodbye: Where to?, I'm lost!, Help me?, Bye for now!" />
+        <figcaption>All 24 phrases on the Say wheel. Only the phrase’s number travels to the park.</figcaption>
+      </figure>
+      <p>The groups are Hello, Thanks and cheers, Together, Things to do, Feelings, and Help and goodbye. A few of the phrases are “Nice to meet you!”, “Follow me!”, “Fishing?” and “Bye for now!”.</p>
+      <p>Only the phrase’s number travels to the park, never typed words. So nobody can send rude words or personal details.</p>
+      <p>An owl can say one phrase every few seconds, and each bubble fades after a moment. That keeps the park from filling with repeats.</p>
+
+      <h2>What is there to do in Owl Park?</h2>
+      <p>Owl Park has small things to do that fit a spare 20 minutes in a browser tab. Most of them work alone or with whoever is around.</p>
+      <ul>
+        <li>Quests from the park’s owls, who ask for help around the park.</li>
+        <li>The arcade, a room of quick games.</li>
+        <li>Fishing, the stage quiz, lanterns to light and the robot owl’s copy game.</li>
+        <li>Daily tasks, and leaf piles to flop into.</li>
+        <li>The tree, a map of hills and slopes to climb, with a jump and two flaps.</li>
+      </ul>
+      <p>What you find dresses your owl and fills your nest. The feather shop takes only feathers earned in play, never money.</p>
+
+      <h2>Can I make a place of my own?</h2>
+      <p>Yes: every owl gets a nest, a tree house on the park’s street of nests. You decorate it with furniture you put out yourself.</p>
+      <p>Open the nest to visitors, and other owls can walk in and see it. Close it to visitors again whenever you like.</p>
+
+      <h2>Do I need a download or an account?</h2>
+      <p>No. Owl Park opens in the browser tab you already have, on a computer or a phone.</p>
+      <p>Playing needs no account and no password: the owl lives in this browser. Its look, and the key to what it has collected, are kept in the browser’s <a href="https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage">local storage</a>, which the browser keeps between visits. On a phone, a thumbstick and buttons on the screen do the walking and jumping.</p>
+      <p>Anyone can add an email to protect an owl, where it is offered. That email is used only to send the owl’s links, and is never shown to anyone.</p>
+
+      <h2>Is Owl Park free?</h2>
+      <p>Owl Park is free to look around. Guests come in free, look around and play the basics, but keep nothing they win.</p>
+      <p>A Day Ticket lets an owl keep everything it wins, and opens the quests and the shops. The store’s checkout shows the price before you pay, and a ticket can be refunded until it is used or it expires.</p>
+
+      <h2>How do I make my owl?</h2>
+      <p>You make your owl on the home screen before you go in. A picture quiz, Which owl are you?, asks eight questions and suggests a kind of owl and its colours. You can skip it.</p>
+      <p>Pick a great horned, barn, burrowing or snowy owl, then change its colours. You can change how it looks again later, at the mirror in your nest.</p>
+
+      <h2>What happens when the park is busy?</h2>
+      <p>On a busy night, new owls can wait in a line on the home screen. It shows your place in line and a rough wait, and updates on its own.</p>
+      <p>When your turn comes, you go in. A ticket’s time starts at the turnstiles, not in the line.</p>
+
+      <h2>Does the park ever close?</h2>
+      <p>Yes, once a night the park restarts. Every owl is sent home after a short notice, and Play brings it back in.</p>
+
+      <h2>How is Owl Park different from app-based worlds?</h2>
+      <p>Many online worlds ask for an app download or an account before you see anything. Owl Park opens in the browser tab you already have, and guests walk in free.</p>
+      <p>Read how chat stays safe and what the park keeps in <a href="/about/#safety">Safety and privacy</a>, and the answers to common questions in <a href="/about/#questions">Questions</a>.</p>
+
+      <h2>Is Owl Park finished?</h2>
+      <p>No, the park is in early preview, with more on the way before it fully opens. Every change, with its date, is listed on <a href="/changelog/">What's new</a>.</p>
+      <p>To write to the park, send a feedback note from the Menu inside the park. Only the park’s keepers read it. More about the park is on <a href="/about/">About Owl Park</a>.</p>
+      <footer><nav aria-label="Owl Park pages"><a href="/">Play Owl Park</a><a href="/about/">About</a><a href="/about/#questions">Questions</a><a href="/about/#contact">Contact</a><a href="/chatroom-worlds/">A small, safe chatroom world</a><a href="/changelog/">What's new</a></nav></footer>
+    </main>
+  </body>
+</html>

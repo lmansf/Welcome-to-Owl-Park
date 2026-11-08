@@ -1,0 +1,55 @@
+{
+  "experiment": "webhook-dropped",
+  "n": 3,
+  "name": "The store's webhook answered 500, then too late",
+  "run_id": "2026-10-30-webhook-dropped",
+  "git": {
+    "park": "0d2cec62b83bb64087542a6ff62b9bee895f607f",
+    "harness": "0d2cec62b83bb64087542a6ff62b9bee895f607f"
+  },
+  "dirty": false,
+  "environment": "this machine: the park under wrangler dev on port 8797, the stand-in store on port 8791",
+  "hypothesis": "A paid-order webhook the Worker fails (a 500, or no answer in the 5 s the store waits) is sent again by the store, and the order gets its one ticket and one claim-link email, never two.",
+  "blast_radius": "Two orders in the stand-in store, and the throwaway park's answers about them; nothing else the store answers is touched.",
+  "abort_rule": "Any steady-state check failing for more than 30 s during the experiment ends it and runs the rollback; the harness never leaves a fault injected.",
+  "start": "2026-10-30T08:38:34.905Z",
+  "end": "2026-10-30T08:39:17.774Z",
+  "verdict": "held",
+  "abort_fired": false,
+  "rollback_confirmed": true,
+  "observations": [
+    {
+      "what": "order A's first delivery, the store failing",
+      "value": "HTTP 500 {\"error\":\"try again\"} in 41 ms",
+      "ok": true,
+      "component": "worker",
+      "fix": "answer a webhook whose work failed with a 5xx, so the store sends it again (a 2xx without the ticket loses the order)",
+      "at": "2026-10-30T08:38:56.219Z"
+    },
+    {
+      "what": "order A sent again, then once more",
+      "value": "HTTP 200 {\"tickets\":1,\"sent\":true} in 43 ms; HTTP 200 {\"tickets\":1,\"sent\":true} in 28 ms; emails 1",
+      "ok": true,
+      "component": "worker",
+      "fix": "make each step of a paid order safe to repeat: the desk's tickets once per order, the claim-link email once (storeHooks.ts)",
+      "at": "2026-10-30T08:38:56.219Z"
+    },
+    {
+      "what": "order B's first delivery, the store's answer held back",
+      "value": "no answer within 5 s",
+      "ok": true,
+      "component": "worker",
+      "at": "2026-10-30T08:39:12.317Z"
+    },
+    {
+      "what": "order B sent again while the first delivery was still at work, then once more",
+      "value": "HTTP 200 {\"tickets\":1,\"sent\":true} in 3063 ms; HTTP 200 {\"tickets\":1,\"sent\":true} in 24 ms; emails 1",
+      "ok": true,
+      "component": "worker",
+      "fix": "two deliveries of one order at once must not both email the claim link: hold the order while one delivery works on it (storeHooks.ts)",
+      "at": "2026-10-30T08:39:12.317Z"
+    }
+  ],
+  "filed": [],
+  "proposed": 0
+}

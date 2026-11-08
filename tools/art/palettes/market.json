@@ -1,0 +1,9 @@
+{
+  "realm": "market",
+  "anchors": ["#FF2AA1", "#00E5FF", "#0B0B16", "#C7CEDA", "#6E3AFF", "#1B1B2E", "#7A1F5C", "#0E6E78"],
+  "black": "#0B0B16",
+  "white": "#C7CEDA",
+  "strength": 0.4,
+  "chroma_boost": 1.12,
+  "levels_percentiles": [0.5, 99.5]
+}

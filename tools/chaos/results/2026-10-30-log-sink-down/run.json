@@ -1,0 +1,53 @@
+{
+  "experiment": "log-sink-down",
+  "n": 8,
+  "name": "The collection log’s database unreachable",
+  "run_id": "2026-10-30-log-sink-down",
+  "git": {
+    "park": "0d2cec62b83bb64087542a6ff62b9bee895f607f",
+    "harness": "0d2cec62b83bb64087542a6ff62b9bee895f607f"
+  },
+  "dirty": false,
+  "environment": "this machine: the park under wrangler dev on port 8797, the stand-in store on port 8791",
+  "hypothesis": "With the collection log down, new owls still get their starter pack at once, and its rows wait in the outbox and reach the log once it is back, each once (OP-107).",
+  "blast_radius": "The throwaway park's collection log only (sent to the stand-in store in place of the log function), and five new scripted visitors.",
+  "abort_rule": "Any steady-state check failing for more than 30 s during the experiment ends it and runs the rollback; the harness never leaves a fault injected.",
+  "start": "2026-10-30T08:40:46.376Z",
+  "end": "2026-10-30T08:41:56.477Z",
+  "verdict": "held",
+  "abort_fired": false,
+  "rollback_confirmed": true,
+  "observations": [
+    {
+      "what": "new owls in with their starter pack while the log was down",
+      "value": "5 of 5 played their first emote",
+      "ok": true,
+      "component": "collections",
+      "fix": "grant first and log after: a collectible never waits on the collection log (collectLog.ts, the outbox)",
+      "at": "2026-10-30T08:41:08.663Z"
+    },
+    {
+      "what": "the log while it was down",
+      "value": "11 sends refused, 0 starter rows taken",
+      "ok": true,
+      "component": "collections",
+      "fix": "send what is granted at once, and keep it in the outbox when the log refuses it",
+      "at": "2026-10-30T08:41:26.452Z"
+    },
+    {
+      "what": "the starter-pack rows once the log was back",
+      "value": "20 new owls' rows taken (at least the 15 of their starter packs), 24 s after it came back; 0 rows sent twice",
+      "ok": true,
+      "component": "collections",
+      "fix": "send what waited in the outbox on the next try once the log is back, each row once (collectLog.ts round)",
+      "at": "2026-10-30T08:41:50.488Z"
+    }
+  ],
+  "filed": [],
+  "park_settings": [
+    "PARK_LOG_URL",
+    "FRAUD_SCORE_KEY",
+    "FRAUD_HASH_SALT"
+  ],
+  "proposed": 0
+}

@@ -1,0 +1,235 @@
+import { describe, expect, it } from 'vitest';
+import { CLOSE, EDGE_PROTOCOL_VERSION as V, parseClientFrame, parseServerFrame, type ServerFrame } from './edge';
+import { MAX_RISE } from './flight';
+import { isEmoteId, isParkMessage } from './validate';
+
+const look = { body: '#111111', belly: '#222222', accent: '#333333' };
+
+describe('protocol v10, the climb', () => {
+  it('starts or resumes a climb with nothing but a request id, and takes a band with the run’s seed', () => {
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'climb', r: 5 }))).toEqual({ t: 'act', a: 'climb', r: 5 });
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'ascent', k: 77, band: 3, r: 6 }))).toEqual({ t: 'act', a: 'ascent', k: 77, band: 3, r: 6 });
+    for (const bad of [{ band: 0 }, { band: 7 }, { band: 1.5 }, { band: '3' }, { band: undefined }, { k: undefined }, { k: -1 }, { k: 2 ** 32 }])
+      expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'ascent', k: 1, band: 3, r: 7, ...bad })), JSON.stringify(bad)).toBeNull();
+  });
+
+  it('passes the realms switch to the page in the welcome, as a frame of its own, and when a realm turns an owl away', () => {
+    const realms = { open: ['glass'], portal: true, night: null };
+    expect(parseServerFrame(JSON.stringify({ t: 'realms', realms }))).toEqual({ t: 'realms', realms });
+    expect(parseServerFrame(JSON.stringify({ t: 'closed', room: 'glass', why: 'realm', sign: 'Hatching Soon' }))).toEqual({ t: 'closed', room: 'glass', why: 'realm', sign: 'Hatching Soon' });
+    expect(CLOSE.REALM_CLOSED).toBe(4013);
+  });
+});
+
+describe('protocol v9, the arcade', () => {
+  it('is version 18 (the triple jump, OP-239), and a page speaking the version before is refused at its hello (so it reloads)', () => {
+    expect(V).toBe(18);
+    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V - 1, look }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V, look }))).toEqual({ t: 'hello', v: V, look });
+    expect(new Set(Object.values(CLOSE)).size).toBe(Object.keys(CLOSE).length);
+  });
+
+  it('starts a run of a game it knows, and nothing else', () => {
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'run', g: 'flight', r: 1 }))).toEqual({ t: 'act', a: 'run', g: 'flight', r: 1 });
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'run', g: 'Moon Flap', r: 1 }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'run', r: 1 }))).toBeNull();
+  });
+
+  it('reads a run’s result: the game, a whole score, the run’s seed, and shots only when sent', () => {
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'score', g: 'crossing', s: 7, k: 99, r: 2 }))).toEqual({ t: 'act', a: 'score', g: 'crossing', s: 7, k: 99, r: 2 });
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'score', g: 'sling', s: 9, n: 4, k: 0, r: 3 }))).toEqual({ t: 'act', a: 'score', g: 'sling', s: 9, n: 4, k: 0, r: 3 });
+    // A run's best so far (OP-137) carries what a score does.
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'record', g: 'flight', s: 26, k: 5, r: 5 }))).toEqual({ t: 'act', a: 'record', g: 'flight', s: 26, k: 5, r: 5 });
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'record', g: 'flight', s: -1, k: 5, r: 6 }))).toBeNull();
+    for (const bad of [{ s: -1 }, { s: 1.5 }, { s: '7' }, { s: 2e6 }, { k: undefined }, { k: -1 }, { n: 1.5 }, { g: 'golf' }])
+      expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'score', g: 'crossing', s: 7, k: 1, r: 4, ...bad })), JSON.stringify(bad)).toBeNull();
+  });
+
+  it('passes the score wall on to the page', () => {
+    const wall: ServerFrame = { t: 'wall', walls: [{ game: 'flight', top: [{ score: 12, look }] }], mine: { flight: 12 } };
+    expect(parseServerFrame(JSON.stringify(wall))).toEqual(wall);
+  });
+});
+
+describe('protocol v8, prewritten chat', () => {
+  it('reads a phrase by its number only, and never words', () => {
+    expect(parseClientFrame(JSON.stringify({ t: 'say', n: 3 }))).toEqual({ t: 'say', n: 3 });
+    expect(parseClientFrame(JSON.stringify({ t: 'say', n: 7, text: 'anything at all' }))).toEqual({ t: 'say', n: 7 });
+    // A whole number in range reaches the room, which drops one its list does not have.
+    expect(parseClientFrame(JSON.stringify({ t: 'say', n: 999 }))).toEqual({ t: 'say', n: 999 });
+    for (const n of [undefined, 0, -1, 1.5, '3', 'Hi!', 1000, null]) expect(parseClientFrame(JSON.stringify({ t: 'say', n })), String(n)).toBeNull();
+  });
+
+  it('passes a phrase from the room on to the page', () => {
+    const say: ServerFrame = { t: 'say', id: 'v_a', n: 12 };
+    expect(parseServerFrame(JSON.stringify(say))).toEqual(say);
+  });
+});
+
+describe('protocol v7, the nests', () => {
+  it('has a close code of its own for a nest that turns an owl away', () => {
+    expect(CLOSE.NEST_CLOSED).toBe(4011);
+  });
+
+  it('reads a street request with its request number only', () => {
+    expect(parseClientFrame(JSON.stringify({ t: 'street', r: 1 }))).toEqual({ t: 'street', r: 1 });
+    expect(parseClientFrame(JSON.stringify({ t: 'street', r: 2, nestId: 'abcd1234', cid: 'c_abcdefgh' }))).toEqual({ t: 'street', r: 2 });
+    for (const r of [undefined, -1, 1.5, '3', 2e9]) expect(parseClientFrame(JSON.stringify({ t: 'street', r })), String(r)).toBeNull();
+  });
+
+  it("reads an owner's change to its nest: a piece in a spot, taking one away, opening and closing", () => {
+    expect(parseClientFrame(JSON.stringify({ t: 'nest', r: 2, spot: 'f1', item: 'rug' }))).toEqual({ t: 'nest', r: 2, spot: 'f1', item: 'rug' });
+    expect(parseClientFrame(JSON.stringify({ t: 'nest', r: 3, spot: 'w2', item: null }))).toEqual({ t: 'nest', r: 3, spot: 'w2', item: null });
+    expect(parseClientFrame(JSON.stringify({ t: 'nest', r: 4, open: false }))).toEqual({ t: 'nest', r: 4, open: false });
+    expect(parseClientFrame(JSON.stringify({ t: 'nest', r: 5, open: true, extra: 'x' }))).toEqual({ t: 'nest', r: 5, open: true });
+    // A well-formed spot or piece the rules do not know is passed on, for them to refuse with a reason.
+    expect(parseClientFrame(JSON.stringify({ t: 'nest', r: 6, spot: 'f9', item: 'sofa' }))).toEqual({ t: 'nest', r: 6, spot: 'f9', item: 'sofa' });
+  });
+
+  it('rejects a malformed change to a nest', () => {
+    for (const bad of [
+      { t: 'nest', spot: 'f1', item: 'rug' }, // no request number
+      { t: 'nest', r: -1, open: true },
+      { t: 'nest', r: 1 },
+      { t: 'nest', r: 1, spot: 'f1' },
+      { t: 'nest', r: 1, spot: 'f1', item: 'rug', open: true },
+      { t: 'nest', r: 1, spot: 'F1', item: 'rug' },
+      { t: 'nest', r: 1, spot: 'f1', item: 'Rug' },
+      { t: 'nest', r: 1, open: 'yes' },
+      { t: 'nest', r: 1, layout: { f1: 'rug' } },
+    ]) {
+      expect(parseClientFrame(JSON.stringify(bad)), JSON.stringify(bad)).toBeNull();
+    }
+  });
+
+  it('lets a page read the nest, street and closed frames', () => {
+    const frames: ServerFrame[] = [
+      { t: 'nest', nest: { nestId: 'abcd1234', open: true, layout: { f1: 'rug' }, look }, mine: true, owned: ['rug'], gift: { taken: false, next: 1 } },
+      { t: 'nest', r: 3, ok: false, reason: 'not-owner' },
+      { t: 'street', r: 1, own: { nestId: 'abcd1234', open: false }, doors: [{ nestId: 'zz99zz99', look }, null, null, null, null] },
+      { t: 'closed', room: 'nest-abcd1234', why: 'closed' },
+    ];
+    for (const f of frames) expect(parseServerFrame(JSON.stringify(f))).toEqual(f);
+  });
+});
+
+describe('parseClientFrame', () => {
+  it('accepts well-formed frames and rounds coordinates', () => {
+    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V, look, spawn: 'from-grove', pos: { x: 10.4, y: 20.6 } }))).toEqual({ t: 'hello', v: V, look, spawn: 'from-grove', pos: { x: 10, y: 21 } });
+    expect(parseClientFrame(JSON.stringify({ t: 'move', to: { x: 1, y: 2 }, seq: 3 }))).toEqual({ t: 'move', to: { x: 1, y: 2 }, seq: 3 });
+    expect(parseClientFrame(JSON.stringify({ t: 'look', look, extra: 1 }))).toEqual({ t: 'look', look });
+    expect(parseClientFrame(JSON.stringify({ t: 'bye' }))).toEqual({ t: 'bye' });
+    // Come by travel from the map (OP-130).
+    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V, look, spawn: 'default', via: 'travel' }))).toEqual({ t: 'hello', v: V, look, spawn: 'default', via: 'travel' });
+    // A keeper's token (OP-156): two base64url parts, the second a signature's 43 characters.
+    const keeper = `${'eyJrIjoia3By'.padEnd(40, 'A')}.${'s'.repeat(43)}`;
+    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V, look, keeper }))).toEqual({ t: 'hello', v: V, look, keeper });
+    for (const bad of ['not a token', `${'a'.repeat(201)}.${'s'.repeat(43)}`, `abc.${'s'.repeat(42)}`, `abc.${'s'.repeat(43)}=`, 42, null]) {
+      expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V, look, keeper: bad })), String(bad)).toBeNull();
+    }
+    // The park the owl walks (OP-265): 1 or 2, nothing else.
+    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V, look, map: 2 }))).toEqual({ t: 'hello', v: V, look, map: 2 });
+    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V, look, map: 1 }))).toEqual({ t: 'hello', v: V, look, map: 1 });
+    for (const bad of [0, 3, '2', 1.5, null]) {
+      expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V, look, map: bad })), String(bad)).toBeNull();
+    }
+    // An owl asleep or awake (OP-126): a plain yes or no, nothing else.
+    expect(parseClientFrame(JSON.stringify({ t: 'rest', asleep: true }))).toEqual({ t: 'rest', asleep: true });
+    expect(parseClientFrame(JSON.stringify({ t: 'rest', asleep: false, extra: 1 }))).toEqual({ t: 'rest', asleep: false });
+    expect(parseClientFrame(JSON.stringify({ t: 'rest', asleep: 'yes' }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'rest' }))).toBeNull();
+    // And the room server's word to the others reaches their pages.
+    expect(parseServerFrame(JSON.stringify({ t: 'rest', id: 'o1', asleep: false }))).toEqual({ t: 'rest', id: 'o1', asleep: false });
+  });
+
+  it('accepts an emote from the catalogue and nothing else: the old hop is gone with flight (OP-084)', () => {
+    expect(parseClientFrame(JSON.stringify({ t: 'emote', e: 'hoot' }))).toEqual({ t: 'emote', e: 'hoot' });
+    expect(parseClientFrame(JSON.stringify({ t: 'emote', e: 'fly' }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'emote', e: 'jump' }))).toBeNull();
+    expect(isEmoteId('jump')).toBe(false);
+    expect(isParkMessage({ t: 'emote', id: 'p1', e: 'jump' })).toBe(false);
+  });
+
+  it('carries an owl’s air state each way (OP-084); a page drops one it cannot believe', () => {
+    const air = { z: 120, vz: -86.7, s: 2, f: 1 };
+    expect(parseClientFrame(JSON.stringify({ t: 'air', air }))).toEqual({ t: 'air', air });
+    // The room server never closes a socket over air (OP-084): whatever comes is the room's to check (Room.air drops it).
+    for (const odd of [{ z: MAX_RISE + 5, vz: 0, s: 1, f: 0 }, { z: 30, vz: 0, s: 4, f: 0 }, null, 'high'])
+      expect(parseClientFrame(JSON.stringify({ t: 'air', air: odd })), JSON.stringify(odd)).toEqual({ t: 'air', air: odd });
+    expect(parseServerFrame(JSON.stringify({ t: 'air', id: 'o1', air, at: 5 }))).toEqual({ t: 'air', id: 'o1', air, at: 5 });
+    // Between pages on this device: the same state, on the sender's clock.
+    expect(isParkMessage({ t: 'air', id: 'p1', air, at: 5 })).toBe(true);
+    expect(isParkMessage({ t: 'air', id: 'p1', air: { ...air, z: -40 }, at: 5 })).toBe(false);
+    expect(isParkMessage({ t: 'air', id: 'p1', air })).toBe(false);
+  });
+
+  it('accepts positions anywhere in a room wider than one screen', () => {
+    expect(parseClientFrame(JSON.stringify({ t: 'move', to: { x: 4700, y: 1500 }, seq: 2 }))).toEqual({ t: 'move', to: { x: 4700, y: 1500 }, seq: 2 });
+  });
+
+  it('accepts activity frames, a note only with an emote', () => {
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'light', r: 4 }))).toEqual({ t: 'act', a: 'light', r: 4 });
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'cast', e: 'hoot', r: 5 }))).toEqual({ t: 'act', a: 'cast', r: 5 });
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'note', e: 'hoot', r: 6 }))).toEqual({ t: 'act', a: 'note', e: 'hoot', r: 6 });
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'note', r: 6 }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'note', e: 'sing', r: 6 }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'fly', r: 7 }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'act', a: 'tasks' }))).toBeNull();
+  });
+  it('rejects anything malformed', () => {
+    expect(parseClientFrame('not json')).toBeNull();
+    expect(parseClientFrame('[]')).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V - 1, look }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V, look: { body: 'red' } }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V, look, spawn: 'Not A Spawn' }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V, look, via: 'teleport' }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'move', to: { x: -5, y: 2 }, seq: 1 }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'move', to: { x: 5, y: 2 }, seq: 1.5 }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'move', to: { x: Infinity, y: 2 }, seq: 1 }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'move', to: { x: 6401, y: 2 }, seq: 1 }))).toBeNull(); // past the biggest room
+    expect(parseClientFrame(JSON.stringify({ t: 'say', text: 'hi' }))).toBeNull();
+    expect(parseClientFrame('x'.repeat(2000))).toBeNull();
+  });
+});
+
+describe('protocol v15, spectators (OP-191)', () => {
+  const PASS = `${'a'.repeat(120)}.${'B'.repeat(43)}`;
+
+  it('takes an admit with a pass shaped as the Worker signs one, and nothing else', () => {
+    expect(parseClientFrame(JSON.stringify({ t: 'admit', pass: PASS, r: 3 }))).toEqual({ t: 'admit', pass: PASS, r: 3 });
+    for (const pass of [undefined, 7, '', 'no-dot', `${PASS}.x`, `${'a'.repeat(120)}.${'B'.repeat(42)}`, `${'a'.repeat(467)}.${'B'.repeat(43)}`, `a b.${'B'.repeat(43)}`]) {
+      expect(parseClientFrame(JSON.stringify({ t: 'admit', pass, r: 3 })), String(pass)).toBeNull();
+    }
+    expect(parseClientFrame(JSON.stringify({ t: 'admit', pass: PASS }))).toBeNull();
+    // The longest pass a frame may carry still fits one frame.
+    expect(parseClientFrame(JSON.stringify({ t: 'admit', pass: `${'a'.repeat(466)}.${'B'.repeat(43)}`, r: 1e9 }))).not.toBeNull();
+  });
+
+  it('reads the room’s answer to an admit, a spectator’s welcome and the full room it is turned from', () => {
+    expect(parseServerFrame(JSON.stringify({ t: 'admitted', r: 3, ok: false, reason: 'pass' }))).toEqual({ t: 'admitted', r: 3, ok: false, reason: 'pass' });
+    expect(parseServerFrame(JSON.stringify({ t: 'full', room: 'hub', cap: 80, spectators: true }))).toEqual({ t: 'full', room: 'hub', cap: 80, spectators: true });
+  });
+});
+
+describe('the dash and the courses on the wire (OP-224)', () => {
+  it('reads a dash as a move is read: where to, numbered, in whole pixels', () => {
+    expect(parseClientFrame(JSON.stringify({ t: 'dash', to: { x: 10.4, y: 20.6 }, seq: 3 }))).toEqual({ t: 'dash', to: { x: 10, y: 21 }, seq: 3 });
+    for (const bad of [{ to: { x: 1 }, seq: 1 }, { to: { x: 1, y: 2 }, seq: -1 }, { to: { x: 1, y: 2 }, seq: 1.5 }, { to: { x: 1, y: 2 } }]) expect(parseClientFrame(JSON.stringify({ t: 'dash', ...bad })), JSON.stringify(bad)).toBeNull();
+  });
+
+  it('reads a course step: the piece named for a bench, a part, a feather or a shortcut, none for the rest', () => {
+    expect(parseClientFrame(JSON.stringify({ t: 'course', a: 'state', r: 1 }))).toEqual({ t: 'course', a: 'state', r: 1 });
+    expect(parseClientFrame(JSON.stringify({ t: 'course', a: 'finish', id: 'ignored', r: 2 }))).toEqual({ t: 'course', a: 'finish', r: 2 });
+    expect(parseClientFrame(JSON.stringify({ t: 'course', a: 'part', id: 'bell-1', r: 3 }))).toEqual({ t: 'course', a: 'part', id: 'bell-1', r: 3 });
+    expect(parseClientFrame(JSON.stringify({ t: 'course', a: 'shortcut', id: 'bridge', r: 4 }))).toEqual({ t: 'course', a: 'shortcut', id: 'bridge', r: 4 });
+    expect(parseClientFrame(JSON.stringify({ t: 'course', a: 'part', r: 5 }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'course', a: 'feather', id: 'Not An Id', r: 6 }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'course', a: 'warp', r: 7 }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'course', a: 'state' }))).toBeNull();
+  });
+
+  it('hands a course answer to the page', () => {
+    const f = { t: 'course', r: 1, a: 'fall', ok: true, view: { course: 'trail', run: null, feathers: [], shortcuts: [], cleared: false, bestMs: null }, at: { x: 1, y: 2 } };
+    expect(parseServerFrame(JSON.stringify(f))).toEqual(f);
+  });
+});

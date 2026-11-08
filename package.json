@@ -1,0 +1,52 @@
+{
+  "name": "owl-park",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Owl Park: a 2D multiplayer virtual owl park that runs in the browser.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @owl-park/park dev",
+    "build": "pnpm --filter @owl-park/park build",
+    "preview": "pnpm --filter @owl-park/park preview",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "e2e": "pnpm --filter @owl-park/park e2e",
+    "mutate": "pnpm --filter @owl-park/shared mutate && pnpm --filter @owl-park/edge mutate",
+    "check": "pnpm typecheck && pnpm test && pnpm build",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "dev:edge": "pnpm build && pnpm --filter @owl-park/edge dev",
+    "build:edge": "node tools/build-edge.mjs",
+    "deploy:edge": "pnpm build:edge && pnpm --filter @owl-park/edge exec wrangler deploy",
+    "dev:ig": "pnpm --filter @owl-park/ig-connector dev",
+    "deploy:ig": "pnpm --filter @owl-park/ig-connector exec wrangler deploy",
+    "load": "node tools/load/swarm.mjs",
+    "chaos": "node tools/chaos/run.mjs",
+    "chaos:test": "node --test tools/chaos/chaos.test.mjs",
+    "security:bundle": "node tools/security/bundle-check.mjs apps/park/dist",
+    "security:test": "node --test tools/security/bundle-check.test.mjs tools/security/security-test.test.mjs",
+    "masks:pull": "node tools/masks/pull.mjs",
+    "masks:test": "node --test tools/masks/pull.test.mjs",
+    "kit:greybox": "node tools/kit/greybox.mjs",
+    "kit:catalog": "node tools/kit/catalog.mjs",
+    "kit:preview": "python3 tools/kit/preview.py",
+    "kit:skin": "python3 tools/kit/skin_sheet.py",
+    "kit:check": "python3 -B -m unittest discover -s tools/kit -p \"test_*.py\"",
+    "kit:test": "node --test tools/kit/greybox.test.mjs",
+    "art:generate": "node tools/art/generate.mjs",
+    "art:geometry": "node --experimental-strip-types tools/art/generate.mjs geometry",
+    "art:finish": "python3 -B tools/art/postprocess.py",
+    "art:import": "python3 -B tools/kit/art_import.py",
+    "art:preview": "node tools/art/preview.mjs",
+    "art:test": "node --test \"tools/art/**/*.test.mjs\" && python3 -B -m unittest discover -s tools/art -p \"test_*.py\""
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@playwright/test": "1.56.1",
+    "ws": "^8.21.0"
+  }
+}

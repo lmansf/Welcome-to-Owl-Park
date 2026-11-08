@@ -1,0 +1,7 @@
+{
+  "extends": "../../tsconfig.base.json",
+  // index.ts runs on Deno, which wants the `.ts` on relative imports; src/deno.d.ts declares the
+  // little of Deno it uses.
+  "compilerOptions": { "allowImportingTsExtensions": true, "types": [] },
+  "include": ["src", "test"]
+}

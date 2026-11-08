@@ -1,0 +1,2523 @@
+/**
+ * The art generator's job list: one entry per image the pipeline generates, with the prompt,
+ * the generation size, the base seed, the key (chroma) colour for keyed assets and the
+ * reference-image slots. This file is data; the art director edits it. `generate.mjs` reads it.
+ *
+ * Prompts and style blocks below are the approved defaults. Keys are the public asset ids from
+ * `apps/park/src/game/art.ts` plus helper keys (`tree-master`, `owl-master`, `owl-blink-src` and
+ * the species masters `owl-<species>-master`) whose output is turned into shipped assets by the
+ * post-processing stage.
+ *
+ * Rules for anything added here: no text in images except the four approved sign phrases and the
+ * arcade's three game titles, no names of realms, people, companies or other games, no requests
+ * for another work's style.
+ */
+
+export const VERSION = 1;
+
+/** Built-in defaults; flags and environment variables override them (see README.md). */
+export const DEFAULTS = {
+  provider: 'mock',
+  seed: 1000,
+  variants: 1,
+  concurrency: 2,
+  /** Refuse to start a run whose uncached jobs would cost more than this (USD). */
+  maxSpendUsd: 5,
+  /**
+   * Seedream family: 'seedream-v5-pro' (newest, about $0.07-0.14 per image on fal.ai, up to 2K),
+   * 'seedream-v4.5' ($0.04, up to 4K) or 'seedream-v4' ($0.03). `node tools/art/generate.mjs
+   * models` lists them; prices and size limits live in generate.mjs (MODELS).
+   */
+  model: 'seedream-v5-pro',
+  /** Reference images larger than this are refused when sent inline as data URLs. */
+  maxRefBytes: 2 * 1024 * 1024,
+  /** A warning is printed when one request body grows past this. */
+  warnBodyBytes: 12 * 1024 * 1024,
+  /** Most reference images one request may carry. */
+  maxRefs: 14,
+};
+
+/** Brand anchors and the realm accents the mock provider and the docs refer to. */
+export const PALETTE = {
+  navy: '#0C1E36',
+  deepNavy: '#07122A',
+  gold: '#C9A227',
+  goldLight: '#FFD36A',
+  cream: '#F6F1E3',
+  amber: '#F2B24A',
+  duskBlue: '#2E4C7A',
+  moss: '#3E5A3A',
+  mossLight: '#6E8B4E',
+  bark: '#4A3322',
+  barkDark: '#2B1C12',
+  innerWood: '#5C4632',
+  innerWoodLit: '#8F8068',
+  coolShadow: '#1B2E4C',
+  magenta: '#FF2AA1',
+  cyan: '#00E5FF',
+  asphalt: '#0B0B16',
+  chrome: '#C7CEDA',
+  violet: '#6E3AFF',
+};
+
+/**
+ * The hub redo brief: what the hub is, how the same tree reads in every realm, and how the
+ * images are meant to be generated. Kept next to the prompts so edits stay consistent with it.
+ */
+export const BRIEF = `The hub is the inside of the tree. Visitors stand on the inner-wood floor of the colossal tree's hollow base, inside a moonlit nave of living wood, and the only ways out of it are the four realms. There is no sky, no lawn, no building and no tree "in front of" the visitor: the tree is the architecture, the floor and the light source at once, and that is the answer to "the hub is quite standard".
+
+Composition: camera straight on and slightly elevated, looking into the hollow from its mouth. The far wall is the curved inner trunk; the side walls sweep forward and leave the frame at the left and right edges; the ceiling converges into a tall dark shaft. At the top centre a ragged knothole, cut by the top edge, shows a slice of cream moon and a couple of stars, and a soft cone of cream moonlight falls down the shaft onto the centre of the floor with a few dry gold leaves drifting in it. The floor is the lower 36 percent: pale worn inner wood, mid value so coloured owls read on it, with wide uneven growth rings centred just below the middle of the floor and the moon pool at the default spawn. Thick roots dive under the floor from the walls like buttresses. At the back centre a narrow sealed cleft of exposed golden inner wood glows gold behind amber resin: the heart of the tree, too narrow to be a door, and the foot of the tree-base anchor. Four archways are cut into the living wood at floor level and the wood changes style around each: storybook left wall (to-grove), chrome and neon right wall (to-market), ink wash back-left (closed-a), stained glass back-right (closed-b).
+
+What every realm shares:
+
+1. The tree signature. One master "tree signature sheet" fixes the individual: the LEAN (the trunk drifts slightly left as it rises), the EYE (one tall almond knothole left of centre, about two thirds up, always lit), the GOLD SEAM (a narrow bright cleft of exposed golden inner wood running up the front of the trunk from the base hollow toward the eye), the TALON CROWN (five great buttress roots splayed like an owl's foot) and the SHOULDER (a broken limb stub high on the right). Inside the hub the visitor is standing in the base hollow, looking up the inside of the eye at the moon, with the gold seam glowing in the back wall and the five toes converging under the floor. The sheet (exterior silhouette plus the hub interior render) is a locked reference image in every realm prompt, and these marks are never redrawn differently per realm, only restyled.
+
+2. The spiral of lit hollows. A loose spiral of small round knotholes climbs the trunk; from outside they glow gold, and from inside the hub they are the small warm windows up the dark shaft, which is what keeps the interior reading as a tree rather than a cave or a chapel. In grove they are amber lamplit windows with tiny balconies on the same tree; market has no tree; in the sign eggs they are ink dots and leaded roundels.
+
+3. Platform guides. Thin gold inlay lines, worn into the inner-wood floor, radiate from the moon pool toward the four arches. They make the exits legible under a crowd, give taps a direction, and stay low-contrast so owl drop shadows remain the main separation.
+
+4. Closed bays and their signs. The game draws a 420 x 520 closed-realm sign in front of each sealed bay with its base at the door marker (closed-a at x 500, closed-b at x 1100 in the 1600 x 900 room), which hides the bay opening and the wall straight above it. So the ink and glass treatments are painted spreading outward from each sealed opening onto the surrounding wall and the floor in front of it, where they stay visible beside the sign, and the openings themselves are kept plain and dark. The layout guide (pnpm art:finish guide) shows the sign footprints.
+
+5. Scale cue: a single fallen leaf on the floor, about the size of an owl, painted into the hub background near the bottom left corner. It is not part of hub-fg: the hub's walkable area reaches the bottom edge of the frame, so the overlay's whole lower half stays empty and nothing in it can ever sit over the crowd.
+
+Through-line into the open realms: in grove the same tree stands storybook-style at the right edge of the clearing, its base hollow being the to-hub door at x 1486..1600, the eye lamplit amber, the gold seam a soft honey line, moss and lanterns on the talon crown, the spiral windows glowing, and through the hollow a glimpse of the cream moon pool on growth rings inside. The guardian perches on the upper-middle stage area in front of the trunk, so the colossal owl is literally seated among the roots of the hub's tree. Market is the exception, by the art director's call: no tree; a skyline of futuristic skyscrapers stands behind the stalls instead, and the to-hub passage at the left edge is an arched chrome doorway in the base of a tower, a magenta tube tracing the arch, cream-lit growth rings visible inside as the only hint of the hub beyond.
+
+Light plan for the hub: cool cream from above (moon), warm gold from the back centre (heart seam) and the spiral windows, amber from the left arch, magenta and cyan from the right arch, small jewel patches from the glass. Everything else sits in navy and warm dark wood. Brightest: the moon pool on the floor centre. Darkest: the top of the shaft and the bottom corners.`;
+
+/** Style blocks, one per realm. New prompts for a realm include its block verbatim. */
+export const STYLE = {
+  hub: `STYLE (use verbatim in every hub prompt): hand-painted 2D game background, clean cel-shaded shapes with soft painted gradients, matte-painting depth, slightly stylised proportions, no outlines, no photorealism, no film grain, large flat colour areas that compress cleanly. Night interior inside a colossal living tree, lit by cream moonlight from above and warm gold sap-light from within the wood. PALETTE: navy #0C1E36 and deep navy #07122A for shadow and the vault; gold #C9A227 and warm gold light #FFD36A for sap-light, lit knotholes and highlights; cream #F6F1E3 for moonlight; inner bark warm darks #2B1C12 to #4A3322; inner-wood floor #5C4632 lifting to #8F8068 under the moon; cool shadow #1B2E4C in the corners. Realm accents appear ONLY inside their own archway and its spill: left arch amber #F2B24A and dusk blue #2E4C7A; right arch magenta #FF2AA1, cyan #00E5FF, chrome #C7CEDA, violet #6E3AFF on near-black #0B0B16; ink bay only black #111111, grey #6B6B6B and cream #F6F1E3; glass panes gold #C9A227, ruby #A3202F, emerald #1E6B4C, sapphire #1F4A9C, amber #E6A530 with navy #0C1E36 lead lines. SHAPE LANGUAGE: tall vertical ribs of inner bark, rounded knotty arches, a broad smooth floor with low-contrast growth rings and thin worn gold guide lines, a loose spiral of small lit knotholes climbing the dark shaft, five thick root buttresses converging under the floor, soft volumetric light. READABILITY: a clear, uncluttered, mid-value floor in the lower part of the frame so small colourful figures added later stand out; doorways at floor level, each clearly an opening. AVOID: any text, letters, numbers, writing, signage, logos or watermarks; any owls, birds, animals, people, faces or characters; extra doors or arches beyond those described; exact mirror symmetry; photographic textures; busy noisy detail; lens flare; daylight; sky or landscape beyond the knothole.`,
+  grove: `STYLE (use verbatim in every grove prompt): cozy storybook illustration, hand-painted 2D game background, soft rounded shapes, gentle cel shading with warm painted gradients, slightly chunky proportions, no hard outlines, no photorealism, no film grain, large flat colour areas that compress cleanly. Dusk in a forest clearing with a treehouse village. PALETTE: warm amber lantern light #F2B24A and #FFB347; honey gold #C9A227; cream #F6F1E3 highlights; dusk blue sky #2E4C7A deepening to navy #0C1E36 at the top; mossy greens #3E5A3A and #6E8B4E; warm bark #4A3322 and #6E4E36; firefly points in pale gold #FFE28A. SHAPE LANGUAGE: round lanterns, rope bridges, little shingled treehouse roofs, soft moss cushions, drifting fireflies, the same colossal ancient tree with its locked silhouette (slight leftward lean, one tall almond knothole lit from inside left of centre, a narrow gold seam up the front of the trunk from the base hollow, five splayed buttress roots, a broken limb stub high on the right, a loose spiral of small lit windows up the trunk). READABILITY: a clear mid-value ground plane in the lower half of the frame, nearer is lower, doorways at ground level. AVOID: any text, letters, numbers, writing, signage, logos or watermarks; any owls, birds, animals, people, faces or characters unless the prompt is for a character; photographic textures; busy noisy detail; lens flare; harsh daylight; exact mirror symmetry.`,
+  market: `STYLE (use verbatim in every market prompt): cyberpunk neon market illustration, hand-painted 2D game background with crisp graphic shapes, cel shading with glowing neon gradients, slightly stylised proportions, no photorealism, no film grain, large flat dark areas that compress cleanly. Rainy night in a chrome market street. PALETTE: Night Asphalt #0B0B16 base; Signal Magenta #FF2AA1 and Circuit Cyan #00E5FF neon; Chrome #C7CEDA plating; Violet Haze #6E3AFF mist and mid tones; small touches of brand gold #C9A227 and cream #F6F1E3 in the doorway's glow only. SHAPE LANGUAGE: riveted chrome plates, neon tubes and conduit, stacked market stalls with awnings and hanging cables, puddles reflecting neon, rain streaks, a skyline of tall futuristic skyscrapers with stepped chrome crowns, lit window bands and neon edge lines; no trees anywhere. READABILITY: a clear mid-value rain-slick street as the ground plane in the lower half of the frame, nearer is lower, doorways at ground level, neon signs and displays as abstract glowing shapes only. AVOID: any text, letters, numbers, glyphs, writing, signage lettering, logos or watermarks; any owls, birds, animals, people, faces or characters unless the prompt is for a character; photographic textures; busy noisy detail; lens flare; daylight; exact mirror symmetry.`,
+};
+
+/**
+ * Sent only when a provider is given a field for it (ARK_NEGATIVE_FIELD / FAL_NEGATIVE_FIELD);
+ * the prompts already carry their own AVOID lists.
+ */
+export const NEGATIVE_PROMPT = `text, letters, numbers, words, writing, calligraphy, glyphs, signage lettering, labels, logos, watermark, signature, caption, frame, border, owls, birds, animals, people, humans, faces, characters, figures, crowd, extra doors, extra arches, duplicated doorway, mirror symmetry, photorealistic, photograph, 3D render, film grain, noise, heavy texture, lens flare, blur, bokeh, chromatic aberration, daylight, sun, canopy or sky where the prompt forbids it, green tint on props, soft or semi-transparent edges on keyed assets, shadows cast onto the chroma backdrop, gradient or vignette on the chroma backdrop, arms or hands on the robot owl, colour mixing between the red, green and blue regions of the owl master`;
+
+/** Full prompts, one per job key. Edit here; the job list below points at them. */
+export const PROMPTS = {
+  hub: `Interior of the hollow base of a colossal ancient living tree, seen straight on from its mouth, camera slightly elevated, 16:9 wide shot, 3200x1800. We are inside the trunk: the inner bark rises in tall vertical ribs that bow inward like the columns of a nave and vanish into a dark shaft overhead. A loose spiral of small round knotholes climbs the dark shaft, each glowing warm gold from the wood as if lamplit, drifting from lower left to upper right. At the top centre a ragged knothole opening, cut off by the top edge and leaning a little to the left, shows a slice of a cream moon and a couple of stars; a soft cone of cream moonlight falls straight down the shaft onto the centre of the floor, with a few dry gold leaves drifting in it. High on the right inner wall a dark knot marks a broken limb stump. The floor fills the lower third: a broad, gently dished floor of pale worn inner wood with wide, uneven concentric growth rings, lit brightest in the centre where the moonlight lands and falling into cool navy shadow in the bottom corners, with thin worn gold inlay lines radiating from the lit centre toward the four openings like old guide lines; five thick smooth root buttresses dive under the floor from the base of the walls. In the back wall at dead centre a narrow vertical seam of exposed golden inner wood, sealed with translucent amber resin, glows warm gold from within and runs up toward the shaft, far too narrow to walk through. Four archways are cut into the living wood at floor level and the tree changes style around each one. On the left wall at the left edge: a rounded, knotty, cosy arch with moss cushions, a few small carved round windows glowing amber, a string of paper lanterns across its head and fireflies drifting out; inside it amber light fading to dusk blue, and a wedge of warm light spilling onto the floor. On the right wall at the right edge: an arch sheathed in riveted chrome plates grown out of the bark, a plain magenta neon tube tracing the arch with a thin cyan underline, loose cables, rain mist, near-black inside with magenta and cyan haze, and a wet reflection spilling cool magenta onto the floor. In the back wall left of centre: a sealed pointed arch, a plain dark hollow closed off by living wood, and around it the wall itself has turned to ink: black dry-brush ribs and soft washes on cream rice paper spread outward from the sealed opening across the wall to its left toward the cosy arch and upward into the shaft, with one ink-painted bare branch reaching sideways along the wall, and a faint ink mist drifting onto the floor in front of the opening. In the back wall right of centre: a second sealed pointed arch, also a plain dark closed hollow, and around it the wood has turned to stained glass: dark navy lead lines and jewel panes of gold, ruby, emerald and sapphire in abstract feather and leaf shapes only, set into the wall to its right toward the chrome arch and climbing upward beside the shaft, lit from within by moonlight and throwing soft coloured patches onto the floor in front of the opening. The two sealed openings themselves stay simple, dark and undecorated, because a large sign will stand in front of each one. A single dry fallen leaf, navy-green with cream edges and gold veins and about one tenth of the frame's height long, lies on the floor near the bottom left corner. Nothing else stands on the floor; the room is empty and still. STYLE: hand-painted 2D game background, clean cel-shaded shapes with soft painted gradients, matte-painting depth, slightly stylised proportions, no outlines, no photorealism, no film grain, large flat colour areas that compress cleanly. Night interior inside a colossal living tree, lit by cream moonlight from above and warm gold sap-light from within the wood. PALETTE: navy #0C1E36 and deep navy #07122A for shadow and the vault; gold #C9A227 and warm gold light #FFD36A for sap-light, lit knotholes and highlights; cream #F6F1E3 for moonlight; inner bark warm darks #2B1C12 to #4A3322; inner-wood floor #5C4632 lifting to #8F8068 under the moon; cool shadow #1B2E4C in the corners. Realm accents appear ONLY inside their own archway and its spill: left arch amber #F2B24A and dusk blue #2E4C7A; right arch magenta #FF2AA1, cyan #00E5FF, chrome #C7CEDA, violet #6E3AFF on near-black #0B0B16; ink bay only black #111111, grey #6B6B6B and cream #F6F1E3; glass panes gold #C9A227, ruby #A3202F, emerald #1E6B4C, sapphire #1F4A9C, amber #E6A530 with navy #0C1E36 lead lines. SHAPE LANGUAGE: tall vertical ribs of inner bark, rounded knotty arches, a broad smooth floor with low-contrast growth rings and thin worn gold guide lines, a loose spiral of small lit knotholes climbing the dark shaft, five thick root buttresses converging under the floor, soft volumetric light. READABILITY: a clear, uncluttered, mid-value floor in the lower part of the frame so small colourful figures added later stand out; doorways at floor level, each clearly an opening. No text, no watermark. AVOID: any text, letters, numbers, writing, signage, logos or watermarks; any owls, birds, animals, people, faces or characters; extra doors or arches beyond the four described; exact mirror symmetry; photographic textures; busy noisy detail; lens flare; daylight; sky or landscape beyond the knothole.`,
+
+  'hub-fg': `Foreground props for a 2D game room overlay, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadows on the backdrop, no ground plane, 16:9, 3200x1800. The whole lower half of the frame and the entire centre are completely empty green: nothing touches the bottom edge or the bottom corners, and nothing hangs down past the middle of the frame. Props only, hanging from the top edge and the upper corners: from the upper left corner and the upper right corner a sparse curtain of fine hanging roots and tendrils of ancient tree root in warm dark root wood dangling a short way into the frame, catching cool cream moonlight on their edges, with a couple of small glowing gold bracket fungi on the thickest root; along the top edge a few more thin tendrils; on the far left and far right edges, in the upper third of the frame only, a thin sliver of ribbed inner bark wall with one small glowing gold knothole each. Crisp clean opaque silhouettes against the green, no soft haze or glow bleeding onto the backdrop, no semi-transparent edges. STYLE: hand-painted 2D game art, clean cel-shaded shapes with soft painted gradients, no outlines, no photorealism, no film grain, night lighting with cream moonlight #F6F1E3 from above and warm gold #C9A227 and #FFD36A glow on the fungi and knotholes, inner wood and root tones #2B1C12 to #5C4632, cool shadow #1B2E4C. No text, no watermark. AVOID: any text or writing; any owls, birds, animals, people, faces or characters; anything in the middle of the frame; anything in the lower half of the frame or touching the bottom edge or the bottom corners; anything on the left or right edges below the upper third; green tint on the props.`,
+
+  grove: `A cozy storybook forest clearing at dusk with a treehouse village, 16:9 wide shot, 3200x1800, hand-painted 2D game background. The ground plane fills the lower half: a soft mossy clearing floor in mid-value greens and warm earth, nearer is lower, open and uncluttered in its centre and running to the bottom edge, with a worn path curving in from the right edge. At the right edge of the frame stands the colossal ancient tree, its trunk filling the right side and leaving the frame at the top: it leans very slightly to the left as it rises, has one tall almond-shaped knothole left of centre on the trunk glowing amber as if lamplit from inside, a narrow soft honey-gold seam of exposed golden inner wood running up the front of the trunk from the base hollow toward the knothole, five great buttress roots splayed at its base like a bird's foot with moss cushions and little hanging lanterns on them, a broken limb stub high on the right with a rope bridge tied to it, and a loose spiral of small round windows up the trunk glowing warm amber with tiny balconies. At the base of this tree, at ground level on the right edge of the frame, a rounded hollow opens into the trunk, and through it a glimpse of a cream moonlit floor with growth rings inside; fireflies drift around the hollow. Behind and around the clearing, a treehouse village: little shingled roofs, round windows glowing amber, rope bridges and ladders between the trees, strings of paper lanterns, fireflies everywhere as soft pale gold points. The upper middle of the frame, above the clearing and in front of the deep forest, is a clear calm stage: a broad mossy branch or root ledge at about mid height with open dusk sky and soft haze above it, with nothing standing on it, left empty for a figure to be added later. Dusk sky grading from warm amber at the horizon through dusk blue to navy at the top, a few early stars, soft mist between distant trunks. STYLE: cozy storybook illustration, hand-painted 2D game background, soft rounded shapes, gentle cel shading with warm painted gradients, slightly chunky proportions, no hard outlines, no photorealism, no film grain, large flat colour areas that compress cleanly. PALETTE: warm amber lantern light #F2B24A and #FFB347; honey gold #C9A227; cream #F6F1E3 highlights; dusk blue sky #2E4C7A deepening to navy #0C1E36 at the top; mossy greens #3E5A3A and #6E8B4E; warm bark #4A3322 and #6E4E36; firefly points in pale gold #FFE28A. READABILITY: a clear mid-value ground plane in the lower half of the frame, nearer is lower, the doorway at ground level on the right edge. No text, no watermark. AVOID: any text, letters, numbers, writing, signage, logos or watermarks; any owls, birds, animals, people, faces or characters; photographic textures; busy noisy detail; lens flare; harsh daylight; exact mirror symmetry.`,
+
+  'grove-fg': `Foreground props for a 2D storybook game room overlay, isolated on a flat, solid, uniform pure chroma magenta #FF00FF background that fills the entire canvas with no gradient, no vignette, no cast shadows on the backdrop, no ground plane, 16:9, 3200x1800. The centre of the frame and the whole middle band are completely empty magenta. Props only, each fully inside the frame: in the bottom left corner, inside the left eighth of the width, a small round moss-covered stone with two small paper lanterns on a short stake (no ferns); at the very right edge near the bottom, inside the right sixteenth of the width, a thin bent twig rising from the frame edge with one hanging paper lantern and two tiny mushrooms at its foot (no log, nothing lying on the ground); from the upper left corner a single leafy branch with a string of three paper lanterns dipping a short way into the frame; from the upper right corner a few hanging vine tendrils with small leaves. Every lantern is painted as a solid unlit object in warm amber and honey tones: no glow, no light rays, no halo and no bloom (the game adds the glow itself). Crisp clean opaque silhouettes against the magenta, no soft haze or glow bleeding onto the backdrop, no semi-transparent edges. STYLE: cozy storybook illustration, hand-painted 2D game art, soft rounded shapes, gentle cel shading with warm painted gradients, no hard outlines, no photorealism, no film grain. PALETTE: amber lantern light #F2B24A and #FFB347, honey gold #C9A227, cream #F6F1E3 highlights, mossy greens #3E5A3A and #6E8B4E, warm bark #4A3322 and #6E4E36. No text, no watermark. AVOID: any text or writing; any owls, birds, animals, people, faces or characters; anything in the middle of the frame; anything on the left or right edges between the top corner props and the bottom corner props; magenta or pink tint on the props.`,
+
+  market: `A cyberpunk neon market street on a rainy night, 16:9 wide shot, 3200x1800, hand-painted 2D game background. The ground plane fills the lower half: a rain-slick dark asphalt street in mid-dark values reflecting magenta and cyan neon in long soft streaks and puddles, nearer is lower, open and uncluttered in its centre and running to the bottom edge. A row of stacked market stalls lines the far side of the street at mid height, with chrome counters, striped awnings, hanging cables, glowing abstract neon tubes and blank glowing display panels; at the centre of the row stands one larger storefront, a gift-shop front with a wide glowing window full of small bright shapes, a chrome doorway at street level and an abstract neon shape above its door where a sign would hang, with no letters on it. At the left edge of the frame, at street level, a tall arched doorway opens into the base of a futuristic tower: a riveted chrome frame, a plain magenta neon tube tracing the rounded arch, and through the opening a glimpse of a cream-lit wooden floor with growth rings. Behind the stalls, across the left and centre of the frame, rises a skyline of tall futuristic skyscrapers: slender towers with stepped chrome crowns, bands of lit windows, magenta and cyan neon edge lines, a few sky bridges between them, fading into violet haze with height. The upper right of the frame, above the stalls on the right side and to the right of the towers, is open hazy night sky in violet and near-black with faint rain, left clear for a large figure to be added later. Violet haze and rain in the distance, a few far towers with scattered abstract lights. STYLE: cyberpunk neon market illustration, hand-painted 2D game background with crisp graphic shapes, cel shading with glowing neon gradients, slightly stylised proportions, no photorealism, no film grain, large flat dark areas that compress cleanly. PALETTE: Night Asphalt #0B0B16 base; Signal Magenta #FF2AA1 and Circuit Cyan #00E5FF neon; Chrome #C7CEDA plating; Violet Haze #6E3AFF mist and mid tones; small touches of brand gold #C9A227 and cream #F6F1E3 in the doorway's glow only. READABILITY: a clear mid-value rain-slick street as the ground plane in the lower half of the frame, nearer is lower, the doorway at ground level on the left edge, neon signs and displays as abstract glowing shapes only. No text, no watermark. AVOID: any text, letters, numbers, glyphs, writing, signage lettering, logos or watermarks; any owls, birds, animals, people, robots, faces or characters; photographic textures; busy noisy detail; lens flare; daylight; exact mirror symmetry.`,
+
+  'market-fg': `Foreground props for a 2D cyberpunk game room overlay, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadows on the backdrop, no ground plane, 16:9, 3200x1800. The centre of the frame, the whole middle band, the entire left side below the top quarter and the bottom-left corner are completely empty green (a doorway stands there in the room behind). Props only, each fully inside the frame: from the upper left corner a bundle of hanging cables with one small unlit lantern, staying within the top quarter of the frame; from the upper right corner a torn awning edge in dark fabric with a thin cyan light strip, also within the top quarter; and in the extreme bottom right corner only, inside the right tenth of the width and the lowest fifth of the height, a small stack of two chrome crates with a magenta neon strip along one edge and a small puddle-free base. Crisp clean opaque silhouettes against the green, no soft haze or neon glow bleeding onto the backdrop, no semi-transparent edges. STYLE: cyberpunk neon market illustration, hand-painted 2D game art with crisp graphic shapes, cel shading with glowing neon gradients, no photorealism, no film grain. PALETTE: Night Asphalt #0B0B16, Signal Magenta #FF2AA1, Circuit Cyan #00E5FF, Chrome #C7CEDA, Violet Haze #6E3AFF. No text, no watermark. AVOID: any text, letters, glyphs or writing; any owls, birds, animals, people, robots, faces or characters; anything in the middle of the frame; anything on the left edge below the top quarter or in the bottom-left corner; anything on the right edge between the awning and the crates; a bollard or post anywhere; green tint on the props.`,
+
+  guardian: `A towering, ancient guardian great horned owl, a single character, full body, perched calmly on a broad mossy branch, facing the viewer and gazing slightly downward with gentle, knowing eyes, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills everything not covered by the owl and its perch, no gradient, no vignette, no cast shadows on the backdrop. Portrait proportions 720x820, generated at 1440x1640, the owl centred with its perch touching the bottom edge of the frame and the owl bottom-centre anchored, the ear tufts near the top edge. The great horned owl silhouette is unmistakable: tall ear tufts, broad rounded head, large round eyes, a stout body, talons gripping the branch. Its feathers are old and weathered, with cushions of soft moss and pale lichen growing among them on the shoulders, brow and chest, a few small ferns and tiny glowing fireflies resting in the plumage, and a soft warm inner glow in honey gold that lights the feather edges and the eyes from within, calm and benevolent, not fierce. Colours: feathers in warm bark browns #4A3322 and #6E4E36 with cream #F6F1E3 barring on the chest and face, moss greens #3E5A3A and #6E8B4E, lichen in pale cream-grey, eyes glowing amber gold #C9A227 and #FFD36A, beak and talons dark navy #0C1E36. STYLE: cozy storybook illustration, hand-painted 2D game character art, soft rounded shapes, gentle cel shading with warm painted gradients, slightly chunky proportions, no hard outlines, no photorealism, no film grain, crisp clean opaque silhouette against the green, no glow bleeding onto the backdrop. No text, no watermark. AVOID: any text or writing; any second owl, bird, animal, person or character; any background scenery, sky, trees or ground beyond the single perch; the owl cut off by any edge except the perch at the bottom; green tint on the feathers; photographic textures; lens flare.`,
+
+  'robot-owl': `A giant robot owl, a single mechanical character, full body, standing upright on two heavy hydraulic legs with chrome talons, no arms of any kind, built in the shape of a barred owl so the silhouette stays unmistakable: a big round smooth-domed head with no ear tufts, no horns and nothing pointed on top, a wide round facial disc framed by concentric chrome rings, two large dark round eye sockets each holding a round glowing eye lens, a small hooked beak, a stout rounded plated body with a collar of horizontal barred plates across the upper chest and long vertical streaked plates down the belly, folded plated wings held against the sides with barred plate edges. Facing the viewer three-quarters, calm and monumental, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills everything not covered by the robot, no gradient, no vignette, no cast shadows on the backdrop. Square proportions 900x900, generated at 1536x1536, the robot centred with its feet on the bottom edge of the frame and bottom-centre anchored. Its body is built from large riveted chrome plates #C7CEDA with visible seams, pistons and hydraulic lines at the joints, cables looping along the neck and under the wings, vents and small blank panels on the chest, no printed markings. Neon accents trace the plate edges and the rim of the facial disc in Signal Magenta #FF2AA1, with Circuit Cyan #00E5FF glowing in the eye lenses, the piston lines and a thin band around the neck; shadowed recesses and the eye sockets in Night Asphalt #0B0B16 and Violet Haze #6E3AFF. Scale cues: the plates are the size of doors, the talons the size of cars, thin rain streaks on the chrome. STYLE: cyberpunk illustration, hand-painted 2D game character art with crisp graphic shapes, cel shading with glowing neon gradients, slightly stylised proportions, no photorealism, no film grain, crisp clean opaque silhouette against the green, no neon glow bleeding onto the backdrop. No text, no watermark. AVOID: ear tufts, horns, feather points or spikes on the head; a great horned owl's head; any text, letters, glyphs, numbers, decals or writing; arms, hands, claws on the wings, weapons; any second robot, owl, bird, animal, person or character; any background scenery, city, sky or ground; the robot cut off by any edge except the feet at the bottom; green tint on the chrome; photographic textures; lens flare.`,
+
+  'owl-master': `A cute cartoon great horned owl, a single character, full body, standing upright, front three-quarter view turned slightly toward the viewer's left, feet planted on the bottom edge of the frame, centred horizontally, bottom-centre anchored. Portrait proportions 200x240, the ear tufts near the top edge, the owl filling most of the height. The great horned owl silhouette must be unmistakable and simple: two pointed ear tufts, a broad round head with big round eyes, a plump oval body, short folded wings, a short tail, two small feet. This image is a colour-coded layer master for a game, so the colours are strict flat fills: the body (head, wings and most of the torso) is painted FLAT pure red #FF0000; the belly (a large oval on the chest) is painted FLAT pure green #00FF00; the accent parts (the two ear tufts, the wing tips and the tail) are painted FLAT pure blue #0000FF; any shading on those parts is ONLY a darker value of the same hue (darker red on red, darker green on green, darker blue on blue), with no highlights, no outlines and no colour mixing between the three regions, with crisp hard edges between them. Only the face is natural: two large round eyes with cream #F6F1E3 eye rings, dark navy #0C1E36 pupils with a small cream catchlight, and a small gold #C9A227 beak; the feet are also gold #C9A227. The owl is isolated on a flat, solid, uniform pure magenta #FF00FF background that fills everything not covered by the owl, no gradient, no vignette, no cast shadow on the backdrop. STYLE: clean flat 2D game character art, simple rounded vector-like shapes, hard crisp edges, no outlines, no gradients, no texture, no photorealism, no film grain, friendly and cute. No text, no watermark. AVOID: any text or writing; any second owl, bird, animal, person or character; background scenery; the owl cut off by any edge except the feet at the bottom; any colour other than pure red, pure green, pure blue and their darker shades on the body, belly and accents; magenta tint on the owl; soft or feathered edges; outlines.`,
+
+  'owl-blink-src': `Edit the reference image of the cute cartoon great horned owl colour-coded layer master and change only one thing: the owl's eyes are closed, drawn as two gentle downward-curved dark navy #0C1E36 closed-eye lines on the cream #F6F1E3 eye rings, as if blinking contentedly. Keep everything else pixel-identical to the reference: the same pose, the same front three-quarter view turned slightly toward the viewer's left, the same size and position with the feet on the bottom edge and bottom-centre anchored, the same FLAT pure red #FF0000 body, FLAT pure green #00FF00 belly, FLAT pure blue #0000FF ear tufts, wing tips and tail, the same darker-value-only shading, the same small gold #C9A227 beak and gold feet, the same flat, solid, uniform pure magenta #FF00FF background with no gradient, no vignette and no cast shadow. Portrait proportions 200x240. STYLE: clean flat 2D game character art, simple rounded vector-like shapes, hard crisp edges, no outlines, no gradients, no texture, no photorealism, no film grain. No text, no watermark. AVOID: any change to the pose, silhouette, colours, position or scale; any text or writing; any second character; background scenery; open eyes; soft or feathered edges; outlines.`,
+
+  /**
+   * The tree signature sheet: the one anchor every room prompt references so the same tree
+   * appears in every realm. The art director picks a winner and saves it as refs/tree-master.png.
+   */
+  'tree-master': `Reference sheet of one colossal ancient living tree seen from outside at night, the whole lower tree from its splayed roots up to where the trunk leaves the top edge, square 2048x2048, on a plain flat dark navy backdrop with no landscape, no horizon, no moon, no stars and no other trees. This single tree has fixed marks that must all be present and easy to read: the trunk drifts slightly to the left as it rises; one tall almond-shaped knothole sits left of centre about two thirds of the way up the visible trunk, lit warm gold from inside; a narrow bright cleft of exposed golden inner wood runs up the front of the trunk from the base hollow toward that knothole, glowing gold behind translucent amber resin; five great buttress roots splay at the base like a bird's foot; a broken limb stub juts out high on the right; and a loose spiral of small round knotholes climbs the trunk from lower left to upper right, each glowing soft gold. At the base, between the two centre roots, a rounded dark hollow opens into the trunk at ground level, and through it a glimpse of a cream-lit wooden floor with growth rings. Bark in warm dark browns with soft cream moonlight from the upper left and warm gold sap-light from within the wood. STYLE: hand-painted 2D game concept art, clean cel-shaded shapes with soft painted gradients, matte-painting depth, slightly stylised proportions, no outlines, no photorealism, no film grain, large flat colour areas that compress cleanly. PALETTE: navy #0C1E36 and deep navy #07122A backdrop; gold #C9A227 and warm gold light #FFD36A for sap-light and lit knotholes; cream #F6F1E3 moonlight; bark #2B1C12 to #4A3322; inner wood #5C4632 to #8F8068; cool shadow #1B2E4C. No text, no watermark. AVOID: any text, letters, numbers, writing, signage, logos or watermarks; any owls, birds, animals, people, faces or characters; landscape, horizon, sky gradients, moon, stars or other trees; exact mirror symmetry; photographic textures; busy noisy detail; lens flare; daylight.`,
+};
+
+/**
+ * Named blocks for prompts written as arrays: an array item `@name` is replaced by the block,
+ * and `{key_colour}` inside any prompt is replaced by the job's key colour.
+ */
+export const BLOCKS = {
+  'style.hub': STYLE.hub,
+  'style.grove': STYLE.grove,
+  'style.market': STYLE.market,
+  'layout.room': 'wide 16:9; the lower half is a clear mid-value ground plane where small figures will walk; nearer is lower; doorways stand at ground level; nothing important in the top fifth',
+  'layout.key': 'the subject alone, full view, centred, on a flat solid uniform {key_colour} background; no floor, no cast shadow, no ground, no glow or effects outside the subject; crisp opaque edges',
+  negative: NEGATIVE_PROMPT,
+};
+
+/** Keys that are not shipped assets themselves but feed the post-processing stage. */
+export const HELPER_KEYS = ['tree-master', 'owl-master', 'owl-blink-src'];
+
+/** Shipped owl layer keys produced from the owl master by the post-processing stage. */
+export const OWL_LAYER_KEYS = ['owl-body', 'owl-belly', 'owl-accent', 'owl-face', 'owl-blink'];
+
+/**
+ * Reference-image slots. `ref` is one of:
+ *   refs/<file>        a committed anchor in tools/art/refs/ (chosen by the art director)
+ *   @guide:<room>      the layout guide rendered by the post stage, work/art/guides/<room>.png
+ *   @final:<key>       the published asset apps/park/public/art/<key>.png (or .webp)
+ *   @raw:<key>         the SELECTED raw candidate of another job
+ *   @canvas:<key>      a wing's outpaint canvas from the post stage, work/art/canvas/<key>.png
+ *   https://...        a hosted image, passed through as a URL
+ * An `optional` slot is skipped with a notice when its file does not exist yet (the first runs
+ * happen before any anchor or guide exists); a required slot that is missing fails the job, or
+ * skips it when the job itself is `optional`. `--require-refs` makes every slot required.
+ */
+const treeRef = { ref: 'refs/tree-master.png', role: 'tree signature', optional: true };
+const guide = (room) => ({ ref: `@guide:${room}`, role: 'layout guide', optional: true });
+const published = (key) => ({ ref: `@final:${key}`, role: 'style and lighting', optional: true });
+
+const OWL_REGIONS = { body: '#FF0000', belly: '#00FF00', accent: '#0000FF' };
+
+/**
+ * The job list. `kind` is one of room | overlay | piece | owl | owl-edit | anchor | wing and tells the
+ * mock provider what to draw and the post stage how to treat the raw image. `size` is the
+ * generation size (post resizes to the logical size). `seed` is the base seed; variant i uses
+ * seed + i. `key_colour` is the flat backdrop that post keys out. `regions` are the flat fills
+ * the owl master uses for the three tintable layers. `derives` lists the shipped keys that post
+ * produces from this job's output. `providers` holds per-provider body overrides.
+ */
+export const JOBS = [
+  {
+    key: 'tree-master',
+    kind: 'anchor',
+    realm: 'hub',
+    size: '2048x2048',
+    seed: 1001,
+    variants: 6,
+    prompt: PROMPTS['tree-master'],
+  },
+  {
+    key: 'hub',
+    kind: 'room',
+    realm: 'hub',
+    size: '3200x1800',
+    seed: 1101,
+    variants: 4,
+    refs: [treeRef, guide('hub')],
+    prompt: PROMPTS.hub,
+    // The hollow hall's Commons stand on a copy of this painting until their own screens land.
+    derives: ['commons'],
+  },
+  {
+    key: 'hub-fg',
+    kind: 'overlay',
+    realm: 'hub',
+    size: '3200x1800',
+    seed: 1601,
+    variants: 1,
+    key_colour: '#00FF00',
+    refs: [published('hub'), guide('hub')],
+    prompt: PROMPTS['hub-fg'],
+  },
+  {
+    key: 'grove',
+    kind: 'room',
+    realm: 'grove',
+    size: '3200x1800',
+    seed: 1201,
+    variants: 4,
+    refs: [treeRef, guide('grove')],
+    prompt: PROMPTS.grove,
+  },
+  {
+    key: 'grove-fg',
+    kind: 'overlay',
+    realm: 'grove',
+    size: '3200x1800',
+    seed: 1602,
+    variants: 1,
+    key_colour: '#FF00FF',
+    refs: [published('grove'), guide('grove')],
+    // The wide grove keeps the overlay's lantern string at its west end (`pnpm art:finish wing grove`).
+    derives: ['grove-west-fg'],
+    prompt: PROMPTS['grove-fg'],
+  },
+  {
+    key: 'guardian',
+    kind: 'piece',
+    realm: 'grove',
+    size: '1440x1640',
+    seed: 1301,
+    variants: 4,
+    key_colour: '#00FF00',
+    refs: [published('grove')],
+    // PNG: the edit endpoint otherwise answers in JPEG, whose ringing leaves a halo once keyed.
+    providers: { fal: { output_format: 'png' } },
+    prompt: PROMPTS.guardian,
+  },
+  {
+    key: 'market',
+    kind: 'room',
+    realm: 'market',
+    size: '3200x1800',
+    seed: 1401,
+    variants: 4,
+    refs: [guide('market')],
+    prompt: PROMPTS.market,
+  },
+  {
+    key: 'market-fg',
+    kind: 'overlay',
+    realm: 'market',
+    size: '3200x1800',
+    seed: 1603,
+    variants: 1,
+    key_colour: '#00FF00',
+    refs: [published('market'), guide('market')],
+    // The wide market keeps the overlay's awning and crates at its east end (`pnpm art:finish wing market`).
+    derives: ['market-east-fg'],
+    prompt: PROMPTS['market-fg'],
+  },
+  {
+    key: 'robot-owl',
+    kind: 'piece',
+    realm: 'market',
+    size: '1536x1536',
+    seed: 1501,
+    variants: 4,
+    key_colour: '#00FF00',
+    refs: [published('market')],
+    prompt: PROMPTS['robot-owl'],
+  },
+  {
+    key: 'owl-master',
+    kind: 'owl',
+    realm: 'hub',
+    size: '1040x1248',
+    seed: 1701,
+    variants: 6,
+    key_colour: '#FF00FF',
+    regions: OWL_REGIONS,
+    derives: OWL_LAYER_KEYS,
+    prompt: PROMPTS['owl-master'],
+  },
+  {
+    key: 'owl-blink-src',
+    kind: 'owl-edit',
+    realm: 'hub',
+    optional: true,
+    size: '1040x1248',
+    seed: 1702,
+    variants: 1,
+    key_colour: '#FF00FF',
+    regions: OWL_REGIONS,
+    refs: [{ ref: '@raw:owl-master', role: 'edit source', optional: false }],
+    prompt: PROMPTS['owl-blink-src'],
+  },
+];
+
+// ---------------------------------------------------------------------------------------------
+// Collectible item art: one cosmetic per key (wearables for the head, face and neck, and pets),
+// painted alone on a chroma backdrop at twice its logical size and finished with
+// `pnpm art:finish piece <key> --grade none`. Green subjects (and nothing else) use magenta.
+// Colourways are hue rotations done by the game, so each item is painted once.
+const ITEM_PROMPTS = {
+  'item-witch-hat': "Cosmetic item sprite for a cozy owl game: a tall pointed witch hat with a wide floppy brim, a crooked tip and a gold buckle band, deep purple felt, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-top-hat': "Cosmetic item sprite for a cozy owl game: a tall black silk top hat with a satin band and a small gold feather tucked in the band, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-wizard-hat': "Cosmetic item sprite for a cozy owl game: a tall soft wizard hat in midnight blue, scattered with small gold stars and a crescent moon, tip flopping to one side, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-beanie': "Cosmetic item sprite for a cozy owl game: a snug ribbed knitted beanie with a folded cuff, warm red yarn, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-crown': "Cosmetic item sprite for a cozy owl game: a small regal gold crown with five points, round red and blue gemstones and a velvet base, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-flower-crown': "Cosmetic item sprite for a cozy owl game: a woven ring of small white daisies, yellow buttercups and pink roses packed tightly together, flowers only, no green leaves or stems, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-leaf-crown': "Cosmetic item sprite for a cozy owl game: a woven ring of autumn oak and maple leaves in orange, red and gold, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-propeller-cap': "Cosmetic item sprite for a cozy owl game: a round beanie cap in red, yellow and blue panels with a little propeller on a stalk on top, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-chef-hat': "Cosmetic item sprite for a cozy owl game: a tall puffy white chef's toque with soft pleats, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-party-hat': "Cosmetic item sprite for a cozy owl game: a cone party hat with diagonal pink and yellow stripes and a fluffy pom-pom on the tip, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-beret': "Cosmetic item sprite for a cozy owl game: a soft round beret tilted to one side, deep red felt with a tiny stalk on top, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-cowboy-hat': "Cosmetic item sprite for a cozy owl game: a tan leather cowboy hat with a curled brim and a braided band, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-tricorn': "Cosmetic item sprite for a cozy owl game: a black three-cornered pirate tricorn hat with gold trim edges, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-horned-helmet': "Cosmetic item sprite for a cozy owl game: a rounded steel helmet with two short curved horns and a riveted rim, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-halo': "Cosmetic item sprite for a cozy owl game: a glowing golden ring halo floating flat, warm cream light, simple and clean, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-mushroom-cap': "Cosmetic item sprite for a cozy owl game: a big round red toadstool cap with white spots, worn like a hat, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-acorn-cap': "Cosmetic item sprite for a cozy owl game: an oversized acorn cup cap with a textured brown scaly pattern and a short stem on top, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-ribbon-bow': "Cosmetic item sprite for a cozy owl game: a big satin ribbon bow in pink with two trailing tails, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-bobble-hat': "Cosmetic item sprite for a cozy owl game: a knitted bobble hat in cream with navy stripes and a big fluffy pom-pom, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-pith-helmet': "Cosmetic item sprite for a cozy owl game: a khaki explorer pith helmet with a brown band, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-jester-hat': "Cosmetic item sprite for a cozy owl game: a jester hat with three floppy points in red, yellow and blue, each tipped with a gold bell, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-laurel-wreath': "Cosmetic item sprite for a cozy owl game: a classical golden laurel wreath of small leaves, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-sailor-cap': "Cosmetic item sprite for a cozy owl game: a white sailor cap with a navy band and a short black visor, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-mortarboard': "Cosmetic item sprite for a cozy owl game: a black graduation mortarboard cap with a gold tassel hanging to one side, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-bucket-hat': "Cosmetic item sprite for a cozy owl game: a soft bucket hat in mustard yellow canvas, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-tiara': "Cosmetic item sprite for a cozy owl game: a delicate silver tiara with small sparkling pale gems in a peak, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-pumpkin-hat': "Cosmetic item sprite for a cozy owl game: a little carved jack-o'-lantern pumpkin worn as a hat, warm orange with a softly lit carved face, and a short curly brown stem, no green, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-snowflake-crown': "Cosmetic item sprite for a cozy owl game: a crown of icy pale-blue crystal snowflake points that sparkle, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-candle-crown': "Cosmetic item sprite for a cozy owl game: a gold crown ring holding five small lit candles with warm flames, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-moon-circlet': "Cosmetic item sprite for a cozy owl game: a slim silver circlet with a glowing crescent moon at the front, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-round-glasses': "Cosmetic item sprite for a cozy owl game: a pair of round wire-rim glasses with gold frames \u2014 frames only, with no lens glass at all: the rims are empty, so you see straight through them, the item alone with no owl, head, face, body or mannequin, as it would be worn over a small cartoon owl's eyes, seen straight from the front, level and symmetric, centred in the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-star-shades': "Cosmetic item sprite for a cozy owl game: a pair of star-shaped sunglasses with pink frames and dark lenses, the item alone with no owl, head, face, body or mannequin, as it would be worn over a small cartoon owl's eyes, seen straight from the front, level and symmetric, centred in the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-heart-glasses': "Cosmetic item sprite for a cozy owl game: a pair of heart-shaped sunglasses with red frames and rosy lenses, the item alone with no owl, head, face, body or mannequin, as it would be worn over a small cartoon owl's eyes, seen straight from the front, level and symmetric, centred in the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-monocle': "Cosmetic item sprite for a cozy owl game: a single round gold monocle rim with a thin chain hanging from it \u2014 the ring only, with no lens glass: it is empty, so you see straight through it, the item alone with no owl, head, face, body or mannequin, as it would be worn over a small cartoon owl's eyes, seen straight from the front, level and symmetric, centred in the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-aviator-goggles': "Cosmetic item sprite for a cozy owl game: a pair of brown leather aviator goggles with round brass rims and a strap \u2014 frames only, with no lens glass at all: the rims are empty, so you see straight through them, the item alone with no owl, head, face, body or mannequin, as it would be worn over a small cartoon owl's eyes, seen straight from the front, level and symmetric, centred in the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-masquerade-mask': "Cosmetic item sprite for a cozy owl game: an ornate masquerade eye mask in deep purple with gold filigree edges and two small feathers at one side, the item alone with no owl, head, face, body or mannequin, as it would be worn over a small cartoon owl's eyes, seen straight from the front, level and symmetric, centred in the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-cat-eye-glasses': "Cosmetic item sprite for a cozy owl game: a pair of cat-eye glasses with tortoiseshell frames upswept at the corners, the item alone with no owl, head, face, body or mannequin, as it would be worn over a small cartoon owl's eyes, seen straight from the front, level and symmetric, centred in the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-brass-goggles': "Cosmetic item sprite for a cozy owl game: a pair of steampunk brass goggles with layered rims, rivets and tiny gears \u2014 frames only, with no lens glass at all: the rims are empty, so you see straight through them, the item alone with no owl, head, face, body or mannequin, as it would be worn over a small cartoon owl's eyes, seen straight from the front, level and symmetric, centred in the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-pixel-shades': "Cosmetic item sprite for a cozy owl game: a pair of chunky black pixel-art sunglasses made of square blocks, the item alone with no owl, head, face, body or mannequin, as it would be worn over a small cartoon owl's eyes, seen straight from the front, level and symmetric, centred in the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-half-moon-specs': "Cosmetic item sprite for a cozy owl game: a pair of small half-moon reading spectacles with thin silver frames \u2014 frames only, with no lens glass at all: the rims are empty, so you see straight through them, the item alone with no owl, head, face, body or mannequin, as it would be worn over a small cartoon owl's eyes, seen straight from the front, level and symmetric, centred in the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-knit-scarf': "Cosmetic item sprite for a cozy owl game: a chunky knitted scarf in warm red wrapped snugly in one wide loop as if around a neck, with two short tasselled ends tucked in at the front, clearly wider than it is tall, the item alone with no owl, head, face, body or mannequin, as it would be worn around a small cartoon owl's neck, seen from the front, centred in the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-bow-tie': "Cosmetic item sprite for a cozy owl game: a neat bow tie in navy with small gold polka dots, the item alone with no owl, head, face, body or mannequin, as it would be worn around a small cartoon owl's neck, seen from the front, centred in the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-bandana': "Cosmetic item sprite for a cozy owl game: a red bandana neckerchief with a white paisley pattern, knotted at the front, the item alone with no owl, head, face, body or mannequin, as it would be worn around a small cartoon owl's neck, seen from the front, centred in the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-moon-pendant': "Cosmetic item sprite for a cozy owl game: a slim gold chain necklace with a glowing crescent moon pendant, the item alone with no owl, head, face, body or mannequin, as it would be worn around a small cartoon owl's neck, seen from the front, centred in the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-flower-lei': "Cosmetic item sprite for a cozy owl game: a Hawaiian flower lei of bright pink, orange and yellow blossoms packed tightly, flowers only, no green leaves, the item alone with no owl, head, face, body or mannequin, as it would be worn around a small cartoon owl's neck, seen from the front, centred in the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-bell-collar': "Cosmetic item sprite for a cozy owl game: a soft red collar with a small round gold bell at the front, the item alone with no owl, head, face, body or mannequin, as it would be worn around a small cartoon owl's neck, seen from the front, centred in the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-cape': "Cosmetic item sprite for a cozy owl game: a short velvet cape in deep red with a gold clasp at the collar, seen from the front draped over the shoulders, the item alone with no owl, head, face, body or mannequin, as it would be worn around a small cartoon owl's neck, seen from the front, centred in the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-ruffle-collar': "Cosmetic item sprite for a cozy owl game: a white Elizabethan ruffle collar with layered pleats, the item alone with no owl, head, face, body or mannequin, as it would be worn around a small cartoon owl's neck, seen from the front, centred in the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-pearl-necklace': "Cosmetic item sprite for a cozy owl game: a single strand of round cream pearls, the item alone with no owl, head, face, body or mannequin, as it would be worn around a small cartoon owl's neck, seen from the front, centred in the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-medal-ribbon': "Cosmetic item sprite for a cozy owl game: a gold medal with a star emblem hanging on a blue and gold striped ribbon loop, the item alone with no owl, head, face, body or mannequin, as it would be worn around a small cartoon owl's neck, seen from the front, centred in the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-mouse': "Tiny pet companion sprite for a cozy owl game: a tiny round grey field mouse with big pink ears, a long tail and a curious face, the creature alone, full body, sitting on the ground facing left in a three-quarter view, its feet or base resting on the bottom edge of the frame, centred, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; green tint on the subject.",
+  'item-snake': "Tiny pet companion sprite for a cozy owl game: a small friendly coiled snake in red with gold diamond patterns, head raised with a little smile, the creature alone, full body, sitting on the ground facing left in a three-quarter view, its feet or base resting on the bottom edge of the frame, centred, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; green tint on the subject.",
+  'item-grasshopper': "Tiny pet companion sprite for a cozy owl game: a cute bright green grasshopper with long folded back legs and big eyes, the creature alone, full body, sitting on the ground facing left in a three-quarter view, its feet or base resting on the bottom edge of the frame, centred, isolated on a flat, solid, uniform pure chroma magenta #FF00FF background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; magenta tint on the subject.",
+  'item-ladybug': "Tiny pet companion sprite for a cozy owl game: a round red ladybug with black spots and a little smile, the creature alone, full body, sitting on the ground facing left in a three-quarter view, its feet or base resting on the bottom edge of the frame, centred, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; green tint on the subject.",
+  'item-beetle': "Tiny pet companion sprite for a cozy owl game: a shiny round beetle with a deep blue and violet shell, no green sheen, the creature alone, full body, sitting on the ground facing left in a three-quarter view, its feet or base resting on the bottom edge of the frame, centred, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; green tint on the subject.",
+  'item-snail': "Tiny pet companion sprite for a cozy owl game: a little snail with a swirly orange and cream shell and soft cream body, the creature alone, full body, sitting on the ground facing left in a three-quarter view, its feet or base resting on the bottom edge of the frame, centred, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; green tint on the subject.",
+  'item-moth': "Tiny pet companion sprite for a cozy owl game: a fluffy cream and tan moth with feathery antennae and soft patterned wings, the creature alone, full body, sitting on the ground facing left in a three-quarter view, its feet or base resting on the bottom edge of the frame, centred, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; green tint on the subject.",
+  'item-firefly': "Tiny pet companion sprite for a cozy owl game: a cute firefly with a softly glowing yellow tail, small dark body and clear wings, the creature alone, full body, sitting on the ground facing left in a three-quarter view, its feet or base resting on the bottom edge of the frame, centred, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; green tint on the subject.",
+  'item-frog': "Tiny pet companion sprite for a cozy owl game: a small round green tree frog with big eyes, sitting, the creature alone, full body, sitting on the ground facing left in a three-quarter view, its feet or base resting on the bottom edge of the frame, centred, isolated on a flat, solid, uniform pure chroma magenta #FF00FF background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; magenta tint on the subject.",
+  'item-bat': "Tiny pet companion sprite for a cozy owl game: a small round brown fruit bat sitting upright with folded wings and big ears, the creature alone, full body, sitting on the ground facing left in a three-quarter view, its feet or base resting on the bottom edge of the frame, centred, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; green tint on the subject.",
+  'item-hedgehog': "Tiny pet companion sprite for a cozy owl game: a tiny round hedgehog with soft brown spines and a pointy nose, the creature alone, full body, sitting on the ground facing left in a three-quarter view, its feet or base resting on the bottom edge of the frame, centred, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; green tint on the subject.",
+  'item-caterpillar': "Tiny pet companion sprite for a cozy owl game: a plump segmented green caterpillar with tiny legs and a smiling face, the creature alone, full body, sitting on the ground facing left in a three-quarter view, its feet or base resting on the bottom edge of the frame, centred, isolated on a flat, solid, uniform pure chroma magenta #FF00FF background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; magenta tint on the subject.",
+  'item-cricket': "Tiny pet companion sprite for a cozy owl game: a small brown cricket with long antennae and folded wings, the creature alone, full body, sitting on the ground facing left in a three-quarter view, its feet or base resting on the bottom edge of the frame, centred, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; green tint on the subject.",
+  'item-butterfly': "Tiny pet companion sprite for a cozy owl game: a small butterfly with orange and black monarch wings, resting with wings half open, the creature alone, full body, sitting on the ground facing left in a three-quarter view, its feet or base resting on the bottom edge of the frame, centred, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; green tint on the subject.",
+  'item-spider': "Tiny pet companion sprite for a cozy owl game: a cute round little spider in purple with big friendly eyes, the creature alone, full body, sitting on the ground facing left in a three-quarter view, its feet or base resting on the bottom edge of the frame, centred, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; green tint on the subject.",
+  'item-dragonfly': "Tiny pet companion sprite for a cozy owl game: a slender dragonfly with a blue body and four shimmering clear wings, the creature alone, full body, sitting on the ground facing left in a three-quarter view, its feet or base resting on the bottom edge of the frame, centred, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; green tint on the subject.",
+  'item-salamander': "Tiny pet companion sprite for a cozy owl game: a little orange salamander with black spots and a curled tail, the creature alone, full body, sitting on the ground facing left in a three-quarter view, its feet or base resting on the bottom edge of the frame, centred, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; green tint on the subject.",
+  'item-mole': "Tiny pet companion sprite for a cozy owl game: a round velvety dark grey mole with big pink digging paws and a pink nose, the creature alone, full body, sitting on the ground facing left in a three-quarter view, its feet or base resting on the bottom edge of the frame, centred, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; green tint on the subject.",
+  'item-tiny-dragon': "Tiny pet companion sprite for a cozy owl game: a tiny round baby dragon in teal with small wings, little horns and a curled tail, the creature alone, full body, sitting on the ground facing left in a three-quarter view, its feet or base resting on the bottom edge of the frame, centred, isolated on a flat, solid, uniform pure chroma magenta #FF00FF background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; magenta tint on the subject.",
+  'item-star-beetle': "Tiny pet companion sprite for a cozy owl game: a magical beetle whose dark blue shell is speckled with glowing gold stars, the creature alone, full body, sitting on the ground facing left in a three-quarter view, its feet or base resting on the bottom edge of the frame, centred, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; green tint on the subject.",
+  'item-bat-headband': "Cosmetic item sprite for a cozy owl game: a headband with two small black bat wings standing up on top of it, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-candy-corn-cap': "Cosmetic item sprite for a cozy owl game: a small cone cap striped like candy corn, yellow at the brim, then orange, then a white tip, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-earmuffs': "Cosmetic item sprite for a cozy owl game: a pair of fluffy cream earmuffs joined by a curved band, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-holly-crown': "Cosmetic item sprite for a cozy owl game: a crown wreath of glossy dark-green holly leaves with clusters of bright red berries, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma magenta #FF00FF background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; magenta tint on the item.",
+  'item-mummy-wrap': "Cosmetic item sprite for a cozy owl game: a headband of loosely wrapped cream cloth bandages with one loose end trailing, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, upright and seen from the front with a slight three-quarter angle, its bottom rim level and resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-jack-o-lantern-shades': "Cosmetic item sprite for a cozy owl game: a pair of sunglasses whose two lenses are little orange jack-o'-lanterns with carved happy faces, joined by a black bridge, the item alone with no owl, head, face, body or mannequin, as it would be worn over a small cartoon owl's eyes, seen straight from the front, level and symmetric, centred in the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-candy-necklace': "Cosmetic item sprite for a cozy owl game: a stretchy candy necklace of round pastel candy beads in pink, yellow, lilac and white, the item alone with no owl, head, face, body or mannequin, as it would be worn around a small cartoon owl's neck, seen from the front, centred in the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-vampire-collar': "Cosmetic item sprite for a cozy owl game: a tall black stand-up vampire cape collar with red satin lining and a round gold clasp at the front, the item alone with no owl, head, face, body or mannequin, as it would be worn around a small cartoon owl's neck, seen from the front, centred in the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+  'item-ghost': "Tiny pet companion sprite for a cozy owl game: a tiny friendly floating bedsheet ghost with big dark eyes and a small smile, hovering just above a small soft shadow, the creature alone, full body, sitting on the ground facing left in a three-quarter view, its feet or base resting on the bottom edge of the frame, centred, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; green tint on the subject.",
+  'item-pumpkin-sprite': "Tiny pet companion sprite for a cozy owl game: a tiny round pumpkin creature with two leaf ears, little stubby legs and a carved happy face, the creature alone, full body, sitting on the ground facing left in a three-quarter view, its feet or base resting on the bottom edge of the frame, centred, isolated on a flat, solid, uniform pure chroma magenta #FF00FF background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; magenta tint on the subject.",
+  "item-painted-egg": "Tiny pet sprite for a cozy owl game: a painted Easter egg standing upright on its wide end, its shell cream with painted spring patterns in the park's palette (moss green #6E8B4E, leaf green #8DAE5A, lantern gold #FFD36A, cream #F6F1E3, dusk blue #6F9BC8): a band of tiny leaves around its middle, small dots and a few little flowers, the egg alone, seen straight from the side, its base resting on the bottom edge of the frame, centred, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; green tint on the subject.",
+  "item-rainbow-bunny": "Tiny pet companion sprite for a cozy owl game: a small round bunny with long upright ears, a pink nose and a fluffy tail, sitting, its fur painted in soft rainbow bands from its ears to its tail (red, orange, yellow, green, blue, violet) like a painted toy, the creature alone, full body, sitting on the ground facing left in a three-quarter view, its feet resting on the bottom edge of the frame, centred, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; green tint on the subject.",
+  "item-painted-egg-crack-light": "Tiny pet sprite for a cozy owl game: the same painted egg, its shape, pattern and colours kept exactly, now with three fine hairline cracks on its shell, thin dark lines, the egg still whole, standing upright on its wide end, seen straight from the side, its base resting on the bottom edge of the frame, centred, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; green tint on the subject.",
+  "item-painted-egg-crack-heavy": "Tiny pet sprite for a cozy owl game: the same painted egg, its shape, pattern and colours kept exactly, now with heavy cracks across its shell, dark jagged lines with a few small flakes of shell lifting and a thin sliver of warm light showing in the widest crack, the egg still whole, standing upright on its wide end, seen straight from the side, its base resting on the bottom edge of the frame, centred, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; green tint on the subject.",
+  "item-rainbow-bunny-hop": "Tiny pet companion sprite for a cozy owl game: the same rainbow bunny, its fur bands, ears and face kept exactly, now mid-hop in the air, back legs stretched out behind and front paws tucked, ears streaming back, the creature alone, full body, facing left in a three-quarter view, centred, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; green tint on the subject.",
+  "item-painted-egg-hatch-1": "Tiny sprite for a cozy owl game, frame 1 of 3 of a hatch: the same painted egg's shell just splitting, its top third lifting off with a bright warm glow in the gap and two small flakes of cream shell with the egg's pattern flying up, the lower shell still standing on the bottom edge of the frame, seen straight from the side, centred, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; green tint on the subject.",
+  "item-painted-egg-hatch-2": "Tiny sprite for a cozy owl game, frame 2 of 3 of a hatch: the same painted egg's shell burst into five pieces of cream shell with the egg's pattern flying outward from the centre with a bright warm glow between them, the biggest piece still at the bottom edge of the frame, seen straight from the side, centred, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; green tint on the subject.",
+  "item-painted-egg-hatch-3": "Tiny sprite for a cozy owl game, frame 3 of 3 of a hatch: only small pieces of cream shell with the egg's pattern scattered wide near the edges of the frame, the glow fading, nothing in the middle, seen straight from the side, centred, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; green tint on the subject.",
+  'item-snow-bunny': "Tiny pet companion sprite for a cozy owl game: a tiny round white snow bunny with long ears, a pink nose and a fluffy tail, the creature alone, full body, sitting on the ground facing left in a three-quarter view, its feet or base resting on the bottom edge of the frame, centred, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; green tint on the subject.",
+  'item-black-kitten': "Tiny pet companion sprite for a cozy owl game: a tiny round black kitten with big golden eyes and a curled tail, sitting, the creature alone, full body, sitting on the ground facing left in a three-quarter view, its feet or base resting on the bottom edge of the frame, centred, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; more than one creature; any owl; ground, grass, props or scenery; green tint on the subject.",
+};
+const ITEM_JOBS = [
+  { key: 'item-witch-hat', kind: 'piece', realm: 'items', size: '280x200', seed: 5001, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-witch-hat'] },
+  { key: 'item-top-hat', kind: 'piece', realm: 'items', size: '280x200', seed: 5011, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-top-hat'] },
+  { key: 'item-wizard-hat', kind: 'piece', realm: 'items', size: '280x200', seed: 5021, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-wizard-hat'] },
+  { key: 'item-beanie', kind: 'piece', realm: 'items', size: '280x200', seed: 5031, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-beanie'] },
+  { key: 'item-crown', kind: 'piece', realm: 'items', size: '280x200', seed: 5041, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-crown'] },
+  { key: 'item-flower-crown', kind: 'piece', realm: 'items', size: '280x200', seed: 5051, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-flower-crown'] },
+  { key: 'item-leaf-crown', kind: 'piece', realm: 'items', size: '280x200', seed: 5061, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-leaf-crown'] },
+  { key: 'item-propeller-cap', kind: 'piece', realm: 'items', size: '280x200', seed: 5071, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-propeller-cap'] },
+  { key: 'item-chef-hat', kind: 'piece', realm: 'items', size: '280x200', seed: 5081, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-chef-hat'] },
+  { key: 'item-party-hat', kind: 'piece', realm: 'items', size: '280x200', seed: 5091, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-party-hat'] },
+  { key: 'item-beret', kind: 'piece', realm: 'items', size: '280x200', seed: 5101, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-beret'] },
+  { key: 'item-cowboy-hat', kind: 'piece', realm: 'items', size: '280x200', seed: 5111, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-cowboy-hat'] },
+  { key: 'item-tricorn', kind: 'piece', realm: 'items', size: '280x200', seed: 5121, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-tricorn'] },
+  { key: 'item-horned-helmet', kind: 'piece', realm: 'items', size: '280x200', seed: 5131, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-horned-helmet'] },
+  { key: 'item-halo', kind: 'piece', realm: 'items', size: '280x200', seed: 5141, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-halo'] },
+  { key: 'item-mushroom-cap', kind: 'piece', realm: 'items', size: '280x200', seed: 5151, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-mushroom-cap'] },
+  { key: 'item-acorn-cap', kind: 'piece', realm: 'items', size: '280x200', seed: 5161, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-acorn-cap'] },
+  { key: 'item-ribbon-bow', kind: 'piece', realm: 'items', size: '280x200', seed: 5171, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-ribbon-bow'] },
+  { key: 'item-bobble-hat', kind: 'piece', realm: 'items', size: '280x200', seed: 5181, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-bobble-hat'] },
+  { key: 'item-pith-helmet', kind: 'piece', realm: 'items', size: '280x200', seed: 5191, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-pith-helmet'] },
+  { key: 'item-jester-hat', kind: 'piece', realm: 'items', size: '280x200', seed: 5201, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-jester-hat'] },
+  { key: 'item-laurel-wreath', kind: 'piece', realm: 'items', size: '280x200', seed: 5211, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-laurel-wreath'] },
+  { key: 'item-sailor-cap', kind: 'piece', realm: 'items', size: '280x200', seed: 5221, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-sailor-cap'] },
+  { key: 'item-mortarboard', kind: 'piece', realm: 'items', size: '280x200', seed: 5231, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-mortarboard'] },
+  { key: 'item-bucket-hat', kind: 'piece', realm: 'items', size: '280x200', seed: 5241, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-bucket-hat'] },
+  { key: 'item-tiara', kind: 'piece', realm: 'items', size: '280x200', seed: 5251, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-tiara'] },
+  { key: 'item-pumpkin-hat', kind: 'piece', realm: 'items', size: '280x200', seed: 5261, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-pumpkin-hat'] },
+  { key: 'item-snowflake-crown', kind: 'piece', realm: 'items', size: '280x200', seed: 5271, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-snowflake-crown'] },
+  { key: 'item-candle-crown', kind: 'piece', realm: 'items', size: '280x200', seed: 5281, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-candle-crown'] },
+  { key: 'item-moon-circlet', kind: 'piece', realm: 'items', size: '280x200', seed: 5291, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-moon-circlet'] },
+  { key: 'item-round-glasses', kind: 'piece', realm: 'items', size: '240x120', seed: 5301, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-round-glasses'] },
+  { key: 'item-star-shades', kind: 'piece', realm: 'items', size: '240x120', seed: 5311, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-star-shades'] },
+  { key: 'item-heart-glasses', kind: 'piece', realm: 'items', size: '240x120', seed: 5321, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-heart-glasses'] },
+  { key: 'item-monocle', kind: 'piece', realm: 'items', size: '240x120', seed: 5331, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-monocle'] },
+  { key: 'item-aviator-goggles', kind: 'piece', realm: 'items', size: '240x120', seed: 5341, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-aviator-goggles'] },
+  { key: 'item-masquerade-mask', kind: 'piece', realm: 'items', size: '240x120', seed: 5351, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-masquerade-mask'] },
+  { key: 'item-cat-eye-glasses', kind: 'piece', realm: 'items', size: '240x120', seed: 5361, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-cat-eye-glasses'] },
+  { key: 'item-brass-goggles', kind: 'piece', realm: 'items', size: '240x120', seed: 5371, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-brass-goggles'] },
+  { key: 'item-pixel-shades', kind: 'piece', realm: 'items', size: '240x120', seed: 5381, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-pixel-shades'] },
+  { key: 'item-half-moon-specs', kind: 'piece', realm: 'items', size: '240x120', seed: 5391, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-half-moon-specs'] },
+  { key: 'item-knit-scarf', kind: 'piece', realm: 'items', size: '260x160', seed: 5401, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-knit-scarf'] },
+  { key: 'item-bow-tie', kind: 'piece', realm: 'items', size: '260x160', seed: 5411, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-bow-tie'] },
+  { key: 'item-bandana', kind: 'piece', realm: 'items', size: '260x160', seed: 5421, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-bandana'] },
+  { key: 'item-moon-pendant', kind: 'piece', realm: 'items', size: '260x160', seed: 5431, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-moon-pendant'] },
+  { key: 'item-flower-lei', kind: 'piece', realm: 'items', size: '260x160', seed: 5441, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-flower-lei'] },
+  { key: 'item-bell-collar', kind: 'piece', realm: 'items', size: '260x160', seed: 5451, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-bell-collar'] },
+  { key: 'item-cape', kind: 'piece', realm: 'items', size: '260x160', seed: 5461, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-cape'] },
+  { key: 'item-ruffle-collar', kind: 'piece', realm: 'items', size: '260x160', seed: 5471, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-ruffle-collar'] },
+  { key: 'item-pearl-necklace', kind: 'piece', realm: 'items', size: '260x160', seed: 5481, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-pearl-necklace'] },
+  { key: 'item-medal-ribbon', kind: 'piece', realm: 'items', size: '260x160', seed: 5491, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-medal-ribbon'] },
+  { key: 'item-mouse', kind: 'piece', realm: 'items', size: '180x180', seed: 5501, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-mouse'] },
+  { key: 'item-snake', kind: 'piece', realm: 'items', size: '180x180', seed: 5511, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-snake'] },
+  { key: 'item-grasshopper', kind: 'piece', realm: 'items', size: '180x180', seed: 5521, variants: 2, key_colour: '#FF00FF', prompt: ITEM_PROMPTS['item-grasshopper'] },
+  { key: 'item-ladybug', kind: 'piece', realm: 'items', size: '180x180', seed: 5531, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-ladybug'] },
+  { key: 'item-beetle', kind: 'piece', realm: 'items', size: '180x180', seed: 5541, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-beetle'] },
+  { key: 'item-snail', kind: 'piece', realm: 'items', size: '180x180', seed: 5551, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-snail'] },
+  { key: 'item-moth', kind: 'piece', realm: 'items', size: '180x180', seed: 5561, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-moth'] },
+  { key: 'item-firefly', kind: 'piece', realm: 'items', size: '180x180', seed: 5571, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-firefly'] },
+  { key: 'item-frog', kind: 'piece', realm: 'items', size: '180x180', seed: 5581, variants: 2, key_colour: '#FF00FF', prompt: ITEM_PROMPTS['item-frog'] },
+  { key: 'item-bat', kind: 'piece', realm: 'items', size: '180x180', seed: 5591, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-bat'] },
+  { key: 'item-hedgehog', kind: 'piece', realm: 'items', size: '180x180', seed: 5601, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-hedgehog'] },
+  { key: 'item-caterpillar', kind: 'piece', realm: 'items', size: '180x180', seed: 5611, variants: 2, key_colour: '#FF00FF', prompt: ITEM_PROMPTS['item-caterpillar'] },
+  { key: 'item-cricket', kind: 'piece', realm: 'items', size: '180x180', seed: 5621, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-cricket'] },
+  { key: 'item-butterfly', kind: 'piece', realm: 'items', size: '180x180', seed: 5631, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-butterfly'] },
+  { key: 'item-spider', kind: 'piece', realm: 'items', size: '180x180', seed: 5641, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-spider'] },
+  { key: 'item-dragonfly', kind: 'piece', realm: 'items', size: '180x180', seed: 5651, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-dragonfly'] },
+  { key: 'item-salamander', kind: 'piece', realm: 'items', size: '180x180', seed: 5661, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-salamander'] },
+  { key: 'item-mole', kind: 'piece', realm: 'items', size: '180x180', seed: 5671, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-mole'] },
+  { key: 'item-tiny-dragon', kind: 'piece', realm: 'items', size: '180x180', seed: 5681, variants: 2, key_colour: '#FF00FF', prompt: ITEM_PROMPTS['item-tiny-dragon'] },
+  { key: 'item-star-beetle', kind: 'piece', realm: 'items', size: '180x180', seed: 5691, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-star-beetle'] },
+  { key: 'item-bat-headband', kind: 'piece', realm: 'items', size: '280x200', seed: 6001, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-bat-headband'] },
+  { key: 'item-candy-corn-cap', kind: 'piece', realm: 'items', size: '280x200', seed: 6011, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-candy-corn-cap'] },
+  { key: 'item-earmuffs', kind: 'piece', realm: 'items', size: '280x200', seed: 6021, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-earmuffs'] },
+  { key: 'item-holly-crown', kind: 'piece', realm: 'items', size: '280x200', seed: 6031, variants: 2, key_colour: '#FF00FF', prompt: ITEM_PROMPTS['item-holly-crown'] },
+  { key: 'item-mummy-wrap', kind: 'piece', realm: 'items', size: '280x200', seed: 6041, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-mummy-wrap'] },
+  { key: 'item-jack-o-lantern-shades', kind: 'piece', realm: 'items', size: '240x120', seed: 6051, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-jack-o-lantern-shades'] },
+  { key: 'item-candy-necklace', kind: 'piece', realm: 'items', size: '260x160', seed: 6061, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-candy-necklace'] },
+  { key: 'item-vampire-collar', kind: 'piece', realm: 'items', size: '260x160', seed: 6071, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-vampire-collar'] },
+  { key: 'item-ghost', kind: 'piece', realm: 'items', size: '180x180', seed: 6081, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-ghost'] },
+  { key: 'item-pumpkin-sprite', kind: 'piece', realm: 'items', size: '180x180', seed: 6091, variants: 2, key_colour: '#FF00FF', prompt: ITEM_PROMPTS['item-pumpkin-sprite'] },
+  { key: 'item-painted-egg', kind: 'piece', realm: 'items', size: '180x180', seed: 6201, variants: 4, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-painted-egg'] },
+  { key: 'item-rainbow-bunny', kind: 'piece', realm: 'items', size: '180x180', seed: 6211, variants: 4, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-rainbow-bunny'] },
+  { key: 'item-painted-egg-crack-light', kind: 'piece', realm: 'items', size: '180x180', seed: 6221, variants: 2, key_colour: '#00FF00', refs: [{ ref: '@raw:item-painted-egg', role: "the painted egg as published: keep its shape, pattern and colours exactly", optional: false }], prompt: ITEM_PROMPTS['item-painted-egg-crack-light'] },
+  { key: 'item-painted-egg-crack-heavy', kind: 'piece', realm: 'items', size: '180x180', seed: 6231, variants: 2, key_colour: '#00FF00', refs: [{ ref: '@raw:item-painted-egg', role: "the painted egg as published: keep its shape, pattern and colours exactly", optional: false }], prompt: ITEM_PROMPTS['item-painted-egg-crack-heavy'] },
+  { key: 'item-rainbow-bunny-hop', kind: 'piece', realm: 'items', size: '180x180', seed: 6241, variants: 2, key_colour: '#00FF00', refs: [{ ref: '@raw:item-rainbow-bunny', role: "the rainbow bunny as published: keep its fur bands, ears and face exactly", optional: false }], prompt: ITEM_PROMPTS['item-rainbow-bunny-hop'] },
+  { key: 'item-painted-egg-hatch-1', kind: 'piece', realm: 'items', size: '180x180', seed: 6251, variants: 2, key_colour: '#00FF00', refs: [{ ref: '@raw:item-painted-egg', role: "the painted egg as published: its shell pieces carry its pattern and colours", optional: false }], prompt: ITEM_PROMPTS['item-painted-egg-hatch-1'] },
+  { key: 'item-painted-egg-hatch-2', kind: 'piece', realm: 'items', size: '180x180', seed: 6261, variants: 2, key_colour: '#00FF00', refs: [{ ref: '@raw:item-painted-egg', role: "the painted egg as published: its shell pieces carry its pattern and colours", optional: false }], prompt: ITEM_PROMPTS['item-painted-egg-hatch-2'] },
+  { key: 'item-painted-egg-hatch-3', kind: 'piece', realm: 'items', size: '180x180', seed: 6271, variants: 2, key_colour: '#00FF00', refs: [{ ref: '@raw:item-painted-egg', role: "the painted egg as published: its shell pieces carry its pattern and colours", optional: false }], prompt: ITEM_PROMPTS['item-painted-egg-hatch-3'] },
+  { key: 'item-snow-bunny', kind: 'piece', realm: 'items', size: '180x180', seed: 6101, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-snow-bunny'] },
+  { key: 'item-black-kitten', kind: 'piece', realm: 'items', size: '180x180', seed: 6111, variants: 2, key_colour: '#00FF00', prompt: ITEM_PROMPTS['item-black-kitten'] },
+];
+Object.assign(PROMPTS, ITEM_PROMPTS);
+JOBS.push(...ITEM_JOBS);
+
+// ---------------------------------------------------------------------------------------------
+// Collection icons for the effects and emotes (which have no art of their own): one emblem each,
+// painted white with grey shading so the game can tint it (effects by their colourway, emotes in
+// one UI colour), finished with `pnpm art:finish piece icon-<id> --valign centre --grade none`.
+const ICON_PROMPTS = {
+  'icon-aura': "Effect icon for a cozy owl game's collection menu: a soft round aura made of three concentric rings of light around an empty centre, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-sparkle': "Effect icon for a cozy owl game's collection menu: a cluster of three four-pointed sparkle stars of different sizes, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-eye-flames': "Effect icon for a cozy owl game's collection menu: a pair of cartoon eyes side by side, each with a round pupil, with tall flames rising from the top of both eyes, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-ember-trail': "Effect icon for a cozy owl game's collection menu: a curving trail of small embers and sparks rising from the lower left to the upper right, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-frost-breath': "Effect icon for a cozy owl game's collection menu: a rounded puff of frosty breath with three small ice crystals and two tiny snowflakes, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-snowfall': "Effect icon for a cozy owl game's collection menu: three six-armed snowflakes of different sizes falling, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-fireflies': "Effect icon for a cozy owl game's collection menu: four little fireflies with round tails and tiny wings flying in a loose arc, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-hearts': "Effect icon for a cozy owl game's collection menu: three small hearts of different sizes floating upward in a cluster, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-music-notes': "Effect icon for a cozy owl game's collection menu: two musical notes, a single eighth note and a beamed pair of notes, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-star-halo': "Effect icon for a cozy owl game's collection menu: a ring of five small five-pointed stars spaced evenly around an empty circle, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-moon-halo': "Effect icon for a cozy owl game's collection menu: a crescent moon with two small four-pointed stars beside it, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-leaf-swirl': "Effect icon for a cozy owl game's collection menu: four small leaves spiralling around an empty centre, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-petal-swirl': "Effect icon for a cozy owl game's collection menu: five rounded flower petals spiralling around an empty centre, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-bubbles': "Effect icon for a cozy owl game's collection menu: a cluster of round bubbles of different sizes, each with a small curved highlight, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-smoke-wisps': "Effect icon for a cozy owl game's collection menu: two soft curling wisps of smoke rising side by side, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-rainbow-trail': "Effect icon for a cozy owl game's collection menu: an arched ribbon of three parallel bands, like a small rainbow, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-lightning': "Effect icon for a cozy owl game's collection menu: a bold zigzag lightning bolt with two small sparks beside it, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-neon-outline': "Effect icon for a cozy owl game's collection menu: the silhouette of a round owl head with two ear tufts drawn only as a thick double outline tube, empty inside, like a neon sign, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-shadow-aura': "Effect icon for a cozy owl game's collection menu: dark smoky tendrils swirling in a ring around an empty centre, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-sunbeam': "Effect icon for a cozy owl game's collection menu: a small round sun with long straight rays radiating outward, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-confetti': "Effect icon for a cozy owl game's collection menu: a burst of confetti: small rectangles, dots and curly streamers flying outward, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-comet-tail': "Effect icon for a cozy owl game's collection menu: a comet with a round head and a long sweeping tail, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-rune-ring': "Effect icon for a cozy owl game's collection menu: a ring made of simple geometric marks: dots, short strokes and small triangles evenly spaced (no letters or characters of any real alphabet), painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-glitch': "Effect icon for a cozy owl game's collection menu: a square shape split into offset horizontal slices with a few small square pixels breaking away, like a digital glitch, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-hoot': "Emote icon for a cozy owl game's collection menu: a cute round owl head with two ear tufts, beak open mid-hoot, with three curved sound lines beside it, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-flap': "Emote icon for a cozy owl game's collection menu: a single owl wing spread wide in mid-flap with two short motion lines, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-spin': "Emote icon for a cozy owl game's collection menu: a circular arrow looping around in a full turn, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-hop': "Emote icon for a cozy owl game's collection menu: two little bird feet in the air above a short arc of motion and three small dust puffs, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-tilt': "Emote icon for a cozy owl game's collection menu: a cute round owl head with two ear tufts tilted to one side, looking curious, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-bow': "Emote icon for a cozy owl game's collection menu: a small round owl bowing forward politely, seen from the side, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-wave': "Emote icon for a cozy owl game's collection menu: an owl wing raised and waving with two small motion arcs, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-dance': "Emote icon for a cozy owl game's collection menu: a small round owl dancing on one foot with a musical note beside it, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-sleep': "Emote icon for a cozy owl game's collection menu: a cute round owl head with two ear tufts, eyes closed, wearing a floppy nightcap, beside a small crescent moon, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-heart': "Emote icon for a cozy owl game's collection menu: a single bold heart with a small shine, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-surprise': "Emote icon for a cozy owl game's collection menu: a cute round owl head with two ear tufts and very wide round eyes, its feathers sticking out in surprise, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-laugh': "Emote icon for a cozy owl game's collection menu: a cute round owl head with two ear tufts, eyes squeezed shut and beak wide open, laughing, with two tiny tear drops, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-shiver': "Emote icon for a cozy owl game's collection menu: a small round owl hugging itself and shivering, with short wavy lines on both sides and two tiny snowflakes, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-puff': "Emote icon for a cozy owl game's collection menu: a very round owl puffed up into a fluffy ball, with two tiny feathers floating off, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-wink': "Emote icon for a cozy owl game's collection menu: a cute round owl head with two ear tufts winking one eye, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-nod': "Emote icon for a cozy owl game's collection menu: a cute round owl head with two ear tufts, with one short curved arrow above it and one below it showing an up-and-down nod, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-headshake': "Emote icon for a cozy owl game's collection menu: a cute round owl head with two ear tufts, with one short curved arrow on each side showing a side-to-side shake, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-twirl': "Emote icon for a cozy owl game's collection menu: a graceful spiral ribbon swirl ending in a tiny star, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-flip': "Emote icon for a cozy owl game's collection menu: a curved arrow making a full backward loop over a small round owl silhouette, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-stomp': "Emote icon for a cozy owl game's collection menu: a single bird foot stamping down with a burst of short dust lines, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-preen': "Emote icon for a cozy owl game's collection menu: a single long feather with a small four-pointed sparkle, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-stretch': "Emote icon for a cozy owl game's collection menu: a small round owl stretching both wings wide open overhead, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-sneeze': "Emote icon for a cozy owl game's collection menu: a cute round owl head with two ear tufts sneezing, eyes shut, with a small round puff cloud in front of the beak, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+  'icon-peek': "Emote icon for a cozy owl game's collection menu: a cute round owl head with two ear tufts peeking out from behind a large round leaf, only the eyes and tufts showing, painted in pure white and soft pale grey tones only, with gentle cel-shaded modelling and one crisp highlight (the game tints the whole icon, so there is no other colour anywhere), a single bold centred emblem filling about 80 percent of the frame, readable at 32 pixels, a crisp clean opaque silhouette with no glow halo, no haze and no semi-transparent edges, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette and no shadow. No watermark. AVOID: any colour other than white and grey; any text, letters, numbers or characters of any alphabet; a circle, badge, frame, button or border around the emblem; a background scene; green tint on the emblem.",
+};
+const ICON_JOBS = [
+  { key: 'icon-aura', kind: 'piece', realm: 'icons', size: '128x128', seed: 7001, variants: 2, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-aura'] },
+  { key: 'icon-sparkle', kind: 'piece', realm: 'icons', size: '128x128', seed: 7011, variants: 2, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-sparkle'] },
+  { key: 'icon-eye-flames', kind: 'piece', realm: 'icons', size: '128x128', seed: 7021, variants: 2, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-eye-flames'] },
+  { key: 'icon-ember-trail', kind: 'piece', realm: 'icons', size: '128x128', seed: 7031, variants: 2, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-ember-trail'] },
+  { key: 'icon-frost-breath', kind: 'piece', realm: 'icons', size: '128x128', seed: 7041, variants: 2, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-frost-breath'] },
+  { key: 'icon-snowfall', kind: 'piece', realm: 'icons', size: '128x128', seed: 7051, variants: 2, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-snowfall'] },
+  { key: 'icon-fireflies', kind: 'piece', realm: 'icons', size: '128x128', seed: 7061, variants: 2, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-fireflies'] },
+  { key: 'icon-hearts', kind: 'piece', realm: 'icons', size: '128x128', seed: 7071, variants: 2, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-hearts'] },
+  { key: 'icon-music-notes', kind: 'piece', realm: 'icons', size: '128x128', seed: 7081, variants: 2, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-music-notes'] },
+  { key: 'icon-star-halo', kind: 'piece', realm: 'icons', size: '128x128', seed: 7091, variants: 2, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-star-halo'] },
+  { key: 'icon-moon-halo', kind: 'piece', realm: 'icons', size: '128x128', seed: 7101, variants: 2, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-moon-halo'] },
+  { key: 'icon-leaf-swirl', kind: 'piece', realm: 'icons', size: '128x128', seed: 7111, variants: 2, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-leaf-swirl'] },
+  { key: 'icon-petal-swirl', kind: 'piece', realm: 'icons', size: '128x128', seed: 7121, variants: 2, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-petal-swirl'] },
+  { key: 'icon-bubbles', kind: 'piece', realm: 'icons', size: '128x128', seed: 7131, variants: 2, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-bubbles'] },
+  { key: 'icon-smoke-wisps', kind: 'piece', realm: 'icons', size: '128x128', seed: 7141, variants: 2, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-smoke-wisps'] },
+  { key: 'icon-rainbow-trail', kind: 'piece', realm: 'icons', size: '128x128', seed: 7151, variants: 2, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-rainbow-trail'] },
+  { key: 'icon-lightning', kind: 'piece', realm: 'icons', size: '128x128', seed: 7161, variants: 2, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-lightning'] },
+  { key: 'icon-neon-outline', kind: 'piece', realm: 'icons', size: '128x128', seed: 7171, variants: 2, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-neon-outline'] },
+  { key: 'icon-shadow-aura', kind: 'piece', realm: 'icons', size: '128x128', seed: 7181, variants: 2, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-shadow-aura'] },
+  { key: 'icon-sunbeam', kind: 'piece', realm: 'icons', size: '128x128', seed: 7191, variants: 2, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-sunbeam'] },
+  { key: 'icon-confetti', kind: 'piece', realm: 'icons', size: '128x128', seed: 7201, variants: 2, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-confetti'] },
+  { key: 'icon-comet-tail', kind: 'piece', realm: 'icons', size: '128x128', seed: 7211, variants: 2, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-comet-tail'] },
+  { key: 'icon-rune-ring', kind: 'piece', realm: 'icons', size: '128x128', seed: 7221, variants: 2, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-rune-ring'] },
+  { key: 'icon-glitch', kind: 'piece', realm: 'icons', size: '128x128', seed: 7231, variants: 2, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-glitch'] },
+  { key: 'icon-hoot', kind: 'piece', realm: 'icons', size: '128x128', seed: 7241, variants: 1, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-hoot'] },
+  { key: 'icon-flap', kind: 'piece', realm: 'icons', size: '128x128', seed: 7251, variants: 1, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-flap'] },
+  { key: 'icon-spin', kind: 'piece', realm: 'icons', size: '128x128', seed: 7261, variants: 1, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-spin'] },
+  { key: 'icon-hop', kind: 'piece', realm: 'icons', size: '128x128', seed: 7271, variants: 1, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-hop'] },
+  { key: 'icon-tilt', kind: 'piece', realm: 'icons', size: '128x128', seed: 7281, variants: 1, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-tilt'] },
+  { key: 'icon-bow', kind: 'piece', realm: 'icons', size: '128x128', seed: 7291, variants: 1, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-bow'] },
+  { key: 'icon-wave', kind: 'piece', realm: 'icons', size: '128x128', seed: 7301, variants: 1, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-wave'] },
+  { key: 'icon-dance', kind: 'piece', realm: 'icons', size: '128x128', seed: 7311, variants: 1, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-dance'] },
+  { key: 'icon-sleep', kind: 'piece', realm: 'icons', size: '128x128', seed: 7321, variants: 1, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-sleep'] },
+  { key: 'icon-heart', kind: 'piece', realm: 'icons', size: '128x128', seed: 7331, variants: 1, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-heart'] },
+  { key: 'icon-surprise', kind: 'piece', realm: 'icons', size: '128x128', seed: 7341, variants: 1, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-surprise'] },
+  { key: 'icon-laugh', kind: 'piece', realm: 'icons', size: '128x128', seed: 7351, variants: 1, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-laugh'] },
+  { key: 'icon-shiver', kind: 'piece', realm: 'icons', size: '128x128', seed: 7361, variants: 1, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-shiver'] },
+  { key: 'icon-puff', kind: 'piece', realm: 'icons', size: '128x128', seed: 7371, variants: 1, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-puff'] },
+  { key: 'icon-wink', kind: 'piece', realm: 'icons', size: '128x128', seed: 7381, variants: 1, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-wink'] },
+  { key: 'icon-nod', kind: 'piece', realm: 'icons', size: '128x128', seed: 7391, variants: 1, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-nod'] },
+  { key: 'icon-headshake', kind: 'piece', realm: 'icons', size: '128x128', seed: 7401, variants: 1, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-headshake'] },
+  { key: 'icon-twirl', kind: 'piece', realm: 'icons', size: '128x128', seed: 7411, variants: 1, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-twirl'] },
+  { key: 'icon-flip', kind: 'piece', realm: 'icons', size: '128x128', seed: 7421, variants: 1, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-flip'] },
+  { key: 'icon-stomp', kind: 'piece', realm: 'icons', size: '128x128', seed: 7431, variants: 1, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-stomp'] },
+  { key: 'icon-preen', kind: 'piece', realm: 'icons', size: '128x128', seed: 7441, variants: 1, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-preen'] },
+  { key: 'icon-stretch', kind: 'piece', realm: 'icons', size: '128x128', seed: 7451, variants: 1, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-stretch'] },
+  { key: 'icon-sneeze', kind: 'piece', realm: 'icons', size: '128x128', seed: 7461, variants: 1, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-sneeze'] },
+  { key: 'icon-peek', kind: 'piece', realm: 'icons', size: '128x128', seed: 7471, variants: 1, key_colour: '#00FF00', prompt: ICON_PROMPTS['icon-peek'] },
+];
+Object.assign(PROMPTS, ICON_PROMPTS);
+JOBS.push(...ICON_JOBS);
+
+// ---------------------------------------------------------------------------------------------
+// Owl species: each is an edit of the SELECTED great horned owl master, so it keeps the pose,
+// the placement and the colour code and only takes on its species' shape and markings. The post
+// stage splits a chosen species master into its own layers the same way as the owl master.
+const SPECIES_KEEP = 'Keep from the reference: the same single character in the same pose, the same front three-quarter view turned slightly toward the viewer\'s left, about the same size and position with the feet on the bottom edge, centred horizontally and bottom-centre anchored, and the same strict colour code: the body (head, wings and most of the torso) FLAT pure red #FF0000, the belly FLAT pure green #00FF00, the accent parts FLAT pure blue #0000FF, any shading ONLY a darker value of the same hue (darker red on red, darker green on green, darker blue on blue), with no highlights, no outlines and no colour mixing between the three regions, and crisp hard edges between them; the same flat, solid, uniform pure magenta #FF00FF background that fills everything not covered by the owl, with no gradient, no vignette and no cast shadow. Portrait proportions 200x240. STYLE: clean flat 2D game character art in the same style as the reference, simple rounded vector-like shapes, hard crisp edges, no outlines, no gradients, no texture, no photorealism, no film grain, friendly and cute. No text, no watermark. AVOID: any text or writing; any second owl, bird, animal, person or character; background scenery; the owl cut off by any edge except the feet at the bottom; any colour other than pure red, pure green, pure blue and their darker shades on the body, belly and accents; magenta tint on the owl; soft or feathered edges; outlines; realistic or detailed feather texture.';
+
+const SPECIES_OWL_PROMPTS = {
+  'owl-barn-master': `Edit the reference image, a colour-coded layer master of a cute cartoon great horned owl, and turn the character into a cute cartoon barn owl. Change only what makes it a barn owl: no ear tufts at all, the top of the head smooth and gently rounded; a large heart-shaped facial disc filling most of the face, painted FLAT pure green #00FF00 like the belly and edged by a thin rim painted FLAT pure blue #0000FF; inside the disc two large round dark navy #0C1E36 eyes, each with a small cream #F6F1E3 catchlight and no eye ring; the small gold #C9A227 beak at the lower point of the heart; a slightly slimmer, more upright body with the wings folded neatly at the sides; the wing tips and the short tail painted FLAT pure blue #0000FF; two small gold #C9A227 feet. ${SPECIES_KEEP}`,
+  'owl-burrowing-master': `Edit the reference image, a colour-coded layer master of a cute cartoon great horned owl, and turn the character into a cute cartoon burrowing owl. Change only what makes it a burrowing owl: no ear tufts at all, a smaller, smooth, round head; two bold eyebrow stripes above the eyes and a broad chin band under the beak, painted FLAT pure green #00FF00 like the belly; a few small round spots scattered on the head and the wings, also FLAT pure green #00FF00; large round eyes with bright golden-yellow #FFD34A irises and dark navy #0C1E36 pupils, each with a small cream #F6F1E3 catchlight; a small gold #C9A227 beak; long thin legs, so the body stands a little higher above the feet, the legs and the two small feet gold #C9A227; the wing tips and the short tail painted FLAT pure blue #0000FF. ${SPECIES_KEEP}`,
+  'owl-snowy-master': `Edit the reference image, a colour-coded layer master of a cute cartoon great horned owl, and turn the character into a cute cartoon snowy owl. Change only what makes it a snowy owl: no ear tufts at all, a very round, smooth head; a plumper, fluffier, rounder body; small dark crescent-shaped flecks scattered across the head, the wings and the back, painted FLAT pure blue #0000FF, none on the belly; the belly a large clean oval painted FLAT pure green #00FF00; large round eyes with bright golden-yellow #FFD34A irises and dark navy #0C1E36 pupils, each with a small cream #F6F1E3 catchlight; the small gold #C9A227 beak partly tucked into the fluffy face; fluffy feathered feet painted FLAT pure red #FF0000 like the body, with tiny gold #C9A227 claws; the wing tips and the short tail painted FLAT pure blue #0000FF. ${SPECIES_KEEP}`,
+  'owl-screech-master': `Edit the reference image, a colour-coded layer master of a cute cartoon great horned owl, and turn the character into a cute cartoon screech owl, a small and stocky owl. Change only what makes it a screech owl: shorter, chunkier proportions, a big round head on a short plump body, still filling about the same height of the frame; two short, wide, pointed ear tufts painted FLAT pure blue #0000FF; a round facial disc edged by a thin rim painted FLAT pure blue #0000FF; large round eyes with bright golden-yellow #FFD34A irises and dark navy #0C1E36 pupils, each with a small cream #F6F1E3 catchlight; a small gold #C9A227 beak; a few short vertical streaks on the belly drawn only as a darker green; the wing tips and the short tail painted FLAT pure blue #0000FF; two small gold #C9A227 feet. ${SPECIES_KEEP}`,
+};
+
+/** Helper keys of the species masters (not shipped; the post stage derives `owl-<species>-*`). */
+export const SPECIES_MASTER_KEYS = Object.keys(SPECIES_OWL_PROMPTS);
+
+const SPECIES_JOBS = SPECIES_MASTER_KEYS.map((key, i) => ({
+  key,
+  kind: 'owl-edit',
+  derives: OWL_LAYER_KEYS.map((k) => k.replace('owl-', key.replace(/-master$/, '-'))),
+  realm: 'hub',
+  optional: true,
+  size: '1040x1248',
+  seed: 1711 + i * 10,
+  variants: 3,
+  key_colour: '#FF00FF',
+  regions: OWL_REGIONS,
+  refs: [{ ref: '@raw:owl-master', role: 'edit source', optional: false }],
+  // fal's edit endpoint answers in JPEG unless asked; JPEG rings at the key-colour edges.
+  providers: { fal: { output_format: 'png' } },
+  prompt: SPECIES_OWL_PROMPTS[key],
+}));
+Object.assign(PROMPTS, SPECIES_OWL_PROMPTS);
+HELPER_KEYS.push(...SPECIES_MASTER_KEYS);
+JOBS.push(...SPECIES_JOBS);
+
+// In flight (OP-136): the owls' wing opens behind the body, and a body with its folded wings painted
+// on then shows four. Each kind gets a flight master, an edit of its SELECTED master with the folded
+// wings taken away and nothing else. The master goes out as the post stage's cut of its whole frame
+// (`pnpm art:finish cut <kind>-flight-master --base-key <kind>-master --box 0,0,1040,1248`), the same
+// pixels re-encoded small enough to send inline (the snowy owl's own file is not). The post stage
+// then pastes back only what changed around the wings (`pnpm art:finish patch <kind>-flight-master`)
+// and splits it with the master's own registration (`pnpm art:finish owl --flight`), so the flight
+// body sits exactly where the body does and the face, the eyes and the feet are the master's own.
+const FLIGHT_BODY_PROMPT = `Edit the reference image, a colour-coded layer master of a cute cartoon owl, and take away its two folded wings, and nothing else. Where each folded wing lay against the side of the body, the body goes on as the plain, smooth, rounded side of the torso, painted FLAT pure red #FF0000 like the rest of the body, with any shading ONLY a darker red, and with no wing shape, no feather lines, no wing tip and no wing edge left on it; where a wing or its tip stood out past the body, paint the flat pure magenta #FF00FF background there instead, so the body's outline runs smooth and rounded from the shoulders down to the feet. The chest patch keeps its shape, FLAT pure green #00FF00. Keep everything else exactly as it is: the same single owl in the same pose, the same size and the same position in the frame with the feet on the bottom edge; the same head, and ear tufts if it has them; the same face, eyes, beak, markings, tail, legs and feet; the same strict colour code (the body FLAT pure red #FF0000, the chest FLAT pure green #00FF00, the accent parts such as the tail FLAT pure blue #0000FF, any shading ONLY a darker value of the same hue, no highlights, no outlines, no colour mixing between the regions, crisp hard edges between them); and the same flat, solid, uniform pure magenta #FF00FF background with no gradient, no vignette and no cast shadow. STYLE: clean flat 2D game character art in the same style as the reference, simple rounded vector-like shapes, hard crisp edges, no outlines, no gradients, no texture. No text, no watermark. AVOID: any wing, folded or spread; any arm; any feather pattern on the sides of the body; any change to the head, the face, the eyes or the feet; any second owl, bird, animal, person or character; any colour other than pure red, pure green, pure blue and their darker shades on the owl; magenta tint on the owl; soft or feathered edges; outlines.`;
+
+/** Each kind's flight master and the master it is an edit of. */
+export const FLIGHT_MASTERS = Object.fromEntries(['owl-master', ...SPECIES_MASTER_KEYS].map((m) => [m.replace(/-master$/, '-flight-master'), m]));
+const FLIGHT_LAYER_KEYS = ['owl-flight-body', 'owl-flight-belly', 'owl-flight-accent'];
+const FLIGHT_JOBS = Object.entries(FLIGHT_MASTERS).map(([key, master], i) => ({
+  key,
+  kind: 'owl-edit',
+  // owl-flight-master -> owl-flight-body; owl-barn-flight-master -> owl-barn-flight-body.
+  derives: FLIGHT_LAYER_KEYS.map((k) => k.replace('owl-', key.replace(/flight-master$/, ''))),
+  realm: 'hub',
+  optional: true,
+  size: '1040x1248',
+  seed: 1911 + i * 10,
+  variants: 4,
+  key_colour: '#FF00FF',
+  regions: OWL_REGIONS,
+  refs: [{ ref: `@canvas:${key}`, role: 'edit source', optional: false }],
+  // fal's edit endpoint answers in JPEG unless asked; JPEG rings at the key-colour edges.
+  providers: { fal: { output_format: 'png' } },
+  prompt: FLIGHT_BODY_PROMPT,
+}));
+for (const key of Object.keys(FLIGHT_MASTERS)) PROMPTS[key] = FLIGHT_BODY_PROMPT;
+HELPER_KEYS.push(...Object.keys(FLIGHT_MASTERS));
+JOBS.push(...FLIGHT_JOBS);
+
+// Flight (OP-084): the owls' wing. One right wing spread open, painted in the owl master's colour code
+// (the covert feathers FLAT red, the long flight feathers FLAT blue, on magenta) as an edit of the
+// selected owl master, so it shares the owls' style. The post stage splits the picked one into the two
+// tintable layers (`pnpm art:finish wings`); the game mirrors it for the left wing and turns both at
+// the shoulder, spread for a glide and swept up and down for a flap, on every owl kind in its colours.
+const WING_COLOURS = 'Each wing is a big, rounded cartoon owl wing in the same simple flat vector-like style as the reference owl: a broad rounded inner part of covert feathers painted FLAT pure red #FF0000, and along its outer and trailing edge a fan of five or six long, rounded-tipped flight feathers painted FLAT pure blue #0000FF, the feathers told apart by thin darker-blue lines; any shading is ONLY a darker value of the same hue (darker red on red, darker blue on blue), with no highlights, no outlines and no colour mixing, and crisp hard edges between the red and the blue.';
+const WING_ONLY = 'NO body, NO head, NO face, NO eyes, NO beak, NO belly, NO feet and NO tail: only the wings. The wings are isolated on a flat, solid, uniform pure magenta #FF00FF background that fills everything else, with no gradient, no vignette and no cast shadow. STYLE: clean flat 2D game sprite art matching the reference owl, simple rounded shapes, hard crisp edges, no outlines, no gradients, no texture, no photorealism, no film grain, friendly and cute. No text, no watermark. AVOID: any owl body, head, face or eyes; any bird, animal or character; any colour other than pure red, pure blue and their darker shades on the wings; any green; magenta tint on the wings; soft or feathered edges; outlines; realistic or detailed feather texture.';
+PROMPTS['owl-wing-right'] = `Using the reference image only for its style and its strict colour code, paint a NEW image: ONE wing of this same cute cartoon owl, its right wing, and nothing else, spread wide open as when it glides, seen straight from the front: its rounded root at the left edge of the frame, halfway down, and the wing spreading out and slightly up to the right, filling most of a 3:2 frame. ${WING_COLOURS} ${WING_ONLY}`;
+/** The wing's shipped layers, split from `owl-wing-right` by the post stage. */
+export const WING_LAYER_KEYS = ['owl-wing-body', 'owl-wing-accent'];
+HELPER_KEYS.push('owl-wing-right');
+JOBS.push({
+  key: 'owl-wing-right',
+  kind: 'owl-edit',
+  derives: WING_LAYER_KEYS,
+  realm: 'hub',
+  optional: true,
+  size: '1536x1024',
+  seed: 1811,
+  variants: 2,
+  key_colour: '#FF00FF',
+  regions: OWL_REGIONS,
+  refs: [{ ref: '@raw:owl-master', role: 'style and colour code', optional: false }],
+  // fal's edit endpoint answers in JPEG unless asked; JPEG rings at the key-colour edges.
+  providers: { fal: { output_format: 'png' } },
+  prompt: PROMPTS['owl-wing-right'],
+});
+
+// ---------------------------------------------------------------------------------------------
+// Wings: the hub and the grove are three screens wide and the market two. A wing is an edit of
+// the room's approved painting: its 800 px edge strip sits at one end of a grey canvas
+// (`pnpm art:finish canvas <key>`, sent as @canvas:<key>), the model paints the grey, and the
+// post stage stitches the result back onto the painting (`pnpm art:finish wing <room>`). Each
+// prompt is the outpaint brief, the wing's own brief and the room's style block. These are the
+// prompts of the approved candidates; hub-west and grove-west are the second round's wording (the
+// grove's colossal tree stays unique to its painting, no moon overhead in the hub's wings,
+// lanterns unlit, the floor kept empty).
+
+const WING_SCENE = {
+  hub: 'the inside of the hollow base of a colossal ancient tree at night',
+  grove: 'a cozy storybook forest clearing at dusk with a treehouse village',
+  market: 'a rainy night street in a cyberpunk neon market',
+  lobby: 'the cobbled entrance plaza of a storybook theme park at night',
+};
+const WING_CARRY = {
+  hub: 'floor, inner bark walls, lighting, perspective, floor height and brush style',
+  grove: 'lawn, trees, treehouses, sky glow, lighting, perspective, ground height and brush style',
+  market: 'wet street, far curb, stalls, skyline, clouds, lighting, perspective, street height and brush style',
+  lobby: 'cobbled plaza, balustrade, string lights, banners, trees, night sky, lighting, perspective, ground height and brush style',
+};
+const wingIntro = (room, side) => {
+  const [finished, away] = side === 'east' ? ['left', 'right'] : ['right', 'left'];
+  return `Extend this painting into a wide panorama. The reference is an unfinished canvas: its ${finished} fifth is a finished hand-painted game background, ${WING_SCENE[room]}, and everything to the ${away} of it is flat grey placeholder. Repaint the grey completely so the whole frame becomes one continuous, seamless painting: keep the finished ${finished} part as it is, and carry its ${WING_CARRY[room]} straight on to the ${away} with no visible join.`;
+};
+const WING_STYLE_EDITS = [
+  [/, the same colossal ancient tree with its locked silhouette \([^)]*\)\./, '.'],
+  ['lit by cream moonlight from above', 'lit by soft cream moonlight spilling in from the side'],
+  ['sky or landscape beyond the knothole', 'any moon, sky, stars or landscape'],
+  ['so small colourful figures added later stand out', 'kept empty'],
+];
+const wingStyle = (room, edits = []) => edits.reduce((s, [a, b]) => s.replace(a, b), STYLE[room]).replace(/^STYLE \([^)]*\):/, 'STYLE:');
+const EMPTY = { 1: 'open and uncluttered so small figures stand out on it.', 2: 'open, empty and uncluttered.' };
+const hubFloor = (round) => `The hollow is far wider than it first looked. The broad floor of pale worn inner wood with faint concentric growth rings and thin worn gold guide lines continues across the whole lower third at the same height, ${EMPTY[round]}`;
+const HUB_CLOSED = 'tall vertical ribs of inner bark rise into deep navy shadow at the top of the frame, closed overhead, with root buttresses diving under the floor and a few small knotholes glowing gold';
+const HUB_AVOID = 'No new doorways or arches. AVOID in the new stretch: a moon, any sky or stars, any opening or hole in the ceiling or upper walls, any new doorway.';
+const groveLawn = (round) => `The soft mossy lawn continues at the same height across the lower part of the frame, ${EMPTY[round]}`;
+const GROVE_TREES = {
+  1: 'The trees in the new stretch are ordinary tall forest trunks, none of them bigger than the ones beside them.',
+  2: 'Every tree in the new stretch is an ordinary dark forest trunk, none bigger than its neighbours, with no glow, no knothole light and no doorway.',
+};
+
+const WING_PROMPTS = {
+  'hub-west': `${wingIntro('hub', 'west')} ${hubFloor(2)} The cosy storybook archway at the right edge of the finished part is kept exactly as painted, with its string of small lights, and remains the only doorway: directly to its left the bark wall continues, with no second archway and no glowing opening. The new stretch is a closed side bay of the same hollow: ${HUB_CLOSED}. Across the middle of the new stretch one long, low root arcs along the back wall like a beam, and from it hang seven round paper lanterns, all unlit: plain pale cream paper on thin wooden ribs, dark inside, no glow, evenly spaced; beneath them a curve of low, smooth root benches edges an open patch of floor. At the far left edge the wall curves gently forward into shadow with thick roots. The only moonlight here is soft cream light spilling in sideways from the right. ${HUB_AVOID} ${wingStyle('hub', WING_STYLE_EDITS)}`,
+  'hub-east': `${wingIntro('hub', 'east')} ${hubFloor(1)} The new stretch is a closed side bay of the same hollow: ${HUB_CLOSED}. In the middle of the new stretch a wide, shallow alcove in the back wall holds a low round tree-stump platform like a small stage, worn smooth on top, with three paper lanterns hanging above it and soft gold light on it. Further right, a cluster of large shelf fungi on the wall glows a faint warm gold, and at the far right edge the wall curves gently forward into shadow with thick roots. The only moonlight here is soft cream light spilling in sideways from the left. ${HUB_AVOID} ${wingStyle('hub')}`,
+  'grove-west': `${wingIntro('grove', 'west')} The clearing continues to the left. ${groveLawn(2)} In the middle of the new stretch the lawn meets a still forest pond: its near bank is a gentle curve of moss and smooth round stones, its water dark blue and glassy, reflecting the dusk sky and the warm lantern lights. A short jetty of weathered wooden planks runs from the lawn straight back over the water, with a small round amber lantern on a post at its far end. Reeds and a few lily pads at the water's edge, fireflies drifting over the water. Behind the pond, tall dark trunks hold two little shingled treehouses high up on platforms, joined by a rope bridge hung with round amber lanterns, and the warm dusk glow of the sky between the trunks continues at the same height. At the far left edge the forest closes in with big trunks and ferns. ${GROVE_TREES[2]} ${wingStyle('grove', WING_STYLE_EDITS)}`,
+  'grove-east': `${wingIntro('grove', 'east')} The clearing continues to the right. ${groveLawn(1)} A narrow winding dirt path crosses it. The rope bridge that leaves the top right of the finished part carries on into the new stretch, linking three or four more little shingled treehouses with lit round windows at different heights on tall trunks, with rope bridges hung with round amber lanterns and a ladder down to the lawn. On the lawn, a small ring of glowing mushrooms, a few mossy stumps and a fallen log to sit on. The warm dusk glow of the sky between the trunks continues at the same height. At the far right edge the forest closes in with big trunks and ferns. ${GROVE_TREES[1]} ${wingStyle('grove')}`,
+  'market-east': `${wingIntro('market', 'east')} The street continues to the right at the same height: the rain-slick asphalt with neon reflections fills the lower part of the frame, ${EMPTY[1]} Along the far curb the row of market stalls carries on: more stalls with awnings, hanging cables and glowing displays of goods as abstract shapes of colour, a noodle stall with soft steam, a stall stacked with glowing sweets in jars. In the middle of the new stretch the street widens into a small round plaza in front of the stalls, with a low circular platform ringed by cyan neon, empty, like a little stage. Behind the stalls the skyline of tall chrome towers with neon edges and lit window bands continues under the violet and magenta clouds. At the far right edge the street bends away between tall buildings. No robots and no characters anywhere. ${wingStyle('market')}`,
+};
+
+/** The wing keys (one screen each) and the seed of each approved candidate's pair of variants. */
+export const WING_KEYS = Object.keys(WING_PROMPTS);
+const WING_SEEDS = { 'hub-west': 9213, 'hub-east': 9221, 'grove-west': 9233, 'grove-east': 9241, 'market-east': 9251 };
+
+const WING_JOBS = WING_KEYS.map((key) => ({
+  key,
+  kind: 'wing',
+  realm: key.replace(/-(west|east)$/, ''),
+  optional: true,
+  size: '3040x1368',
+  seed: WING_SEEDS[key],
+  variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "the painting's edge on a grey canvas to paint over", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: WING_PROMPTS[key],
+  // The hub's wings are copied as the walls of the hollow hall's Commons (commons-west, commons-east).
+  ...(key.startsWith('hub-') ? { derives: [key.replace('hub-', 'commons-')] } : {}),
+}));
+Object.assign(PROMPTS, WING_PROMPTS);
+JOBS.push(...WING_JOBS);
+
+// ---------------------------------------------------------------------------------------------
+// Lobby concepts: the park's front entrance, where every visitor arrives, buys a ticket at the
+// booth and passes the turnstiles into the park. Two directions, four seeds each, for the art
+// director to pick from before the lobby room is painted and wired into the game.
+
+const LOBBY_STYLE = `STYLE: hand-painted 2D game background, clean cel-shaded shapes with soft painted gradients, matte-painting depth, slightly stylised proportions, no outlines, no photorealism, no film grain, large flat colour areas that compress cleanly. A magical night at the grand entrance of a storybook theme park, festive, opulent and welcoming. PALETTE: navy #0C1E36 and deep navy #07122A night sky; gold #C9A227 and warm gold light #FFD36A for lamps, trims and highlights; cream #F6F1E3 for moonlight and marquee bulbs; polished brass; deep plum and emerald accents on awnings and banners; warm stone and cobbles from #5C4632 to #8F8068 in the lamplight. SHAPE LANGUAGE: ornate arches, scalloped striped awnings, rows of round marquee bulbs, swooping strings of festoon lights, pennants and hanging banners, lanterns on curly iron posts, potted topiaries, polished brass turnstiles, soft volumetric light. READABILITY: straight-on eye-level view; a clear, uncluttered, mid-value plaza of cobbles across the lower third of the frame, open and empty so small colourful figures added later stand out; the ticket booth and the entrance stand at the back of the plaza at floor level. AVOID: any text, letters, numbers, writing, signage lettering, logos or watermarks (signs, banners and the booth carry no words, only patterns or simple owl emblems); any people, crowds, faces, animals or living birds (owl shapes appear only as carved, cast or wrought-iron ornaments); photographic textures; busy noisy detail; lens flare; daylight; exact mirror symmetry.`;
+
+const LOBBY_PROMPTS = {
+  'lobby-concept-a': `Concept painting of the grand front entrance of a magical storybook theme park, seen from the plaza in front of it at night. On the left, a charming ornate ticket booth: a little round kiosk with tall arched windows glowing warm gold, a scalloped striped awning, a domed roof with a brass finial ringed with marquee bulbs, and a velvet-roped queue lane in front of it. On the right half, the entrance itself: a row of five polished brass turnstiles with little lanterns on their posts, standing in front of a towering arched gateway of carved stone and gold wrought iron with an owl crest at its keystone. Its tall gates stand open, and through them the park glows beyond: a colossal ancient tree lit warmly from within under a big full moon. Festoon lights swoop from lamp posts across the plaza, blank pennants and banners in navy, gold and plum hang from the arch, potted topiaries and lanterns line the way, and a few fireworks bloom softly high in the sky. ${LOBBY_STYLE}`,
+  'lobby-concept-b': `Concept painting of the grand front entrance of a magical storybook theme park, seen from the plaza in front of it at night. On the right half, the entrance itself: an enormous archway formed by two giant carved wooden owl statues facing each other, their wings raised to meet overhead in a pointed arch studded with glowing bulbs and hung with lanterns; beneath the arch a row of five ornate turnstiles in brass and dark polished wood with lantern caps; beyond them a glowing path leads into the park toward a colossal ancient tree lit warmly from within under a big full moon. On the left, a whimsical ticket booth shaped like a tall birdhouse: a pointed shingled roof with a gold weathervane, round windows glowing warm gold, a scalloped striped awning over the ticket window, flower boxes and a little velvet-roped queue lane. Festoon lights swoop across the plaza, blank banners in navy, gold and emerald flutter on tall poles, lanterns on curly iron posts and potted topiaries line the way, and fireflies drift in the warm air. ${LOBBY_STYLE}`,
+};
+
+/** Helper keys of the lobby concepts (not shipped: the pick guides the lobby room's art). */
+export const LOBBY_CONCEPT_KEYS = Object.keys(LOBBY_PROMPTS);
+
+const LOBBY_JOBS = LOBBY_CONCEPT_KEYS.map((key, i) => ({
+  key,
+  kind: 'room',
+  realm: 'lobby',
+  optional: true,
+  size: '3200x1800',
+  seed: 2101 + i * 100,
+  variants: 4,
+  providers: { fal: { output_format: 'png' } },
+  prompt: LOBBY_PROMPTS[key],
+}));
+Object.assign(PROMPTS, LOBBY_PROMPTS);
+HELPER_KEYS.push(...LOBBY_CONCEPT_KEYS);
+JOBS.push(...LOBBY_JOBS);
+
+// The art director picked concept B1 (seed 2201). Its booth's weathervane came out as a rooster:
+// an edit of a 1024 px crop of the pick around the booth's roof (work/art/canvas/lobby-vane.png,
+// cut from the selected B1 at x 16..1040, y 0..1024) repaints it as an owl, and only the
+// weathervane is taken from the edit, so the rest of the approved painting stays exactly as picked.
+const LOBBY_VANE_PROMPT = `Edit this painting, a detail of a storybook theme park entrance at night: the pointed shingled roof of a birdhouse-shaped ticket booth, with a gold rooster weathervane on top. Change only the weathervane: the rooster becomes a small owl with folded wings and two little ear tufts, perched on the same arrow and cross, at the same size and height, in the same polished gold metal, catching the same warm lamplight. Keep everything else exactly as it is: the same framing, colours and lighting, the same finial, roof, round windows, awning, banners, string lights, fireflies and night sky. No text, letters or numbers anywhere.`;
+
+const LOBBY_VANE_JOB = {
+  key: 'lobby-vane',
+  // A detail edit, not a screen of a room: an anchor-like helper. Patched into the picked concept
+  // (`pnpm art:finish patch lobby`), it makes the lobby's painting.
+  kind: 'anchor',
+  derives: ['lobby'],
+  realm: 'lobby',
+  optional: true,
+  size: '1024x1024',
+  seed: 2301,
+  variants: 2,
+  refs: [{ ref: '@canvas:lobby-vane', role: 'a crop of the picked concept around the booth roof', optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: LOBBY_VANE_PROMPT,
+};
+PROMPTS['lobby-vane'] = LOBBY_VANE_PROMPT;
+HELPER_KEYS.push('lobby-vane');
+JOBS.push(LOBBY_VANE_JOB);
+
+// The lobby's style block, for its wing (the concepts above carry it verbatim).
+STYLE.lobby = LOBBY_STYLE;
+const LOBBY_WING_EDITS = [
+  ['; the ticket booth and the entrance stand at the back of the plaza at floor level.', '.'],
+  [', polished brass turnstiles', ''],
+  ['ornate arches, ', ''],
+  [' so small colourful figures added later stand out', ''],
+];
+
+// The lobby is two screens wide: the painting (concept B1 with its owl weathervane) is the east
+// screen, and the west wing, where visitors arrive, is painted out from its west edge like the
+// other rooms' wings (`pnpm art:finish canvas lobby-west`, then `pnpm art:finish wing lobby`).
+const LOBBY_WING_PROMPT = `${wingIntro('lobby', 'west')} The plaza continues to the left: its cobbles fill the lower third of the frame at the same height, open, empty and uncluttered. The birdhouse ticket booth at the right edge of the finished part is kept exactly as painted, with its velvet rope posts, and stays the only booth. At the back of the plaza in the middle of the new stretch, in front of the balustrade, stands a round tiered stone fountain on a low step, its basin edged in gold and a small gold owl statue on top, its water glowing softly in the warm lamplight, with a curly iron bench and potted topiaries beside it. Along the back of the plaza a low carved balustrade with ball finials and clipped topiary hedges carries on, lamp posts of curly iron with warm glowing lanterns stand at intervals, strings of round festoon bulbs swoop between them, and tall poles fly blank banners in navy, gold and emerald. Beyond the balustrade, dark rounded trees under the starry navy sky, with fireflies drifting. At the far left edge, tall clipped hedges and trees close the plaza. The new stretch has no second booth, no turnstiles, no gate, no archway, no carved owl statues and no moon. ${wingStyle('lobby', LOBBY_WING_EDITS)}`;
+
+export const LOBBY_WING_JOB = {
+  key: 'lobby-west',
+  kind: 'wing',
+  realm: 'lobby',
+  optional: true,
+  size: '3040x1368',
+  seed: 9261,
+  variants: 4,
+  refs: [{ ref: '@canvas:lobby-west', role: "the painting's edge on a grey canvas to paint over", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: LOBBY_WING_PROMPT,
+};
+PROMPTS['lobby-west'] = LOBBY_WING_PROMPT;
+JOBS.push(LOBBY_WING_JOB);
+
+// ---------------------------------------------------------------------------------------------
+// Construction blockades across the hub's two closed doorways (the owner, 2026-10-21): each one a
+// keyed set piece standing on the floor in front of its sealed arch, carrying that doorway's
+// approved sign phrase, in place of the old drawn sign-and-egg placeholders. The painting's arches
+// stay as painted around them.
+const BLOCKADE_FRAME = `A single free-standing prop, seen straight on at eye level, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills everything not covered by the prop, with no gradient, no vignette, no floor and no cast shadow on the backdrop. Square proportions 300x300, generated at 1280x1280: the prop is centred, stands with its feet on the bottom edge of the frame, bottom-centre anchored, and fills about four fifths of the width and two thirds of the height, with the green showing above it.`;
+const BLOCKADE_STYLE = `STYLE: hand-painted 2D game prop matching the reference painting of the inside of a great tree at night: clean cel-shaded shapes with soft painted gradients, cream moonlight from above and warm gold lantern light, slightly stylised chunky proportions, no outlines, no photorealism, no film grain, a crisp clean opaque silhouette against the green with no glow bleeding onto the backdrop. PALETTE: warm bark browns #4A3322 and #6E4E36, gold #C9A227 and warm light #FFD36A, cream #F6F1E3, navy #0C1E36, muted brick red #B5523B for the safety stripes. No watermark. AVOID: any other text, letters, numbers or symbols anywhere, only the words on the sign; any owls, birds, animals, people, faces or characters; any doorway, arch, wall, floor or background scenery; the prop cut off by any edge except the feet at the bottom; green tint on the wood; photographic textures; lens flare.`;
+const BLOCKADE_PROMPTS = {
+  'blockade-not-yet-fledged': `A cosy storybook construction blockade that a park puts across a closed doorway. ${BLOCKADE_FRAME} It is built from two sturdy wooden sawhorses joined by two long horizontal planks painted with diagonal stripes of muted brick red and cream, with two rough unpainted boards nailed across them in a big X. On two short posts above the top plank sits a wide hand-carved wooden sign of warm brown wood with a thin gold trim and little brass nail heads, and painted on it in large, friendly storybook serif letters in cream with a thin navy outline are exactly the words "Not Yet Fledged" on two lines, "Not Yet" above "Fledged", spelled exactly so, with nothing else written anywhere. A small brass lantern glowing warm gold hangs from one post, two little cream-and-orange striped traffic cones and a coil of rope stand at the feet, and a few dry gold leaves rest on the planks. ${BLOCKADE_STYLE}`,
+  'blockade-hatching-soon': `A cosy storybook construction blockade that a park puts across a closed doorway. ${BLOCKADE_FRAME} It is a low wooden barrier of three slatted boards painted with diagonal stripes of muted brick red and cream between two sturdy striped posts with round gold caps, with a rope strung between the post tops hung with little triangular pennants in gold, cream and navy. From a crossbar above it, on two short ropes, hangs a wide hand-carved wooden sign of warm brown wood with a thin gold trim and little brass nail heads, and painted on it in large, friendly storybook serif letters in cream with a thin navy outline are exactly the words "Hatching Soon" on two lines, "Hatching" above "Soon", spelled exactly so, with nothing else written anywhere. A small brass lantern glowing warm gold hangs from the crossbar, a short stack of planks with a wooden mallet leans against one post, and two little cream-and-orange striped traffic cones stand at the feet. ${BLOCKADE_STYLE}`,
+};
+Object.assign(PROMPTS, BLOCKADE_PROMPTS);
+JOBS.push(
+  ...Object.entries(BLOCKADE_PROMPTS).map(([key, prompt], i) => ({
+    key,
+    kind: 'piece',
+    realm: 'hub',
+    size: '1280x1280',
+    seed: 1801 + 10 * i,
+    variants: 4,
+    key_colour: '#00FF00',
+    refs: [published('hub')],
+    prompt,
+  })),
+);
+
+// The street of nests and the nests, a free area beside the lobby. The street is two screens: its
+// painting (`homes`, the east screen, nearest the lobby) is a lane of tree houses at dusk in the
+// storybook style of the published grove, with three of the six round nest doors, and its west
+// wing (`homes-west`) is painted out from the painting's west edge like the other rooms' wings
+// (`pnpm art:finish canvas homes-west`, then `pnpm art:finish wing homes`), with the other three.
+// A nest (`nest`) is one owl's round room inside a trunk, kept bare, because the furniture
+// (`decor-<id>`) is placed in it by its owner; each piece is painted alone on a chroma backdrop
+// with the published nest as its style reference. Order: the street, its wing, the nest, then the
+// furniture. Every job asks fal for PNG: with a reference it goes to the edit endpoint, which
+// otherwise answers in JPEG (and JPEG rings at keyed edges).
+
+const HOMES_STYLE = `STYLE: cozy storybook illustration, hand-painted 2D game background, soft rounded shapes, gentle cel shading with warm painted gradients, slightly chunky proportions, no hard outlines, no photorealism, no film grain, large flat colour areas that compress cleanly. Dusk along a lane of tree houses in an old forest, lit by warm lanterns and glowing round windows. PALETTE: warm amber lantern light #F2B24A and #FFB347; honey gold #C9A227; cream #F6F1E3 highlights; dusk blue sky #2E4C7A deepening to navy #0C1E36 at the top; mossy greens #3E5A3A and #6E8B4E; warm bark #4A3322 and #6E4E36; firefly points in pale gold #FFE28A. SHAPE LANGUAGE: broad old trunks with small round wooden doors at their feet, little shingled tree houses with round windows and balconies in the branches above, rope bridges and ladders between the trunks, round paper lanterns, soft moss cushions, drifting fireflies. READABILITY: a clear, open, mid-value lane as the ground plane across the lower part of the frame, nearer is lower; every door at ground level on the far edge of the lane and clearly a door. AVOID: any text, letters, numbers, writing, signage, house numbers, name plates, flags, logos or watermarks; any owls, birds, animals, people, faces or characters; one giant tree bigger than the rest; photographic textures; busy noisy detail; lens flare; harsh daylight; exact mirror symmetry.`;
+
+const HOMES_PROMPT = `A lane of cozy storybook tree houses in an old forest at dusk, seen from outside, 16:9 wide shot, 3200x1800, hand-painted 2D game background, in the same storybook style, palette and dusk light as the reference painting but a new scene, not a copy of it. The ground plane fills the lower part of the frame: a soft lane of packed earth edged with moss runs across the whole width from the left edge to the right edge, mid value, nearer is lower, open and empty. Along the far side of the lane stand broad old tree trunks of similar size, and three of them have a small round wooden door at their foot, at ground level on the edge of the lane: one a sixth of the way in from the left edge, one at the centre and one a sixth of the way in from the right edge, evenly spaced and all the same size, each about one sixth of the frame's height. Every door is round, made of curved planks painted its own colour (honey, rust red, dusk blue), with a brass ring handle, a little round window and a flat stone doorstep, set in a rounded frame of bark with a small lantern on a hook beside it; the bark around each door is otherwise plain. Above the doors the trunks rise into the branches, where little shingled tree houses with round windows glowing warm amber, small balconies and rope ladders sit on platforms, joined by rope bridges hung with round paper lanterns; fireflies drift as soft pale gold points. At the right edge of the frame the lane curves away out of the frame past a lantern on a post. Between the trunks the dusk sky glows warm amber low down, deepening through dusk blue to navy at the top, with a few early stars and soft mist among the distant trunks. ${HOMES_STYLE}`;
+
+// The street's wing, like the other rooms' wings: its scene, what it carries on and its style block.
+STYLE.homes = HOMES_STYLE;
+WING_SCENE.homes = 'a lane of cozy storybook tree houses at dusk';
+WING_CARRY.homes = 'lane, trunks, round doors, tree houses, rope bridges, lanterns, sky glow, lighting, perspective, ground height and brush style';
+
+const HOMES_WING_PROMPT = `${wingIntro('homes', 'west')} The lane continues to the left at the same height across the lower part of the frame, ${EMPTY[2]} Along its far side stand three more broad old trunks, each with a small round wooden door at its foot at ground level: the same size and height as the doors in the finished part and at the same spacing, so all the doors along the lane are evenly spaced, each painted its own colour, with a brass ring handle, a little round window, a flat stone doorstep and a small lantern on a hook beside it, the bark around it otherwise plain. Above them more little shingled tree houses with glowing round windows, small balconies and rope ladders sit in the branches, joined by rope bridges hung with round paper lanterns, and the warm dusk glow of the sky between the trunks continues at the same height. At the far left edge the forest closes in with big trunks, ferns and moss, and the lane ends there. No owls and no characters anywhere. ${wingStyle('homes')}`;
+
+const NEST_PROMPT = `Interior of a cozy round room inside the trunk of an old tree, a small, snug home at dusk, seen straight on from the middle of the room, camera slightly elevated, 16:9 wide shot, 3200x1800, hand-painted 2D game background, in the same storybook style and palette as the reference painting but a new scene. The room is round: walls of smooth honey-brown inner wood with a soft grain curve around the back of the room like the inside of a barrel and sweep forward out of the frame at the left and right edges, under a low domed wooden ceiling, and a single round paper lantern hangs from the top centre, glowing warm amber. The floor fills the lower two fifths of the frame: smooth worn pale inner wood with faint concentric growth rings, mid value, nearer is lower, completely bare and open from edge to edge with nothing standing on it. Near the left edge, at floor level in the curving wall, the round front door: curved wooden planks with a brass ring handle and a little round window, standing slightly ajar with cool dusk-blue light at its edge. In the middle of the back wall a big round window with a wooden frame and four panes looks out on the dusk: a deep blue sky, the dark shapes of neighbouring trees and a rope bridge with a few warm lantern lights; a little moss grows on its sill. Near the right edge a rounded hearth nook is carved into the wall at floor level, with a small hearth of smooth river stones and a low, gentle fire whose warm orange light spills across the floor. A few narrow shelves carved into the wall high up near the ceiling hold small jars, candles and pinecones. Between the door and the window, and between the window and the hearth, the wall is plain and uncluttered: smooth wood, left empty. STYLE: cozy storybook illustration, hand-painted 2D game background, soft rounded shapes, gentle cel shading with warm painted gradients, slightly chunky proportions, no hard outlines, no photorealism, no film grain, large flat colour areas that compress cleanly. Evening inside a hollow tree, lit by warm lantern light and a glowing hearth, with cool dusk light at the window and the door. PALETTE: warm amber lantern and fire light #F2B24A and #FFB347; honey gold #C9A227; cream #F6F1E3 highlights; inner wood #5C4632 lifting to #8F8068 on the floor; warm bark #4A3322 and #6E4E36 in the walls and shadows; dusk blue #2E4C7A and navy #0C1E36 through the window and the door; small touches of moss #3E5A3A and #6E8B4E. READABILITY: a clear, open, mid-value floor across the lower part of the frame, nearer is lower; the door at floor level and clearly a door; plain wall on both sides of the window. AVOID: any text, letters, numbers, writing, signage, logos or watermarks; any owls, birds, animals, people, faces or characters; any furniture or furnishings: no rugs, chairs, stools, tables, beds, bookshelves, lamps, potted plants, pictures, frames, clocks, window boxes, strings of lanterns, mobiles or wall hangings; clutter on the floor; photographic textures; busy noisy detail; lens flare; daylight; exact mirror symmetry.`;
+
+const HOMES_JOBS = [
+  {
+    key: 'homes',
+    kind: 'room',
+    realm: 'homes',
+    size: '3200x1800',
+    seed: 3101,
+    variants: 4,
+    // No layout guide: a guide draws a room's first screen, and this painting is the street's second.
+    refs: [published('grove')],
+    providers: { fal: { output_format: 'png' } },
+    prompt: HOMES_PROMPT,
+  },
+  {
+    key: 'homes-west',
+    kind: 'wing',
+    realm: 'homes',
+    optional: true,
+    size: '3040x1368',
+    seed: 9271,
+    variants: 2,
+    refs: [{ ref: '@canvas:homes-west', role: "the painting's edge on a grey canvas to paint over", optional: false }],
+    providers: { fal: { output_format: 'png' } },
+    prompt: HOMES_WING_PROMPT,
+  },
+  {
+    key: 'nest',
+    kind: 'room',
+    realm: 'homes',
+    size: '3200x1800',
+    seed: 3201,
+    variants: 4,
+    refs: [published('grove'), guide('nest')],
+    providers: { fal: { output_format: 'png' } },
+    prompt: NEST_PROMPT,
+  },
+];
+PROMPTS.homes = HOMES_PROMPT;
+PROMPTS['homes-west'] = HOMES_WING_PROMPT;
+PROMPTS.nest = NEST_PROMPT;
+JOBS.push(...HOMES_JOBS);
+
+// The furniture: each piece alone on a chroma backdrop (magenta for the green subjects, green for
+// the rest), generated at twice its logical size and finished with its bottom centre on the
+// spot: `pnpm art:finish piece decor-<id> --margin 0.04`. No text on anything: the books have
+// blank spines, the clock face has dots only and the framed leaf is a painting of a leaf.
+const DECOR_VIEW = {
+  floor: 'standing on an unseen floor, seen from the front and a little above in a gentle three-quarter view, centred, its base resting on the bottom edge of the frame',
+  flat: 'lying flat on an unseen floor, seen from the front and above at a low angle so it reads as a wide oval, centred, its near edge on the bottom edge of the frame',
+  wall: 'hanging flat against an unseen wall, seen straight from the front, centred',
+};
+const decorPrompt = (subject, view, backdrop) => {
+  const green = backdrop === '#00FF00';
+  return `Furniture piece for a cozy owl game's tree-house rooms: ${subject}, the piece alone, ${DECOR_VIEW[view]}, isolated on a flat, solid, uniform pure chroma ${green ? 'green' : 'magenta'} ${backdrop} background that fills the entire canvas with no gradient, no vignette, no cast shadow and no floor, wall or ground plane, filling about 85 percent of the frame. STYLE: cozy storybook illustration, hand-painted 2D game art, soft rounded shapes, gentle cel shading with warm painted gradients, slightly chunky proportions, no hard outlines, no photorealism, no film grain, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. PALETTE: warm woods #4A3322 and #6E4E36, honey gold #C9A227, warm amber #F2B24A, cream #F6F1E3, dusk blue #2E4C7A${green ? '' : ', mossy greens #3E5A3A and #6E8B4E'}, with navy #0C1E36 for the darkest accents. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face or character; more than one piece; a room, floor, wall or scenery around it; ${green ? 'green parts or green tint on the piece' : 'magenta, pink or purple parts or tint on the piece'}.`;
+};
+
+// id, view, backdrop, generation size (twice the logical size in art.ts), the piece.
+const DECOR = [
+  ['rug', 'flat', '#00FF00', '480x200', 'a round braided rag rug in concentric rings of rust red, amber, cream and dusk blue, soft and a little worn'],
+  ['armchair', 'floor', '#00FF00', '300x300', 'a plump, cozy armchair with a rounded high back, rolled arms and a deep seat cushion, upholstered in warm rust-red fabric with a few honey-gold buttons on the back, on four short turned wooden legs, a small cream knitted blanket folded over one arm'],
+  ['bookshelf', 'floor', '#00FF00', '300x460', 'a sturdy wooden bookshelf with a rounded arched top carved with a simple leaf pattern, three shelves of books leaning and stacked, with plain blank spines in rust red, amber, cream and dusk blue and no titles or lettering, a small round jar and a pinecone among them'],
+  ['lamp', 'floor', '#00FF00', '240x420', 'a tall standing floor lamp: a slender twisted wooden stem rising from a round wooden foot, topped by a cream fabric shade shaped like an upturned bell, lit warm from inside but painted as a solid object with no glow, light rays or halo around it'],
+  ['potted-fern', 'floor', '#FF00FF', '260x300', 'a lush fern with arching bright green fronds in a round terracotta pot with a simple cream band around its rim'],
+  ['mushroom-stool', 'floor', '#00FF00', '240x200', 'a sturdy stool shaped like a toadstool: a broad, flat-topped red cap with cream spots as the seat, on a short, thick cream stem'],
+  ['quilt-bed', 'floor', '#00FF00', '520x340', 'a small wooden bed seen from the side, its rounded headboard taller than its footboard, carved from warm honey wood, with a plump round cream pillow and a puffy patchwork quilt in squares of amber, rust red, cream and dusk blue hanging a little over the side'],
+  ['acorn-bowl', 'floor', '#00FF00', '240x180', 'a shallow carved wooden bowl heaped with shiny brown acorns wearing their little caps, with two golden oak leaves tucked among them'],
+  ['teapot-table', 'floor', '#00FF00', '340x280', 'a small round wooden table on three curved legs, set for tea: a round cream teapot with a dusk-blue band, two little cups on saucers and a small plate of biscuits, with no steam'],
+  ['wall-clock', 'wall', '#00FF00', '200x280', 'a round wall clock in a carved wooden case with a short brass pendulum below it, its face plain cream marked only with twelve small dots and two dark hands, with no numerals, letters or writing anywhere'],
+  ['framed-leaf', 'wall', '#00FF00', '220x280', 'a small framed picture: a carved honey-wood frame with rounded corners around a painting of a single golden-orange autumn leaf on a plain cream ground, with no writing or signature'],
+  ['window-box', 'wall', '#FF00FF', '360x220', 'a wooden window box planter on two small iron brackets, overflowing with trailing green ivy and leafy herbs dotted with small cream and amber flowers'],
+  ['lantern-string', 'wall', '#00FF00', '360x200', 'a string of five small round paper lanterns in amber, cream and honey gold hanging in a gentle swag from a twine cord between two little wooden pegs, softly lit from inside but painted as solid shapes with no glow, light rays or halo around them'],
+  ['moss-rug', 'flat', '#FF00FF', '440x200', 'a soft round rug of thick, cushiony green moss with a few tiny cream flowers and small amber mushrooms at its edge'],
+  ['stump-table', 'floor', '#00FF00', '320x240', 'a low table made from a smooth sawn tree stump, its flat top showing growth rings, bark on its sides and a few gnarled roots at its foot, a little clay cup on top, bare wood with no moss'],
+  ['feather-mobile', 'wall', '#00FF00', '220x320', 'a hanging mobile: a small hoop of bent twig hung from a short cord, with five long soft feathers in cream, honey gold and dusk blue dangling from it on short threads at different heights'],
+];
+const DECOR_PROMPTS = Object.fromEntries(DECOR.map(([id, view, backdrop, , subject]) => [`decor-${id}`, decorPrompt(subject, view, backdrop)]));
+
+/** The furniture keys, in the order of the shared furniture list. */
+export const DECOR_KEYS = Object.keys(DECOR_PROMPTS);
+
+const DECOR_JOBS = DECOR.map(([id, , backdrop, size], i) => ({
+  key: `decor-${id}`,
+  kind: 'piece',
+  realm: 'decor',
+  size,
+  seed: 4001 + i * 10,
+  variants: 2,
+  key_colour: backdrop,
+  // The published nest is the style reference; until it exists the slot is skipped with a notice.
+  refs: [published('nest')],
+  providers: { fal: { output_format: 'png' } },
+  prompt: DECOR_PROMPTS[`decor-${id}`],
+}));
+Object.assign(PROMPTS, DECOR_PROMPTS);
+JOBS.push(...DECOR_JOBS);
+
+// ---------------------------------------------------------------------------------------------
+// The arcade: one screen off the market street's east end, in the market's style and palette. Its
+// three game cabinets and the blank score board are painted into the room; a cabinet in play and
+// the scores are drawn over them by the park. The cabinets stand a third of the way in, at the
+// centre and two thirds of the way in, as the room data has them; the entrance back to the street
+// is the west edge, and the hall runs on out of the east edge so it can be widened later.
+
+const ARCADE_STYLE = `STYLE: cyberpunk neon market illustration, hand-painted 2D game background with crisp graphic shapes, cel shading with glowing neon gradients, slightly stylised proportions, no photorealism, no film grain, large flat dark areas that compress cleanly. Rainy night inside a small arcade hall off a chrome market street. PALETTE: Night Asphalt #0B0B16 base; Signal Magenta #FF2AA1 and Circuit Cyan #00E5FF neon; Chrome #C7CEDA plating; Violet Haze #6E3AFF mist and mid tones; small touches of brand gold #C9A227 and cream #F6F1E3 in the cabinets' buttons only. SHAPE LANGUAGE: riveted chrome plates and trim, neon tubes and conduit, upright arcade cabinets with glowing screens, hanging cables, a wet tiled floor reflecting neon, rain beyond the entrance. READABILITY: a clear mid-value floor as the ground plane in the lower third of the frame, nearer is lower; the entrance at floor level on the left edge; the three cabinets standing on the far edge of the floor; every screen and display showing only abstract glowing shapes. AVOID: any text, letters, numbers, glyphs, writing, signage lettering, logos or watermarks, including on the cabinets, their screens and the board; any owls, birds, animals, people, robots, faces or characters, including on the screens; more or fewer than three cabinets; photographic textures; busy noisy detail; lens flare; daylight; exact mirror symmetry.`;
+
+const ARCADE_PROMPT = `Interior of a small neon arcade hall that opens off a rainy cyberpunk market street at night, seen straight on from the middle of the hall, camera slightly elevated, 16:9 wide shot, 3200x1800, hand-painted 2D game background, in the same style, palette and neon night light as the reference painting but a new scene, not a copy of it. The floor fills the lower third of the frame: dark polished tiles wet with rain carried in from the street, mid-dark values reflecting magenta and cyan neon in long soft streaks, nearer is lower, completely open and empty from edge to edge. Along the back wall, standing side by side on the far edge of the floor, are exactly three tall upright arcade cabinets of the same size and shape: one a third of the way in from the left edge, one at the centre and one a third of the way in from the right edge, evenly spaced with plain wall between them, each about a quarter of the frame's height. Each cabinet has a chrome-trimmed case in near-black with a glowing neon edge in its own colour (magenta, cyan and violet), a tilted screen glowing with soft abstract shapes, a small control panel with round buttons and a short joystick, and a plain glowing panel on top where a marquee would be, with no lettering. On the back wall above the three cabinets hangs one large blank score board: a wide, dark, rectangular panel in a riveted chrome frame with a thin cyan neon edge, about two fifths of the frame wide, its face plain and empty. At the left edge of the frame, at floor level, the hall's wide open entrance: a tall chrome-framed opening traced by a magenta neon tube, through which the rainy market street outside is glimpsed with a few soft neon lights and falling rain, and a few puddles on the floor just inside it. The ceiling is low and dark with chrome beams, hanging cables and strips of cyan and magenta neon. Toward the right edge the hall carries on out of the frame, dimmer, past a chrome pillar and neon strips, with nothing standing on its floor. ${ARCADE_STYLE}`;
+
+STYLE.arcade = ARCADE_STYLE;
+WING_SCENE.arcade = 'a neon arcade hall off a rainy cyberpunk market street';
+WING_CARRY.arcade = 'wet tiled floor, back wall, ceiling, chrome trim, neon strips, lighting, perspective, floor height and brush style';
+
+export const ARCADE_JOB = {
+  key: 'arcade',
+  kind: 'room',
+  realm: 'market',
+  size: '3200x1800',
+  seed: 3301,
+  variants: 4,
+  refs: [published('market'), guide('arcade')],
+  providers: { fal: { output_format: 'png' } },
+  prompt: ARCADE_PROMPT,
+};
+PROMPTS.arcade = ARCADE_PROMPT;
+JOBS.push(ARCADE_JOB);
+
+// The arcade's doorway on the market street: an edit of a 1024 px crop of the street's east screen
+// (cut from market-east@2x.webp at x 2176..3200, y 560..1584) that turns the shop fronts nearest
+// the viewer on the right of the street into the arcade's entrance, with a pictogram sign and no
+// letters. Only the doorway is taken from the edit (`pnpm art:finish patch market-east`), so the rest
+// of the approved painting stays as it is.
+const MARKET_ARCADE_DOOR_PROMPT = `Edit this painting, a detail of a rainy cyberpunk neon market street at night: the right side of the street, where a row of small shop fronts and a curtained stall stand along the sidewalk as the street bends away. Change only the shop fronts on the right side of the frame nearest the viewer: they become the entrance of a neon arcade, set into the building at sidewalk level and facing the street, a tall, wide, open doorway in a riveted chrome frame traced by a glowing magenta neon tube, its inside glowing cyan and violet with the dark silhouettes of upright arcade cabinets faintly visible within; above the doorway a small neon sign, a simple glowing pictogram of an arcade joystick in a rounded frame in cyan and magenta, with no letters. The doorway's threshold meets the wet sidewalk, which reflects its neon. Keep everything else exactly as it is: the same framing, colours and lighting, the street and its curb, the far shop fronts up the street, the buildings, the towers and the sky. No text, letters or numbers anywhere. No owls, birds, animals, people or characters.`;
+
+export const MARKET_ARCADE_DOOR_JOB = {
+  key: 'market-arcade-door',
+  // A detail edit, not a screen of a room: an anchor-like helper, patched into the street's east
+  // screen (`pnpm art:finish patch market-east`).
+  kind: 'anchor',
+  derives: ['market-east'],
+  realm: 'market',
+  optional: true,
+  size: '1024x1024',
+  seed: 3401,
+  variants: 2,
+  refs: [{ ref: '@canvas:market-arcade-door', role: "a crop of the street's east screen around the shop fronts", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: MARKET_ARCADE_DOOR_PROMPT,
+};
+PROMPTS['market-arcade-door'] = MARKET_ARCADE_DOOR_PROMPT;
+HELPER_KEYS.push('market-arcade-door');
+JOBS.push(MARKET_ARCADE_DOOR_JOB);
+
+// ---------------------------------------------------------------------------------------------
+// The arcade's bays, a candidate round for the art director: the hall widens to three screens,
+// one bay per game, each with a cabinet built for its own game standing under a blank sign panel
+// for its title, and the score board moves to the middle screen.
+//   A, x 0..1600     an edit of the published painting: the entrance stays on the west edge and
+//                    the three alike cabinets and the board give way to the street-crossing game's
+//                    cabinet (`arcade-bays-a`; three of its five variants are carried on as halls 1-3).
+//   B, x 1600..3200  an east wing painted out from hall n's A like the rooms' wings (the east 800 px
+//                    of A's finish at 2x on grey, `outpaint_canvas` in artlib/wings.py, written to
+//                    work/art/canvas/arcade-bays-b<n>.png): the score board in the middle and the
+//                    night-flight game's bay (`arcade-bays-b<n>`).
+//   C, x 3200..4800  an east wing painted out the same way from hall n's B: the slingshot game's
+//                    bay, and the hall ends there (`arcade-bays-c<n>`).
+// The titles are neon sign logos painted alone on a chroma backdrop, their glow kept inside a
+// backing board so they key out cleanly (`arcade-title-<game>`, three variants each, generated
+// with --model seedream-v4.5; two of the first three slingshot titles came out with the backdrop
+// inside the board, so that job was run again with --model seedream-v5-pro). Every key here is a
+// helper: the picked hall and titles are finished into the arcade's own keys when the room is built.
+
+const BAYS_STYLE_EDITS = [
+  ['a small arcade hall', 'a long arcade hall'],
+  ['upright arcade cabinets with glowing screens', 'one-of-a-kind upright arcade cabinets with glowing screens, blank sign panels'],
+  ['the three cabinets standing on the far edge of the floor', 'each cabinet standing on the far edge of the floor with open floor in front of it'],
+  ['including on the cabinets, their screens and the board', 'including on the cabinets, their screens, the sign panels and the board'],
+];
+const BAYS_A_STYLE = [...BAYS_STYLE_EDITS, ['more or fewer than three cabinets', 'a second cabinet']].reduce((s, [a, b]) => s.replace(a, b), ARCADE_STYLE);
+const BAYS_WING_EDITS = [
+  ...BAYS_STYLE_EDITS,
+  ['; the entrance at floor level on the left edge', ''],
+  [', rain beyond the entrance', ''],
+  ['more or fewer than three cabinets', 'a second cabinet or a doorway in the new stretch'],
+];
+const BAYS_NONE = 'No text, letters or numbers anywhere, including on the cabinet, its screen and the panel. No owls, birds, animals, people, robots, faces or characters anywhere, including on the screen.';
+const bayPanel = (neon, where) => `blank sign panel for the game's title: a wide, dark rectangular panel in a riveted chrome frame traced by a ${neon} neon tube, ${where}, its face plain and empty`;
+const BAYS_HALL = 'under the same low dark ceiling with chrome beams, hanging cables and neon strips, and the dark back wall with its chrome rail carries on at the same depth';
+
+const ARCADE_BAYS_A_PROMPT = `Edit this painting, a hand-painted 2D game background of a neon arcade hall that opens off a rainy cyberpunk market street at night. Keep exactly as they are: the framing, camera height and perspective; the wide open entrance at the left edge with its magenta neon frame, the rainy street seen through it and the puddles just inside it; the wet dark tiled floor across the lower third with its long neon reflections; the low dark ceiling with its chrome beams, hanging cables and neon strips; the dark back wall with its chrome rail; and the chrome pillar and the dim hall carrying on out of the right edge. Change only the back wall between the entrance and the pillar. Remove all three arcade cabinets and the big board above them, leaving plain dark riveted wall where they stood. In their place, a little left of the centre of the frame, one tall upright arcade cabinet now stands against that wall, unlike any ordinary cabinet, built for a game of hopping across a busy neon street: a near-black case taller than the old cabinets with a squared-off top, edged with glowing magenta neon; bold pale crosswalk stripes across its side; a little traffic signal with three round lamps on a short chrome arm at its top corner; small chrome delivery drones with tiny rotors and a little noodle cart with a striped awning as raised motifs on its side and around its screen; a tilted screen glowing with soft abstract shapes of lanes and lights; and a control panel with round buttons and a short joystick. Above the cabinet on the wall hangs a big ${bayPanel('magenta', 'about a quarter of the frame wide, centred over the cabinet')}. The floor in front of the cabinet stays open and empty, and the back wall to its right is plain wall with its chrome rail. ${BAYS_NONE} ${BAYS_A_STYLE}`;
+
+const ARCADE_BAYS_B_PROMPT = `${wingIntro('arcade', 'east')} The hall continues to the right at the same height: its wet dark tiled floor with long neon reflections fills the lower third of the frame, open, empty and uncluttered, ${BAYS_HALL}. In the middle of the new stretch, high on the back wall, hangs the hall's one big blank score board: a wide, dark rectangular panel in a riveted chrome frame with a thin cyan neon edge, about a third of the new stretch wide, its face plain and empty. On the left of the new stretch, between the finished part and the board, stands one tall upright arcade cabinet against the wall, unlike any ordinary cabinet, built for a game of flying through a moonlit night: a near-black case with a rounded, arched top like a night window, edged with glowing cyan neon; a big pale crescent moon on its upper side; dark silhouette branches curling around its edges and over its top; a tilted screen glowing with a soft deep-blue night sky of abstract shapes; and a control panel with one big round button. Just above the cabinet hangs a ${bayPanel('cyan', 'smaller and lower than the score board, centred over the cabinet')}. The floor in front of the cabinet and the board stays open and empty. Toward the right edge the back wall carries on past a chrome pillar with neon strips, with nothing standing on its floor. The new stretch has no doorway, no second cabinet and no other board. ${BAYS_NONE} ${wingStyle('arcade', BAYS_WING_EDITS)}`;
+
+const ARCADE_BAYS_C_PROMPT = `${wingIntro('arcade', 'east')} The hall continues to the right at the same height: its wet dark tiled floor with long neon reflections fills the lower third of the frame, open, empty and uncluttered, ${BAYS_HALL}. In the middle of the new stretch stands one arcade cabinet against the wall, unlike any ordinary cabinet, built for a game of knocking down stacks of crates with a slingshot: a broad, sturdy near-black case edged with glowing violet neon; its base built like a stack of dark wooden crates with chrome corners; a big Y-shaped slingshot fork with a stretched band rising from its top corner; a tilted screen glowing with soft abstract shapes of tumbling blocks; and a control panel with round buttons and a short joystick. Above the cabinet on the wall hangs a ${bayPanel('violet', 'centred over the cabinet')}. The floor in front of the cabinet stays open and empty. At the far right edge the hall ends: the back wall turns forward into a closed end wall of dark riveted chrome plates with a vertical neon strip and a chrome pillar in the corner, with no doorway and no opening. The new stretch has no doorway, no second cabinet and no board. ${BAYS_NONE} ${wingStyle('arcade', BAYS_WING_EDITS)}`;
+
+const titlePrompt = (title, neon, backdrop, motif) => {
+  const green = backdrop === '#00FF00';
+  return `Title sign for a game in a neon arcade: a neon sign logo that reads exactly "${title}", the sign alone, seen straight from the front, centred, filling about 85 percent of the frame's width, isolated on a flat, solid, uniform pure chroma ${green ? 'green' : 'magenta'} ${backdrop} background that fills the entire canvas with no gradient, no vignette, no cast shadow and no wall, floor or scenery. The words "${title}" in bold, rounded, friendly display letters made of glowing ${neon} neon tubes with bright white-hot cores, every letter spelled correctly, evenly spaced and clearly readable, with ${motif} drawn in the same neon beside the words. Everything is mounted on a dark near-black #0B0B16 backing board with a thin riveted chrome #C7CEDA rim, a wide rounded shape that follows the logo; all the glow stays inside the board, so the board's outer edge is a crisp, clean, opaque silhouette against the backdrop. STYLE: cyberpunk neon arcade sign, hand-painted 2D game art with crisp graphic shapes, cel shading with glowing neon gradients, no photorealism, no film grain. No other text, no watermark. AVOID: any other words, letters, numbers or logos; misspelled, extra, missing or repeated letters; any owl, bird, animal, person, face or character; a room, wall or scenery around the sign; glow, haze or semi-transparent edges outside the board; ${green ? 'green parts or green tint on the sign' : 'magenta, pink or purple parts or tint on the sign'}.`;
+};
+
+// key, the title, its neon, the backdrop, the motif beside the words.
+const TITLES = [
+  ['arcade-title-hoot-hop', 'Hoot & Hop', 'magenta #FF2AA1', '#00FF00', 'a little traffic signal with three round lamps and a short row of crosswalk stripes'],
+  ['arcade-title-moon-flap', 'Moon Flap', 'cyan #00E5FF', '#FF00FF', 'a crescent moon and a curling branch'],
+  // The slingshot game was Nest Knockdown until the owner named it Talon Toss (OP-137, 2026-10-28).
+  ['arcade-title-talon-toss', 'Talon Toss', 'violet #6E3AFF', '#00FF00', 'a Y-shaped slingshot and a small stack of crates'],
+];
+
+const bayWing = (key, seed, prompt, variants = 2) => ({
+  key,
+  kind: 'wing',
+  realm: 'market',
+  optional: true,
+  size: '3040x1368',
+  seed,
+  variants,
+  refs: [{ ref: `@canvas:${key}`, role: "the previous screen's edge on a grey canvas to paint over", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt,
+});
+
+const ARCADE_BAYS_JOBS = [
+  {
+    key: 'arcade-bays-a',
+    kind: 'room',
+    realm: 'market',
+    size: '3200x1800',
+    seed: 3501,
+    variants: 5,
+    refs: [{ ref: '@final:arcade', role: 'the published painting to edit', optional: false }],
+    providers: { fal: { output_format: 'png' } },
+    prompt: ARCADE_BAYS_A_PROMPT,
+  },
+  ...[1, 2, 3].flatMap((n) => [
+    bayWing(`arcade-bays-b${n}`, 9291 + 10 * n, ARCADE_BAYS_B_PROMPT),
+    // Hall 3's first two C variants came out with a doubled sign panel, so it took two more.
+    bayWing(`arcade-bays-c${n}`, 9321 + 10 * n, ARCADE_BAYS_C_PROMPT, n === 3 ? 4 : 2),
+  ]),
+  ...TITLES.map(([key, title, neon, backdrop, motif], i) => ({
+    key,
+    kind: 'piece',
+    realm: 'market',
+    size: '1600x800',
+    seed: 3601 + 10 * i,
+    variants: 3,
+    key_colour: backdrop,
+    providers: { fal: { output_format: 'png' } },
+    prompt: titlePrompt(title, neon, backdrop, motif),
+  })),
+];
+
+// Hall 3 was picked (2026-10-23): its second and third screens became the arcade's own.
+for (const [key, own] of [['arcade-bays-b3', 'arcade-mid'], ['arcade-bays-c3', 'arcade-end']]) ARCADE_BAYS_JOBS.find((j) => j.key === key).derives = [own];
+
+/** The bays round's keys: the first screen, each hall's second and third, and the titles. */
+export const ARCADE_BAYS_KEYS = ARCADE_BAYS_JOBS.map((j) => j.key);
+/** The title signs, picked and finished, are the arcade's own keys; the rest stay helpers. */
+export const ARCADE_TITLE_KEYS = TITLES.map(([key]) => key);
+for (const j of ARCADE_BAYS_JOBS) PROMPTS[j.key] = j.prompt;
+HELPER_KEYS.push(...ARCADE_BAYS_KEYS.filter((k) => !ARCADE_TITLE_KEYS.includes(k)));
+JOBS.push(...ARCADE_BAYS_JOBS);
+
+// ---------------------------------------------------------------------------------------------
+// The arcade's games, round 2 of the bays (the art director picked hall 3 and the titles HH3, MF1
+// and NK2). Each game is played on a 480 x 640 field, so its background is painted at 2x, 960 x 1280,
+// over a flat guide of the field drawn from the games' geometry (`pnpm art:finish field`, written to
+// work/art/canvas/arcade-<game>-bg.png), and each piece is painted alone on a chroma backdrop, bold
+// enough to read at play size on a phone, for the code to move, flip, stretch or tile. The visitor's
+// own owl is the player, so no owl or other character is in any of it. Three variants each; each key
+// is the arcade's own, its pick finished at the size the game draws it (2026-10-24).
+
+const gameStyle = (neon) => `STYLE: hand-painted 2D game art in the park's neon storybook style: crisp, friendly, rounded graphic shapes, cel shading with glowing neon gradients, slightly chunky proportions, no photorealism, no film grain, large flat dark areas that compress cleanly. PALETTE: Night Asphalt #0B0B16 and deep navy night; ${neon}; Chrome #C7CEDA; small touches of gold #C9A227 and cream #F6F1E3.`;
+const GAME_AVOID = 'any text, letters, numbers, glyphs, signage lettering, logos or watermarks; any owls, birds, animals, people, robots, faces or characters; photographic textures; busy noisy detail; lens flare; daylight';
+const HOP_NEON = 'Signal Magenta #FF2AA1 and Circuit Cyan #00E5FF neon, warm amber #FFC46A lantern light';
+const FLAP_NEON = 'Circuit Cyan #00E5FF neon and soft cream moonlight';
+const KNOCK_NEON = 'violet #8A4DFF neon and warm amber #FFC46A light';
+
+const fieldIntro = (scene) => `${scene}, portrait 3:4, a hand-painted 2D background for a small arcade game played on a phone. The reference is a flat layout guide of the game's field: keep every band and shape exactly where it is in the guide and paint over it as one finished picture, seen straight on with no perspective tilt.`;
+const FIELD_CALM = 'The game draws its own moving pieces and the player over this picture, so keep it calm, dark and low in contrast where they move, with soft glows and no busy detail.';
+const fieldPrompt = (scene, body, neon) => `${fieldIntro(scene)} ${body} ${FIELD_CALM} ${gameStyle(`${neon}; Violet Haze #6E3AFF mist`)} AVOID: ${GAME_AVOID}.`;
+
+const HOP_BG_PROMPT = fieldPrompt('A neon street crossing at night', 'From the bottom up: a strip of near pavement whose kerb runs straight across the frame; five lanes of wet dark asphalt, straight level bands of equal height, divided by faint dashed lane lines in pale magenta neon; a far kerb and pavement band; and along the top edge the glowing fronts of little shops and noodle stalls with striped awnings and lit windows. A faded pale crosswalk of short wide stripes runs up the middle of the road from kerb to kerb. Puddles on the road reflect magenta and cyan neon. The road is empty: no vehicles, drones, carts or traffic lights on it.', HOP_NEON);
+const FLAP_BG_PROMPT = fieldPrompt('A moonlit night sky over rooftops and treetops', "A big round pale moon glows soft cream high in the upper right, where the guide's disc is. The night sky fills most of the frame, deep navy fading to violet near the horizon, with soft drifting clouds and small stars, open and empty. Along the bottom, where the guide's dark band is, a low skyline of rooftops, chimneys, water towers and rounded treetops in dark silhouette, a few windows lit warm and thin cyan neon along some roof edges, and below it a plain dark strip. Nothing else in the sky: no branches, poles or wires.", FLAP_NEON);
+const KNOCK_BG_PROMPT = fieldPrompt('A city rooftop at night', "The flat rooftop's ledge runs straight and level across the whole frame where the guide's ground begins, its top edge traced by a thin violet neon line, with the building's dark wall below it. At the far left, where the guide's dark shapes are, rooftop clutter in silhouette: a water tank on legs, a vent box and a short chimney, with a small neon tube glowing on a pole. Above the ledge the right two thirds of the frame is open night sky, deep navy to violet with a few soft clouds and stars, and beyond the ledge only the dim tips of distant chrome towers rise a little above it. Nothing stands on the ledge: no slingshot, crates, boxes or stands.", KNOCK_NEON);
+
+const gamePiece = (subject, view, backdrop, neon, avoid = GAME_AVOID) => {
+  const green = backdrop === '#00FF00';
+  return `Game piece for a small neon arcade game played on a phone: ${subject}. ${view}, isolated on a flat, solid, uniform pure chroma ${green ? 'green' : 'magenta'} ${backdrop} background that fills the entire canvas with no gradient, no vignette, no cast shadow and no floor, wall or ground plane. ${gameStyle(neon)} READABILITY: bold simple shapes and a thick clean glowing neon outline, so it reads at a small size; painted as a solid object, its glow kept inside its silhouette, with a crisp opaque edge against the backdrop and no haze or semi-transparent edges. No text, no watermark. AVOID: ${avoid}; more than one piece; scenery around it; ${green ? 'green parts or green tint on the piece' : 'magenta, pink or purple parts or tint on the piece'}.`;
+};
+/** Hoot & Hop's bat is the one animal among the games' pieces: friendly, and nothing else alive with it. */
+const BAT_AVOID = 'any text, letters, numbers, glyphs, signage lettering, logos or watermarks; any owls, birds, people, robots or other animals; a scary, angry or menacing look, fangs or claws; photographic textures; busy noisy detail; lens flare; daylight';
+/** A texture the game lays across its field (a river's water, a copy and its mirror side by side): no shape and no backdrop, the canvas filled. */
+const gameTexture = (subject, backdrop, neon) => `Seamless texture for a small neon arcade game played on a phone: ${subject}. It fills the entire canvas edge to edge, seen from straight above, flat with no perspective, calm and even all over. ${gameStyle(neon)} No text, no watermark. AVOID: ${GAME_AVOID}; any edge, border, frame, wall, bank or backdrop; anything standing on it or in it; any pure green ${backdrop} or green tint.`;
+const ALONE = 'The piece alone, centred, filling about 85 percent of the frame';
+
+// key, kind, size, backdrop (pieces), neon, prompt or subject and view.
+const GAME_ART = [
+  ['arcade-hop-bg', 'anchor', '960x1280', null, HOP_BG_PROMPT],
+  ['arcade-hop-drone', 'piece', '960x768', '#00FF00', gamePiece('a small delivery drone flying to the right, seen exactly side-on: a rounded chrome body like a little capsule with a glowing magenta neon stripe along its side and a round cyan headlight at its front (the right end), two short rotor arms on top with flat spinning rotors drawn as thin pale discs, and a small plain parcel box, with no pictures, symbols or markings on it, hanging under it on two short cords', ALONE, '#00FF00', HOP_NEON)],
+  ['arcade-hop-cart', 'piece', '1152x768', '#00FF00', gamePiece('a little noodle cart rolling to the right, seen exactly side-on: a boxy cart body of dark night-blue wood with a warm amber neon trim and plain panels with no symbols, pictures or markings, a striped magenta and cream awning on two thin poles, a big bowl of noodles with chopsticks on its counter with no steam, a round red paper lantern hanging at its front corner (the right end), two round wheels with chrome hubs, and a push handle at its back (the left end)', ALONE, '#00FF00', HOP_NEON)],
+  ['arcade-flap-bg', 'anchor', '960x1280', null, FLAP_BG_PROMPT],
+  ['arcade-flap-branch', 'piece', '512x2048', '#FF00FF', gamePiece('one straight upright tree branch for the obstacles of a night-flight game, seen side-on: a thick branch of dark bark, the same width from top to bottom like a pillar, its bark edged on both sides by a glowing cyan neon line, with a few knots and grooves; its top end is a rounded, knobbly broken end with one short twig and two small leaves outlined in cyan neon', 'The branch alone, upright in the middle of the frame and filling the middle third of its width, its top end a little below the top edge and its body running straight out of the bottom edge', '#FF00FF', FLAP_NEON)],
+  ['arcade-flap-ground', 'piece', '2048x512', '#FF00FF', gamePiece('a long strip of ground for a side-scrolling night-flight game, seen straight from the front: the ridge of a long tiled roof, dark slate tiles in neat even rows, its top edge traced by a glowing cyan neon line, perfectly straight, level and the same all along so it repeats end to end', 'The strip alone, running straight and level across the whole frame and out of both side edges, filling the lower half of the frame', '#FF00FF', FLAP_NEON)],
+  ['arcade-knock-bg', 'anchor', '960x1280', null, KNOCK_BG_PROMPT],
+  ['arcade-knock-sling', 'piece', '640x1024', '#00FF00', gamePiece('a big sturdy Y-shaped slingshot standing upright, seen straight from the front: a thick forked trunk of dark polished wood wrapped with glowing violet neon tubing, its two arms rising into a wide Y with rounded tips and nothing between them (no band, ring or loop), standing on a small round chrome base', ALONE, '#00FF00', KNOCK_NEON)],
+  ['arcade-knock-crate', 'piece', '1024x1024', '#00FF00', gamePiece('one wooden crate seen straight from the front, a perfect square: dark planks with a thick glowing violet neon edge all round, a neon X brace across its face and small chrome corner plates', 'The crate alone, centred, filling about 80 percent of the frame', '#00FF00', KNOCK_NEON)],
+  ['arcade-knock-stand', 'piece', '1024x1024', '#00FF00', gamePiece('a sturdy stand for stacking crates on, seen straight from the front: one solid rectangular block with no legs and no gaps, its front faced with riveted dark steel panels from top to bottom under a thick top slab whose front edge glows with a violet neon line, the panels the same all over', ALONE, '#00FF00', KNOCK_NEON)],
+  // Hoot & Hop in levels (OP-137, 2026-10-28): bats join the drones in the air, and rivers crossed
+  // on logs, laid over the street's lanes by the level (their banks, and the pavements to rest on,
+  // are the street's own kerb, cut from its painting).
+  // The strips first asked for came back as shapes with ends, never edge to edge: the river is a texture.
+  ['arcade-hop-bat', 'piece', '960x768', '#00FF00', gamePiece('a little cartoon bat flying to the right, seen exactly side-on: a small round fuzzy body of dark plum with two big pointed ears and two bright friendly round cyan eyes, its two wings spread wide up and out, thin dark leathery wings edged with a glowing violet neon line, tiny feet tucked under it', ALONE, '#00FF00', HOP_NEON, BAT_AVOID)],
+  ['arcade-hop-log', 'piece', '1536x512', '#00FF00', gamePiece('one round log floating level, seen exactly side-on: a thick straight log of dark brown bark with a few knots and long grooves, both cut ends showing pale cream growth rings, a thin glowing warm amber neon line along its top edge and a few small tufts of moss on top', 'The log alone, lying level across the middle of the frame and filling about 90 percent of its width', '#00FF00', HOP_NEON)],
+  ['arcade-hop-river', 'piece', '2048x512', '#00FF00', gameTexture('the dark water of a city canal at night and nothing else: deep navy and indigo water with soft even ripples running side to side, and long wavy streaks of reflected cyan and magenta neon light scattered evenly across it', '#00FF00', HOP_NEON)],
+  // Talon Toss on a physics engine (OP-137): the roof of the sheltered nest, and the nest.
+  ['arcade-knock-plank', 'piece', '2048x512', '#00FF00', gamePiece('one long flat wooden plank lying level, seen exactly side-on: a straight board of dark planed wood, the same thickness from end to end, its long top edge traced by a glowing violet neon line, small chrome caps on its two square ends and a few small chrome bolts along it', 'The plank alone, lying level across the middle of the frame and filling about 95 percent of its width, long and thin like a plank', '#00FF00', KNOCK_NEON)],
+  ['arcade-knock-nest', 'piece', '1536x768', '#00FF00', gamePiece("a bird's nest with nothing in it but eggs, seen exactly side-on: a wide round bowl woven of dark twigs, more than twice as wide as it is tall, its rounded underside and its level open rim traced by a glowing warm amber neon line, the tops of three small pale speckled eggs peeking over its rim", ALONE, '#00FF00', KNOCK_NEON)],
+];
+
+// The rooftop's second variant put its ledge in the middle of the frame, so it took two more.
+const MORE_VARIANTS = { 'arcade-knock-bg': 5 };
+
+const GAME_ART_JOBS = GAME_ART.map(([key, kind, size, backdrop, prompt], i) => ({
+  key,
+  kind,
+  realm: 'market',
+  size,
+  seed: 3701 + 10 * i,
+  variants: MORE_VARIANTS[key] ?? 3,
+  ...(backdrop ? { key_colour: backdrop } : { refs: [{ ref: `@canvas:${key}`, role: "a flat layout guide of the game's field", optional: false }] }),
+  providers: { fal: { output_format: 'png' } },
+  prompt,
+}));
+
+/** The games' art keys: each game's background and pieces. */
+export const ARCADE_GAME_KEYS = GAME_ART_JOBS.map((j) => j.key);
+for (const j of GAME_ART_JOBS) PROMPTS[j.key] = j.prompt;
+JOBS.push(...GAME_ART_JOBS);
+
+// ---------------------------------------------------------------------------------------------
+// The stained-glass realm and its climb (designs/the-stained-glass-climb.md): the room's two
+// screens, the six pieces the climb's tower is built from, and the Glass Circlet the clouds grant.
+// Everything here waits for the owner's pick, as every piece of art does.
+
+const GLASS_STYLE = `STYLE (use verbatim in every stained-glass prompt): hand-painted 2D game background, clean cel-shaded shapes with soft painted gradients, matte-painting depth, slightly stylised proportions, no outlines, no photorealism, no film grain, large flat colour areas that compress cleanly. Dusk in a city of mosaic skyscrapers whose every wall is leaded stained glass lit from within, towers rising out of sight into a violet evening sky with the first stars, a few small clouds catching the last light. PALETTE: deep lapis #1A2D5A and midnight violet #3A3F78 for the glass in shadow; Glass Blue #9FD0FF, warm gold #FFD36A, rose #FF8AD0, mint #7BE0C8 and lilac #CDB0FF for lit panes; dark lead lines #2A3B63 between the panes; the lit glass glows softly, never neon. No text, no watermark.`;
+const GLASS_FRAME = `A wide side-on game room screen, 3200x1800, drawn for a camera looking straight at the scene with no perspective tilt, the floor a level band across the bottom third where small characters will walk (keep it clear of clutter), the walls rising straight up and out of frame.`;
+const GLASS_PIECE = `isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills everything not covered by the piece, no gradient, no vignette, no cast shadows on the backdrop, a crisp clean opaque silhouette against the green with no glow bleeding onto the backdrop.`;
+const GLASS_PIECE_STYLE = `STYLE: hand-painted 2D game prop in the stained-glass realm's style: clean cel-shaded shapes with soft painted gradients, leaded stained glass lit from within in Glass Blue #9FD0FF, warm gold #FFD36A, rose #FF8AD0, mint #7BE0C8 and lilac #CDB0FF with dark lead lines #2A3B63, slightly stylised proportions, no outlines, no photorealism, no film grain. No text, no watermark. AVOID: any text, letters, glyphs or numbers; any owl, bird, animal, person or character; green tint on the piece; photographic textures; lens flare.`;
+
+const GLASS_PROMPTS = {
+  glass: `${GLASS_FRAME} The west screen of the stained-glass realm's street: at the far left a tall round-topped archway back into a great tree, its inside glowing warm gold; to its right the street runs along the foot of mosaic skyscrapers whose stained-glass walls climb out of frame, their lowest storeys showing shopfronts of coloured glass panes; a little right of the middle stands a plinth of pale stone with an empty top where a realm's idol will be placed by the game (leave the top of the plinth clear and lit). The pavement is a mosaic of small glass tiles in muted blues with a few gold ones. Lanterns of coloured glass hang on brackets between the storeys. Evening sky in violet above. ${GLASS_STYLE} AVOID: any text, letters, glyphs, numbers or signage lettering; owls, birds, animals, people or characters; a second archway; daylight; photorealism; the floor band cluttered.`,
+  'glass-idol': `The stained-glass realm's idol: a single barn owl made entirely of leaded stained glass, perched upright and facing the viewer, a calm monumental figure lit from within, ${GLASS_PIECE} Landscape proportions 600x480, generated at 1200x960, the owl centred with its talons and the small pale stone cap it grips touching the bottom edge of the frame and the whole figure bottom-centre anchored, the top of the head near the top edge, the folded wings spreading the figure wide. The barn owl silhouette is unmistakable: no ear tufts at all, a smooth gently rounded head, a large heart-shaped facial disc filling most of the face and edged in a thin rim of dark lead, two large round dark eyes set in it, a small hooked beak at the lower point of the heart, a slim upright body, long folded wings, talons gripping the stone cap. Its body is a mosaic of glass panes: the facial disc and chest in pale cream and white glass #FFF8EC lit warm from behind, the head, back and wings in warm gold #FFD36A and honey amber #D9A066 panes flecked with Glass Blue #9FD0FF, rose #FF8AD0 and lilac #CDB0FF, each pane edged in dark lead lines #2A3B63, the eyes two round panes of deep navy #0C1E36 glass each with a small point of light, a soft inner glow lighting every pane from behind without bleeding past the silhouette. STYLE: hand-painted 2D game character art in the stained-glass realm's style, clean cel-shaded shapes with soft painted gradients, slightly stylised proportions, no outlines, no photorealism, no film grain. No text, no watermark. AVOID: ear tufts or horns of any kind; glowing yellow or orange eyes; any text, letters, glyphs or numbers; any second owl, bird, animal, person or character; any background scenery, sky, tower or ground beyond the small stone cap; the owl cut off by any edge except the cap at the bottom; green tint on the glass; photographic textures; lens flare.`,
+  'glass-east': `${GLASS_FRAME} The east screen of the stained-glass realm's street, continuing the same pavement and skyline from its west screen so the two join at the left edge: more mosaic skyscrapers of leaded stained glass climbing out of frame, and in the right half a single tall arched window of glass lit brighter than any other, reaching from the pavement to the top of the frame, its foot a step of pale stone where a character will stand (keep that spot clear): the portal up the tower. Threads of light rise inside the window's glass toward the sky. A few small clouds high up catch gold. ${GLASS_STYLE} AVOID: any text, letters, glyphs, numbers or signage lettering; owls, birds, animals, people or characters; a door or archway other than the window; daylight; photorealism; the floor band cluttered.`,
+  'climb-sky': `A tall vertical game background tile, portrait 960x1800, filling the entire canvas edge to edge with no border and no empty space: the inner face of a mosaic skyscraper seen from a few metres away while climbing it, a wall of leaded stained-glass panes in deep lapis and violet with a few panes lit in gold, rose, mint and lilac, dark lead lines between them, the pattern tiling seamlessly from its bottom edge to its top edge so copies stack without a seam. No ledges, balconies or figures on it. Painted on a flat pure chroma green #00FF00 backdrop that must not show anywhere, the tile covering all of it. ${GLASS_PIECE_STYLE}`,
+  'climb-column': `A tall vertical game piece, portrait 1024x3840: one slender column of leaded stained glass and dark lead, a mullion of a mosaic skyscraper, lit panes of gold and rose running up it, tiling seamlessly from its bottom edge to its top edge, ${GLASS_PIECE} ${GLASS_PIECE_STYLE}`,
+  'climb-ledge-a': `A small wide game platform piece, landscape 2240x560: a short balcony ledge of pale stone edged with a strip of lit stained glass in Glass Blue #9FD0FF and gold #FFD36A, its top surface flat and level across the whole width so a character can stand on it, a little dark lead bracket under each end, ${GLASS_PIECE} ${GLASS_PIECE_STYLE}`,
+  'climb-ledge-b': `A wide game platform piece, landscape 2240x560: a longer balcony ledge of pale stone edged with a strip of lit stained glass in rose #FF8AD0 and gold #FFD36A, its top surface flat and level across the whole width so a character can stand on it, three dark lead brackets under it, ${GLASS_PIECE} ${GLASS_PIECE_STYLE}`,
+  'climb-balcony': `A wide game platform piece, landscape 2240x560: a full-width balcony of pale stone running the whole width of the frame with a low balustrade of small lit stained-glass panes in gold #FFD36A and mint #7BE0C8 along its front, its top surface flat and level across the whole width so characters can stand on it, lanterns of coloured glass at each end, ${GLASS_PIECE} ${GLASS_PIECE_STYLE}`,
+  'climb-cloud-cap': `A wide game piece, landscape 960x440: the very top of a mosaic skyscraper where it meets the clouds, a flat rooftop terrace of pale stone with a low balustrade of small lit stained-glass panes running the whole width of the frame along the bottom third (its top surface flat and level so characters can stand on it), and above and around it only soft cream and gold cumulus clouds lit by the last evening light with a few stars showing between them: no building, palace, spire, tower or roof rises above the terrace, the clouds alone do, ${GLASS_PIECE} ${GLASS_PIECE_STYLE}`,
+  'item-glass-circlet': "Cosmetic item sprite for a cozy owl game: a thin circlet of leaded stained glass, a slender ring of dark lead holding small panes of pale blue, gold, rose, mint and lilac glass that glow softly, worn like a halo resting flat on the crown, the item alone with no owl, head, face, body or mannequin, as it would sit on top of a small round cartoon owl's head, seen from the front with a slight three-quarter angle so the ring reads as a shallow ellipse, its bottom resting on the bottom edge of the frame, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills the entire canvas with no gradient, no vignette, no cast shadow and no ground plane, filling about 85 percent of the frame. STYLE: clean 2D cel-shaded game art that matches a cartoon owl mascot: bold flat colour shapes with simple soft shading and one gentle highlight, no outlines, no photorealism, no texture noise, readable at a small size, a crisp clean opaque silhouette against the backdrop with no glow, haze or semi-transparent edges. No text, no watermark. AVOID: any text, letters, numbers or logos; any owl, bird, animal, person, face, head or mannequin; more than one item; green tint on the item.",
+};
+// The pieces ask fal for PNG: its endpoints otherwise answer in JPEG, whose ringing spoils the matte at the key-colour edges.
+const glassPiece = (key, size, seed) => ({ key, kind: 'piece', realm: 'glass', size, seed, variants: 4, key_colour: '#00FF00', refs: [published('glass')], providers: { fal: { output_format: 'png' } }, prompt: GLASS_PROMPTS[key] });
+const GLASS_JOBS = [
+  { key: 'glass', kind: 'room', realm: 'glass', size: '3200x1800', seed: 7101, variants: 4, refs: [published('hub'), guide('glass')], providers: { fal: { output_format: 'png' } }, prompt: GLASS_PROMPTS.glass },
+  { key: 'glass-east', kind: 'room', realm: 'glass', size: '3200x1800', seed: 7111, variants: 4, refs: [published('glass'), guide('glass')], providers: { fal: { output_format: 'png' } }, prompt: GLASS_PROMPTS['glass-east'] },
+  // The idol stands on the west screen's plinth; the owl is the piece, so it has its own prompt rather than the props' one.
+  { key: 'glass-idol', kind: 'piece', realm: 'glass', size: '1200x960', seed: 7171, variants: 4, key_colour: '#00FF00', refs: [published('glass')], providers: { fal: { output_format: 'png' } }, prompt: GLASS_PROMPTS['glass-idol'] },
+  glassPiece('climb-sky', '960x1800', 7201),
+  // The flat pieces are painted at four to one (the widest the image models take) and drawn at their own size.
+  glassPiece('climb-column', '1024x3840', 7211),
+  glassPiece('climb-ledge-a', '2240x560', 7221),
+  glassPiece('climb-ledge-b', '2240x560', 7231),
+  glassPiece('climb-balcony', '2240x560', 7241),
+  glassPiece('climb-cloud-cap', '960x440', 7251),
+  { key: 'item-glass-circlet', kind: 'piece', realm: 'items', size: '280x200', seed: 7301, variants: 2, key_colour: '#00FF00', providers: { fal: { output_format: 'png' } }, prompt: GLASS_PROMPTS['item-glass-circlet'] },
+];
+export const GLASS_KEYS = Object.keys(GLASS_PROMPTS);
+Object.assign(PROMPTS, GLASS_PROMPTS);
+JOBS.push(...GLASS_JOBS);
+
+// The seam between the realm's two screens (OP-125). They were painted apart, the east one with the
+// west one only as a style reference, so at the join the buildings and the pavement do not continue.
+// The edit is a crop across the join of the two published screens laid side by side (`pnpm
+// art:finish cut glass-seam --base-key glass --base <glass@2x.webp>,<glass-east@2x.webp> --box
+// 2560,0,3840,1800 --half`); its middle half is repainted, `patch --threshold 0 --join` joins that
+// band to each screen where the two agree, and `room glass --crop left` and `room glass-east --crop
+// right` finish each screen.
+const GLASS_SEAM_PROMPT = `Edit this painting, a tall strip of a city street at dusk in a realm of mosaic skyscrapers whose walls are leaded stained glass lit from within. It was made from two paintings set side by side, and they meet in a hard vertical line down the exact middle of the frame where nothing continues: on the left a shopfront of glowing rose and blue stained-glass panes under a hanging lantern, standing on blue cobblestones; on the right the foot of a tall tower of large lit glass panes in gold, rose and mint, standing on smooth dark paving with a low kerb. Repaint only the middle half of the frame, a quarter of the width either side of that line, so the two sides become one continuous street with no line, seam or change of style anywhere: the shopfront ends in a slim pilaster of dark stone and lead; beside it a narrow shadowed gap between the two buildings rises to a sliver of violet evening sky with a first star; on the far side of the gap the tower begins, its lit panes as they are now. At the bottom the street runs on unbroken across the whole width at one level: the blue cobblestones give way to the smooth dark paving along a plain pale stone edge, so the ground reads as one walkable floor at the same height, open and uncluttered. Keep the left and right quarters of the frame exactly as they are, and match their colours, light and brushwork in the repainted middle: the same framing, straight side-on with no perspective tilt, a hand-painted 2D game background with clean cel-shaded shapes and soft painted gradients. No text, letters or numbers anywhere. No owls, birds, animals, people or characters.`;
+
+export const GLASS_SEAM_JOB = {
+  key: 'glass-seam',
+  // A detail edit, not a screen of a room: a helper, patched into both screens.
+  kind: 'anchor',
+  derives: ['glass', 'glass-east'],
+  realm: 'glass',
+  optional: true,
+  size: '1280x1800',
+  seed: 7125,
+  variants: 4,
+  refs: [{ ref: '@canvas:glass-seam', role: "a crop across the join of the realm's two screens", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: GLASS_SEAM_PROMPT,
+};
+PROMPTS['glass-seam'] = GLASS_SEAM_PROMPT;
+HELPER_KEYS.push('glass-seam');
+JOBS.push(GLASS_SEAM_JOB);
+
+// ---- The tree (map 2, OP-155): the style frame (OP-157) ----
+// The new park is one side-scrolling world around the colossal tree: the trunk is the spine and
+// each level runs left and right of it in screens of 2048x1152. Every screen is painted in three
+// layers that the game scrolls at different rates: the background plate (half speed), the
+// playfield the owl stands on (the camera's speed) and the foreground overlay in front of the owl
+// (a little faster). The playfield and the overlay are painted on flat magenta, which the finish
+// stage keys out. The style frame is one screen, the lobby at the trunk's foot (level 1, screen 0),
+// settled before any other screen is painted.
+//
+// Approved by the owner on 2026-10-31 (candidates A, C and B of the three layers): TREE_STYLE and the
+// way the three prompts below are written are the style every later screen of the tree follows.
+// TODO-DOCS (OP-157): docs/MAP.md's style sheet, from these: the shared style and light words, the
+// three layers and what each paints (and leaves out), magenta for the keyed layers, the owl at a sixth
+// of the frame's height, and the screen's edges described so the neighbouring screens stitch.
+
+const TREE_STYLE = `STYLE (the same words in all three layers of every screen of the tree): hand-painted 2D game art for a side-scrolling platformer in a storybook painterly look: clean cel-shaded shapes with soft painted gradients, matte-painting depth, slightly stylised proportions, no outlines, no photorealism, no film grain, large flat colour areas that compress cleanly. A magical night at a colossal ancient living tree. LIGHT (the same in every layer): cool cream moonlight from high on the left; warm gold lantern light and sap-light glowing from within the wood; deep navy shadow on the right-hand sides of forms. PALETTE: night navy #0C1E36 and deep navy #07122A; dusk blue #2E4C7A in the distance; gold #C9A227 and warm gold light #FFD36A for lanterns, sap-light and lit knotholes; cream #F6F1E3 moonlight; bark #2B1C12 to #4A3322; inner wood #5C4632 lifting to #8F8068 in the light; moss #3E5A3A and #6E8B4E; cool shadow #1B2E4C. VIEW: a strict side view like a classic 2D platformer, the camera level with the floor, no perspective floor plane and no vanishing point; every surface a visitor can stand on is seen edge-on, with a clear, readable flat top edge.`;
+
+const TREE_L1_0 = `THE SCREEN (the same composition in all three layers, 2048x1152): the foot of the colossal tree seen from the side. Its trunk fills the middle three fifths of the frame and rises out of the top edge, and its great buttress roots flare out to grip the ground on the left and the right. The front of the trunk's base is cut away in a tall rounded arch, like a dollhouse, showing the lobby inside: a round hollow chamber of warm, polished inner wood. The walking floor is one level surface across the whole width of the frame, its top edge four fifths of the way down: outside the trunk on the left and the right it is a mossy packed-earth path, and through a tall arched opening at floor level in each side of the trunk (each about a third of the frame's height tall) it becomes the chamber's inner-wood floor with a gold inlay ring. Inside the chamber: in the middle of the back wall at floor level, a ticket booth window built into the wood, a little carved counter at chest height under an arched window glowing warm gold and a striped scalloped awning, with no lettering; on the right, a broad wooden spiral stair climbs the inner wall from the floor up to a round opening in the chamber's ceiling (the way up); left of centre, set into the back of the floor behind its unbroken front edge, a stairwell edged with a low carved railing where worn steps go down into the roots, lit cold blue from below (the way down); a broad shelf fungus with a flat top on the inner left wall a third of the way up, and a small wooden balcony with a railing on the inner right wall two thirds of the way up, both standable. Round paper lanterns hang in the chamber and stand on curly iron posts along the outside path. The path runs off the left and right edges at the same height into the next screens: westward toward a closed gate, eastward toward a lantern-lit market. A visitor added later by the game stands about one sixth of the frame's height tall, so the arches are about twice that and every step and ledge is sized for it.`;
+
+const TREE_PROMPTS = {
+  'tree-l1-0-bg': `Background plate for one screen of a side-scrolling 2D game: the farthest of the screen's three layers, which the game scrolls at half speed behind the others. Paint ONLY the far distance, edge to edge, with no empty areas and no flat backdrop: a moonlit night sky with a large cream full moon high on the left, a scatter of small stars and soft navy clouds lit cream on their upper edges; far away, the dark silhouettes of the colossal tree's own lower boughs reaching across the sky from the middle of the frame, hung with a few tiny warm gold lantern points; at the horizon in the lower third, a far forest of rounded misty tree crowns in layered dusk blue and navy, lighter toward the horizon; the bottom fifth of the frame is plain deep navy and dark brown shadow with no detail (the game covers it with the ground). The horizon, the clouds and the forest band run off the left and right edges at the same heights, so the neighbouring screens continue them. Nothing near: no ground, no path, no floor, no stairs, no booth, no ledges, no railings, no lanterns on posts, and no trunk or roots in front, because the game's nearer layers paint the tree's foot, which stands in the middle of this frame. Keep it calm and low in contrast so the nearer layers read in front of it. ${TREE_STYLE} No text, no watermark. AVOID: any text, letters, numbers or writing; any owls, birds, animals, people, faces or characters; any ground, floor, path or platform; anything in the foreground; daylight; a sun; busy detailed texture; exact mirror symmetry.`,
+  'tree-l1-0-play': `The playfield layer for one screen of a side-scrolling 2D game: the layer a small visitor walks and jumps on, which the game draws over a separate sky painting. Paint everything a visitor can stand on, walk past or touch, and paint the open sky as FLAT PURE MAGENTA #FF00FF: every part of the frame where the night sky or the far distance would show (above the outside path on the left and the right of the trunk, and above the path where it is seen through the arched side openings) is one flat, solid, uniform pure magenta #FF00FF, with no gradient, no clouds, no stars, no moon, no glow, no haze and no cast shadow, so the game can cut it out. ${TREE_L1_0} The path, the roots, the trunk, the chamber and everything in it are painted fully and opaquely, with crisp clean edges against the magenta: no soft glow, haze or light halo bleeding onto the magenta, no semi-transparent edges, no magenta tint on the painting. ${TREE_STYLE} No text, no watermark. AVOID: any text, letters, numbers or writing on the booth, the awning or anywhere; any owls, birds, animals, people, faces or characters; any sky, moon, stars, clouds or distant scenery (all of that is flat magenta); a gradient or vignette on the magenta; a sloping or curving floor; perspective; exact mirror symmetry.`,
+  'tree-l1-0-fg': `Foreground overlay for one screen of a side-scrolling 2D game: the nearest of the screen's three layers, drawn in front of the visitor and scrolled a little faster than the rest, isolated on a flat, solid, uniform pure magenta #FF00FF background that fills the entire canvas with no gradient, no vignette, no ground plane and no cast shadows on the backdrop, 16:9, 2048x1152. The scene behind it, painted separately, is the foot of a colossal tree at night with a lobby inside its hollow base, a walking floor four fifths of the way down the frame. Props only, at the edges of the screen, nearer than everything else: along the top edge, a sagging string of small round warm gold lanterns on a dark cord running across the frame, with clusters of leaves and hanging moss dangling from the upper left and upper right corners no further down than a fifth of the frame; on the far left and far right edges, a dark near root and a fern frond, each no wider than a tenth of the frame; along the bottom edge, below the walking floor only (the bottom eighth of the frame), a few tufts of tall grass, small mushrooms and a low curl of root. The whole middle of the frame, and every place a visitor walks or jumps, stays completely empty magenta. The props are darker and a little larger than the scene behind them, rim-lit by cream moonlight from the upper left and warm gold from the lanterns. Crisp clean opaque silhouettes against the magenta, no soft haze or glow bleeding onto the backdrop, no semi-transparent edges. ${TREE_STYLE} No text, no watermark. AVOID: any text or writing; any owls, birds, animals, people, faces or characters; anything in the middle of the frame; any sky, trunk, floor or scenery; magenta tint on the props; soft or feathered edges.`,
+};
+
+/** The style frame's three layers, background to foreground: the lobby room's art keys (map 2's `l1`), placeholders until the owner picks. */
+export const TREE_FRAME_KEYS = Object.keys(TREE_PROMPTS);
+
+const TREE_FRAME_JOBS = [
+  { key: 'tree-l1-0-bg', kind: 'room', seed: 3101 },
+  { key: 'tree-l1-0-play', kind: 'overlay', seed: 3201, key_colour: '#FF00FF' },
+  { key: 'tree-l1-0-fg', kind: 'overlay', seed: 3301, key_colour: '#FF00FF' },
+].map((j) => ({
+  ...j,
+  realm: 'tree',
+  optional: true,
+  size: '2048x1152',
+  variants: 4,
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_PROMPTS[j.key],
+}));
+Object.assign(PROMPTS, TREE_PROMPTS);
+JOBS.push(...TREE_FRAME_JOBS);
+
+// ---- The tree, level 1 (OP-162): the screens either side of the lobby ring, in the style frame's words ----
+// The lobby ring (screen 0) is the approved style frame; these screens continue its ground line, its
+// path and its sky. West of it (screen -1, `w1`) the path ends at a closed gate; east of it (+1, `e1`)
+// is a lantern-lit market's common square, then (+2, `e2`) a run over the market's roofs toward the
+// street it leads into. The game draws the statue, the guardian, the stall game and the barrier
+// itself, so the paintings leave their places bare. The moon is only in the lobby's sky.
+
+/** The three prompts of one screen of the tree, in the approved style frame's wording (OP-157). */
+function treeScreen({ composition, far, scene, props }) {
+  return {
+    bg: `Background plate for one screen of a side-scrolling 2D game: the farthest of the screen's three layers, which the game scrolls at half speed behind the others. Paint ONLY the far distance, edge to edge, with no empty areas and no flat backdrop: ${far} At the horizon in the lower third, a far forest of rounded misty tree crowns in layered dusk blue and navy, lighter toward the horizon; the bottom fifth of the frame is plain deep navy and dark brown shadow with no detail (the game covers it with the ground). The horizon, the clouds and the forest band run off the left and right edges at the same heights, so the neighbouring screens continue them. Nothing near: no ground, no path, no floor, no stairs, no stalls, no ledges, no railings, no lanterns on posts, no gate, and no trunk or roots in front, because the game's nearer layers paint everything near. Keep it calm and low in contrast so the nearer layers read in front of it. ${TREE_STYLE} No text, no watermark. AVOID: any text, letters, numbers or writing; any owls, birds, animals, people, faces or characters; any ground, floor, path or platform; anything in the foreground; a moon; daylight; a sun; busy detailed texture; exact mirror symmetry.`,
+    play: `The playfield layer for one screen of a side-scrolling 2D game: the layer a small visitor walks and jumps on, which the game draws over a separate sky painting. Paint everything a visitor can stand on, walk past or touch, and paint the open sky as FLAT PURE MAGENTA #FF00FF: every part of the frame where the night sky or the far distance would show is one flat, solid, uniform pure magenta #FF00FF, with no gradient, no clouds, no stars, no moon, no glow, no haze and no cast shadow, so the game can cut it out. ${composition} Everything solid is painted fully and opaquely, with crisp clean edges against the magenta: no soft glow, haze or light halo bleeding onto the magenta, no semi-transparent edges, no magenta tint on the painting. ${TREE_STYLE} No text, no watermark. AVOID: any text, letters, numbers or writing on the gate, the stalls, the awnings or anywhere; any owls, birds, animals, people, faces, statues or characters; any sky, moon, stars, clouds or distant scenery (all of that is flat magenta); a gradient or vignette on the magenta; a sloping or curving floor; perspective; exact mirror symmetry.`,
+    fg: `Foreground overlay for one screen of a side-scrolling 2D game: the nearest of the screen's three layers, drawn in front of the visitor and scrolled a little faster than the rest, isolated on a flat, solid, uniform pure magenta #FF00FF background that fills the entire canvas with no gradient, no vignette, no ground plane and no cast shadows on the backdrop, 16:9, 2048x1152. The scene behind it, painted separately, is ${scene}, with a walking floor four fifths of the way down the frame. Props only, at the edges of the screen, nearer than everything else: ${props} The whole middle of the frame, and every place a visitor walks or jumps, stays completely empty magenta. The props are darker and a little larger than the scene behind them, rim-lit by cream moonlight from the upper left and warm gold from the lanterns. Crisp clean opaque silhouettes against the magenta, no soft haze or glow bleeding onto the backdrop, no semi-transparent edges. ${TREE_STYLE} No text, no watermark. AVOID: any text or writing; any owls, birds, animals, people, faces or characters; anything in the middle of the frame; any sky, trunk, floor or scenery; magenta tint on the props; soft or feathered edges.`,
+  };
+}
+
+const TREE_L1_SCREENS = {
+  // Screen -1: the path west of the tree's foot ends at a closed gate (its barrier is the game's). Its
+  // right edge continues the lobby's left edge (the path, a low stone wall, a lamp post); the first
+  // round's playfields put a second trunk there.
+  w1: treeScreen({
+    composition: `THE SCREEN (the same composition in all three layers, 2048x1152): a mossy path west of a colossal tree, seen from the side; the tree stands in the neighbouring screen to the right, and no part of it, no trunk and no root, is in this frame. The walking floor is one level mossy packed-earth path across the whole width of the frame, a flat strip seen side-on, its top edge five sixths of the way down; under it, solid dark earth fills the frame down to the bottom edge. Along the back of the path, from the right edge to the gate, runs a low wall of dark grey dressed stone with square stone pillars, about a visitor and a half tall. The path leaves the right edge at exactly the floor's height, past a curly black iron lamp post hung with two round paper lanterns, and a second lantern post stands halfway along. On the left, the path ends at a closed gate in an ink-wash style: two tall posts of black lacquered wood under a sweeping roof of dark tiles, about three times a visitor's height, closed by a pair of tall folding screens of pale paper painted with soft grey ink-wash mountains and mist, with a narrow dark gap where the two screens meet near the ground; in front of the gate the path widens into a flat apron of worn grey stone slabs where a barrier can stand. Beyond the gate, at the far left edge, a low wall of dark stacked stone with a thicket of bamboo behind it closes the path. Between the lamp posts and the gate: a low flat-topped boulder about a visitor's height tall, and a fallen log lying along the path with a flat top about half a visitor's height tall, both standable, a short hop up. A visitor added later by the game stands about one sixth of the frame's height tall; every hop and ledge is sized for it.`,
+    far: `a moonlit night sky (the moon itself hangs in the neighbouring screen to the right and is not in this frame), a scatter of small stars and soft navy clouds lit cream on their upper edges; far away on the right, the dark silhouette of one of the colossal tree's lower boughs reaching in from the right edge, hung with a few tiny warm gold lantern points; toward the left, beyond the far forest, faint pale ink-wash mountains rising out of soft grey mist.`,
+    scene: 'the ground beside the foot of a colossal tree at night, with a closed gate in an ink-wash style on the left',
+    props: `along the top edge, a few hanging strands of bamboo leaves and one round paper lantern on a cord, no further down than a fifth of the frame; on the far left edge, a single tall dark bamboo stalk no wider than a twentieth of the frame; on the far right edge, a dark near root no wider than a tenth of the frame; along the bottom edge, below the walking floor only (the bottom eighth of the frame), a few tufts of tall grass and smooth pebbles.`,
+  }),
+  // Screen +1: the market's common square (the statue, the stall game and the guardian are the game's).
+  // Its left edge continues the lobby's right edge: the path, crates and a lamp post, no trunk.
+  e1: treeScreen({
+    composition: `THE SCREEN (the same composition in all three layers, 2048x1152): the common square of a lantern-lit market east of a colossal tree, seen from the side; the tree stands in the neighbouring screen to the left, and no part of it, no trunk and no root, is in this frame. The walking floor is one level surface across the whole width of the frame, a flat strip seen side-on, its top edge five sixths of the way down; under it, solid dark earth fills the frame down to the bottom edge. At the left edge the floor is a mossy packed-earth path with a few flat stepping stones, arriving at exactly that height past a stack of wooden crates and a curly black iron lamp post hung with two round paper lanterns; under the market it becomes a floor of worn wooden boards and flat stones. In the square, from left to right: a round stone plinth with a flat top about a visitor's height tall, bare (a statue is placed on it later); a long low wooden stall counter under a striped scalloped awning in deep red and cream, its counter bare (a game is set on it later); a crooked wooden post with a flat round perch on top about twice a visitor's height tall, bare (a guardian owl sits there later). Behind the square, the fronts of three closed market stalls with dark lattice windows glowing warm gold from inside and striped awnings; their flat roofs, about two visitors' heights up, are standable, reached by a stair of stacked crates. Strings of round paper lanterns zig-zag between tall poles above the square. At the right edge the floor leaves at the same height into the next screen, a narrowing lane between stalls going east. A visitor added later by the game stands about one sixth of the frame's height tall; every crate, roof and ledge is sized for it.`,
+    far: `a moonlit night sky (the moon itself hangs in the neighbouring screen to the left and is not in this frame), a scatter of small stars and soft navy clouds lit cream on their upper edges, the clouds larger and fuller toward the left; low over the far forest on the right, a soft warm gold glow from distant market lanterns.`,
+    scene: 'the common square of a lantern-lit market among the roots of a colossal tree at night',
+    props: `along the top edge, a sagging string of round red and gold paper lanterns on a dark cord running across the frame, no further down than a fifth of the frame; on the far right edge, a dark near wooden pole hung with one lantern, no wider than a twentieth of the frame; on the far left edge, a dark near root and a fern frond, each no wider than a tenth of the frame; along the bottom edge, below the walking floor only (the bottom eighth of the frame), the tops of two wooden crates, a basket of round fruit and tufts of grass.`,
+  }),
+  // Screen +2: the market's roof run, three steps of difficulty, and the way on into the market street.
+  e2: treeScreen({
+    composition: `THE SCREEN (the same composition in all three layers, 2048x1152): further east along the lantern-lit market's lane, seen from the side: a run over the stall roofs. The walking floor is one level surface of worn wooden boards across the whole width of the frame, a flat strip seen side-on, its top edge five sixths of the way down, arriving from the left edge at exactly that height; under it, solid dark earth fills the frame down to the bottom edge. Above the lane, standable tops rise from left to right in three steps of difficulty: first a stair of stacked crates and barrels, each step about half a visitor's height, up to a row of flat stall roofs about two visitors' heights above the floor; then a clear gap between two roofs, about two visitors wide, to a higher roof about three visitors' heights up; then, at the far right and high up, a small round balcony on a tall lantern tower about four visitors' heights up, bare (a reward appears there later), reached by gliding across from the higher roof. Under the roofs, closed stall fronts with lattice windows glowing warm gold and striped awnings in deep red and cream, and ropes hung with round paper lanterns strung between poles. At floor level at the right edge, a wide wooden archway hung with lanterns leads on east into the rest of the market street. A visitor added later by the game stands about one sixth of the frame's height tall; every crate, roof, gap and ledge is sized for it.`,
+    far: `a moonlit night sky with a scatter of small stars and soft navy clouds lit cream on their upper edges, with no moon and no boughs in this frame; low over the far forest, the soft warm gold glow of a distant market's lanterns and two or three tiny far-off lantern towers.`,
+    scene: 'a run over the stall roofs of a lantern-lit market at night',
+    // The second round keeps the top right and bottom right clear: the first round's pennants hung
+    // over the tower's balcony (the reward) and its barrels stood in front of the archway.
+    props: `along the top edge, across the left two thirds of the frame only, a string of small triangular cloth pennants in red and cream and two round paper lanterns, no further down than a fifth of the frame; the top right third of the frame stays completely empty magenta, because a high balcony stands there in the scene behind; from the upper left corner, the dark near corner of an awning, no further down than a sixth of the frame; along the bottom edge, below the walking floor only (the bottom eighth of the frame) and only in the left two thirds of the frame, a coil of rope, the top of a barrel and a few tufts of grass; the bottom right third stays empty magenta, because a doorway stands there in the scene behind.`,
+  }),
+};
+
+/** Level 1's new screens, each in three layers: `tree-l1-<screen>-bg|play|fg` (OP-162). */
+const TREE_L1_PROMPTS = Object.fromEntries(
+  Object.entries(TREE_L1_SCREENS).flatMap(([s, p]) => [
+    [`tree-l1-${s}-bg`, p.bg],
+    [`tree-l1-${s}-play`, p.play],
+    [`tree-l1-${s}-fg`, p.fg],
+  ]),
+);
+export const TREE_L1_KEYS = Object.keys(TREE_L1_PROMPTS);
+
+/** Seeds by screen (the lobby's are 3101, 3201, 3301; each job's four candidates take seed to seed + 3). */
+const TREE_L1_SEEDS = { w1: 11, e1: 21, e2: 31 };
+const TREE_L1_JOBS = Object.entries(TREE_L1_SEEDS).flatMap(([s, n]) => [
+  { key: `tree-l1-${s}-bg`, kind: 'room', seed: 3100 + n },
+  { key: `tree-l1-${s}-play`, kind: 'overlay', seed: 3200 + n, key_colour: '#FF00FF' },
+  { key: `tree-l1-${s}-fg`, kind: 'overlay', seed: 3300 + n, key_colour: '#FF00FF' },
+]).map((j) => ({
+  ...j,
+  realm: 'tree',
+  optional: true,
+  size: '2048x1152',
+  variants: 4,
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L1_PROMPTS[j.key],
+}));
+Object.assign(PROMPTS, TREE_L1_PROMPTS);
+JOBS.push(...TREE_L1_JOBS);
+
+// ---- Level 1's middle distance (OP-162, on Logan's ask): a fourth layer between the sky and the
+// playfield, scrolled at three quarters of the camera's pace. Keyed like the playfield, and finished
+// at half size (800x450, drawn twice as large): it is soft and far, and stays light to load and draw.
+// It shows only above the playfield's skyline, so its shapes rise to three fifths of the way up; its
+// side edges stay empty, because neighbouring tiles at that pace overlap and the game fades them.
+function treeMid(shapes) {
+  return `Middle-distance layer for one screen of a side-scrolling 2D game: the layer between the far sky and the playfield, which the game scrolls at three quarters of the camera's pace, isolated on a flat, solid, uniform pure magenta #FF00FF background that fills the entire canvas with no gradient, no vignette and no cast shadows, 16:9, 2048x1152. Paint only middle-distance silhouettes standing on an unseen horizon: ${shapes} They rise from the bottom edge of the frame to at most three fifths of the way up, and the top two fifths of the frame are empty magenta. Toward the left and right edges they thin out, and the outer tenth of the frame on each side is empty magenta, so neighbouring screens blend. Flat shapes in muted, desaturated night blues and blue-greys, paler and softer than anything near so they read as distant, with only a few tiny warm gold lantern points; crisp clean opaque edges against the magenta, no soft haze, glow or mist bleeding onto the backdrop, no semi-transparent edges, no magenta tint on the shapes. ${TREE_STYLE} No text, no watermark. AVOID: any text, letters or writing; any owls, birds, animals, people, faces or characters; a moon; clouds; stars; any ground, floor, path or ledge in front; anything in the top two fifths of the frame; bright saturated colours; busy detailed texture; exact mirror symmetry.`;
+}
+const TREE_L1_MIDS = {
+  // Behind the closed gate's wall.
+  w1: treeMid('a misty grove of tall bamboo and, among it, the sweeping dark-tiled roofs of a quiet pavilion and a slender tiered tower in an ink-wash style, with two or three tiny lantern points.'),
+  // Behind the lobby: its trunk stands in front of the middle, so the shapes keep to the sides.
+  0: treeMid('in the left third and the right third of the frame, the dark rounded crowns and trunks of other great trees far away, with a few tiny warm lantern points among their roots; the middle third stays almost empty.'),
+  // Behind the market square.
+  e1: treeMid('the rooftops, peaked tents and two slender lantern towers of the rest of a lantern-lit market, with strings of tiny lantern points draped between them.'),
+  // Behind the roof run, the market street going on east.
+  e2: treeMid('taller market buildings with curved roofs, one tall lantern tower, and a distant rope bridge between two of the roofs hung with tiny lantern points.'),
+};
+const TREE_L1_MID_PROMPTS = Object.fromEntries(Object.entries(TREE_L1_MIDS).map(([s, p]) => [`tree-l1-${s}-mid`, p]));
+export const TREE_L1_MID_KEYS = Object.keys(TREE_L1_MID_PROMPTS);
+const TREE_L1_MID_SEEDS = { w1: 11, 0: 1, e1: 21, e2: 31 };
+const TREE_L1_MID_JOBS = Object.entries(TREE_L1_MID_SEEDS).map(([s, n]) => ({
+  key: `tree-l1-${s}-mid`,
+  kind: 'overlay',
+  seed: 3400 + n,
+  key_colour: '#FF00FF',
+  realm: 'tree',
+  optional: true,
+  size: '2048x1152',
+  variants: 4,
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L1_MID_PROMPTS[`tree-l1-${s}-mid`],
+}));
+Object.assign(PROMPTS, TREE_L1_MID_PROMPTS);
+JOBS.push(...TREE_L1_MID_JOBS);
+
+// The joins between level 1's playfields (OP-162). The four screens were painted apart, so where two
+// meet, the floor, the walls and the props stop in a hard vertical line. As for the glass realm's
+// seam (OP-125), an edit repaints a band across each join. The four selected playfields are laid side
+// by side, west to east (8192x1152, the joins at x 2048, 4096 and 6144), and a square across a join is
+// cut out (`pnpm art:finish cut tree-l1-seam-<pair> --base-key tree-l1-w1-play --base <w1>,<0>,<e1>,<e2>
+// --box <J-576>,0,<J+576>,1152 --half`). Its middle half is repainted, `patch --threshold 0 --join 96`
+// pastes each edit back into the row of four in turn, and each screen is finished from the patched row
+// with `overlay tree-l1-<screen>-play --crop <i/3>,0.5` (i = 0..3, west to east).
+function treeSeam(left, right, middle) {
+  return `Edit this painting: a square crop of the playfield layer of a side-scrolling 2D game, in which the open sky is flat pure magenta #FF00FF so that the game can cut it out. It was made from two paintings set side by side, and they meet in a hard vertical line down the exact middle of the frame where nothing continues: on the left ${left}; on the right ${right}. Repaint only the middle half of the frame, a quarter of the width either side of that line, so that the two sides become one continuous scene with no line, seam or change of style anywhere: ${middle} The walking floor runs on unbroken across the whole width at exactly the height it has at both sides, its flat top edge level, open and uncluttered, so that a visitor can walk straight across, and the dark earth below it runs on at the same depth. Wherever the sky would show, the frame stays one flat, solid, uniform pure magenta #FF00FF, the same magenta as at the top of the frame now, with no gradient, no clouds, no stars, no moon, no glow and no haze. Keep the left and right quarters of the frame exactly as they are, and match their colours, light and brushwork in the repainted middle: the same strict side view with no perspective tilt, hand-painted 2D game art with clean cel-shaded shapes, soft painted gradients and crisp clean edges against the magenta. No text, letters or numbers anywhere. No owls, birds, animals, people or characters.`;
+}
+const TREE_L1_SEAM_PROMPTS = {
+  'tree-l1-seam-w1-0': treeSeam(
+    'a low wall of pale grey stone blocks topped with moss, a square stone pillar and an iron lamp post hung with two glowing paper lanterns, standing on a floor of grassy earth',
+    'a packed-earth path that leads back past small iron lamp posts and a little stone gate with steps in the distance, and the dark bark of a colossal tree\'s root arching over the path',
+    'the stone wall on the left ends at its last square pillar a little left of the middle; past the pillar the wall steps down into a few tumbled stones and dark shrubs, so the little gate, the steps and the lamp posts on the right stay small in the distance behind the path; the grassy earth on the left becomes the packed-earth path on the right without a step, with a few flat stones and tufts of moss along it.',
+  ),
+  'tree-l1-seam-0-e1': treeSeam(
+    'the dark bark of a colossal tree\'s root arching down to the ground, and beyond it, small in the distance, iron lamp posts with glowing lanterns and the roofs of market stalls along a path of earth and flat stones',
+    'a stack of four large wooden crates with moss on their lids, standing on a floor of earth, grass and flat stepping stones',
+    'the tree\'s root on the left reaches down and ends in the earth; the path of earth and flat stones runs on from under the root into the floor of the market on the right; the far lamp posts and stall roofs sink out of sight behind the stacked wooden crates, which stand on the same floor at the same height.',
+  ),
+  'tree-l1-seam-e1-e2': treeSeam(
+    'a lane of wooden planks between market buildings, one with a red and white striped awning, a pale stone building corner and a wooden fence, behind a wooden boardwalk edged with flat grey flagstones',
+    'a stack of wooden crates and small barrels standing on a plain wooden boardwalk of long planks',
+    'the lane between the buildings on the left ends behind the wooden fence and the stone building\'s corner; the wooden boardwalk in front runs on unbroken into the boardwalk on the right, one level of planks of one size with one straight front edge, the flagstones giving way to plain planks; the stack of crates and barrels on the right begins a little right of the middle, standing on the boardwalk.',
+  ),
+};
+export const TREE_L1_SEAM_KEYS = Object.keys(TREE_L1_SEAM_PROMPTS);
+const TREE_L1_SEAM_JOBS = TREE_L1_SEAM_KEYS.map((key, i) => ({
+  key,
+  // A detail edit, not a screen of a room: a helper, patched into the screens either side of its join.
+  kind: 'anchor',
+  derives: key.replace('tree-l1-seam-', '').split('-').map((s) => `tree-l1-${s}-play`),
+  realm: 'tree',
+  optional: true,
+  size: '1152x1152',
+  seed: 3601 + 10 * i,
+  variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "a crop across the join of two of the level's playfields", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L1_SEAM_PROMPTS[key],
+}));
+Object.assign(PROMPTS, TREE_L1_SEAM_PROMPTS);
+HELPER_KEYS.push(...TREE_L1_SEAM_KEYS);
+JOBS.push(...TREE_L1_SEAM_JOBS);
+
+// ---- The tree in six layers (OP-173), from level 4 on (OP-159) ----
+// The next levels are painted in six layers a screen (docs/MAP.md section 6): the sky (0.5), the
+// middle distance (0.75), the back scenery, the platforms and the front props (all three at the
+// camera's pace) and the overlay (1.2). The three at the camera's pace have to stay in register to
+// the pixel (a tread against the bark behind it, a lantern post on the walkway's edge), so they come
+// from ONE painting of the screen, the scene, painted as level 1's playfields were: the back scenery
+// is the scene itself, which the game draws a step quieter, and the platforms and the front props
+// are its own pixels cut out over it. Which pixels are which is the second round's work, once the
+// scene is picked. The scene is a helper (never published); its job derives the three layers.
+
+/** The sky plate of one screen of the six-layer levels: the far distance, edge to edge. */
+function treeSky(far, horizon) {
+  return `Background plate for one screen of a side-scrolling 2D game: the farthest of the screen's layers, which the game scrolls at half speed behind the others. Paint ONLY the far distance, edge to edge, with no empty areas and no flat backdrop: ${far} ${horizon} The horizon, the clouds and the forest band run off the left and right edges at the same heights, so the neighbouring screens continue them. Nothing near: no ground, no path, no floor, no walkway, no stairs, no ledges, no railings, no lanterns on posts, and no trunk, boughs or leaves in front, because the game's nearer layers paint everything near. Keep it calm and low in contrast so the nearer layers read in front of it. ${TREE_STYLE} No text, no watermark. AVOID: any text, letters, numbers or writing; any owls, birds, animals, people, faces or characters; any ground, floor, path or platform; anything in the foreground; a moon; daylight; a sun; busy detailed texture; exact mirror symmetry.`;
+}
+
+/**
+ * The scene of one screen of the six-layer levels: everything at the camera's pace, on a magenta sky,
+ * in level 1's playfield wording, with OP-173's readability asked of the painting itself (what can be
+ * stood on is crisp and lit, what stands behind is quieter, and only lanterns glow).
+ */
+function treeScene(composition) {
+  return `The playfield painting for one screen of a side-scrolling 2D game: everything at the visitor's own depth, which the game draws over a separate sky painting, a small visitor walking and jumping on it. Paint the open sky as FLAT PURE MAGENTA #FF00FF: every part of the frame where the night sky or the far distance would show is one flat, solid, uniform pure magenta #FF00FF, with no gradient, no clouds, no stars, no moon, no glow, no haze and no cast shadow, so the game can cut it out. ${composition} READABILITY: every surface a visitor can stand on is a solid, simple shape with a broad, flat, clearly lit top edge, lighter and crisper than anything behind it; everything behind the walkway (the trunk, the boughs, the leaves) is a step darker, softer and less detailed, so nothing behind looks like somewhere to stand; the things that stand in front of the walkway are simple dark shapes with crisp outlines. Only lanterns glow: stairwells, doorways and the bare places where the game adds things later are painted plainly, with no glow, no light and no sign. Everything solid is painted fully and opaquely, with crisp clean edges against the magenta: no soft glow, haze or light halo bleeding onto the magenta, no semi-transparent edges, no magenta tint on the painting. ${TREE_STYLE} No text, no watermark. AVOID: any text, letters, numbers or writing anywhere; any owls, birds, animals, people, faces, statues or characters; any sky, moon, stars, clouds or distant scenery (all of that is flat magenta); a gradient or vignette on the magenta; a sloping or curving walkway; perspective; exact mirror symmetry.`;
+}
+
+/** The overlay of one screen of the six-layer levels: props at the frame's edges only, nearer than everything. */
+function treeOverlay(scene, props) {
+  return `Foreground overlay for one screen of a side-scrolling 2D game: the nearest of the screen's layers, drawn in front of the visitor and scrolled a little faster than the rest, isolated on a flat, solid, uniform pure magenta #FF00FF background that fills the entire canvas with no gradient, no vignette, no ground plane and no cast shadows on the backdrop, 16:9, 2048x1152. The scene behind it, painted separately, is ${scene}, with a walkway five sixths of the way down the frame. Props only, at the edges of the screen, nearer than everything else: ${props} The whole middle of the frame, and every place a visitor walks or jumps, stays completely empty magenta. The props are darker and a little larger than the scene behind them, rim-lit by cream moonlight from the upper left and warm gold from the lanterns. Crisp clean opaque silhouettes against the magenta, no soft haze or glow bleeding onto the backdrop, no semi-transparent edges. ${TREE_STYLE} No text, no watermark. AVOID: any text or writing; any owls, birds, animals, people, faces or characters; anything in the middle of the frame; any sky, trunk, walkway or scenery; magenta tint on the props; soft or feathered edges.`;
+}
+
+/** A screen's four painted jobs' prompts: `tree-l<n>-<screen>-bg|mid|scene|fg`. */
+function treeSixLayers({ far, horizon, mid, composition, scene, props }) {
+  return { bg: treeSky(far, horizon), mid: treeMid(mid), scene: treeScene(composition), fg: treeOverlay(scene, props) };
+}
+
+/** The three layers at the camera's pace that a screen's scene is cut into (OP-173). */
+export const TREE_CUT_LAYERS = ['back', 'play', 'front'];
+
+/**
+ * Jobs for a level's screens: the sky (a room), and the middle distance, the scene and the overlay
+ * (keyed on magenta), four candidates each at 2048x1152. `seeds` maps each screen to the base of its
+ * seeds; the four layers take base, base + 10, base + 20 and base + 30, and a job's candidates seed
+ * to seed + 3.
+ */
+function treeLevelJobs(level, seeds, prompts) {
+  return Object.entries(seeds).flatMap(([s, n]) => {
+    const k = (layer) => `tree-l${level}-${s}-${layer}`;
+    return [
+      { key: k('bg'), kind: 'room', seed: n },
+      { key: k('mid'), kind: 'overlay', seed: n + 10, key_colour: '#FF00FF' },
+      { key: k('scene'), kind: 'overlay', seed: n + 20, key_colour: '#FF00FF', derives: TREE_CUT_LAYERS.map(k) },
+      { key: k('fg'), kind: 'overlay', seed: n + 30, key_colour: '#FF00FF' },
+    ];
+  }).map((j) => ({
+    ...j,
+    realm: 'tree',
+    optional: true,
+    size: '2048x1152',
+    variants: 4,
+    providers: { fal: { output_format: 'png' } },
+    prompt: prompts[j.key],
+  }));
+}
+
+/** Prompts by key for a level's screens, from `treeSixLayers` per screen. */
+function treeLevelPrompts(level, screens) {
+  return Object.fromEntries(
+    Object.entries(screens).flatMap(([s, p]) => Object.entries(p).map(([layer, prompt]) => [`tree-l${level}-${s}-${layer}`, prompt])),
+  );
+}
+
+// ---- Level 4, the sky landing (OP-159): two screens, room `l4` ----
+// Screen 0 is the stair landing on the trunk: the spiral stair up to the canopy (level 5) and the
+// stairwell down to level 3, and the walkway east. Screen +1 (`e1`) is the overlook at the end of a
+// great bough: a quiet perch over the park, nothing to use, and one find (`find-overlook`) on its
+// highest perch, reached by gliding. The game draws the doorway marks and the find, so the paintings
+// leave the stair's ends and the perch bare. The two screens meet on a plain run of planks with
+// nothing standing on it, so the join is easy to mend. No moon: it is only in the lobby's sky.
+const TREE_L4_HORIZON = `Far below, a far forest of rounded misty tree crowns, seen from high above, spreads to the horizon in the lower third in layered dusk blue and navy, lighter toward the horizon; the bottom fifth of the frame is plain deep navy shadow with no detail (the game covers it with the walkway).`;
+const TREE_L4_SCREENS = {
+  0: treeSixLayers({
+    far: `a night sky with a scatter of small stars and soft navy clouds lit cream on their upper edges, with no moon in this frame; high across the top of the frame, the dark silhouettes of the colossal tree's own upper boughs and leaves reaching out from the canopy above, hung with a few tiny warm gold lantern points.`,
+    horizon: TREE_L4_HORIZON,
+    mid: 'in the left third and the right third of the frame, the dark rounded crowns of other great trees far away across a misty valley, rising to about this height, with a few tiny warm gold lantern points among their boughs; the middle third stays almost empty.',
+    composition: `THE SCREEN (2048x1152): high in a colossal ancient tree at night, the sky landing where a spiral stair climbs around the trunk, seen from the side. The trunk rises through the middle of the frame, about two fifths of the frame's width, from below the walkway up out of the top edge: deep gnarled bark with a few thin cracks of glowing gold sap. The walking floor is one level walkway of thick wooden planks across the whole width of the frame, built around the trunk: a flat strip seen side-on, with a broad, clean, flat top edge five sixths of the way down. Under it, the walkway's thick timber edge, a row of carved wooden brackets and a dense mass of dark leaves and small branches fill the frame down to the bottom edge. THE WAY UP: right of the middle, a spiral stair of thick wooden plank treads fixed to the bark climbs from the walkway up and to the left across the front of the trunk in five broad treads, each about half a visitor's height above the last and about a visitor wide, to a small flat wooden landing on the trunk's left side about three visitors' heights above the walkway; from that landing the stair winds on up around the trunk and out of the top edge, lost among the leaves. A carved wooden banister on slim posts runs along the outer edge of the treads. THE WAY DOWN: left of the trunk, set into the back of the walkway behind its unbroken front edge, an open stairwell edged at its back with a low carved wooden railing, where the stair's first worn steps wind down around the trunk into soft shadow. THE EDGES: at the far left the walkway ends against a great bough that grows up out of the trunk's side and curves up out of the top left corner, thick with leaves, so nothing leads on to the left. At the right edge the walkway leaves the frame at exactly the floor's height as a plain, level run of planks along the top of a great bough reaching away east, with nothing standing on it within a tenth of the frame of the right edge. One curly black iron lantern post stands at the walkway's front edge about four fifths of the way across, hung with a round paper lantern; strings of small round lanterns hang from the boughs high above. A visitor added later by the game stands about one sixth of the frame's height tall; every tread, landing and ledge is sized for it.`,
+    scene: 'a walkway around the trunk of a colossal tree high above the ground at night, where a spiral stair climbs around the trunk',
+    props: `along the top edge, clusters of dark leaves and a few hanging strands of moss from the upper left and upper right corners, no further down than a fifth of the frame, with the top middle third of the frame left empty magenta because the stair climbs out of the frame there in the scene behind; on the far left edge, a dark near leafy twig no wider than a tenth of the frame; along the bottom edge, below the walkway only (the bottom eighth of the frame), the dark tips of a few leafy branches.`,
+  }),
+  e1: treeSixLayers({
+    far: `a wide, open night sky with a scatter of small stars and soft navy clouds lit cream on their upper edges, the calmest sky of the level, with no moon in this frame; far away among the misty crowns near the horizon, the faint warm gold lights of a park glow in a few small clusters.`,
+    horizon: TREE_L4_HORIZON,
+    mid: 'the rounded crowns of two or three other great trees far away across a misty valley, the nearest on the right, rising to about this height, with a few tiny warm gold lantern points among their boughs.',
+    composition: `THE SCREEN (2048x1152): high in a colossal ancient tree at night, the overlook at the end of a great bough reaching east from the trunk, seen from the side; the trunk stands in the neighbouring screen to the left, and no part of it is in this frame. The walking floor is one level walkway of thick wooden planks along the top of the bough: a flat strip seen side-on, with a broad, clean, flat top edge five sixths of the way down, arriving from the left edge at exactly that height as a plain, level run of planks with nothing standing on it within a tenth of the frame of the left edge. Under it, the walkway's thick timber edge, a row of carved wooden brackets and a dense mass of dark leaves and small branches fill the frame down to the bottom edge. The walkway runs on to about four fifths of the way across, where it ends at a stout carved wooden railing; beyond the railing the bough narrows and dips away out of the bottom right corner, and nothing leads on to the right. THE PERCHES: above the walkway, standable tops rise from left to right in three steps of difficulty: first a broad flat-topped burl on the walkway about half a visitor's height tall, a third of the way across; then a small platform of planks built on a side branch growing up out of the bough, its flat top about two visitors' heights above the walkway, a hop up from the burl; then, across a clear gap about two visitors wide, a broad shelf fungus with a flat top on a second branch, about three visitors' heights up; then, right of the middle and high up, a small flat wooden lookout perch on the tip of a slender branch, about three and a half visitors' heights above the walkway, bare (a reward appears there later), reached by gliding across from the shelf fungus. One curly black iron lantern post stands at the walkway's front edge just before the railing, hung with a round paper lantern. A visitor added later by the game stands about one sixth of the frame's height tall; every hop, gap and ledge is sized for it.`,
+    scene: 'a walkway along a great bough high in a colossal tree at night, ending at an overlook',
+    // The first round's four overlays each missed: tropical blade leaves, a moon-like glow, or leaves over
+    // the walkway's ends. The second keeps the tree's own leaves and leaves the walkway clear.
+    props: `from the upper left corner only, a few clusters of dark, broad, rounded leaves of the same kind as the tree's own and a few hanging strands of moss, no further down than a sixth of the frame; the whole right half of the top of the frame stays empty magenta, because high perches stand there in the scene behind; along the bottom edge, below the walkway only (the bottom eighth of the frame), the small dark tips of a few leafy branches, low and sparse, leaving the walkway, its railing and its lantern post at the right completely uncovered; no moon and no bright glow anywhere.`,
+  }),
+};
+
+/** Level 4's screens, each in four painted jobs: `tree-l4-<screen>-bg|mid|scene|fg` (OP-159). */
+const TREE_L4_PROMPTS = treeLevelPrompts(4, TREE_L4_SCREENS);
+export const TREE_L4_KEYS = Object.keys(TREE_L4_PROMPTS);
+const TREE_L4_JOBS = treeLevelJobs(4, { 0: 4401, e1: 4405 }, TREE_L4_PROMPTS);
+Object.assign(PROMPTS, TREE_L4_PROMPTS);
+HELPER_KEYS.push(...TREE_L4_KEYS.filter((k) => k.endsWith('-scene')));
+JOBS.push(...TREE_L4_JOBS);
+
+// ---- Level 4's colour-coded maps (OP-159): which pixels of each screen are the platforms and the
+// front props. Each map is an edit of the screen's back scenery (its picked scene, moved onto the
+// ground line and mended at its join), sent at half size as `@canvas:<map>` (`pnpm art:finish cut
+// tree-l4-<screen>-codes --base-key tree-l4-<screen>-back --box 0,0,2048,1152 --half`). The finish
+// step `split` reads the green and the blue out of the picked map and keeps the back scenery's own
+// pixels there (tools/art/artlib/split.py), so what the model redraws elsewhere does not matter.
+
+/** The edit that colour-codes one screen: what a visitor stands on in green, what stands in front of the walkway in blue. */
+function treeCodes({ stand, front, keep }) {
+  return `Edit this painting: one screen of a side-scrolling 2D game, whose open sky is flat magenta #FF00FF. Make it a colour-coded map of the very same picture for the game's tools: every shape stays exactly where it is, exactly its size and outline, and only colours change. Fill every surface a small visitor stands on with flat, solid, uniform pure green #00FF00, exactly to its outline: ${stand} Fill every thing that stands in front of the walkway with flat, solid, uniform pure blue #0000FF, exactly to its outline: ${front} Everything else stays exactly as it is painted, unchanged: ${keep} and the flat magenta sky. The green and the blue are flat fills with no shading, texture, outline, highlight or glow, and no green or blue appears anywhere else. No text, no watermark. AVOID: moving, resizing, adding or removing anything; redrawing the picture in another style; green or blue on anything not listed; soft or feathered edges on the fills; any change to the magenta.`;
+}
+
+const TREE_L4_CODES = {
+  // The picked scene (seed 4424): a pale plank walkway across the frame, the stair's pale treads up the
+  // trunk's right side to a landing, a small railed balcony on the trunk's left, one lantern post.
+  'tree-l4-0-codes': treeCodes({
+    stand: `the long walkway of pale wooden planks across the whole width of the frame, with its carved front edge and the carved brackets under it; each pale wooden tread of the stair that climbs the right side of the trunk, and the flat wooden landing at the top of those treads; and the floor of the small balcony on the left side of the trunk, without its railing.`,
+    front: `the curly black iron lantern post standing on the walkway right of the stair, with the round lantern hanging from it.`,
+    keep: `the trunk and its bark, the banister and every railing (the balcony's railing, the stair's banister and the low railing around the stairwell at the back of the walkway), the steps going down in the stairwell, the boughs, the leaves and the strings of lanterns, the mass of leaves under the walkway,`,
+  }),
+  // The picked scene (seed 4428): the walkway along the bough to a railing at its end, a stump, a plank
+  // platform and a shelf fungus on branches, a railed lookout at a slender branch's tip, one lantern post.
+  'tree-l4-e1-codes': treeCodes({
+    stand: `the long walkway of pale wooden planks from the left edge to the railing at its end, with its timber front edge and the carved brackets under it; the flat-topped stump standing on the walkway; the small square platform of planks on its branch; the broad shelf fungus; and the floor of the small railed lookout at the tip of the slender branch, without its railing.`,
+    front: `the curly black iron lantern post standing at the walkway's end beside the railing, with the round lantern hanging from it.`,
+    keep: `the great dark bough on the left, the branches that hold the platform, the fungus and the lookout, the railing at the walkway's end and the lookout's railing, the bough curving down under the walkway's end, the leaves under the walkway,`,
+  }),
+};
+export const TREE_L4_CODE_KEYS = Object.keys(TREE_L4_CODES);
+const TREE_L4_CODE_JOBS = TREE_L4_CODE_KEYS.map((key, i) => ({
+  key,
+  // A map, never published: `split` reads the screen's platforms and front props out of it.
+  kind: 'anchor',
+  derives: ['play', 'front'].map((l) => key.replace('-codes', `-${l}`)),
+  realm: 'tree',
+  optional: true,
+  size: '2048x1152',
+  seed: 4451 + 10 * i,
+  variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "the screen's painting at half size, to colour-code", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L4_CODES[key],
+}));
+Object.assign(PROMPTS, TREE_L4_CODES);
+HELPER_KEYS.push(...TREE_L4_CODE_KEYS);
+JOBS.push(...TREE_L4_CODE_JOBS);
+
+// The join between level 4's two screens (OP-159), mended as level 1's were (OP-125's recipe): the two
+// picked back sceneries, moved onto the ground line, side by side (4096x1152, the join at x 2048); a
+// square across the join cut at half size (`cut tree-l4-seam-0-e1 --base-key tree-l4-0-back --base
+// <0>,<e1> --box 1472,0,2624,1152 --half`), its middle half repainted, and pasted back into the row
+// (`patch tree-l4-0-back ... --at 1472,0 --box 192,0,960,1152 --threshold 0 --join 96`: the box keeps the
+// paste between screen 0's lantern post and the overlook's stump, so the joins cross only planks and sky). The row is then the base of both
+// screens' maps, their splits (`split --box`) and their back scenery (`overlay --crop 0|1,0.5`).
+const TREE_L4_SEAM_PROMPTS = {
+  'tree-l4-seam-0-e1': treeSeam(
+    'the end of a level walkway of pale wooden planks on a great bough, under open sky, with clusters of dark leaves and strings of small glowing lanterns hanging from the boughs above and an iron lantern post near the left edge',
+    'a great dark bough of the tree flecked with glowing gold sap, rising from just behind the same walkway of pale wooden planks up out of the top of the frame, and the walkway running on to the right past a flat-topped stump',
+    'the walkway of pale planks runs on unbroken across the middle at the same height, one level of planks of one size with one straight front edge, its timber edge and the bough beneath it running on below; the leaves and lantern strings on the left end in a few leafy twigs against open sky, and the great dark bough on the right rises from behind the walkway a little right of the middle, straight up out of the top of the frame, with open sky between them. The flat-topped stump at the right edge stays exactly where it is, the only stump in the frame.',
+  ),
+};
+export const TREE_L4_SEAM_KEYS = Object.keys(TREE_L4_SEAM_PROMPTS);
+const TREE_L4_SEAM_JOBS = TREE_L4_SEAM_KEYS.map((key) => ({
+  key,
+  // A detail edit, not a screen: a helper, patched into the row of the two screens' back sceneries.
+  kind: 'anchor',
+  derives: ['tree-l4-0-back', 'tree-l4-e1-back'],
+  realm: 'tree',
+  optional: true,
+  size: '1152x1152',
+  seed: 4471,
+  variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "a crop across the join of the level's two screens", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L4_SEAM_PROMPTS[key],
+}));
+Object.assign(PROMPTS, TREE_L4_SEAM_PROMPTS);
+HELPER_KEYS.push(...TREE_L4_SEAM_KEYS);
+JOBS.push(...TREE_L4_SEAM_JOBS);
+
+// The top strip of level 4's row (OP-159). Moving each picked scene down onto the ground line filled the
+// top of its frame by mirroring (170 and 195 painted px), which left an upside-down copy of the canopy
+// there: a seam across screen 0's trunk, lantern strings meeting their reflections and, over the overlook,
+// a bough meeting its own reflection in an arrowhead. One edit across the join repaints the strip (`cut
+// tree-l4-top-0-e1 --base-key tree-l4-0-back --base <row> --box 768,0,2816,1152 --half`), and only the
+// strip goes back into the row (`patch tree-l4-0-back --base <row> --edit-key tree-l4-top-0-e1 --at 768,0
+// --box 0,0,2048,260 --threshold 0 --join 96`), above every platform, so the maps, the splits and the
+// play and front layers stand. Its sky is a lighter magenta than the row's, so both back sceneries are
+// finished with `--t0 70 --t1 150`. Screen 0's strip west of x 768 keeps its mirror: the overlay's leaves
+// cover it whenever it is in view.
+const TREE_L4_TOP_PROMPTS = {
+  'tree-l4-top-0-e1': `Edit this painting: a crop of the playfield layer of a side-scrolling 2D game, in which the open sky is flat pure magenta #FF00FF so that the game can cut it out. Along the top of the frame, about the top sixth, the painting was filled by mirroring the strip just below it, so everything up there is an upside-down reflection that meets itself along a straight horizontal line: the great trunk on the left has a seam across it, the strings of small glowing lanterns are reflected, and on the right a second great dark trunk splits into two boughs that meet their own reflections in a pointed arrowhead. Repaint only that top strip, the top fifth of the frame, so that everything continues naturally up and out of the top of the frame, with no reflection, line or seam anywhere: the great trunk on the left rises straight on up out of the frame, its bark running on unbroken; the boughs, the clusters of dark leaves and the strings of small glowing lanterns in the upper middle continue upward and outward, the lantern strings hanging in gentle downward curves from the boughs above; the dark trunk on the right rises on, and its bough toward the upper right curves on up and out of the top of the frame, thinning, with a few clusters of dark leaves, never folding back on itself. Wherever the sky would show, the frame stays one flat, solid, uniform pure magenta #FF00FF, the same magenta as in the rest of the frame now, with no gradient, no clouds, no stars, no moon, no glow and no haze. Keep everything below the top strip exactly as it is (the walkway, the stair, the balcony, the lantern post, the stump, the leaves and lanterns already there and the open magenta sky), and match its colours, light and brushwork in the repainted strip: the same strict side view with no perspective tilt, hand-painted 2D game art with clean cel-shaded shapes, soft painted gradients and crisp clean edges against the magenta. No text, letters or numbers anywhere. No owls, birds, animals, people or characters.`,
+};
+export const TREE_L4_TOP_KEYS = Object.keys(TREE_L4_TOP_PROMPTS);
+const TREE_L4_TOP_JOBS = TREE_L4_TOP_KEYS.map((key) => ({
+  key,
+  // A detail edit, not a screen: a helper, patched into the row of the two screens' back sceneries.
+  kind: 'anchor',
+  derives: ['tree-l4-0-back', 'tree-l4-e1-back'],
+  realm: 'tree',
+  optional: true,
+  size: '2048x1152',
+  seed: 4481,
+  variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "a crop across the join of the level's two screens, at half size", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L4_TOP_PROMPTS[key],
+}));
+Object.assign(PROMPTS, TREE_L4_TOP_PROMPTS);
+HELPER_KEYS.push(...TREE_L4_TOP_KEYS);
+JOBS.push(...TREE_L4_TOP_JOBS);
+
+// ---- Level 3, the high branch (OP-160): three screens, room `l3` ----
+// Screen 0 is the trunk: the stair up to level 4 and the stairwell down to level 2, and the branch
+// leaving east. Screen +1 (`e1`) is the stained-glass realm's common area, a broad plaza where the
+// branch is widest: the game draws its idol, its guardian and the climb's portal (OP-116), so the
+// painting leaves their places bare. Screen +2 (`e2`) is the realm's adventure: the doorway into the
+// stained-glass street (today's screens) on the walkway, and a stair of perches toward the branch's
+// tip, where the style set's capstone (OP-110) waits on a bare perch a beginner reaches with single
+// jumps. The screens meet on plain runs of planks with nothing standing on them, so the joins are easy
+// to mend. The walkway is asked six sevenths of the way down with only a narrow band under it, so the
+// move onto the ground line (985 of 1152 painted px) stays small. No moon: it is only in the lobby's sky.
+const TREE_L3_HORIZON = `Below, a forest of rounded misty tree crowns, seen from high above, spreads to the horizon in the lower third in layered dusk blue and navy, lighter toward the horizon; the bottom fifth of the frame is plain deep navy shadow with no detail (the game covers it with the walkway).`;
+const TREE_L3_FLOOR = `The walking floor is one level walkway of thick wooden planks, a flat strip seen side-on with a broad, clean, flat top edge six sevenths of the way down the frame; below it there is only a narrow band, about a seventh of the frame, of the walkway's thick timber edge and the dark leaves under it, down to the bottom edge.`;
+const TREE_L3_GLASS = 'small lanterns of coloured glass in ruby, amber, emerald and sapphire, each glowing softly in its own colour';
+const TREE_L3_SCREENS = {
+  0: treeSixLayers({
+    far: `a night sky with a scatter of small stars and soft navy clouds lit cream on their upper edges, with no moon in this frame; high across the top of the frame, the dark silhouettes of the colossal tree's own boughs and leaves reaching out from the trunk above, hung with a few tiny warm gold lantern points.`,
+    horizon: TREE_L3_HORIZON,
+    mid: 'in the left third and the right third of the frame, the dark rounded crowns of other great trees far away across a misty valley, rising to about this height, with a few tiny warm gold lantern points among their boughs; the middle third stays almost empty.',
+    composition: `THE SCREEN (2048x1152): partway up a colossal ancient tree at night, a landing on the trunk where a stair climbs up and another winds down, and where a great branch sets off east, seen from the side. The trunk rises through the middle of the frame, about two fifths of the frame's width, from below the walkway up out of the top edge: deep gnarled bark with a few thin cracks of glowing gold sap. ${TREE_L3_FLOOR} It runs across the whole width of the frame, built around the trunk. THE WAY UP: left of the middle, a stair of thick wooden plank treads fixed to the bark climbs from the walkway up and to the right across the front of the trunk in six broad treads, each about half a visitor's height above the last and about a visitor wide, to a small flat wooden landing on the trunk's right side about three visitors' heights above the walkway; from that landing the stair winds on up around the trunk and out of the top edge, lost among the leaves. A carved wooden banister on slim posts runs along the outer edge of the treads. THE WAY DOWN: right of the trunk, set into the back of the walkway behind its unbroken front edge, an open stairwell edged at its back with a low carved wooden railing, where the stair's first worn steps wind down around the trunk into soft shadow. THE EDGES: at the far left the walkway ends against a great bough that grows up out of the trunk's side and curves up out of the top left corner, thick with leaves, so nothing leads on to the left. At the right edge the walkway leaves the frame at exactly the floor's height as a plain, level run of planks along the top of a great branch reaching away east, with nothing standing on it within a tenth of the frame of the right edge; above that run, near the right edge, the first few ${TREE_L3_GLASS} hang from the bough overhead, where the branch's realm begins. One curly black iron lantern post stands at the walkway's front edge about a fifth of the way across, hung with a round paper lantern. A visitor added later by the game stands about one sixth of the frame's height tall; every tread, landing and ledge is sized for it.`,
+    scene: 'a walkway around the trunk of a colossal tree at night, where one stair climbs around the trunk and another winds down, and a great branch sets off east',
+    props: `along the top edge, clusters of dark leaves and a few hanging strands of moss from the upper left and upper right corners, no further down than a fifth of the frame, with the top middle third of the frame left empty magenta because the stair climbs out of the frame there in the scene behind; on the far left edge, a dark near leafy twig no wider than a tenth of the frame; along the bottom edge, below the walkway only (the bottom eighth of the frame), the dark tips of a few leafy branches, leaving the walkway and its lantern post uncovered.`,
+  }),
+  e1: treeSixLayers({
+    far: `a night sky with a scatter of small stars and soft navy clouds lit cream on their upper edges, with no moon in this frame; the undersides of a few low clouds catch a faint wash of jewel colours, ruby, amber and sapphire, as if from coloured glass far below.`,
+    horizon: TREE_L3_HORIZON,
+    mid: 'the rounded crowns of other great trees far away across a misty valley, rising to about this height, with a few tiny lantern points among their boughs, some warm gold and some faintly coloured like glass.',
+    // The first round's four scenes each missed: a deep floor in perspective with three white mats where
+    // the bare stretches were asked, a bright pool of light across the middle, or the walkway a third of
+    // the frame too high. The second asks one plain strip of planks, evenly lit, with nothing on it.
+    composition: `THE SCREEN (2048x1152): partway up a colossal ancient tree at night, the common area of a great branch reaching east from the trunk, seen strictly from the side with no perspective tilt; the trunk stands in the neighbouring screen to the left, and no part of it is in this frame. ${TREE_L3_FLOOR} It arrives from the left edge at exactly that height, crosses the whole frame at that one height as one straight strip of planks of one depth, and leaves the right edge at exactly the same height, with nothing standing on it within a tenth of the frame of either edge. THE GATHERING PLACE: in the middle of the frame, close behind the walkway's back edge, a row of slim carved wooden posts, and between them hang strings of ${TREE_L3_GLASS}. The planks of the walkway stay plain, evenly lit wood from edge to edge, the same as everywhere else, with no mats, rugs, panels, markings, pools of light or anything standing on them: the game sets its own things there later. Behind the posts, the branch's own bark and a few smaller boughs rise into clusters of dark leaves at the top of the frame, a step darker and softer than the walkway so nothing behind looks like somewhere to stand, with open magenta sky between them. A visitor added later by the game stands about one sixth of the frame's height tall; the walkway is sized for it.`,
+    scene: 'a broad plaza of planks on a great branch of a colossal tree at night, hung with small lanterns of coloured glass',
+    props: `from the upper left corner and the upper right corner, a few clusters of dark leaves and fine chains hung with two or three ${TREE_L3_GLASS}, no further down than a fifth of the frame, with the top middle third of the frame left empty magenta; along the bottom edge, below the walkway only (the bottom eighth of the frame), the dark tips of a few leafy branches, low and sparse, leaving the walkway completely uncovered; no moon and no large glow anywhere.`,
+  }),
+  e2: treeSixLayers({
+    far: `a wide, open night sky with a scatter of small stars and soft navy clouds lit cream on their upper edges, with no moon in this frame; far away among the misty crowns near the horizon, a few small faint glimmers of jewel-coloured light.`,
+    horizon: TREE_L3_HORIZON,
+    mid: 'the rounded crowns of two or three other great trees far away across a misty valley, the nearest on the left, rising to about this height, with a few tiny lantern points among their boughs.',
+    composition: `THE SCREEN (2048x1152): partway up a colossal ancient tree at night, the far reach of a great branch, where it narrows toward its tip, seen from the side; the trunk is two screens away to the left, and no part of it is in this frame. ${TREE_L3_FLOOR} It arrives from the left edge at exactly that height as a plain, level run of planks with nothing standing on it within a tenth of the frame of the left edge, and runs to about two thirds of the way across, where it ends at a low carved wooden railing; beyond the railing the bare branch narrows and rises toward the right edge. THE DOORWAY: about a third of the way across, at the back of the walkway, a tall pointed archway of carved dark wood set with panels of coloured glass in ruby, amber, emerald and sapphire, about two visitors' heights tall, standing on the walkway; its opening is plain, dark and bare, with nothing in it and no glow, for a doorway the game marks later. THE WAY UP: from the railing to the branch's tip at the upper right, a stair of perches, each a short hop to the right of the last and about two thirds of a visitor's height higher: a flat-topped knot of bark on the branch, a small square platform of planks on a twig, a broad shelf fungus, and a second small platform of planks; the last carries on up to a small, flat, round perch of pale wood at the very tip of the branch, about three and a third visitors' heights above the walkway, left completely plain and bare for a thing the game adds later. Every perch has a broad, flat, clearly lit top. Strings of ${TREE_L3_GLASS} hang along the branch above the walkway. A visitor added later by the game stands about one sixth of the frame's height tall; every perch is sized for it.`,
+    scene: 'a walkway along a great branch of a colossal tree at night, with a pointed archway of coloured glass and a stair of perches up to the branch\'s tip',
+    props: `from the upper left corner only, a few clusters of dark leaves and fine chains hung with two or three ${TREE_L3_GLASS}, no further down than a sixth of the frame; the whole right half of the top of the frame stays empty magenta, because high perches stand there in the scene behind; along the bottom edge, below the walkway only (the bottom eighth of the frame), the small dark tips of a few leafy branches, low and sparse, leaving the walkway, the archway and the railing completely uncovered; no moon and no large glow anywhere.`,
+  }),
+};
+
+/** Level 3's screens, each in four painted jobs: `tree-l3-<screen>-bg|mid|scene|fg` (OP-160). */
+const TREE_L3_PROMPTS = treeLevelPrompts(3, TREE_L3_SCREENS);
+export const TREE_L3_KEYS = Object.keys(TREE_L3_PROMPTS);
+const TREE_L3_JOBS = treeLevelJobs(3, { 0: 4301, e1: 4305, e2: 4309 }, TREE_L3_PROMPTS);
+Object.assign(PROMPTS, TREE_L3_PROMPTS);
+HELPER_KEYS.push(...TREE_L3_KEYS.filter((k) => k.endsWith('-scene')));
+JOBS.push(...TREE_L3_JOBS);
+
+// ---- Level 3's joins, colour-coded maps and top strips (OP-160), made as level 4's were (OP-159) ----
+// The three picked scenes, moved onto the ground line (93, 166 and 173 room px), side by side make a row
+// of 6144x1152 with joins at x 2048 and 4096. Each join is mended by an edit of a square across it (`cut
+// tree-l3-seam-<a>-<b> --base-key tree-l3-0-back --base <0>,<e1>,<e2> --box <J-576>,0,<J+576>,1152 --half`)
+// pasted back into the row (`patch tree-l3-0-back ... --at <J-576>,0 --box <x0>,0,<x1>,1152 --threshold 0
+// --join 96`). At the first join the box (192..736) stops short of the foot of the plaza's arching bough,
+// so the bough stays the scene's own; at the second it is level 4's (192..960).
+const TREE_L3_SEAM_PROMPTS = {
+  'tree-l3-seam-0-e1': treeSeam(
+    `the end of a level walkway of pale wooden planks under open sky, a carved wooden railing post at the left edge, and above it a great leafy bough hung with small lanterns of coloured glass in ruby, amber, emerald and sapphire`,
+    `clusters of dark leaves along the top, a dark twisting branch reaching down out of them, and the foot of a great mossy bough that rises from just behind the same walkway and arches away to the right`,
+    `the walkway of pale planks runs on unbroken across the middle at the same height, one level of planks of one size with one straight front edge, its thick timber edge running on below; the leafy bough with its lanterns of coloured glass on the left reaches on into the dark clusters of leaves on the right, so the leaves run on across the top of the frame; open magenta sky stays between the leaves and the walkway, and nothing stands on the walkway in the middle. The twisting branch and the foot of the mossy bough on the right stay exactly where they are.`,
+  ),
+  'tree-l3-seam-e1-e2': treeSeam(
+    `clusters of dark leaves along the top, and below them the far end of a great dark mossy bough with small glowing knots, arching down from the left toward the walkway, a small amber glass lantern hanging from it`,
+    `a great bough of the tree rising from just behind the same walkway up out of the top of the frame, wound with ropes hung with small lanterns of coloured glass, with dark leafy bushes behind it on the right`,
+    `the mossy bough arching down on the left reaches the walkway's back edge and grows into the foot of the great bough rising on the right, as one bough that dips to the walkway and rises again; the dark leaves along the top run on into the rising bough's branches; open magenta sky stays above the walkway between them; the walkway of pale planks runs on unbroken across the middle at the same height, one level of planks of one size with one straight front edge, its thick timber edge running on below, and nothing stands on the walkway in the middle.`,
+  ),
+};
+export const TREE_L3_SEAM_KEYS = Object.keys(TREE_L3_SEAM_PROMPTS);
+const TREE_L3_SEAM_JOBS = TREE_L3_SEAM_KEYS.map((key, i) => ({
+  key,
+  // A detail edit, not a screen: a helper, patched into the row of the three screens' back sceneries.
+  kind: 'anchor',
+  derives: key.replace('tree-l3-seam-', '').split('-').map((s) => `tree-l3-${s}-back`),
+  realm: 'tree',
+  optional: true,
+  size: '1152x1152',
+  seed: 4381 + 10 * i,
+  variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "a crop across the join of two of the level's screens", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L3_SEAM_PROMPTS[key],
+}));
+Object.assign(PROMPTS, TREE_L3_SEAM_PROMPTS);
+HELPER_KEYS.push(...TREE_L3_SEAM_KEYS);
+JOBS.push(...TREE_L3_SEAM_JOBS);
+
+// Level 3's colour-coded maps: each an edit of one screen of the mended row (`cut tree-l3-<screen>-codes
+// --base-key tree-l3-0-back --box <i*2048>,0,<(i+1)*2048>,1152 --half`), read by `split --box`. Only
+// screen 0 has a front prop, its lantern post; the plaza's and the far reach's maps are green alone, and
+// those two screens have no front layer.
+const TREE_L3_CODES = {
+  // The picked scene (seed 4322): the walkway around the trunk, the stair's treads up the trunk's front
+  // to a landing on its right side, the stairwell's railing right of the trunk, one lantern post.
+  'tree-l3-0-codes': treeCodes({
+    stand: `the long walkway of pale wooden planks from its rounded end at the left to the right edge of the frame, with its timber front edge; each pale wooden tread of the stair that climbs up and to the right across the front of the trunk; and the flat wooden landing at the top of those treads on the trunk's right side.`,
+    front: `the curly black iron lantern post standing at the walkway's front edge on the left, with the round lantern hanging from it.`,
+    keep: `the trunk and its bark, the stair's carved banister and every railing (the low railing at the back of the walkway on the left, the landing's railing and the low railing around the stairwell right of the trunk), the stair winding on up behind the landing, the boughs, the leaves and the lanterns of coloured glass hanging at the right, the leaves under the walkway,`,
+  }),
+  // The picked scene (seed 4325, second round): the walkway across the frame, a great mossy bough arching
+  // behind it, carved posts hung with lanterns of coloured glass.
+  'tree-l3-e1-codes': treeCodes({
+    stand: `the long walkway of pale wooden planks across the whole width of the frame, with its thick timber front edge.`,
+    front: `nothing: no thing in this frame stands in front of the walkway, so this map has no blue at all.`,
+    keep: `the great mossy bough arching behind the walkway, the carved wooden posts and the lanterns of coloured glass hanging between them, the boughs and the clusters of dark leaves along the top, the leaves under the walkway,`,
+  }),
+  // The picked scene (seed 4331): the walkway to a short railing, the archway on it, and six perches up
+  // the branch to its tip (a stump, a table of planks, a shelf fungus, two platforms, the round tip perch).
+  'tree-l3-e2-codes': treeCodes({
+    stand: `the walkway of pale wooden planks from the left edge to its end at the short carved railing, with its thick timber front edge; and every perch up the branch to the right: the cut stump, the small square table of planks, the broad shelf fungus, the two small platforms of planks higher up, and the small round flat perch of pale wood at the branch's tip.`,
+    front: `nothing: no thing in this frame stands in front of the walkway, so this map has no blue at all.`,
+    keep: `the great bough on the left and the branch the perches stand on, the pointed archway of carved wood and coloured glass with its dark opening, the short carved railing at the walkway's end, the ropes of lanterns of coloured glass, the leafy branches and bushes behind,`,
+  }),
+};
+export const TREE_L3_CODE_KEYS = Object.keys(TREE_L3_CODES);
+const TREE_L3_CODE_JOBS = TREE_L3_CODE_KEYS.map((key, i) => ({
+  key,
+  // A map, never published: `split` reads the screen's platforms (and screen 0's front prop) out of it.
+  kind: 'anchor',
+  derives: (key === 'tree-l3-0-codes' ? ['play', 'front'] : ['play']).map((l) => key.replace('-codes', `-${l}`)),
+  realm: 'tree',
+  optional: true,
+  size: '2048x1152',
+  seed: 4351 + 10 * i,
+  variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "the screen's painting at half size, to colour-code", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L3_CODES[key],
+}));
+Object.assign(PROMPTS, TREE_L3_CODES);
+HELPER_KEYS.push(...TREE_L3_CODE_KEYS);
+JOBS.push(...TREE_L3_CODE_JOBS);
+
+// The top strips of level 3's row. The move onto the ground line filled the top of each frame by
+// mirroring (119, 212 and 221 painted px): a gold crack on screen 0's trunk meets its reflection in a
+// point, the plaza's canopy meets its own in V shapes, and over the far reach a great bough's branches
+// meet theirs in arrowheads, its lanterns standing on their ropes. One edit per screen repaints the strip
+// (`cut tree-l3-top-<screen> --base-key tree-l3-0-back --base <row> --box <i*2048>,0,<(i+1)*2048>,1152
+// --half`), and only the strip goes back into the row (`patch tree-l3-0-back --base <row> --edit-key
+// tree-l3-top-<screen> --at <i*2048>,0 --box 0,0,2048,<220|300|310> --threshold 0 --join 96`), above
+// every platform, so the maps, the splits and the play and front layers stand.
+/** The edit that repaints the mirrored top strip of one screen of a row. */
+function treeTopStrip(mirrored, continues, keep) {
+  return `Edit this painting: one screen of the playfield layer of a side-scrolling 2D game, in which the open sky is flat pure magenta #FF00FF so that the game can cut it out. Along the top of the frame, about the top fifth, the painting was filled by mirroring the strip just below it, so everything up there is an upside-down reflection that meets itself along a straight horizontal line: ${mirrored} Repaint only that top strip, the top quarter of the frame, so that everything continues naturally up and out of the top of the frame, with no reflection, line or seam anywhere: ${continues} Wherever the sky would show, the frame stays one flat, solid, uniform pure magenta #FF00FF, the same magenta as in the rest of the frame now, with no gradient, no clouds, no stars, no moon, no glow and no haze. Keep everything below the top strip exactly as it is (${keep} and the open magenta sky), and match its colours, light and brushwork in the repainted strip: the same strict side view with no perspective tilt, hand-painted 2D game art with clean cel-shaded shapes, soft painted gradients and crisp clean edges against the magenta. No text, letters or numbers anywhere. No owls, birds, animals, people or characters.`;
+}
+const TREE_L3_TOP_PROMPTS = {
+  'tree-l3-top-0': treeTopStrip(
+    `a glowing gold crack in the great trunk meets its own reflection in a point, and the leafy boughs on either side of the trunk meet theirs.`,
+    `the great trunk rises straight on up out of the frame, its bark and its few thin cracks of glowing gold sap running on unbroken; the leafy boughs on the left and the right of the trunk rise and spread on up and out of the top edge.`,
+    `the trunk, the stair, the landing, the railings, the walkway, the lantern post, the leaves and the lanterns of coloured glass already there`,
+  ),
+  'tree-l3-top-e1': treeTopStrip(
+    `the clusters of dark leaves and the dark boughs among them meet their own reflections in V shapes.`,
+    `the dark boughs rise on and branch outward, carrying clusters of dark leaves up out of the top edge, with a few small gaps of open sky between the clusters.`,
+    `the great mossy bough arching behind the walkway, the carved posts and the lanterns of coloured glass, the walkway and the leaves already there`,
+  ),
+  'tree-l3-top-e2': treeTopStrip(
+    `on the left, a great bough's branches meet their own reflections in pointed arrowheads, and its ropes hung with small lanterns of coloured glass are reflected, so that lanterns stand upside down on top of their ropes.`,
+    `the great bough on the left rises on up out of the top edge, its bark running on unbroken; its branches curve on upward and outward to the upper right, thinning, with a few clusters of dark leaves, never folding back on themselves; the ropes of lanterns hang in gentle downward curves from the branches, each lantern hanging below its rope on a short chain; the right half of the top of the frame stays open magenta sky.`,
+    `the great bough on the left, the lanterns of coloured glass already there, the pointed archway, the walkway, the branch with its perches climbing to the right`,
+  ),
+};
+export const TREE_L3_TOP_KEYS = Object.keys(TREE_L3_TOP_PROMPTS);
+const TREE_L3_TOP_JOBS = TREE_L3_TOP_KEYS.map((key, i) => ({
+  key,
+  // A detail edit, not a screen: a helper, patched into the row of the three screens' back sceneries.
+  kind: 'anchor',
+  derives: [`${key.replace('tree-l3-top-', 'tree-l3-')}-back`],
+  realm: 'tree',
+  optional: true,
+  size: '2048x1152',
+  seed: 4395 + 2 * i,
+  variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "one screen of the level's row, at half size", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L3_TOP_PROMPTS[key],
+}));
+Object.assign(PROMPTS, TREE_L3_TOP_PROMPTS);
+HELPER_KEYS.push(...TREE_L3_TOP_KEYS);
+JOBS.push(...TREE_L3_TOP_JOBS);
+
+// ---- Level 2, the high branch west (OP-161): three screens, room `l2` ----
+// Screen 0 is the trunk: the stair up to level 3 and the stairwell down to level 1, and the branch
+// leaving west. Screen -1 (`w1`) is the grove's common area, a broad run of planks hung with round
+// paper lanterns: the game draws its idol, its guardian and its small game, so the painting leaves
+// the planks bare. Screen -2 (`w2`) is the grove's adventure, the treetop diner (OP-165): a little
+// kitchen hut with a serving window and a bare counter, and a plain terrace beside it; the game draws
+// the stations, the tables, the dishes and the customers, so the painting leaves the counter's top
+// and the terrace empty. No parkour on this branch: the tip's bare perch is a single hop up. The
+// screens meet on plain runs of planks, as level 3's do, and the walkway sits six sevenths of the way
+// down as on level 3. No moon: it is only in the lobby's sky.
+const TREE_L2_HORIZON = `Below, a forest of rounded misty tree crowns, seen from above, spreads to the horizon in the lower third in layered dusk blue and navy, lighter toward the horizon; the bottom fifth of the frame is plain deep navy shadow with no detail (the game covers it with the walkway).`;
+const TREE_L2_LANTERNS = 'round paper lanterns glowing warm amber';
+const TREE_L2_SCREENS = {
+  0: treeSixLayers({
+    far: `a night sky with a scatter of small stars and soft navy clouds lit cream on their upper edges, with no moon in this frame; high across the top of the frame, the dark silhouettes of the colossal tree's own boughs and leaves reaching out from the trunk above, hung with a few tiny warm gold lantern points.`,
+    horizon: TREE_L2_HORIZON,
+    mid: 'in the left third and the right third of the frame, the dark rounded crowns of other great trees far away across a misty valley, rising to about this height, with a few tiny warm gold lantern points among their boughs; the middle third stays almost empty.',
+    composition: `THE SCREEN (2048x1152): partway up a colossal ancient tree at night, a landing on the trunk where a stair climbs up and another winds down, and where a great branch sets off west, seen from the side. The trunk rises through the middle of the frame, about two fifths of the frame's width, from below the walkway up out of the top edge: deep gnarled bark with a few thin cracks of glowing gold sap. ${TREE_L3_FLOOR} It runs across the whole width of the frame, built around the trunk. THE WAY UP: left of the middle, a stair of thick wooden plank treads fixed to the bark climbs from the walkway up and to the right across the front of the trunk in six broad treads, each about half a visitor's height above the last and about a visitor wide, to a small flat wooden landing on the trunk's right side about three visitors' heights above the walkway; from that landing the stair winds on up around the trunk and out of the top edge, lost among the leaves. A carved wooden banister on slim posts runs along the outer edge of the treads. THE WAY DOWN: right of the trunk, set into the back of the walkway behind its unbroken front edge, an open stairwell edged at its back with a low carved wooden railing, where the stair's first worn steps wind down around the trunk into soft shadow. THE EDGES: at the far right the walkway ends against a great bough that grows up out of the trunk's side and curves up out of the top right corner, thick with leaves, so nothing leads on to the right. At the left edge the walkway leaves the frame at exactly the floor's height as a plain, level run of planks along the top of a great branch reaching away west, with nothing standing on it within a tenth of the frame of the left edge; above that run, near the left edge, the first few ${TREE_L2_LANTERNS} hang on a string from the branch's boughs. One curly black iron lantern post stands at the walkway's front edge about a fifth of the way across, hung with a round paper lantern. A visitor added later by the game stands about one sixth of the frame's height tall; every tread, landing and ledge is sized for it.`,
+    scene: 'a walkway around the trunk of a colossal tree at night, where one stair climbs around the trunk and another winds down, and a great branch sets off west',
+    props: `along the top edge, clusters of dark leaves and a few hanging strands of moss from the upper left and upper right corners, no further down than a fifth of the frame, with the top middle third of the frame left empty magenta because the stair climbs out of the frame there in the scene behind; on the far right edge, a dark near leafy twig no wider than a tenth of the frame; along the bottom edge, below the walkway only (the bottom eighth of the frame), the dark tips of a few leafy branches, leaving the walkway and its lantern post uncovered.`,
+  }),
+  w1: treeSixLayers({
+    far: `a night sky with a scatter of small stars and soft navy clouds lit cream on their upper edges, with no moon in this frame; far away among the misty crowns near the horizon, the warm amber glimmers of a little village of treehouses show in a few small clusters, and a few tiny pale gold firefly points drift high in the air.`,
+    horizon: TREE_L2_HORIZON,
+    mid: 'the rounded crowns of other great trees far away across a misty valley, rising to about this height, with the little steep shingled roofs of a few treehouses among their boughs and a few tiny warm amber lantern points.',
+    composition: `THE SCREEN (2048x1152): partway up a colossal ancient tree at night, the common area of a great branch reaching west from the trunk, seen strictly from the side with no perspective tilt; the trunk stands in the neighbouring screen to the right, and no part of it is in this frame. ${TREE_L3_FLOOR} It arrives from the right edge at exactly that height, crosses the whole frame at that one height as one straight strip of planks of one depth, and leaves the left edge at exactly the same height, with nothing standing on it within a tenth of the frame of either edge. THE GATHERING PLACE: in the middle of the frame, close behind the walkway's back edge, a row of slim carved wooden posts, and between them hang strings of ${TREE_L2_LANTERNS}; behind the posts, among the branch's own boughs, soft cushions of moss and the little steep shingled roof of a small treehouse hut peek from the clusters of dark leaves, its one round window dark, all a step darker and softer than the walkway so nothing behind looks like somewhere to stand. The planks of the walkway stay plain, evenly lit wood from edge to edge, the same as everywhere else, with no mats, rugs, panels, markings, pools of light or anything standing on them: the game sets its own things there later. Above, the boughs rise into clusters of dark leaves at the top of the frame, with open magenta sky between them. A visitor added later by the game stands about one sixth of the frame's height tall; the walkway is sized for it.`,
+    scene: 'a broad run of planks on a great branch of a colossal tree at night, hung with round paper lanterns, with a small treehouse roof among the leaves behind',
+    props: `from the upper left corner and the upper right corner, a few clusters of dark leaves and two or three ${TREE_L2_LANTERNS} hanging on short cords, no further down than a fifth of the frame, with the top middle third of the frame left empty magenta; along the bottom edge, below the walkway only (the bottom eighth of the frame), the dark tips of a few leafy branches, low and sparse, leaving the walkway completely uncovered; no moon and no large glow anywhere.`,
+  }),
+  w2: treeSixLayers({
+    far: `a wide, open night sky with a scatter of small stars and soft navy clouds lit cream on their upper edges, with no moon in this frame; far away among the misty crowns near the horizon, the warm amber glimmers of a little village of treehouses, and a few tiny pale gold firefly points drifting high in the air.`,
+    horizon: TREE_L2_HORIZON,
+    mid: 'the rounded crowns of two or three other great trees far away across a misty valley, the nearest on the right, rising to about this height, with the little steep shingled roofs of a few treehouses among their boughs and a few tiny warm amber lantern points.',
+    composition: `THE SCREEN (2048x1152): partway up a colossal ancient tree at night, the far reach of a great branch where a little treetop diner stands, seen strictly from the side with no perspective tilt; the trunk is two screens away to the right, and no part of it is in this frame. ${TREE_L3_FLOOR} It arrives from the right edge at exactly that height as a plain, level run of planks with nothing standing on it within a tenth of the frame of the right edge, and runs to the left to about a tenth of the frame from the left edge, where it ends at a low carved wooden railing; beyond the railing the bare tip of the branch curves a little up and out of the left edge, and nothing leads on to the left. THE DINER: left of the middle, standing on the branch close behind the walkway's back edge, a small treetop kitchen hut: a little house of warm wooden planks with a steep shingled roof, a short brick chimney and a round dark window in its gable, built over the branch and about two and a half visitors' heights tall. Its front, facing the walkway, is open as one wide serving window under a striped scalloped awning, and under the window a long plain wooden counter at a visitor's chest height runs along the hut's front at the walkway's back edge, its top bare, plain and empty, with nothing on it (the game sets its stations there later); inside the window the kitchen is dim and plain, with a shelf of jars and a hanging pot, and no glow. ${TREE_L2_LANTERNS} hang from the hut's eaves. THE TERRACE: right of the hut, the walkway is a plain open terrace, a stretch of evenly lit planks with nothing standing on it, edged at its back by a low carved wooden railing on slim posts hung with a string of ${TREE_L2_LANTERNS}; the game sets its tables there later. Behind the railing the branch's own boughs rise into clusters of dark leaves with soft cushions of moss, a step darker and softer than the walkway so nothing behind looks like somewhere to stand. THE TIP: at the far left, just beyond the walkway's end railing, a small flat round perch of pale wood sits on the branch's tip about half a visitor's height above the walkway, a single hop up, left completely plain and bare for a thing the game adds later. A visitor added later by the game stands about one sixth of the frame's height tall; the counter, the hut and the perch are sized for it.`,
+    scene: 'a walkway along a great branch of a colossal tree at night, with a little treetop kitchen hut and a lantern-lit terrace',
+    props: `from the upper right corner only, a few clusters of dark leaves and two or three ${TREE_L2_LANTERNS} hanging on short cords, no further down than a sixth of the frame; the whole left half of the top of the frame stays empty magenta, because the hut's roof stands there in the scene behind; along the bottom edge, below the walkway only (the bottom eighth of the frame), the small dark tips of a few leafy branches, low and sparse, leaving the walkway, the counter and the railings completely uncovered; no moon and no large glow anywhere.`,
+  }),
+};
+
+/** Level 2's screens, each in four painted jobs: `tree-l2-<screen>-bg|mid|scene|fg` (OP-161). */
+const TREE_L2_PROMPTS = treeLevelPrompts(2, TREE_L2_SCREENS);
+export const TREE_L2_KEYS = Object.keys(TREE_L2_PROMPTS);
+const TREE_L2_JOBS = treeLevelJobs(2, { 0: 4201, w1: 4205, w2: 4209 }, TREE_L2_PROMPTS);
+Object.assign(PROMPTS, TREE_L2_PROMPTS);
+HELPER_KEYS.push(...TREE_L2_KEYS.filter((k) => k.endsWith('-scene')));
+JOBS.push(...TREE_L2_JOBS);
+
+// ---- Level 2's joins, colour-coded maps and top strips (OP-161), made as level 3's were (OP-160) ----
+// The three picked scenes, moved onto the ground line (101, 88 and 65 room px), side by side west to
+// east (the diner, the common area, the trunk) make a row of 6144x1152 with joins at x 2048 and 4096,
+// held under `tree-l2-w2-back`. Each join is mended by an edit of a square across it (`cut
+// tree-l2-seam-<a>-<b> --base-key tree-l2-w2-back --base <w2>,<w1>,<0> --box <J-576>,0,<J+576>,1152 --half`)
+// pasted back into the row (`patch tree-l2-w2-back ... --at <J-576>,0 --box 192,0,960,1152 --threshold 0 --join 96`).
+const TREE_L2_SEAM_PROMPTS = {
+  'tree-l2-seam-w2-w1': treeSeam(
+    `the end of a level walkway of pale wooden planks, a low carved wooden railing on slim posts along its back edge hung with a string of round paper lanterns glowing warm amber, and clusters of dark leaves along the top`,
+    `the same walkway of pale wooden planks under open sky, a great dark leafy bough reaching in from the upper right, and dark leaves under the walkway`,
+    `the walkway of pale planks runs on unbroken across the middle at the same height, one level of planks of one size with one straight front edge, its thick timber edge running on below; the railing with its string of lanterns ends in a last slim post a little left of the middle, and right of it the walkway's back edge is open with nothing standing on it; the clusters of dark leaves along the top run on into the leafy bough on the right, with open magenta sky between the leaves and the walkway; the dark leaves under the walkway run on.`,
+  ),
+  'tree-l2-seam-w1-0': treeSeam(
+    `a level walkway of pale wooden planks under open sky, with clusters of dark leaves and the end of a great dark bough along the top`,
+    `the same walkway of pale wooden planks running on as a plain run of planks, a string of round paper lanterns glowing warm amber hanging from a bough above it, and a curly black iron lantern post standing at the walkway's front edge near the right edge`,
+    `the walkway of pale planks runs on unbroken across the middle at the same height, one level of planks of one size with one straight front edge, its thick timber edge running on below, and nothing stands on the walkway in the middle; the clusters of dark leaves along the top run on from the left into the bough that carries the lantern string on the right, with open magenta sky between the leaves and the walkway; the dark leaves under the walkway run on. The lantern post at the right stays exactly where it is, the only post in the frame.`,
+  ),
+};
+export const TREE_L2_SEAM_KEYS = Object.keys(TREE_L2_SEAM_PROMPTS);
+const TREE_L2_SEAM_JOBS = TREE_L2_SEAM_KEYS.map((key, i) => ({
+  key,
+  // A detail edit, not a screen: a helper, patched into the row of the three screens' back sceneries.
+  kind: 'anchor',
+  derives: key.replace('tree-l2-seam-', '').split('-').map((s) => `tree-l2-${s}-back`),
+  realm: 'tree',
+  optional: true,
+  size: '1152x1152',
+  seed: 4281 + 10 * i,
+  variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "a crop across the join of two of the level's screens", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L2_SEAM_PROMPTS[key],
+}));
+Object.assign(PROMPTS, TREE_L2_SEAM_PROMPTS);
+HELPER_KEYS.push(...TREE_L2_SEAM_KEYS);
+JOBS.push(...TREE_L2_SEAM_JOBS);
+
+// Level 2's colour-coded maps: each an edit of one screen of the mended row (`cut tree-l2-<screen>-codes
+// --base-key tree-l2-w2-back --box <i*2048>,0,<(i+1)*2048>,1152 --half`, i = 0 for the diner, 1 for the
+// common area, 2 for the trunk), read by `split --box`. Only the trunk screen has a front prop, its
+// lantern post; the diner's and the common area's maps are green alone, and those two screens have no
+// front layer.
+const TREE_L2_CODES = {
+  // The picked scene (seed 4222): the walkway across the frame, the stair's treads up the trunk's front
+  // to a landing on its right side, the stairwell's railing right of the trunk, one lantern post at the left.
+  'tree-l2-0-codes': treeCodes({
+    stand: `the long walkway of pale wooden planks across the whole width of the frame, with its timber front edge; each pale wooden tread of the stair that climbs up and to the right across the front of the trunk; and the flat wooden landing at the top of those treads on the trunk's right side.`,
+    front: `the curly black iron lantern post standing at the walkway's front edge on the left, with the round lantern hanging from it.`,
+    keep: `the trunk and its bark, the stair's carved banister and every railing (the landing's railing and the low railing around the stairwell right of the trunk), the stair winding on up behind the landing, the boughs, the leaves and the string of lanterns at the upper left, the leaves under the walkway,`,
+  }),
+  // The picked scene (seed 4226): the walkway across the frame, slim posts behind it with a string of
+  // lanterns, a great bough and a small dark treehouse among the leaves behind.
+  'tree-l2-w1-codes': treeCodes({
+    stand: `the long walkway of pale wooden planks across the whole width of the frame, with its thick timber front edge.`,
+    front: `nothing: no thing in this frame stands in front of the walkway, so this map has no blue at all.`,
+    keep: `the slim carved posts and the string of lanterns behind the walkway, the great bough, the little dark treehouse and the moss among the leaves behind, the clusters of dark leaves along the top, the leaves under the walkway,`,
+  }),
+  // The picked scene (seed 4229): the walkway from the right edge to the railing at its end on the left,
+  // the kitchen hut with its counter and awning, the terrace railing with its lanterns, the tip's perch.
+  'tree-l2-w2-codes': treeCodes({
+    stand: `the long walkway of pale wooden planks from the right edge of the frame to its end at the low railing on the left, with its thick timber front edge; and the small round flat perch of pale wood at the very tip of the branch at the far left, beyond the railing.`,
+    front: `nothing: no thing in this frame stands in front of the walkway, so this map has no blue at all.`,
+    keep: `the kitchen hut with its roof, chimney, awning, serving window and counter, every railing (the low railing at the walkway's end and the terrace's railing with its posts), the strings of lanterns, the bare tip of the branch under the perch, the boughs and the clusters of dark leaves behind and along the top, the leaves under the walkway,`,
+  }),
+};
+export const TREE_L2_CODE_KEYS = Object.keys(TREE_L2_CODES);
+const TREE_L2_CODE_JOBS = TREE_L2_CODE_KEYS.map((key, i) => ({
+  key,
+  // A map, never published: `split` reads the screen's platforms (and the trunk screen's front prop) out of it.
+  kind: 'anchor',
+  derives: (key === 'tree-l2-0-codes' ? ['play', 'front'] : ['play']).map((l) => key.replace('-codes', `-${l}`)),
+  realm: 'tree',
+  optional: true,
+  size: '2048x1152',
+  seed: 4251 + 10 * i,
+  variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "the screen's painting at half size, to colour-code", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L2_CODES[key],
+}));
+Object.assign(PROMPTS, TREE_L2_CODES);
+HELPER_KEYS.push(...TREE_L2_CODE_KEYS);
+JOBS.push(...TREE_L2_CODE_JOBS);
+
+// The top strips of level 2's row, repainted as level 3's were: one edit per screen (`cut tree-l2-top-<screen>
+// --base-key tree-l2-w2-back --base <row> --box <i*2048>,0,<(i+1)*2048>,1152 --half`), and only the strip goes
+// back into the row (`patch tree-l2-w2-back --base <row> --edit-key tree-l2-top-<screen> --at <i*2048>,0
+// --box 0,0,2048,<h> --threshold 0 --join 96`), above every platform.
+const TREE_L2_TOP_PROMPTS = {
+  'tree-l2-top-0': treeTopStrip(
+    `the great trunk and the leafy boughs on either side of it meet their own reflections, and the string of lanterns at the upper left is reflected.`,
+    `the great trunk rises straight on up out of the frame, its bark and its few thin cracks of glowing gold sap running on unbroken; the leafy boughs on the left and the right of the trunk rise and spread on up and out of the top edge; the string of lanterns at the upper left hangs in a gentle downward curve from the bough above it, each lantern hanging below the string.`,
+    `the trunk, the stair, the landing, the railings, the walkway, the lantern post, the leaves and the lanterns already there`,
+  ),
+  'tree-l2-top-w1': treeTopStrip(
+    `the clusters of dark leaves and the dark boughs among them meet their own reflections in V shapes, and the string of lanterns is reflected, so that lanterns stand upside down above it.`,
+    `the dark boughs rise on and branch outward, carrying clusters of dark leaves up out of the top edge, with a few small gaps of open sky between the clusters; the string of lanterns hangs in a gentle downward curve from the boughs, each lantern hanging below the string.`,
+    `the great bough behind the walkway, the slim posts and the lanterns, the little treehouse among the leaves, the walkway and the leaves already there`,
+  ),
+  'tree-l2-top-w2': treeTopStrip(
+    `the clusters of dark leaves and the dark boughs among them meet their own reflections in V shapes, and the roof of the kitchen hut and its chimney may meet theirs.`,
+    `the dark boughs rise on and branch outward, carrying clusters of dark leaves up out of the top edge, with a few small gaps of open sky between the clusters; the hut's steep shingled roof and its chimney end where they do now, with open sky or leaves above them.`,
+    `the kitchen hut with its awning, window and counter, the railings and their strings of lanterns, the walkway, the tip's perch and the leaves already there`,
+  ),
+};
+export const TREE_L2_TOP_KEYS = Object.keys(TREE_L2_TOP_PROMPTS);
+const TREE_L2_TOP_JOBS = TREE_L2_TOP_KEYS.map((key, i) => ({
+  key,
+  // A detail edit, not a screen: a helper, patched into the row of the three screens' back sceneries.
+  kind: 'anchor',
+  derives: [`${key.replace('tree-l2-top-', 'tree-l2-')}-back`],
+  realm: 'tree',
+  optional: true,
+  size: '2048x1152',
+  seed: 4295 + 2 * i,
+  variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "one screen of the level's row, at half size", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L2_TOP_PROMPTS[key],
+}));
+Object.assign(PROMPTS, TREE_L2_TOP_PROMPTS);
+HELPER_KEYS.push(...TREE_L2_TOP_KEYS);
+JOBS.push(...TREE_L2_TOP_JOBS);
+
+// ---- Level 5, the canopy (OP-158): six screens in two rooms ----
+// The nests street (room `l5w`): screen -2 (`w2`) nest doors 5 to 8 and the parkour bough 6, screen -1
+// (`w1`) nest doors 1 to 4 and the mirror. The canopy (room `l5`): screen 0 the trunk's crown, where a
+// doorway in the trunk leads to the nests street; +1 (`e1`) the park entrance, its arch, the front gate
+// and the stair down to level 4; +2 (`e2`) the lounge and the gift shop; +3 (`e3`) the parkour bough 7.
+// The game draws the doorway marks, the gate's sale, the mirror, the shop's counter, the benches and
+// the finds, so the paintings leave their places bare. The walkway sits six sevenths of the way down as
+// on levels 2 and 3. No moon: it is only in the lobby's sky.
+const TREE_L5_HORIZON = `Far below, a far forest of rounded misty tree crowns, seen from high above, spreads to the horizon in the lower third in layered dusk blue and navy, lighter toward the horizon; the bottom fifth of the frame is plain deep navy shadow with no detail (the game covers it with the walkway).`;
+const TREE_L5_SKY = `a wide night sky with a scatter of small stars and soft navy clouds lit cream on their upper edges, with no moon in this frame; along the top edge, the dark silhouettes of the canopy's own highest leaves and twigs reach in from above.`;
+const TREE_L5_MID = 'the dark rounded crowns of other great trees far away across a misty valley, rising to about this height, with a few tiny warm gold lantern points among their boughs';
+const TREE_L5_PROPS = (corners) => `${corners} along the bottom edge, below the walkway only (the bottom eighth of the frame), the small dark tips of a few leafy branches, low and sparse, leaving the walkway and everything standing on it completely uncovered; no moon and no large glow anywhere.`;
+const TREE_L5_NEST = `a small, snug treehouse hut of warm wooden planks with a steep shingled roof and a round dark window in its gable, standing on the branch close behind the walkway's back edge, about two visitors' heights tall, with a round wooden door of curved planks in its front at the walkway's level, the door plain, dark and bare, with a brass ring handle and a small lantern on a hook beside it`;
+const TREE_L5_PARKOUR = (dir) => `THE PERCHES: above the walkway, standable tops rise toward the ${dir} in three steps of difficulty: first a short stair of three flat-topped burls on the branch, each about half a visitor's height above the last and a hop apart; then, across a clear gap about two visitors wide, a small square platform of planks on a side branch, about two visitors' heights above the walkway; then, across a long clear gap about four visitors wide, a broad shelf fungus with a flat top on a second branch, about three visitors' heights up, reached by gliding; and beyond it, at the branch's tip at the ${dir} edge, a small flat wooden platform about three and a half visitors' heights above the walkway, left completely plain and bare (a bench and a reward appear there later). Every perch has a broad, flat, clearly lit top.`;
+const TREE_L5_SCREENS = {
+  w2: treeSixLayers({
+    far: TREE_L5_SKY,
+    horizon: TREE_L5_HORIZON,
+    mid: `${TREE_L5_MID}, the nearest on the left; the right third stays almost empty.`,
+    composition: `THE SCREEN (2048x1152): the canopy of a colossal ancient tree at night, the far west end of the street of nests along a great bough, seen strictly from the side with no perspective tilt; the trunk is two screens away to the right, and no part of it is in this frame. ${TREE_L3_FLOOR} It arrives from the right edge at exactly that height as a plain, level run of planks with nothing standing on it within a tenth of the frame of the right edge, and runs to the left to about a third of the way across, where it ends at a low carved wooden railing; beyond the railing the bare bough narrows and rises toward the left edge. THE NESTS: along the walkway, between the railing and the right edge, stand four of ${TREE_L5_NEST}, evenly spaced, all the same size, their doors all at the walkway's level, with a slim carved post hung with a round paper lantern between each pair. ${TREE_L5_PARKOUR('left')} Above everything, the canopy's leaves close over in dark clusters, with open magenta sky between them. A visitor added later by the game stands about one sixth of the frame's height tall; every door, hop, gap and ledge is sized for it.`,
+    scene: 'a walkway along a great bough in the canopy of a colossal tree at night, lined with four small treehouse huts, ending at a stair of perches toward the bough\'s tip',
+    props: TREE_L5_PROPS(`from the upper right corner only, a few clusters of dark leaves and a few hanging strands of moss, no further down than a sixth of the frame; the whole left half of the top of the frame stays empty magenta, because high perches stand there in the scene behind;`),
+  }),
+  w1: treeSixLayers({
+    far: TREE_L5_SKY,
+    horizon: TREE_L5_HORIZON,
+    mid: `${TREE_L5_MID}; the middle third stays almost empty.`,
+    composition: `THE SCREEN (2048x1152): the canopy of a colossal ancient tree at night, the street of nests along a great bough, seen strictly from the side with no perspective tilt; the trunk stands in the neighbouring screen to the right, and no part of it is in this frame. ${TREE_L3_FLOOR} It arrives from the right edge at exactly that height, crosses the whole frame at that one height as one straight strip of planks of one depth, and leaves the left edge at exactly the same height, with nothing standing on it within a tenth of the frame of either edge. THE NESTS: along the walkway stand four of ${TREE_L5_NEST}, evenly spaced across the frame, all the same size, their doors all at the walkway's level, with a slim carved post hung with a round paper lantern between each pair; about halfway across, between two of the huts, a plain stretch of the walkway's back edge is left open and empty, with only the bough's bark behind it (the game sets a mirror there later). Above everything, the canopy's leaves close over in dark clusters, with open magenta sky between them. A visitor added later by the game stands about one sixth of the frame's height tall; every door is sized for it.`,
+    scene: 'a walkway along a great bough in the canopy of a colossal tree at night, lined with four small treehouse huts with round doors',
+    props: TREE_L5_PROPS(`from the upper left corner and the upper right corner, a few clusters of dark leaves and a few hanging strands of moss, no further down than a fifth of the frame, with the top middle third of the frame left empty magenta;`),
+  }),
+  0: treeSixLayers({
+    far: `a wide night sky with a scatter of small stars and soft navy clouds lit cream on their upper edges, with no moon in this frame; the sky is open to the top edge, with only a few tiny leaves at the very corners.`,
+    horizon: TREE_L5_HORIZON,
+    mid: `in the left third and the right third of the frame, ${TREE_L5_MID}; the middle third stays almost empty.`,
+    composition: `THE SCREEN (2048x1152): the crown of a colossal ancient tree at night, where the trunk ends and the canopy's great boughs spread, seen from the side. The trunk rises through the middle of the frame, about two fifths of the frame's width, from below the walkway to about two thirds of the way up, where it ends in a crown of four or five great boughs that spread up and out of the top and the sides of the frame, thick with clusters of dark leaves: deep gnarled bark with a few thin cracks of glowing gold sap. ${TREE_L3_FLOOR} It runs across the whole width of the frame, built around the trunk. THE WAY WEST: on the trunk's left side, at the walkway's level, a tall rounded archway cut into the bark, about two visitors' heights tall, its opening plain, dark and bare, with nothing in it and no glow (a doorway the game marks later). THE EDGES: at the far left the walkway ends against a great bough that grows up out of the trunk's side and curves up out of the top left corner, thick with leaves, so nothing leads on to the left. At the right edge the walkway leaves the frame at exactly the floor's height as a plain, level run of planks along the top of a great bough reaching away east, with nothing standing on it within a tenth of the frame of the right edge. Strings of round paper lanterns hang between the boughs of the crown, and one curly black iron lantern post stands at the walkway's front edge about a fifth of the way across, hung with a round paper lantern. A visitor added later by the game stands about one sixth of the frame's height tall; the archway and the walkway are sized for it.`,
+    scene: 'a walkway around the top of the trunk of a colossal tree at night, where the trunk ends in a crown of great boughs',
+    props: TREE_L5_PROPS(`along the top edge, clusters of dark leaves and a few hanging strands of moss from the upper left and upper right corners, no further down than a fifth of the frame, with the top middle third of the frame left empty magenta because the crown's boughs rise out of the frame there in the scene behind;`),
+  }),
+  e1: treeSixLayers({
+    far: TREE_L5_SKY,
+    horizon: TREE_L5_HORIZON,
+    mid: `${TREE_L5_MID}, the nearest on the right; the left third stays almost empty.`,
+    composition: `THE SCREEN (2048x1152): the canopy of a colossal ancient tree at night, the park's entrance on a great bough reaching east from the trunk, seen strictly from the side with no perspective tilt; the trunk stands in the neighbouring screen to the left, and no part of it is in this frame. ${TREE_L3_FLOOR} It arrives from the left edge at exactly that height, crosses the whole frame at that one height as one straight strip of planks of one depth, and leaves the right edge at exactly the same height, with nothing standing on it within a tenth of the frame of either edge. THE ENTRANCE: in the middle of the frame, a grand carved wooden archway spans the walkway from its back edge, about three visitors' heights tall, its two posts standing at the walkway's back edge and its curved top hung with a string of round paper lanterns and blank pennants in navy and gold; under the arch the walkway runs on plain and bare, with no gate, no turnstile, no sign and no glow (the game sets its gate there later). THE WAY DOWN: right of the arch, set into the back of the walkway behind its unbroken front edge, an open stairwell edged at its back with a low carved wooden railing, where worn steps wind down around a great limb into soft shadow. Behind the walkway, the bough's bark and a few smaller boughs rise into clusters of dark leaves at the top of the frame, a step darker and softer than the walkway, with open magenta sky between them. A visitor added later by the game stands about one sixth of the frame's height tall; the archway and the walkway are sized for it.`,
+    scene: 'a walkway along a great bough in the canopy of a colossal tree at night, spanned by a grand carved archway hung with lanterns and pennants',
+    props: TREE_L5_PROPS(`from the upper left corner and the upper right corner, a few clusters of dark leaves and a few hanging strands of moss, no further down than a fifth of the frame, with the top middle third of the frame left empty magenta because the archway stands there in the scene behind;`),
+  }),
+  e2: treeSixLayers({
+    far: TREE_L5_SKY,
+    horizon: TREE_L5_HORIZON,
+    mid: `${TREE_L5_MID}; the middle third stays almost empty.`,
+    composition: `THE SCREEN (2048x1152): the canopy of a colossal ancient tree at night, the lounge and the gift shop on a great bough, seen strictly from the side with no perspective tilt; the trunk is two screens away to the left, and no part of it is in this frame. ${TREE_L3_FLOOR} It arrives from the left edge at exactly that height, crosses the whole frame at that one height as one straight strip of planks of one depth, and leaves the right edge at exactly the same height, with nothing standing on it within a tenth of the frame of either edge. THE SHOP: left of the middle, standing on the branch close behind the walkway's back edge, a small gift shop hut of warm wooden planks with a steep shingled roof and a round dark window in its gable, about two and a half visitors' heights tall; its front, facing the walkway, is open as one wide serving window under a striped scalloped awning, and under the window a long plain wooden counter at a visitor's chest height runs along the hut's front at the walkway's back edge, its top bare, plain and empty, with nothing on it (the game sets its wares there later); inside the window, dim shelves of small jars and folded cloth, and no glow. THE LOUNGE: right of the middle, behind the walkway's back edge, a cosy nook: a low carved wooden rail with slim posts hung with round paper lanterns, soft cushions of moss on the bough behind it and a hanging lantern, all a step darker and softer than the walkway, with the walkway's planks in front of it plain and empty (the game sets its seats there later). Behind everything, the bough's bark and a few smaller boughs rise into clusters of dark leaves at the top of the frame, with open magenta sky between them. A visitor added later by the game stands about one sixth of the frame's height tall; the counter, the hut and the walkway are sized for it.`,
+    scene: 'a walkway along a great bough in the canopy of a colossal tree at night, with a little gift shop hut and a lantern-lit lounge nook',
+    props: TREE_L5_PROPS(`from the upper left corner and the upper right corner, a few clusters of dark leaves and two or three round paper lanterns glowing warm amber hanging on short cords, no further down than a fifth of the frame, with the top middle third of the frame left empty magenta;`),
+  }),
+  e3: treeSixLayers({
+    far: TREE_L5_SKY,
+    horizon: TREE_L5_HORIZON,
+    mid: `${TREE_L5_MID}, the nearest on the right; the left third stays almost empty.`,
+    composition: `THE SCREEN (2048x1152): the canopy of a colossal ancient tree at night, the far east end of a great bough where it narrows toward its tip, seen strictly from the side with no perspective tilt; the trunk is three screens away to the left, and no part of it is in this frame. ${TREE_L3_FLOOR} It arrives from the left edge at exactly that height as a plain, level run of planks with nothing standing on it within a tenth of the frame of the left edge, and runs to about a third of the way across, where it ends at a low carved wooden railing; beyond the railing the bare bough narrows and rises toward the right edge. ${TREE_L5_PARKOUR('right')} Strings of round paper lanterns hang along the bough above the walkway. Above everything, the canopy's leaves close over in dark clusters, with open magenta sky between them. A visitor added later by the game stands about one sixth of the frame's height tall; every hop, gap and ledge is sized for it.`,
+    scene: 'a walkway along a great bough in the canopy of a colossal tree at night, ending at a stair of perches toward the bough\'s tip',
+    props: TREE_L5_PROPS(`from the upper left corner only, a few clusters of dark leaves and a few hanging strands of moss, no further down than a sixth of the frame; the whole right half of the top of the frame stays empty magenta, because high perches stand there in the scene behind;`),
+  }),
+};
+
+/** Level 5's screens, each in four painted jobs: `tree-l5-<screen>-bg|mid|scene|fg` (OP-158). */
+const TREE_L5_PROMPTS = treeLevelPrompts(5, TREE_L5_SCREENS);
+export const TREE_L5_KEYS = Object.keys(TREE_L5_PROMPTS);
+const TREE_L5_JOBS = treeLevelJobs(5, { w2: 4501, w1: 4505, 0: 4509, e1: 4513, e2: 4517, e3: 4521 }, TREE_L5_PROMPTS);
+Object.assign(PROMPTS, TREE_L5_PROMPTS);
+HELPER_KEYS.push(...TREE_L5_KEYS.filter((k) => k.endsWith('-scene')));
+JOBS.push(...TREE_L5_JOBS);
+
+// ---- Level 5's joins, colour-coded maps and top strips (OP-158), made as level 2's were ----
+// Two rows: the nests street (the far west end, then the street: 4096x1152, the join at x 2048, held
+// under `tree-l5-w2-back`) and the canopy (the crown, the entrance, the lounge, bough 7: 8192x1152,
+// joins at x 2048, 4096 and 6144, held under `tree-l5-0-back`). The two rooms meet at a doorway in the
+// trunk, not on a walkway, so no join is mended between them.
+const TREE_L5_SEAM_PROMPTS = {
+  'tree-l5-seam-w2-w1': treeSeam(
+    `a level walkway of pale wooden planks along a great bough, a small treehouse hut with a round door standing behind it near the left edge and a slim post hung with a round paper lantern, with the canopy's dark leaves above`,
+    `the same walkway of pale wooden planks running on, a small treehouse hut with a round door standing behind it near the right edge, and the canopy's dark leaves and boughs above`,
+    `the walkway of pale planks runs on unbroken across the middle at the same height, one level of planks of one size with one straight front edge, its thick timber edge running on below; between the two huts the walkway's back edge is plain, with one slim post hung with a round paper lantern a little left of the middle and nothing else standing there; the canopy's dark leaves and boughs run on across the top with open magenta sky between them and the walkway; the dark leaves under the walkway run on. The two huts stay exactly where they are.`,
+  ),
+  'tree-l5-seam-0-e1': treeSeam(
+    `a level walkway of pale wooden planks leaving the crown of a colossal tree along a great bough, with strings of round paper lanterns hanging from the crown's boughs above`,
+    `the same walkway of pale wooden planks running on along the bough, a great dark bough with clusters of leaves above it, and a carved wooden post of an archway standing at the walkway's back edge near the right edge`,
+    `the walkway of pale planks runs on unbroken across the middle at the same height, one level of planks of one size with one straight front edge, its thick timber edge and the bough beneath it running on below; the strings of lanterns on the left end in a last lantern a little left of the middle, and the great bough on the right reaches on toward them, with open magenta sky between the boughs and the walkway; nothing stands on the walkway in the middle, and the archway's post at the right stays exactly where it is.`,
+  ),
+  'tree-l5-seam-e1-e2': treeSeam(
+    `a level walkway of pale wooden planks, a low carved wooden railing on posts along its back edge around an open stairwell, where steps wind down behind it, and great dark boughs with clusters of leaves above`,
+    `the same walkway of pale wooden planks running on, a small shop hut with a striped awning standing behind it near the right edge, and great dark boughs with clusters of leaves above`,
+    `the walkway of pale planks runs on unbroken across the middle at the same height, one level of planks of one size with one straight front edge, its thick timber edge running on below; the carved railing on the left ends in its last post where it does now, and right of it the walkway's back edge is plain with nothing standing on it as far as the hut; the dark boughs and leaves run on across the top with open magenta sky between them and the walkway. The stairwell and the hut stay exactly where they are.`,
+  ),
+  'tree-l5-seam-e2-e3': treeSeam(
+    `a level walkway of pale wooden planks, a low carved wooden railing on posts hung with round paper lanterns along its back edge with soft moss behind it, and great dark boughs with clusters of leaves above`,
+    `the same walkway of pale wooden planks running on along the bough, strings of round paper lanterns hanging above it from the boughs, and clusters of dark leaves along the top`,
+    `the walkway of pale planks runs on unbroken across the middle at the same height, one level of planks of one size with one straight front edge, its thick timber edge and the bough beneath it running on below; the lantern-hung railing on the left ends in its last post where it does now, and right of it the walkway's back edge is plain with nothing standing on it; the strings of lanterns on the right hang on from the boughs, which run on across the top with open magenta sky between them and the walkway.`,
+  ),
+};
+export const TREE_L5_SEAM_KEYS = Object.keys(TREE_L5_SEAM_PROMPTS);
+const TREE_L5_SEAM_JOBS = TREE_L5_SEAM_KEYS.map((key, i) => ({
+  key,
+  kind: 'anchor',
+  derives: key.replace('tree-l5-seam-', '').split('-').map((s) => `tree-l5-${s}-back`),
+  realm: 'tree',
+  optional: true,
+  size: '1152x1152',
+  seed: 4581 + 10 * i,
+  variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "a crop across the join of two of the level's screens", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L5_SEAM_PROMPTS[key],
+}));
+Object.assign(PROMPTS, TREE_L5_SEAM_PROMPTS);
+HELPER_KEYS.push(...TREE_L5_SEAM_KEYS);
+JOBS.push(...TREE_L5_SEAM_JOBS);
+
+const TREE_L5_HUTS = `the small treehouse huts with their roofs, round doors and lanterns, the slim posts with their lanterns between them,`;
+const TREE_L5_CODES = {
+  'tree-l5-w2-codes': treeCodes({
+    stand: `the walkway of pale wooden planks from the right edge of the frame to its end at the low railing on the left, with its timber front edge; and every perch up the bough to the left: the three flat-topped burls, the small square platform of planks, the broad shelf fungus, and the small flat platform at the bough's tip at the far left.`,
+    front: `nothing: no thing in this frame stands in front of the walkway, so this map has no blue at all.`,
+    keep: `${TREE_L5_HUTS} the low railing at the walkway's end, the great bough and the branches the perches stand on, the clusters of dark leaves, the leaves under the walkway,`,
+  }),
+  'tree-l5-w1-codes': treeCodes({
+    stand: `the long walkway of pale wooden planks across the whole width of the frame, with its timber front edge.`,
+    front: `nothing: no thing in this frame stands in front of the walkway, so this map has no blue at all.`,
+    keep: `${TREE_L5_HUTS} the great bough and the clusters of dark leaves behind and above, the leaves under the walkway,`,
+  }),
+  'tree-l5-0-codes': treeCodes({
+    stand: `the long walkway of pale wooden planks from its rounded end at the left to the right edge of the frame, with its timber front edge.`,
+    front: `the curly black iron lantern post standing at the walkway's front edge on the left, with the round lantern hanging from it.`,
+    keep: `the trunk and its bark, the archway cut into it, the crown's great boughs and their clusters of leaves, the strings of lanterns, the leaves under the walkway,`,
+  }),
+  'tree-l5-e1-codes': treeCodes({
+    stand: `the long walkway of pale wooden planks across the whole width of the frame, with its timber front edge.`,
+    front: `nothing: no thing in this frame stands in front of the walkway, so this map has no blue at all.`,
+    keep: `the grand carved archway with its lanterns and pennants, the stairwell's railing, its posts and its steps winding down, the great boughs and their clusters of leaves, the leaves under the walkway,`,
+  }),
+  'tree-l5-e2-codes': treeCodes({
+    stand: `the long walkway of pale wooden planks across the whole width of the frame, with its timber front edge.`,
+    front: `nothing: no thing in this frame stands in front of the walkway, so this map has no blue at all.`,
+    keep: `the shop hut with its roof, awning, window and counter, the lounge's railing, its posts, its lanterns and the moss behind it, the great boughs and their clusters of leaves, the leaves under the walkway,`,
+  }),
+  'tree-l5-e3-codes': treeCodes({
+    stand: `the walkway of pale wooden planks from the left edge of the frame to its end at the low railing, with its timber front edge; and every perch up the bough to the right: the three flat-topped burls, the small square platform of planks, the broad shelf fungus, and the small flat platform at the bough's tip at the upper right.`,
+    front: `nothing: no thing in this frame stands in front of the walkway, so this map has no blue at all.`,
+    keep: `the low railing at the walkway's end, the great bough and the branches the perches stand on, the strings of lanterns, the clusters of dark leaves, the leaves under the walkway,`,
+  }),
+};
+export const TREE_L5_CODE_KEYS = Object.keys(TREE_L5_CODES);
+const TREE_L5_CODE_JOBS = TREE_L5_CODE_KEYS.map((key, i) => ({
+  key,
+  kind: 'anchor',
+  derives: (key === 'tree-l5-0-codes' ? ['play', 'front'] : ['play']).map((l) => key.replace('-codes', `-${l}`)),
+  realm: 'tree',
+  optional: true,
+  size: '2048x1152',
+  seed: 4551 + 10 * i,
+  variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "the screen's painting at half size, to colour-code", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L5_CODES[key],
+}));
+Object.assign(PROMPTS, TREE_L5_CODES);
+HELPER_KEYS.push(...TREE_L5_CODE_KEYS);
+JOBS.push(...TREE_L5_CODE_JOBS);
+
+const TREE_L5_TOP_MIRROR = `the clusters of dark leaves and the dark boughs among them meet their own reflections in V shapes, and any string of lanterns is reflected, so that lanterns stand upside down above it.`;
+const TREE_L5_TOP_GOES_ON = `the dark boughs rise on and branch outward, carrying clusters of dark leaves up out of the top edge, with a few small gaps of open sky between the clusters; any string of lanterns hangs in a gentle downward curve from the boughs, each lantern hanging below the string.`;
+const TREE_L5_TOP_PROMPTS = Object.fromEntries(
+  Object.entries({
+    w2: 'the huts, the railing, the walkway, the perches up the bough and the leaves already there',
+    w1: 'the huts, the posts and their lanterns, the walkway and the leaves already there',
+    0: 'the trunk, its archway, the crown\'s boughs, the lantern strings, the walkway, the lantern post and the leaves already there',
+    e1: 'the archway with its lanterns and pennants, the stairwell and its railing, the walkway and the leaves already there',
+    e2: 'the shop hut, the lounge\'s railing and lanterns, the walkway and the leaves already there',
+    e3: 'the railing, the walkway, the perches up the bough, the lantern strings and the leaves already there',
+  }).map(([s, keep]) => [`tree-l5-top-${s}`, treeTopStrip(TREE_L5_TOP_MIRROR, TREE_L5_TOP_GOES_ON, keep)]),
+);
+export const TREE_L5_TOP_KEYS = Object.keys(TREE_L5_TOP_PROMPTS);
+const TREE_L5_TOP_JOBS = TREE_L5_TOP_KEYS.map((key, i) => ({
+  key,
+  kind: 'anchor',
+  derives: [`${key.replace('tree-l5-top-', 'tree-l5-')}-back`],
+  realm: 'tree',
+  optional: true,
+  size: '2048x1152',
+  seed: 4595 + 2 * i,
+  variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "one screen of the level's row, at half size", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L5_TOP_PROMPTS[key],
+}));
+Object.assign(PROMPTS, TREE_L5_TOP_PROMPTS);
+HELPER_KEYS.push(...TREE_L5_TOP_KEYS);
+JOBS.push(...TREE_L5_TOP_JOBS);
+// ---- Level 0, the cavern (OP-163): the stair foot and the realm challenge stair, room `l0` ----
+// Under the tree there is no sky: the far layer is the cavern's depth, the middle distance its
+// hanging roots, and the overlay's roots and moss may cross the middle of the frame as long as the
+// floor stays clear (OP-163). Screen 0 is the stair foot: the stair down from the lobby ring reaches
+// the cavern's floor, the cavern's mouth opens east toward the arcade cave (its own room, painted
+// separately once the owner settles its width), and one find waits on a high root ledge reached by
+// gliding. Screen -1 (`w1`) is the realm challenge stair: a stone stairwell sunk into the floor goes
+// down into the dark, closed until OP-115's first lock ships; the game draws its door and the
+// two-owl plate, so the floor before it stays bare. The floor sits six sevenths of the way down.
+const TREE_CAVE_LIGHT = `LIGHT (the same in every layer): cold blue-white light filtering down from high on the left through gaps in the roots overhead; warm gold sap-light glowing from cracks and knotholes in the roots; deep navy shadow in the depths and on the right-hand sides of forms.`;
+const TREE_CAVE_STYLE = TREE_STYLE.replace(/LIGHT \(the same in every layer\):[^.]*\./, TREE_CAVE_LIGHT);
+function treeCaveFar(far) {
+  return `Background plate for one screen of a side-scrolling 2D game: the farthest of the screen's layers, which the game scrolls at half speed behind the others. Paint ONLY the far depth of a vast root cavern under a colossal tree, edge to edge, with no empty areas and no flat backdrop: ${far} Everything is soft, dark and low in contrast, receding into deep navy, so the nearer layers read in front of it; the bottom fifth of the frame is plain deep navy and dark brown shadow with no detail (the game covers it with the floor). The bands of roots and shadow run off the left and right edges at the same heights, so the neighbouring screens continue them. Nothing near: no floor, no path, no ledge, no stair, no railing, no lantern, and no root in front, because the game's nearer layers paint everything near. ${TREE_CAVE_STYLE} No text, no watermark. AVOID: any text, letters, numbers or writing; any owls, birds, animals, people, faces or characters; any floor, path or platform; anything in the foreground; sky, moon, stars, daylight; busy detailed texture; exact mirror symmetry.`;
+}
+function treeCaveMid(shapes) {
+  return `Middle-distance layer for one screen of a side-scrolling 2D game: the layer between the far depth of a root cavern and the playfield, which the game scrolls at three quarters of the camera's pace, isolated on a flat, solid, uniform pure magenta #FF00FF background that fills the entire canvas with no gradient, no vignette and no cast shadows, 16:9, 2048x1152. Paint only middle-distance silhouettes: ${shapes} They hang from the top edge of the frame or rise from the bottom edge, and the middle of the frame between them stays mostly empty magenta so the far depth shows through. Toward the left and right edges they thin out, and the outer tenth of the frame on each side is empty magenta, so neighbouring screens blend. Flat shapes in muted, desaturated night blues and blue-greys, paler and softer than anything near so they read as distant, with only a few tiny warm gold sap-light points; crisp clean opaque edges against the magenta, no soft haze, glow or mist bleeding onto the backdrop, no semi-transparent edges, no magenta tint on the shapes. ${TREE_CAVE_STYLE} No text, no watermark. AVOID: any text, letters or writing; any owls, birds, animals, people, faces or characters; any floor, path or ledge in front; sky, moon or stars; bright saturated colours; busy detailed texture; exact mirror symmetry.`;
+}
+function treeCaveOverlay(scene, props) {
+  return `Foreground overlay for one screen of a side-scrolling 2D game: the nearest of the screen's layers, drawn in front of the visitor and scrolled a little faster than the rest, isolated on a flat, solid, uniform pure magenta #FF00FF background that fills the entire canvas with no gradient, no vignette, no ground plane and no cast shadows on the backdrop, 16:9, 2048x1152. The scene behind it, painted separately, is ${scene}, with a walking floor five sixths of the way down the frame. Props only, nearer than everything else: ${props} The floor and everything standing on it in the scene behind stay uncovered: nothing in this layer comes lower than three quarters of the way down the frame except at the far left and far right edges, and the bottom quarter of the frame in the middle stays empty magenta, so the visitor is never hidden. The props are darker and a little larger than the scene behind them, rim-lit by cold blue-white light from the upper left and warm gold sap-light. Crisp clean opaque silhouettes against the magenta, no soft haze or glow bleeding onto the backdrop, no semi-transparent edges. ${TREE_CAVE_STYLE} No text, no watermark. AVOID: any text or writing; any owls, birds, animals, people, faces or characters; anything over the floor; any floor, wall or scenery; magenta tint on the props; soft or feathered edges.`;
+}
+const TREE_L0_FLOOR = `The walking floor is one level path of packed earth and flat stone among the roots, a flat strip seen side-on with a broad, clean, flat top edge six sevenths of the way down the frame; below it there is only a narrow band, about a seventh of the frame, of dark earth and root ends, down to the bottom edge. Where the cavern's open depth would show behind the roots and above the floor, the frame is flat pure magenta #FF00FF, and the roots, the walls and the floor are painted fully and opaquely against it.`;
+const TREE_L0_SCREENS = {
+  0: {
+    bg: treeCaveFar(`the far wall of the cavern, a great tangle of the colossal tree's roots, thick as columns, diving from the top of the frame down into dark earth, with dark hollows between them, a few small knotholes glowing warm gold far away among the roots, and low down a faint cold blue mist in the farthest hollows.`),
+    mid: treeCaveMid(`thick roots hanging from the top edge of the frame in the left third and the right third, reaching down to at most the middle of the frame, with a few fine root threads and strands of moss hanging from them, and a few low rounded root humps rising from the bottom edge to a fifth of the way up at the sides; the middle third of the frame stays almost empty.`),
+    scene: treeScene(`THE SCREEN (2048x1152): a vast cavern among the roots under a colossal ancient tree at night, the foot of the stair down from the tree's lobby, seen strictly from the side with no perspective tilt. ${TREE_L0_FLOOR} It runs across the whole width of the frame. THE STAIR'S FOOT: right of the middle, a broad wooden stair of thick plank treads comes down from a round opening in the cavern's roof at the top of the frame, winding down around a great root to its foot on the floor, its lowest treads bare and plain, with a carved wooden banister along its outer edge; the opening above is plain and dark, with no glow (a doorway the game marks later). THE MOUTH: at the right edge, the floor leaves the frame at exactly its height through a tall rounded opening between two great roots, about two and a half visitors' heights tall, its far side plain, dark and bare (the way into the next cave, which the game marks later), with nothing standing on the floor within a tenth of the frame of the right edge. THE WEST: at the left edge, the floor leaves the frame at exactly its height as a plain run of packed earth between roots, with nothing standing on it within a tenth of the frame of the left edge. THE FIND: left of the middle, high up, a broad flat-topped root ledge juts from the cavern's wall about three visitors' heights above the floor, reached by gliding from the stair, its top plain and bare (a reward appears there later); below it, two smaller flat-topped root knobs a hop apart lead up from the floor to a flat stone shelf about one and a half visitors' heights up, a step on the way. Great roots arch over everything, the cavern's roof lost in shadow at the top of the frame, with the cold blue-white light falling in from a gap at the upper left; a few lanterns of plain glass hang on hooks from the roots along the floor and glow warm gold. A visitor added later by the game stands about one sixth of the frame's height tall; every tread, ledge and opening is sized for it.`),
+    fg: treeCaveOverlay('the foot of a wooden stair in a vast root cavern under a colossal tree, with a flat path among the roots', `from the top edge, two or three thick dark roots curve down into the frame and back up out of it, one of them reaching to about the middle of the frame, with fine root threads and long strands of moss hanging from them; at the far left and far right edges, a thick dark root runs from the top of the frame down past the floor, each no wider than an eighth of the frame.`),
+  },
+  w1: {
+    bg: treeCaveFar(`the far wall of the cavern, a great tangle of the colossal tree's roots diving from the top of the frame into dark earth, the hollows between them deeper and darker toward the left, where the cavern falls away into a black depth with a faint cold blue mist low down; a few small knotholes glow warm gold far away on the right.`),
+    mid: treeCaveMid(`thick roots hanging from the top edge of the frame in the right third and a few in the left third, reaching down to at most the middle of the frame, with fine root threads and strands of moss hanging from them, and a few low rounded root humps rising from the bottom edge to a fifth of the way up at the right; the middle stays almost empty.`),
+    scene: treeScene(`THE SCREEN (2048x1152): a vast cavern among the roots under a colossal ancient tree at night, the far end of the cavern where a stair goes down to a deeper place, seen strictly from the side with no perspective tilt. ${TREE_L0_FLOOR} It arrives from the right edge at exactly that height as a plain run of packed earth between roots, with nothing standing on it within a tenth of the frame of the right edge, and runs to the left to about a quarter of the way across, where it ends at a low wall of fitted stone blocks. THE STAIR DOWN: left of the middle, set into the back of the floor behind its unbroken front edge, a stairwell of old fitted stone, its mouth edged with a low carved stone rim and two squat stone posts, where worn stone steps go down into deep black shadow; the stairwell is plain, dark and bare, with no door, no gate, no glow and no sign (the game closes it later), and the floor in front of it, between the stairwell and the right edge, is a plain, even stretch of packed earth and flat stone with nothing on it (the game sets a plate there later). THE END: beyond the low stone wall at the left, the cavern falls away into a black depth, and nothing leads on to the left. Great roots arch over everything, thicker and older than elsewhere, the cavern's roof lost in shadow at the top of the frame, with the cold blue-white light falling in from a gap at the upper left; a few lanterns of plain glass hang on hooks from the roots along the floor and glow warm gold. A visitor added later by the game stands about one sixth of the frame's height tall; the stairwell and the floor are sized for it.`),
+    fg: treeCaveOverlay('the far end of a vast root cavern under a colossal tree, where a stone stair goes down into the dark', `from the top edge, two or three thick dark roots curve down into the frame and back up out of it, the largest at the right reaching to about the middle of the frame, with fine root threads and long strands of moss hanging from them; at the far right edge, a thick dark root runs from the top of the frame down past the floor, no wider than an eighth of the frame; the left edge stays open.`),
+  },
+};
+
+/** Level 0's screens so far, each in four painted jobs: `tree-l0-<screen>-bg|mid|scene|fg` (OP-163). */
+const TREE_L0_PROMPTS = treeLevelPrompts(0, TREE_L0_SCREENS);
+export const TREE_L0_KEYS = Object.keys(TREE_L0_PROMPTS);
+const TREE_L0_JOBS = treeLevelJobs(0, { 0: 4605, w1: 4601 }, TREE_L0_PROMPTS);
+Object.assign(PROMPTS, TREE_L0_PROMPTS);
+HELPER_KEYS.push(...TREE_L0_KEYS.filter((k) => k.endsWith('-scene')));
+JOBS.push(...TREE_L0_JOBS);
+
+// ---- Level 0's join, colour-coded maps and top strips (OP-163), made as level 2's were ----
+// The two picked scenes, moved onto the ground line, side by side west to east (the challenge stair,
+// the stair foot) make a row of 4096x1152 with the join at x 2048, held under `tree-l0-w1-back`.
+const TREE_L0_SEAM_PROMPTS = {
+  'tree-l0-seam-w1-0': treeSeam(
+    `a level floor of packed earth and flat stone among the roots of a vast cavern, a great gnarled root rising at the left edge with a lantern of plain glass on a hook, and the cavern's open depth as flat magenta between the roots`,
+    `the same floor of packed earth running on, a great gnarled root rising on the right with a lantern of plain glass on a hook, more roots arching over, and the cavern's open depth as flat magenta between them`,
+    `the floor of packed earth and flat stone runs on unbroken across the middle at the same height, one level floor with one straight, clearly lit top edge, its band of dark earth and root ends running on below; the great roots on either side arch toward each other over the middle and join into the cavern's roof at the top of the frame, with the open magenta depth showing between them; nothing stands on the floor in the middle, and the lanterns stay exactly where they are.`,
+  ),
+};
+export const TREE_L0_SEAM_KEYS = Object.keys(TREE_L0_SEAM_PROMPTS);
+const TREE_L0_SEAM_JOBS = TREE_L0_SEAM_KEYS.map((key, i) => ({
+  key,
+  kind: 'anchor',
+  derives: ['tree-l0-w1-back', 'tree-l0-0-back'],
+  realm: 'tree',
+  optional: true,
+  size: '1152x1152',
+  seed: 4681 + 10 * i,
+  variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "a crop across the join of the level's two screens", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L0_SEAM_PROMPTS[key],
+}));
+Object.assign(PROMPTS, TREE_L0_SEAM_PROMPTS);
+HELPER_KEYS.push(...TREE_L0_SEAM_KEYS);
+JOBS.push(...TREE_L0_SEAM_JOBS);
+
+const TREE_L0_CODES = {
+  // The picked scene (seed 4621): the floor from the right edge to a low stone wall at the left, a stone
+  // stairwell with a rim and two posts left of the middle, lanterns on the roots.
+  'tree-l0-w1-codes': treeCodes({
+    stand: `the long floor of packed earth and flat stone from the right edge of the frame to the low wall of stone blocks on the left, with its lit top edge.`,
+    front: `nothing: no thing in this frame stands in front of the floor, so this map has no blue at all.`,
+    keep: `the low stone wall, the stone stairwell with its rim, its posts and its dark steps, the great roots, the lanterns on their hooks, the dark earth under the floor,`,
+  }),
+  // The picked scene (seed 4626): the floor across the frame, the stair's pale treads down the great
+  // root to the floor, a flat stone shelf and a stump on the left, a high root shelf above them.
+  'tree-l0-0-codes': treeCodes({
+    stand: `the long floor of packed earth and flat stone across the whole width of the frame, with its lit top edge; each pale wooden tread of the stair that comes down the great root to the floor; the flat top of the stump and the flat stone shelf on the left; and the top of the broad flat root ledge high on the left above them.`,
+    front: `nothing: no thing in this frame stands in front of the floor, so this map has no blue at all.`,
+    keep: `the great roots, the stair's banister, the round dark opening in the roof, the tall rounded opening at the right edge, the lanterns on their hooks, the dark earth under the floor,`,
+  }),
+};
+export const TREE_L0_CODE_KEYS = Object.keys(TREE_L0_CODES);
+const TREE_L0_CODE_JOBS = TREE_L0_CODE_KEYS.map((key, i) => ({
+  key,
+  kind: 'anchor',
+  derives: [key.replace('-codes', '-play')],
+  realm: 'tree',
+  optional: true,
+  size: '2048x1152',
+  seed: 4651 + 10 * i,
+  variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "the screen's painting at half size, to colour-code", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L0_CODES[key],
+}));
+Object.assign(PROMPTS, TREE_L0_CODES);
+HELPER_KEYS.push(...TREE_L0_CODE_KEYS);
+JOBS.push(...TREE_L0_CODE_JOBS);
+
+const TREE_L0_TOP_PROMPTS = {
+  'tree-l0-top-w1': treeTopStrip(
+    `the great roots and the cavern's roof meet their own reflections, and the lanterns on their hooks are reflected.`,
+    `the great roots rise on and join into the cavern's roof, which closes over at the top of the frame in dark earth and root, with the cold blue-white light falling in from the gap at the upper left; the lanterns hang below their hooks.`,
+    `the floor, the low stone wall, the stone stairwell, the roots, the lanterns and the open magenta depth already there`,
+  ),
+  'tree-l0-top-0': treeTopStrip(
+    `the great roots and the cavern's roof meet their own reflections, the round opening in the roof is reflected, and the lanterns on their hooks are reflected.`,
+    `the great roots rise on and join into the cavern's roof, which closes over at the top of the frame in dark earth and root, with the cold blue-white light falling in from the gap at the upper left; the round opening in the roof stays one opening, where the stair comes down; the lanterns hang below their hooks.`,
+    `the floor, the stair, the shelf and the stump, the high root ledge, the roots, the lanterns and the open magenta depth already there`,
+  ),
+};
+export const TREE_L0_TOP_KEYS = Object.keys(TREE_L0_TOP_PROMPTS);
+const TREE_L0_TOP_JOBS = TREE_L0_TOP_KEYS.map((key, i) => ({
+  key,
+  kind: 'anchor',
+  derives: [`${key.replace('tree-l0-top-', 'tree-l0-')}-back`],
+  realm: 'tree',
+  optional: true,
+  size: '2048x1152',
+  seed: 4695 + 2 * i,
+  variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "one screen of the level's row, at half size", optional: false }],
+  providers: { fal: { output_format: 'png' } },
+  prompt: TREE_L0_TOP_PROMPTS[key],
+}));
+Object.assign(PROMPTS, TREE_L0_TOP_PROMPTS);
+HELPER_KEYS.push(...TREE_L0_TOP_KEYS);
+JOBS.push(...TREE_L0_TOP_JOBS);
+
+// ---- Level 0's arcade cave (OP-163): three screens, its own room `l0c` (cap 40, as today's hall) ----
+// The arcade's three-screen hall rebuilt as a cave off the stair foot's cavern: a bay a screen, each
+// with a bare alcove at the back of the floor where the game sets a cabinet, the score wall's bare panel
+// on the middle screen, and chrome plates and neon tubes threaded through the roots. The cave's mouth is
+// at the west edge of the first screen (a doorway the game marks); the east end closes. The game draws
+// the cabinets, the score wall and the Hatching Soon slots, so the paintings leave their places bare.
+const TREE_CAVE_NEON = `NEON (only here, under the tree): riveted chrome plates bolted to the roots, conduit and glowing neon tubes in signal magenta #FF2AA1 and circuit cyan #00E5FF threaded along the roots and the floor's back edge, their light caught on the wet stone; the rest keeps the cavern's bark, earth, cold blue-white light from above and warm gold sap-light.`;
+const TREE_CAVE_FLOOR = `The walking floor is one level path of flat stone slabs among the roots, a flat strip seen side-on with a broad, clean, flat top edge six sevenths of the way down the frame, its slabs wet and catching thin streaks of magenta and cyan light; below it there is only a narrow band, about a seventh of the frame, of dark earth and root ends, down to the bottom edge. Where the cavern's open depth would show behind the roots and above the floor, the frame is flat pure magenta #FF00FF, and the roots, the walls and the floor are painted fully and opaquely against it.`;
+const TREE_CAVE_ALCOVE = (where) => `${where}, at the back of the floor behind its unbroken front edge, a tall bare alcove between two great roots, about two and a half visitors' heights tall and one and a half wide, framed in a riveted chrome arch traced by a thin neon tube, its inside plain, dark and empty, with no cabinet, no screen, no sign and no glow inside it (the game sets a cabinet there later), and the floor in front of it plain and open`;
+const TREE_L0C_SCREENS = {
+  c0: {
+    bg: treeCaveFar(`the far wall of the cavern, a great tangle of the colossal tree's roots diving from the top of the frame into dark earth, with dark hollows between them; far away among the roots a few thin lines of magenta and cyan neon glow faintly, and a few small knotholes glow warm gold.`),
+    mid: treeCaveMid(`thick roots hanging from the top edge of the frame in the left third and the right third, reaching down to at most the middle of the frame, with fine root threads hanging from them and a thin line of faint cyan neon wound round one; and a few low rounded root humps rising from the bottom edge to a fifth of the way up at the sides; the middle third stays almost empty.`),
+    scene: treeScene(`THE SCREEN (2048x1152): a cave off a vast root cavern under a colossal ancient tree at night, made into a games hall, seen strictly from the side with no perspective tilt. ${TREE_CAVE_FLOOR} It runs across the whole width of the frame. THE MOUTH: at the left edge, the floor leaves the frame at exactly its height through a tall rounded opening between two great roots, about two and a half visitors' heights tall, its far side plain, dark and bare (the way back to the cavern, which the game marks later), with nothing standing on the floor within a tenth of the frame of the left edge. THE BAY: ${TREE_CAVE_ALCOVE('in the middle of the frame')}. THE EAST: at the right edge the floor leaves the frame at exactly its height as a plain run of stone slabs between roots, with nothing standing on it within a tenth of the frame of the right edge. Great roots arch over everything, the cave's roof lost in shadow at the top of the frame, with the cold blue-white light falling in from a gap at the upper left; ${TREE_CAVE_NEON} A visitor added later by the game stands about one sixth of the frame's height tall; the alcove and the openings are sized for it.`),
+    fg: treeCaveOverlay('a games hall in a cave of roots under a colossal tree, with a flat stone floor', `from the top edge, two or three thick dark roots curve down into the frame and back up out of it, one of them reaching to about the middle of the frame, with fine root threads hanging from them and a short run of chrome conduit with a glowing cyan neon tube bolted along one; at the far left and far right edges, a thick dark root runs from the top of the frame down past the floor, each no wider than an eighth of the frame.`),
+  },
+  c1: {
+    bg: treeCaveFar(`the far wall of the cavern, a great tangle of the colossal tree's roots diving from the top of the frame into dark earth, the hollows between them lit faintly from within by magenta and cyan neon far away, and a few small knotholes glowing warm gold.`),
+    mid: treeCaveMid(`thick roots hanging from the top edge of the frame in the left third and the right third, reaching down to at most the middle of the frame, with fine root threads hanging from them and thin lines of faint magenta neon wound round two of them; the middle third stays almost empty.`),
+    scene: treeScene(`THE SCREEN (2048x1152): the middle of a games hall in a cave of roots under a colossal ancient tree at night, seen strictly from the side with no perspective tilt. ${TREE_CAVE_FLOOR} It arrives from the left edge at exactly that height, crosses the whole frame at that one height as one straight strip of slabs, and leaves the right edge at exactly the same height, with nothing standing on it within a tenth of the frame of either edge. THE SCORE WALL: in the middle of the frame, high on the cave's back wall above the floor, between the roots, one large blank panel: a wide, dark, rectangular panel in a riveted chrome frame traced by a thin cyan neon tube, about two fifths of the frame wide and a visitor's height tall, its bottom edge about two visitors' heights above the floor, its face plain and empty (the game writes on it later); the floor under it is plain and open. THE BAY: ${TREE_CAVE_ALCOVE('right of the middle, about three quarters of the way across')}. Great roots arch over everything, the cave's roof lost in shadow at the top of the frame, with the cold blue-white light falling in from a gap at the upper left; ${TREE_CAVE_NEON} A visitor added later by the game stands about one sixth of the frame's height tall; the alcove and the panel are sized for it.`),
+    fg: treeCaveOverlay('the middle of a games hall in a cave of roots under a colossal tree, with a flat stone floor', `from the top edge, two or three thick dark roots curve down into the frame and back up out of it, the largest in the left third reaching to about the middle of the frame, with fine root threads hanging from them and a short run of chrome conduit with a glowing magenta neon tube bolted along one; the whole middle third of the top of the frame stays empty magenta, because a panel hangs there in the scene behind; at the far right edge, a thick dark root runs from the top of the frame down past the floor, no wider than an eighth of the frame.`),
+  },
+  c2: {
+    bg: treeCaveFar(`the far wall of the cavern, a great tangle of the colossal tree's roots diving from the top of the frame into dark earth, the hollows between them darkest toward the right, where the cave ends in black depth; a few thin lines of magenta and cyan neon glow faintly among the roots on the left, and a few small knotholes glow warm gold.`),
+    mid: treeCaveMid(`thick roots hanging from the top edge of the frame in the left third and a dense curtain of them in the right third, reaching down to at most the middle of the frame, with fine root threads hanging from them and a thin line of faint cyan neon wound round one on the left; the middle third stays almost empty.`),
+    scene: treeScene(`THE SCREEN (2048x1152): the far end of a games hall in a cave of roots under a colossal ancient tree at night, seen strictly from the side with no perspective tilt. ${TREE_CAVE_FLOOR} It arrives from the left edge at exactly that height as a plain run of stone slabs with nothing standing on it within a tenth of the frame of the left edge, and runs to the right to about four fifths of the way across, where it ends against a wall of great roots grown together, so nothing leads on to the right. THE BAY: ${TREE_CAVE_ALCOVE('left of the middle, about a third of the way across')}. THE SLOTS: right of the middle, at the back of the floor, two smaller empty alcoves side by side between the roots, each about two visitors' heights tall and a visitor wide, framed in plain riveted chrome with no neon, their insides dark, empty and unlit (bays that open later). Great roots arch over everything, the cave's roof lost in shadow at the top of the frame, with the cold blue-white light falling in from a gap at the upper left; ${TREE_CAVE_NEON} A visitor added later by the game stands about one sixth of the frame's height tall; the alcoves are sized for it.`),
+    fg: treeCaveOverlay('the far end of a games hall in a cave of roots under a colossal tree, with a flat stone floor', `from the top edge, two or three thick dark roots curve down into the frame and back up out of it, the largest at the right reaching to about the middle of the frame, with fine root threads hanging from them and a short run of chrome conduit with a glowing cyan neon tube bolted along one; at the far left edge, a thick dark root runs from the top of the frame down past the floor, no wider than an eighth of the frame; the right edge stays open.`),
+  },
+};
+const TREE_L0C_PROMPTS = treeLevelPrompts(0, TREE_L0C_SCREENS);
+export const TREE_L0C_KEYS = Object.keys(TREE_L0C_PROMPTS);
+const TREE_L0C_JOBS = treeLevelJobs(0, { c0: 4701, c1: 4705, c2: 4709 }, TREE_L0C_PROMPTS);
+Object.assign(PROMPTS, TREE_L0C_PROMPTS);
+HELPER_KEYS.push(...TREE_L0C_KEYS.filter((k) => k.endsWith('-scene')));
+JOBS.push(...TREE_L0C_JOBS);
+
+// ---- The arcade cave's joins, maps and top strips (OP-163), made as the levels above were ----
+// The three picked scenes, moved onto the ground line, side by side west to east make a row of
+// 6144x1152 held under `tree-l0-c0-back`, with joins at x 2048 and 4096.
+const TREE_L0C_SEAM_PROMPTS = {
+  'tree-l0-seam-c0-c1': treeSeam(
+    `a level floor of wet flat stone slabs among the roots of a cave, catching streaks of magenta and cyan neon, a great gnarled root rising at the left edge with a lantern of plain glass, chrome conduit and a neon tube running along the back of the floor, and the cave's open depth as flat magenta between the roots`,
+    `the same floor of wet stone slabs running on, a great gnarled root rising on the right with chrome plates and neon conduit bolted along it, and the cave's open depth as flat magenta between the roots`,
+    `the floor of wet stone slabs runs on unbroken across the middle at the same height, one level floor with one straight, clearly lit top edge, its band of dark earth and root ends running on below; the neon conduit along the back of the floor runs on from the left into the plates on the right as one line of chrome and light; the great roots on either side arch toward each other over the middle and join into the cave's roof at the top of the frame, with the open magenta depth showing between them; nothing stands on the floor in the middle.`,
+  ),
+  'tree-l0-seam-c1-c2': treeSeam(
+    `a level floor of wet flat stone slabs among the roots of a cave, catching streaks of magenta and cyan neon, a tall bare alcove framed in riveted chrome at the back of the floor near the left edge, and the cave's open depth as flat magenta between the roots`,
+    `the same floor of wet stone slabs running on, great gnarled roots rising on the right with chrome plates and neon conduit bolted along them, and the cave's open depth as flat magenta between the roots`,
+    `the floor of wet stone slabs runs on unbroken across the middle at the same height, one level floor with one straight, clearly lit top edge, its band of dark earth and root ends running on below; a thin neon tube runs along the back of the floor from the alcove's frame on the left to the plates on the right; the great roots on either side arch toward each other over the middle and join into the cave's roof at the top of the frame, with the open magenta depth showing between them; nothing stands on the floor in the middle, and the alcove stays exactly where it is.`,
+  ),
+};
+export const TREE_L0C_SEAM_KEYS = Object.keys(TREE_L0C_SEAM_PROMPTS);
+JOBS.push(...TREE_L0C_SEAM_KEYS.map((key, i) => ({
+  key, kind: 'anchor', derives: key.replace('tree-l0-seam-', '').split('-').map((s) => `tree-l0-${s}-back`), realm: 'tree', optional: true,
+  size: '1152x1152', seed: 4781 + 10 * i, variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "a crop across the join of two of the cave's screens", optional: false }],
+  providers: { fal: { output_format: 'png' } }, prompt: TREE_L0C_SEAM_PROMPTS[key],
+})));
+Object.assign(PROMPTS, TREE_L0C_SEAM_PROMPTS);
+HELPER_KEYS.push(...TREE_L0C_SEAM_KEYS);
+
+const TREE_L0C_KEEP = `the great roots and the cave's roof, the chrome plates, the conduit and the neon tubes, every alcove with its chrome frame and its dark inside, the lanterns, the dark earth under the floor,`;
+const TREE_L0C_CODES = {
+  'tree-l0-c0-codes': treeCodes({ stand: `the long floor of wet stone slabs across the whole width of the frame, with its lit top edge.`, front: `nothing: no thing in this frame stands in front of the floor, so this map has no blue at all.`, keep: `the mouth at the left edge, ${TREE_L0C_KEEP}` }),
+  'tree-l0-c1-codes': treeCodes({ stand: `the long floor of wet stone slabs across the whole width of the frame, with its lit top edge.`, front: `nothing: no thing in this frame stands in front of the floor, so this map has no blue at all.`, keep: `the large blank panel in its chrome frame high on the back wall, ${TREE_L0C_KEEP}` }),
+  'tree-l0-c2-codes': treeCodes({ stand: `the floor of wet stone slabs from the left edge of the frame to its end against the wall of roots on the right, with its lit top edge.`, front: `nothing: no thing in this frame stands in front of the floor, so this map has no blue at all.`, keep: `the two smaller empty alcoves on the right, ${TREE_L0C_KEEP}` }),
+};
+export const TREE_L0C_CODE_KEYS = Object.keys(TREE_L0C_CODES);
+JOBS.push(...TREE_L0C_CODE_KEYS.map((key, i) => ({
+  key, kind: 'anchor', derives: [key.replace('-codes', '-play')], realm: 'tree', optional: true,
+  size: '2048x1152', seed: 4751 + 10 * i, variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "the screen's painting at half size, to colour-code", optional: false }],
+  providers: { fal: { output_format: 'png' } }, prompt: TREE_L0C_CODES[key],
+})));
+Object.assign(PROMPTS, TREE_L0C_CODES);
+HELPER_KEYS.push(...TREE_L0C_CODE_KEYS);
+
+const TREE_L0C_TOP_PROMPTS = Object.fromEntries(['c0', 'c1', 'c2'].map((s) => [`tree-l0-top-${s}`, treeTopStrip(
+  `the great roots and the cave's roof meet their own reflections, and the chrome plates and neon tubes among them are reflected.`,
+  `the great roots rise on and join into the cave's roof, which closes over at the top of the frame in dark earth and root, with the cold blue-white light falling in from the gap at the upper left; the chrome plates and the neon tubes end where they do now, with plain root and earth above them.`,
+  `the floor, every alcove and panel, the roots, the plates, the neon, the lanterns and the open magenta depth already there`,
+)]));
+export const TREE_L0C_TOP_KEYS = Object.keys(TREE_L0C_TOP_PROMPTS);
+JOBS.push(...TREE_L0C_TOP_KEYS.map((key, i) => ({
+  key, kind: 'anchor', derives: [`${key.replace('tree-l0-top-', 'tree-l0-')}-back`], realm: 'tree', optional: true,
+  size: '2048x1152', seed: 4795 + 2 * i, variants: 2,
+  refs: [{ ref: `@canvas:${key}`, role: "one screen of the cave's row, at half size", optional: false }],
+  providers: { fal: { output_format: 'png' } }, prompt: TREE_L0C_TOP_PROMPTS[key],
+})));
+Object.assign(PROMPTS, TREE_L0C_TOP_PROMPTS);
+HELPER_KEYS.push(...TREE_L0C_TOP_KEYS);
+
+// The art kit (OP-229): textures and shape sheets from config/kit.json (kit.mjs).
+import { KIT_AREA_PROMPTS, KIT_AREA_SHEET_KEYS, KIT_COURSE_PROMPTS, KIT_COURSE_SHEET_KEYS, KIT_LANDMARK_PROMPTS, KIT_LANDMARK_SHEET_KEYS, KIT_HERO_PROMPTS, KIT_PUZZLE_PROMPTS, KIT_PUZZLE_SHEET_KEYS, KIT_RECUT_COLUMN_KEYS, KIT_RECUT_PROMPTS, KIT_RECUT_RUN_KEYS, KIT_RECUT_SHEET_KEYS, KIT_SHEET_KEYS, KIT_SHEET_PROMPTS, KIT_TEXTURE_PROMPTS, kitJobs } from './kit.mjs';
+JOBS.push(...kitJobs());
+Object.assign(PROMPTS, KIT_TEXTURE_PROMPTS, KIT_SHEET_PROMPTS, KIT_AREA_PROMPTS, KIT_COURSE_PROMPTS, KIT_LANDMARK_PROMPTS, KIT_RECUT_PROMPTS, KIT_PUZZLE_PROMPTS, KIT_HERO_PROMPTS);
+HELPER_KEYS.push(...KIT_SHEET_KEYS, ...KIT_AREA_SHEET_KEYS, ...KIT_COURSE_SHEET_KEYS, ...KIT_LANDMARK_SHEET_KEYS, ...KIT_RECUT_RUN_KEYS, ...KIT_RECUT_SHEET_KEYS, ...KIT_RECUT_COLUMN_KEYS, ...KIT_PUZZLE_SHEET_KEYS);
+
+// The art targets (OP-249): three finished screens painted as one picture each, reference art for
+// the kit's recut and the value bands, never shipped (targets.mjs).
+import { TARGET_KEYS, TARGET_PROMPTS, targetJobs } from './targets.mjs';
+JOBS.push(...targetJobs());
+Object.assign(PROMPTS, TARGET_PROMPTS);
+HELPER_KEYS.push(...TARGET_KEYS);

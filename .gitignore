@@ -1,0 +1,29 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+test-results/
+playwright-report/
+blob-report/
+all-blob-reports/
+apps/park/shard-tests.txt
+apps/park/report.json
+e2e-screenshots/
+*.log
+.DS_Store
+.wrangler/
+worker-configuration.d.ts
+# The load test's throwaway Worker config (tools/load/throwaway-config.mjs)
+apps/edge/wrangler.load.jsonc
+apps/edge/wrangler.load.secrets.json
+# Art pipeline: raw candidates and per-machine files (keys, private word list)
+work/
+tools/art/.local/
+__pycache__/
+# EGM briefs, drafts and review reports (EGM/README.md); never committed
+EGM/*
+!EGM/README.md
+# Mutation testing (OP-131): each package's report, its incremental file and Stryker's sandbox
+reports/
+.stryker-tmp/

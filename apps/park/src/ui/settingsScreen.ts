@@ -1,0 +1,194 @@
+import type { Settings, SettingsStore } from '../settings';
+import { createModal, modalHeader } from './modal';
+
+export interface SettingsScreen {
+  open(opener?: HTMLElement | null): void;
+  close(): void;
+  isOpen(): boolean;
+}
+
+const CSS = `
+#hud .settings h3{margin:4px 0 0;font-size:12px;letter-spacing:.06em;text-transform:uppercase;opacity:.7}
+#hud .settings .opt{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:14px;background:rgba(246,241,227,.06);border:1px solid rgba(246,241,227,.12)}
+#hud .settings .opt > span{flex:1;display:flex;flex-direction:column;gap:2px;font-size:15px;font-weight:700}
+#hud .settings .opt small{font-size:12.5px;font-weight:400;opacity:.8;line-height:1.3}
+#hud .settings .switch{position:relative;flex:none;width:58px;min-height:34px;height:34px;padding:0;border-radius:999px;background:rgba(246,241,227,.18);border:1px solid rgba(246,241,227,.3);box-shadow:none}
+#hud .settings .switch::after{content:"";position:absolute;top:3px;left:3px;width:26px;height:26px;border-radius:50%;background:#F6F1E3;box-shadow:0 1px 4px rgba(0,0,0,.4);transition:transform .15s ease-out}
+#hud .settings .switch[aria-checked=true]{background:#C9A227;border-color:#FFD36A}
+#hud .settings .switch[aria-checked=true]::after{transform:translateX(24px)}
+#hud .settings .keys{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:13.5px;align-items:center}
+#hud .settings .keys kbd{display:inline-block;margin:0 4px 0 0;opacity:.95}
+#hud .settings .keys span:nth-child(odd){white-space:nowrap}
+#hud .settings .touch-only,#hud .settings .keys-only{display:none}
+@media (pointer:coarse){#hud .settings .touch-only{display:flex}}
+@media (hover:hover) and (pointer:fine){#hud .settings .keys-only{display:grid}}
+#hud .settings .tips{font-size:13.5px;line-height:1.45;margin:0;opacity:.9}
+`;
+
+/** What the keys do, for the Controls part (the same keys as ui/keyboard.ts). */
+export const KEY_HELP: ReadonlyArray<[keys: string[], what: string]> = [
+  [['W', 'A', 'S', 'D'], 'Walk (or the arrow keys)'],
+  // In the tree, seen from the side, up goes through doorways and stairs (OP-212).
+  [['W'], 'In the tree: through the doorway or up the stair you stand in (or the up arrow)'],
+  [['E'], 'Do what you are standing at'],
+  [['Space'], 'Jump; again in the air to flap, held on the way down to glide'],
+  [['Shift'], 'Dash, in a parkour course: once a jump, in the air'],
+  [['M'], 'Map, in the Menu'],
+  [['T'], 'Say'],
+  [['1–8'], 'Play an emote at once, as numbered on the wheel'],
+  [['Q'], 'Your owl: to the mirror in your nest'],
+  [['J'], 'Quests'],
+  [['Esc'], 'Close'],
+];
+
+let styled = false;
+
+/** Each switch's state, from the settings (after the rows are drawn, and whenever a setting changes). */
+export function syncSettings(root: ParentNode, s: Settings): void {
+  for (const sw of root.querySelectorAll<HTMLButtonElement>('[data-setting]')) sw.setAttribute('aria-checked', String(s[sw.dataset['setting'] as keyof Settings]));
+}
+
+/**
+ * The Send feedback row's words (OP-167): the first row of Settings, wherever they open.
+ */
+export const FEEDBACK_ROW_WORDS = {
+  title: 'Something wrong? An idea?',
+  note: 'Tell the park’s keepers: they read every note.',
+  button: 'Send feedback',
+} as const;
+
+/** A row of Settings with a button at its end: its words on the left, a note under them. */
+function buttonRow(title: string, note: string, label: string, onClick: () => void): { row: HTMLElement; button: HTMLButtonElement } {
+  const row = document.createElement('div');
+  row.className = 'opt';
+  const text = document.createElement('span');
+  text.append(title);
+  const small = document.createElement('small');
+  small.textContent = note;
+  text.appendChild(small);
+  const button = document.createElement('button');
+  button.textContent = label;
+  button.addEventListener('click', onClick);
+  row.append(text, button);
+  return { row, button };
+}
+
+/**
+ * The settings themselves, as rows, for the home screen's Settings and the Menu's Settings tab
+ * (OP-108): first Send feedback, which opens the Feedback form (OP-167), then the thumbstick (touch
+ * screens), the bubbles of what owls say, the park's sounds, calm motion, full screen where the
+ * browser allows it, and which keys and touches do what. `redraw` draws them again (full screen
+ * changed). Every place Settings open draws these rows, so each has Send feedback first.
+ */
+export function settingsRows(store: SettingsStore, redraw: () => void, feedback: () => void): HTMLElement[] {
+  if (!styled) {
+    const style = document.createElement('style');
+    style.textContent = CSS;
+    document.head.appendChild(style);
+    styled = true;
+  }
+  const rows: HTMLElement[] = [];
+  const toggle = (key: keyof Settings, title: string, note: string, cls = ''): HTMLElement => {
+    const row = document.createElement('label');
+    row.className = `opt ${cls}`.trim();
+    const text = document.createElement('span');
+    text.append(title);
+    if (note) {
+      const small = document.createElement('small');
+      small.textContent = note;
+      text.appendChild(small);
+    }
+    const sw = document.createElement('button');
+    sw.className = 'switch';
+    sw.dataset['setting'] = key;
+    sw.dataset['key'] = `setting-${key}`;
+    sw.setAttribute('role', 'switch');
+    sw.setAttribute('aria-label', title);
+    sw.addEventListener('click', () => store.set({ [key]: !store.get()[key] }));
+    row.append(text, sw);
+    return row;
+  };
+
+  {
+    const h = (t: string) => {
+      const e = document.createElement('h3');
+      e.textContent = t;
+      return e;
+    };
+    const fb = buttonRow(FEEDBACK_ROW_WORDS.title, FEEDBACK_ROW_WORDS.note, FEEDBACK_ROW_WORDS.button, feedback);
+    fb.row.dataset['feedbackRow'] = '';
+    fb.button.dataset['screen'] = 'feedback';
+    fb.button.dataset['key'] = 'feedback';
+    rows.push(
+      fb.row,
+      h('On screen'),
+      toggle('thumbstick', 'Thumbstick', 'Walk with the stick in the corner. Off: tap the floor to walk.', 'touch-only'),
+      toggle('bubbles', 'Show what owls say', ''),
+      h('Sound'),
+      toggle('sound', 'Sounds', 'A soft knock as the Menu opens.'),
+      h('Motion'),
+      toggle('calm', 'Calm motion', 'No drifting fireflies, gold dust or neon rain.'),
+    );
+    if (document.fullscreenEnabled) {
+      const full = buttonRow('Full screen', 'The park fills the whole screen. Esc or the browser’s own button leaves it.', document.fullscreenElement ? 'Leave' : 'Go full screen', () => {
+        if (document.fullscreenElement) void document.exitFullscreen().then(redraw, redraw);
+        else void document.documentElement.requestFullscreen().then(redraw, redraw);
+      });
+      full.button.dataset['fullscreen'] = '';
+      rows.push(h('Screen'), full.row);
+    }
+    rows.push(h('Controls'));
+    const keys = document.createElement('div');
+    keys.className = 'keys keys-only';
+    for (const [ks, what] of KEY_HELP) {
+      const k = document.createElement('span');
+      for (const key of ks) {
+        const kbd = document.createElement('kbd');
+        kbd.textContent = key;
+        k.appendChild(kbd);
+      }
+      const w = document.createElement('span');
+      w.textContent = what;
+      keys.append(k, w);
+    }
+    const tips = document.createElement('p');
+    tips.className = 'tips';
+    tips.textContent =
+      'Tap the floor to walk there, or hold the thumbstick. On a phone, the “!” does what you are standing at and the arrow below jumps: tap it again in the air to flap, and hold it on the way down to glide. The button beside the “!” opens the Menu, and the small ones above open your emotes and Say. Tap an owl with a gold “!” to talk. Your quests are in the Menu.';
+    rows.push(keys, tips);
+  }
+  for (const r of rows) syncSettings(r, store.get());
+  return rows;
+}
+
+/**
+ * Settings from the home screen, before the park (in the park they are the Menu's Settings tab).
+ * `feedback` opens the Feedback form; it is given the button that opened Settings, which takes the
+ * focus back when the form closes.
+ */
+export function createSettingsScreen(root: HTMLElement, store: SettingsStore, feedback: (opener: HTMLElement | null) => void): SettingsScreen {
+  const modal = createModal(root, { name: 'settings', label: 'Settings', layout: 'card' });
+  const box = modal.box;
+  let openedBy: HTMLElement | null = null;
+
+  const render = () => {
+    box.innerHTML = '';
+    box.appendChild(modalHeader('Settings', { onClose: () => modal.close(), closeLabel: 'Close settings' }));
+    box.append(...settingsRows(store, render, () => feedback(openedBy)));
+    syncSettings(box, store.get());
+  };
+  store.onChange((s) => syncSettings(box, s));
+  document.addEventListener('fullscreenchange', () => {
+    if (modal.isOpen()) render();
+  });
+
+  return {
+    open(opener) {
+      openedBy = opener ?? null;
+      render();
+      modal.open(opener);
+    },
+    close: () => modal.close(),
+    isOpen: () => modal.isOpen(),
+  };
+}

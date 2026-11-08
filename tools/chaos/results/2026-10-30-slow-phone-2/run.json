@@ -1,0 +1,48 @@
+{
+  "experiment": "slow-phone",
+  "n": 5,
+  "name": "One phone on a 3G network",
+  "run_id": "2026-10-30-slow-phone-2",
+  "git": {
+    "park": "0d2cec62b83bb64087542a6ff62b9bee895f607f",
+    "harness": "0d2cec62b83bb64087542a6ff62b9bee895f607f"
+  },
+  "dirty": false,
+  "environment": "this machine: the park under wrangler dev on port 8797, the stand-in store on port 8791",
+  "hypothesis": "A phone on 3G comes into the hub and can play (its owl walks, the others are there), and the load screen's bar shows the bytes as they come: it only grows, in steps, while the park loads (OP-129).",
+  "blast_radius": "One scripted phone page in the throwaway park, its network and processor slowed.",
+  "abort_rule": "Any steady-state check failing for more than 30 s during the experiment ends it and runs the rollback; the harness never leaves a fault injected.",
+  "start": "2026-10-30T08:42:43.292Z",
+  "end": "2026-10-30T08:43:22.957Z",
+  "verdict": "held",
+  "abort_fired": false,
+  "rollback_confirmed": true,
+  "observations": [
+    {
+      "what": "a phone on 3G into the hub by address",
+      "value": "online in 12.3 s",
+      "ok": true,
+      "component": "page",
+      "fix": "load less before the room opens on a slow network (OP-129: the art the first frame needs, the rest after)",
+      "at": "2026-10-30T08:43:15.668Z"
+    },
+    {
+      "what": "the load screen's bar while the phone loaded",
+      "value": "14 steps between empty and full, 0 back, up to 100%, up 9.7 s",
+      "ok": true,
+      "component": "page",
+      "fix": "move the bar by the bytes as they come (loadArt's onProgress), never by a timer, and never back within a load",
+      "at": "2026-10-30T08:43:15.669Z"
+    },
+    {
+      "what": "the phone on 3G at play",
+      "value": "its owl walked where it was told, 10 other owls in view of the room",
+      "ok": true,
+      "component": "page",
+      "fix": "keep the slow phone in step: its walks and the others it is told about",
+      "at": "2026-10-30T08:43:16.766Z"
+    }
+  ],
+  "filed": [],
+  "proposed": 0
+}

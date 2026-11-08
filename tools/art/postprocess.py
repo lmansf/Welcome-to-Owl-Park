@@ -1,0 +1,2988 @@
+#!/usr/bin/env python3
+"""Art post-processing CLI: a selected raw candidate -> the files the game loads.
+
+Stage 2 of the art pipeline (stage 1 is ``generate.mjs``). Every command runs offline with the
+generator's mock output or the synthetic images in ``artlib/synth.py``; nothing here calls a
+network or git. Python 3, Pillow 12 and numpy only; deterministic (same input and flags give
+byte-identical files).
+
+Commands (``python3 -B tools/art/postprocess.py <command> --help`` for flags):
+
+  guide <room>|--all   layout guides from work/art/geometry.json (text-free, used as references)
+  room <key>           crop/resize to 1600x900 (and opt-in 3200x1800), grade, WebP under budget, review
+  piece <key>          chroma key, fit into the logical canvas at 2x, downsample, grade, budget
+  webp <key...>        a published cut-out's PNGs re-encoded as its WebP finals (keys the table marks webp)
+  overlay <key>        chroma key a full-frame foreground overlay; --check enforces the overlay rules
+  cut <key>            a crop of a picked candidate around a detail to repaint (the generator's @canvas:<key>)
+  patch <key>          paste the edited crop back, only where it changed: a new raw candidate of <key>
+  shift <key> --dy N   a keyed candidate moved N room px down, its top rows mirrored into the gap: a new raw candidate
+  split <key>          a tree screen's platforms or front props: its painting's pixels where a colour-coded edit shows one code colour
+  match <key>          a keyed candidate's props moved to another's colours (mean and spread): a new raw candidate
+  field [game...]      the arcade games' field guides at 2x (the generator's @canvas:arcade-<game>-bg)
+  canvas <key...>      a wing's outpaint canvas: the room painting's edge on grey (the generator's @canvas:<key>)
+  wing <room>         stitch the room's picked wings onto its painting; finish every screen and the end overlays
+  owl                  split the owl master into the five layers at 200x240 and 400x480
+  grade <in> <out>     the palette grade hook on its own
+  ref <in> <out>       prepare a committed anchor reference (<= 1024 px, no metadata, under budget)
+  sheet <key>          contact sheet of a key's raw candidates for picking the winner
+  bands <key...>|--all pull published backdrop layers into their value bands in place (OP-250); --measure <png> measures
+  publish <key...>     move finals into apps/park/public/art, append tools/art/provenance.jsonl
+  check [--all|keys]   verify what is published against the loader contract
+  demo                 run the whole chain on synthetic (or mock) input in a temp dir and assert it
+
+Outputs: finals in work/art/final/<key>.png (and <key>@2x.png; rooms as <key>.webp and
+<key>@2x.webp, since a painted room cannot meet the budget as PNG, and so the cut-outs the table
+marks ``"format": "webp"``, the nests' furniture, with their alpha exact), a review composite in
+work/art/review/<key>.png with the room geometry drawn over it, and a work/art/final/<key>.post.json
+record of the parameters, from which ``publish`` writes the committed provenance line. Finals are
+re-encoded by Pillow with no ancillary chunks (no EXIF, XMP or ICC in a WebP), re-read, and checked
+for size, dimensions and the chunk allowlist before the command returns.
+
+Raw candidates: ``--raw <file>`` or the key's SELECTED candidate under work/art/raw/<key>/
+(written by ``generate.mjs select``); a lone candidate is used with a notice. The candidate's JSON
+sidecar supplies the key colour, the owl region colours, the seed and the provider for provenance.
+"""
+
+from __future__ import annotations
+
+import argparse
+import colorsys
+import io
+import json
+import os
+import shutil
+import sys
+import tempfile
+from pathlib import Path
+
+_HERE = Path(__file__).resolve().parent
+if str(_HERE) not in sys.path:
+    sys.path.insert(0, str(_HERE))
+
+try:
+    import numpy as np  # noqa: E402
+    from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps  # noqa: E402
+except ImportError as _missing:  # pragma: no cover - depends on the machine
+    print(f"pnpm art:finish needs Pillow 12 and numpy ({_missing.name or 'a module'} is missing): python3 -m pip install pillow numpy (a venv is fine)", file=sys.stderr)
+    sys.exit(2)
+
+from artlib import (BUDGET_2X_RELAXED, BUDGET_2X_ROOM, BUDGET_BYTES, DEFAULT_WORK_DIR, HELPER_KEYS, OWL_LAYERS, OWL_SPECIES,  # noqa: E402
+                    PALETTES_DIR, PIECE_ANCHOR, PROVENANCE_PATH, PUBLIC_ART_DIR, SPRITES_PATH, PUBLIC_ROOMS, REALM_OF_KEY, ROOM_H, ROOM_W,
+                    TINTED_LAYERS, TOOLS_ART_DIR, WING_LAYERS, WING_MASTER, ArtError, flight_layers, flight_master, is_overlay, is_room_background, load_assets, ships_as_webp, load_key_colours, logical_size,
+                    now_iso, owl_layer_base, owl_master_of, rel_to_repo, sha256_bytes, species_layers, validate_key)
+from artlib import bands, forbidden, level, pngmeta, prov, sprites, webpmeta  # noqa: E402
+from artlib.budget import BudgetError, encode_under_budget  # noqa: E402
+from artlib.chroma import ChromaParams, clear_glow, key_out, solidify  # noqa: E402
+from artlib.fields import GAMES as FIELD_GAMES, render_field_guide  # noqa: E402
+from artlib.grade import grade as grade_image, load_palette  # noqa: E402
+from artlib.guide import fit_below_top, load_geometry, render_guide, review_composite, room_of, tile_view  # noqa: E402
+from artlib.overlaycheck import check_overlay, clear_key_haze, clear_sign_boards  # noqa: E402
+from artlib.patch import cut as cut_crop, patch as patch_edit  # noqa: E402
+from artlib import parse_hex  # noqa: E402
+from artlib.split import CODE_TOLERANCE, split as split_layer  # noqa: E402
+from artlib.match import SOLID_DISTANCE, match_colours  # noqa: E402
+from artlib.resize import crop_to_aspect, downsample, fit_contain, resize_exact  # noqa: E402
+from artlib.synth import fixture_geometry, synth_keyed_subject, synth_overlay, synth_owl_master, synth_room  # noqa: E402
+from artlib.wings import SIDES, TILE_H, TILE_W, outpaint_canvas, split_overlay, split_tiles, stitch, tile_key, wing_of  # noqa: E402
+import owl_layers  # noqa: E402
+import wing_layers  # noqa: E402
+
+Image.MAX_IMAGE_PIXELS = 80_000_000
+
+
+def warn(msg: str) -> None:
+    print(f"warning: {msg}", file=sys.stderr)
+
+
+def note(msg: str) -> None:
+    print(msg)
+
+
+class Ctx:
+    """Per-invocation paths and shared flags."""
+
+    def __init__(self, a: argparse.Namespace):
+        self.work = Path(getattr(a, "work", None) or os.environ.get("ART_WORK_DIR") or DEFAULT_WORK_DIR)
+        self.out = Path(getattr(a, "out", None) or (self.work / "final"))
+        self.review = self.work / "review"
+        self.geometry_path = Path(getattr(a, "geometry", None) or (self.work / "geometry.json"))
+        self.now = now_iso(getattr(a, "now", None))
+        self.budget = int(getattr(a, "budget", None) or BUDGET_BYTES)
+        self.notes = list(getattr(a, "note", None) or [])
+        self.assets = load_assets()
+        self.key_colours = load_key_colours()
+        self.public = Path(getattr(a, "public", None) or PUBLIC_ART_DIR)
+        self._geom: dict | None = None
+
+    def geometry(self) -> dict:
+        if self._geom is None:
+            if self.geometry_path.exists():
+                self._geom = load_geometry(self.geometry_path)
+            else:
+                warn(f"no geometry at {self.geometry_path}; using the built-in fixture mirror (run `pnpm art:geometry` for the live data)")
+                self._geom = fixture_geometry()
+        return self._geom
+
+    def tile_of(self, key: str) -> tuple[str, dict] | None:
+        """(room id, {key, x, y}) when a room wider than one screen lists the key among its art tiles."""
+        for rid, room in self.geometry().get("rooms", {}).items():
+            for t in (room.get("backgrounds") or []) + (room.get("foregrounds") or []):
+                if t.get("key") == key:
+                    return rid, t
+        return None
+
+    def behind_owls(self, key: str) -> bool:
+        """Whether a room draws the key among its backgrounds, behind the owls (the tree's keyed
+        playfield, OP-156), rather than in front of them as an overlay usually is."""
+        return any(t.get("key") == key for room in self.geometry().get("rooms", {}).values() for t in room.get("backgrounds") or [])
+
+    def room_for(self, key: str) -> str:
+        if key in PIECE_ANCHOR:
+            return PIECE_ANCHOR[key][0]
+        hit = self.tile_of(key)
+        if hit:
+            return hit[0]
+        base = key[:-3] if key.endswith("-fg") else key
+        wing = wing_of(base)
+        return wing[0] if wing else base
+
+    def view_for(self, key: str) -> tuple[dict, str] | None:
+        """The geometry a key's art is drawn and checked against, and its room id: one screen of a
+        wider room is seen through ``tile_view``. None for room art that a wider room does not draw."""
+        geom = self.geometry()
+        room = self.room_for(key)
+        hit = self.tile_of(key)
+        if hit:
+            return tile_view(geom, room, float(hit[1].get("x", 0)), float(hit[1].get("y", 0))), room
+        size = (geom.get("rooms", {}).get(room) or {}).get("size") or {"w": ROOM_W, "h": ROOM_H}
+        if self.assets.get(key, {}).get("kind") == "room" and (size["w"], size["h"]) != (ROOM_W, ROOM_H):
+            return None
+        return geom, room
+
+
+# ----------------------------------------------------------------------------------------------
+# Raw candidates and post records
+
+
+def resolve_raw(ctx: Ctx, key: str, raw_flag: str | None) -> tuple[Path, dict | None]:
+    if raw_flag:
+        p = Path(raw_flag)
+        if not p.exists():
+            raise ArtError(f"raw file {p} does not exist")
+        sc = p.with_suffix(".json")
+        return p, (json.loads(sc.read_text(encoding="utf-8")) if sc.exists() else None)
+    d = ctx.work / "raw" / key
+    if not d.is_dir():
+        raise ArtError(f"no raw candidates for {key!r} under {d} (run `pnpm art:generate --only {key}` or pass --raw)")
+    sel = d / "SELECTED"
+    cands = sorted([p for p in d.iterdir() if p.suffix.lower() in (".png", ".jpg", ".jpeg")])
+    if sel.exists():
+        h = sel.read_text(encoding="utf-8").strip()
+        for p in cands:
+            if p.stem == h:
+                sc = p.with_suffix(".json")
+                return p, (json.loads(sc.read_text(encoding="utf-8")) if sc.exists() else None)
+        raise ArtError(f"SELECTED candidate {h} of {key!r} has no image file in {d}")
+    if len(cands) == 1:
+        note(f"{key}: no SELECTED marker, using the only candidate {cands[0].name}")
+        sc = cands[0].with_suffix(".json")
+        return cands[0], (json.loads(sc.read_text(encoding="utf-8")) if sc.exists() else None)
+    if not cands:
+        raise ArtError(f"no raw candidates for {key!r} in {d}")
+    raise ArtError(f"{key!r} has {len(cands)} candidates and no SELECTED marker: run `node tools/art/generate.mjs select {key} <hash16|latest>` or pass --raw")
+
+
+def open_raw(path: Path) -> Image.Image:
+    img = Image.open(path)
+    img.load()
+    if path.suffix.lower() in (".jpg", ".jpeg"):
+        warn(f"{path.name} is JPEG; ringing around saturated key edges costs matte quality (request PNG output from the provider)")
+    return img
+
+
+def open_base(ctx: Ctx, key: str, flag: str | None) -> tuple[Image.Image, str, dict | None]:
+    """The image ``cut`` and ``patch`` work on, its name and its sidecar: the key's picked candidate,
+    a raw file, or several files laid side by side, left to right (``a,b``: a room's screens, for an
+    edit across their join; they must be one height)."""
+    if flag and "," in flag:
+        paths = [Path(p) for p in flag.split(",")]
+        for p in paths:
+            if not p.exists():
+                raise ArtError(f"raw file {p} does not exist")
+        imgs = [open_raw(p).convert("RGB") for p in paths]
+        if len({i.height for i in imgs}) != 1:
+            raise ArtError(f"files laid side by side must be one height: {', '.join(f'{p.name} {i.width}x{i.height}' for p, i in zip(paths, imgs))}")
+        row = Image.new("RGB", (sum(i.width for i in imgs), imgs[0].height))
+        x = 0
+        for i in imgs:
+            row.paste(i, (x, 0))
+            x += i.width
+        return row, "+".join(p.name for p in paths), None
+    raw, sc = resolve_raw(ctx, key, flag)
+    return open_raw(raw), raw.name, sc
+
+
+def sidecar_subset(sc: dict | None) -> dict | None:
+    """The sidecar fields the post record and the provenance line carry (result URL without its query)."""
+    if not sc:
+        return None
+    out = {k: sc.get(k) for k in prov.SIDECAR_FIELDS if k in sc}
+    if "source_url" in out:
+        out["source_url"] = prov.public_url(out["source_url"])
+    return out
+
+
+#: Raster formats the loader tries after the SVG, in its order of preference.
+RASTER_EXTS = ("webp", "png")
+
+
+def verify_final(path: Path, expect: tuple[int, int] | None, budget: int | None) -> dict:
+    """pngmeta.verify_file or webpmeta.verify_file, by the file's extension."""
+    return (webpmeta if Path(path).suffix.lower() == ".webp" else pngmeta).verify_file(path, expect, budget)
+
+
+def remove_rasters(d: Path, key: str, keep: set[str]) -> list[str]:
+    """Delete <key>.png|webp and <key>@2x.png|webp in d except the names in keep; returns what went."""
+    removed = []
+    for ext in RASTER_EXTS:
+        for name in (f"{key}.{ext}", f"{key}@2x.{ext}"):
+            if name not in keep and (d / name).exists():
+                (d / name).unlink()
+                removed.append(name)
+    return removed
+
+
+def write_final(ctx: Ctx, name: str, data: bytes, expect: tuple[int, int], budget: int) -> dict:
+    path = ctx.out / name
+    pngmeta.write_bytes(path, data)
+    v = verify_final(path, expect, budget)
+    if not v["ok"]:
+        raise ArtError(f"{name}: " + "; ".join(v["problems"]))
+    return {"file": name, "bytes": v["bytes"], "sha256": sha256_bytes(data), "size": f"{expect[0]}x{expect[1]}"}
+
+
+def budget_line(info: dict) -> str:
+    if info.get("format") == "webp":
+        return f"budget: webp q{info['quality']}"
+    if info.get("colors"):
+        return f"budget: P{info['colors']}" + (" relaxed" if info.get("budget_relaxed") else "") + (f" dither={info['dither']}" if info.get("dither", "none") != "none" else "")
+    return f"budget: {info.get('mode', 'truecolour')}" + (" relaxed" if info.get("budget_relaxed") else "")
+
+
+def encode_final(img: Image.Image, budget: int, relaxed: int | None, dither: str, label: str) -> tuple[bytes, dict]:
+    data, info = encode_under_budget(img, budget, relaxed=relaxed, dither=dither)
+    if info.get("colors") and info["colors"] < 128:
+        warn(f"{label}: palette reduced to {info['colors']} colours to meet the budget; expect banding")
+    if info.get("budget_relaxed"):
+        warn(f"{label}: {info['bytes']} bytes exceeds the {BUDGET_BYTES} byte rule; shipped under the relaxed budget (flagged in provenance)")
+    return data, info
+
+
+def save_post_record(ctx: Ctx, key: str, record: dict, earlier_edits: list[str] | None = None) -> Path:
+    """Write the finish record; its human edits are ``earlier_edits`` (art finished again from
+    published art keeps its notes) followed by this run's --note entries."""
+    record = dict(record)
+    record["finished_at"] = ctx.now
+    record["human_edits"] = list(earlier_edits or []) + list(ctx.notes)
+    p = ctx.out / f"{key}.post.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(record, indent=2), encoding="utf-8")
+    return p
+
+
+def load_post_record(ctx: Ctx, key: str) -> dict | None:
+    p = ctx.out / f"{key}.post.json"
+    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
+
+
+def grade_spec(ctx: Ctx, key: str, flag: str | None, strength: float | None) -> tuple[dict | None, str | None, float | None]:
+    realm = flag if flag is not None else REALM_OF_KEY.get(key)
+    if realm in (None, "none", ""):
+        return None, None, None
+    pal, sha = load_palette(realm)
+    return pal, f"grade: {realm}@{strength if strength is not None else pal['strength']} palette={sha}", strength
+
+
+def apply_grade(img: Image.Image, pal: dict | None, strength: float | None) -> Image.Image:
+    return grade_image(img, pal, strength) if pal else img
+
+
+def key_colour_for(ctx: Ctx, key: str, flag: str | None, sidecar: dict | None) -> str | None:
+    """--key-colour, else the candidate's sidecar, else config/assets.json (the generator's own table)."""
+    if flag:
+        return None if flag.lower() == "auto" else flag
+    if sidecar and sidecar.get("key_colour"):
+        return sidecar["key_colour"]
+    return ctx.key_colours.get(key)
+
+
+def chroma_params(a: argparse.Namespace, key_colour: str | None) -> ChromaParams:
+    return ChromaParams(key=key_colour, t0=a.t0, t1=a.t1, despill_band=a.despill_band, min_area=a.min_area, max_hole=a.max_hole, feather=a.feather, trust_key=a.trust_key)
+
+
+def background_for(ctx: Ctx, key: str) -> Image.Image:
+    """The painting behind a key's art: the screen at the same place for one screen of a wider room,
+    else the room's own painting (published, else finished), else its layout guide."""
+    room = ctx.room_for(key)
+    bg = room
+    hit = ctx.tile_of(key)
+    if hit:
+        rid, t = hit
+        for b in room_of(ctx.geometry(), rid).get("backgrounds") or []:
+            if (b.get("x"), b.get("y")) == (t.get("x"), t.get("y")):
+                bg = b["key"]
+    for cand in (ctx.public / f"{bg}.webp", ctx.public / f"{bg}.png", ctx.out / f"{bg}.webp", ctx.out / f"{bg}.png"):
+        if cand.exists():
+            return Image.open(cand).convert("RGB").resize((ROOM_W, ROOM_H), Image.Resampling.LANCZOS)
+    view = ctx.view_for(key)
+    return render_guide(view[0], view[1], ctx.assets) if view else Image.new("RGB", (ROOM_W, ROOM_H), (12, 30, 54))
+
+
+def write_review(ctx: Ctx, name: str, img: Image.Image) -> Path:
+    p = ctx.review / name
+    pngmeta.save(img, p)
+    return p
+
+
+# ----------------------------------------------------------------------------------------------
+# Commands
+
+
+def cmd_guide(ctx: Ctx, a: argparse.Namespace) -> int:
+    geom = ctx.geometry()
+    rooms = sorted(geom["rooms"]) if a.all or not a.room else [a.room]
+    out_dir = ctx.work / "guides"
+    for r in rooms:
+        img = render_guide(geom, r, ctx.assets)
+        n = pngmeta.save(img, out_dir / f"{r}.png")
+        note(f"guide {r}: {rel_to_repo(out_dir / f'{r}.png')} ({n} bytes)")
+    return 0
+
+
+def finish_room(ctx: Ctx, key: str, img: Image.Image, crop: str, shift_y: int, pal: dict | None, strength: float | None, with_2x: bool, budget_2x: int) -> tuple[dict, list[str]]:
+    """The WebP finals of one screen of a room (1x, and 2x when asked): (outputs, budget lines)."""
+    W, H = logical_size(key, ctx.assets)
+    outputs: dict = {}
+    tools: list[str] = []
+    fields = ("format", "quality", "colors", "mode", "budget_relaxed")
+    one = apply_grade(resize_exact(img, W, H, crop, shift_y), pal, strength)
+    data, info = webpmeta.encode_under_budget(one, ctx.budget)
+    outputs["1x"] = {**write_final(ctx, f"{key}.webp", data, (W, H), ctx.budget), **{k: info.get(k) for k in fields}}
+    tools.append(budget_line(info))
+    if with_2x:
+        two = apply_grade(resize_exact(img, 2 * W, 2 * H, crop, shift_y), pal, strength)
+        data2, info2 = webpmeta.encode_under_budget(two, budget_2x)
+        outputs["2x"] = {**write_final(ctx, f"{key}@2x.webp", data2, (2 * W, 2 * H), budget_2x), **{k: info2.get(k) for k in fields}}
+        tools.append("budget@2x: " + budget_line(info2)[8:])
+    # Only this finish's files may remain: a PNG from an earlier finish, or a 2x this one did not
+    # write, would otherwise be published with it.
+    for name in remove_rasters(ctx.out, key, {o["file"] for o in outputs.values()}):
+        note(f"removed stale final {name}")
+    return outputs, tools
+
+
+def finish_cutout_webp(ctx: Ctx, key: str, one: Image.Image, two: Image.Image | None) -> tuple[dict, list[str]]:
+    """The WebP finals of a cut-out the table marks ``"format": "webp"`` from its RGBA at 1x (and
+    2x): (outputs, budget lines). The colour is lossy, at the first quality under the budget; the
+    alpha, the cut-out's edge and what the sprite manifest measures, is kept exact."""
+    W, H = logical_size(key, ctx.assets)
+    fields = ("format", "quality", "colors", "mode", "budget_relaxed")
+    outputs: dict = {}
+    tools: list[str] = []
+    for logical, img, size in (("1x", one, (W, H)), ("2x", two, (2 * W, 2 * H))):
+        if img is None:
+            continue
+        img = img.convert("RGBA")
+        name = f"{key}.webp" if logical == "1x" else f"{key}@2x.webp"
+        data, info = webpmeta.encode_under_budget(img, ctx.budget)
+        if not webpmeta.same_alpha(data, img):
+            raise ArtError(f"{name}: the encoder changed the alpha; a cut-out's edge must stay exact")
+        outputs[logical] = {**write_final(ctx, name, data, size, ctx.budget), **{k: info.get(k) for k in fields}}
+        tools.append(budget_line(info) if logical == "1x" else "budget@2x: " + budget_line(info)[8:])
+    for name in remove_rasters(ctx.out, key, {o["file"] for o in outputs.values()}):
+        note(f"removed stale final {name}")
+    return outputs, tools
+
+
+def room_review(ctx: Ctx, key: str, img: Image.Image) -> Image.Image:
+    """``img`` with its room's geometry over it (the screen's own view of a wider room), or as it is
+    when no room draws the key."""
+    view = ctx.view_for(key)
+    return review_composite(img, view[0], view[1], 0.4, ctx.assets) if view else img.convert("RGB")
+
+
+def patch_lines(sc: dict | None) -> list[str]:
+    """The provenance line of a candidate made by ``patch``: what was pasted into what, and where."""
+    p = (sc or {}).get("patched")
+    if not p:
+        return []
+    base, edit, bb = p["base"], p["edit"], p["patch_bbox"]
+    # Screens laid side by side have no candidate of their own: the files name them.
+    into = f"{base['key']} seed {base['seed']} ({base['file']})" if base.get("key") else base["file"]
+    joins = f", joined along cuts in x {p['join_columns'][0][0]}..{p['join_columns'][0][1]} and {p['join_columns'][1][0]}..{p['join_columns'][1][1]}" if p.get("join_columns") else ""
+    return [f"patch: {edit['key']} seed {edit['seed']} ({edit['file']}) pasted into {into} "
+            f"at x {bb[0]}..{bb[2]}, y {bb[1]}..{bb[3]} ({p['patched_px']} px changed, tone shift {p['tone_shift']}{joins})"]
+
+
+def cmd_room(ctx: Ctx, a: argparse.Namespace) -> int:
+    """Rooms ship as lossy WebP: a painted 1600x900 room cannot meet the budget as PNG."""
+    key = validate_key(a.key, allow_helpers=False, assets=ctx.assets)
+    raw, sc = resolve_raw(ctx, key, a.raw)
+    img = open_raw(raw).convert("RGB")
+    pal, gline, strength = grade_spec(ctx, key, a.grade, a.strength)
+    tools = patch_lines(sc) + [f"room: crop={a.crop} shift={a.shift_y} source={img.width}x{img.height}"]
+    if gline:
+        tools.append(gline)
+    outputs, lines = finish_room(ctx, key, img, a.crop, a.shift_y, pal, strength, a.with_2x, a.budget_2x)
+    tools.extend(lines)
+    rv = write_review(ctx, f"{key}.png", room_review(ctx, key, Image.open(ctx.out / f"{key}.webp")))
+    save_post_record(ctx, key, {"key": key, "kind": "room", "raw": rel_to_repo(raw), "raw_sidecar": sidecar_subset(sc), "outputs": outputs, "tools": tools, "params": {"crop": a.crop, "shift_y": a.shift_y, "with_2x": a.with_2x}})
+    for k, o in outputs.items():
+        note(f"{key} {k}: {o['file']} {o['bytes']} bytes WebP q{o['quality']}")
+    note(f"review: {rel_to_repo(rv)}")
+    return 0
+
+
+def _floor_cut(rgba: Image.Image, y: int | None) -> Image.Image:
+    if y is None:
+        return rgba
+    arr = np.asarray(rgba).copy()
+    arr[y:, :, :] = 0
+    return Image.fromarray(arr, "RGBA")
+
+
+def cmd_piece(ctx: Ctx, a: argparse.Namespace) -> int:
+    key = validate_key(a.key, allow_helpers=False, assets=ctx.assets)
+    W, H = logical_size(key, ctx.assets)
+    raw, sc = resolve_raw(ctx, key, a.raw)
+    img = open_raw(raw)
+    kc = key_colour_for(ctx, key, a.key_colour, sc)
+    rgba, cinfo = key_out(img, chroma_params(a, kc))
+    glow = ""
+    if a.clear_glow:
+        # Light painted over the key around a lamp: paint it backdrop inside the boxes and key again.
+        img, n = clear_glow(img, [parse_ints(b, 4, "--clear-glow") for b in a.clear_glow], cinfo["backdrop"], a.glow_margin)
+        rgba, cinfo = key_out(img, chroma_params(a, kc))
+        glow = f" clear_glow={';'.join(a.clear_glow)} margin={a.glow_margin} ({n} px)"
+    if a.solid:
+        rgba, sinfo = solidify(rgba, img, a.solid)
+        cinfo.update(sinfo)
+    rgba = _floor_cut(rgba, a.floor_cut)
+    if a.flip:
+        rgba = ImageOps.mirror(rgba)
+    canvas2x, finfo = fit_contain(rgba, 2 * W, 2 * H, a.margin, a.anchor_x, a.pad_bottom, a.valign)
+    pal, gline, strength = grade_spec(ctx, key, a.grade, a.strength)
+    canvas2x = apply_grade(canvas2x, pal, strength)
+    one = downsample(canvas2x, W, H)
+    tools = [f"piece: key={cinfo['backdrop']} t0={a.t0} t1={a.t1} despill={a.despill_band} fit=contain margin={a.margin} anchor_x={a.anchor_x} pad_bottom={a.pad_bottom} valign={a.valign} scale={finfo['scale']}" + (f" solid={a.solid}" if a.solid else "") + (" flip" if a.flip else "") + (f" floor_cut={a.floor_cut}" if a.floor_cut is not None else "") + glow]
+    if gline:
+        tools.append(gline)
+    if ships_as_webp(key, ctx.assets):
+        # The table marks it WebP (the nests' furniture): no palette, the alpha exact.
+        outputs, lines = finish_cutout_webp(ctx, key, one, None if a.no_2x else canvas2x)
+        tools.extend(lines)
+    else:
+        outputs = {}
+        data, info = encode_final(one, ctx.budget, None, a.dither, f"{key}.png")
+        outputs["1x"] = {**write_final(ctx, f"{key}.png", data, (W, H), ctx.budget), **{k: info.get(k) for k in ("colors", "mode", "budget_relaxed", "dither")}}
+        tools.append(budget_line(info))
+        if not a.no_2x:
+            data2, info2 = encode_final(canvas2x, ctx.budget, None, a.dither, f"{key}@2x.png")
+            outputs["2x"] = {**write_final(ctx, f"{key}@2x.png", data2, (2 * W, 2 * H), ctx.budget), **{k: info2.get(k) for k in ("colors", "mode", "budget_relaxed", "dither")}}
+            tools.append("budget@2x: " + budget_line(info2)[8:])
+        elif (ctx.out / f"{key}@2x.png").exists():
+            (ctx.out / f"{key}@2x.png").unlink()
+        remove_rasters(ctx.out, key, {f"{key}.png", f"{key}@2x.png"})
+    # Review: the piece in its room at the anchor, scaled as ambience.ts does (on the room's painted
+    # screen, as that screen sees the room when the room is wider than one).
+    room, anchor = PIECE_ANCHOR.get(key, (None, None))
+    view = ctx.view_for(room) if room else None
+    geom, room = view if view else (ctx.geometry(), room)
+    if room and anchor and anchor in (room_of(geom, room).get("anchors") or {}):
+        ax, ay = (room_of(geom, room)["anchors"][anchor][k] for k in ("x", "y"))
+        k = fit_below_top(H, ay)
+        bg = background_for(ctx, room).convert("RGBA")
+        piece_img = Image.open(ctx.out / outputs["1x"]["file"]).convert("RGBA").resize((max(1, int(round(W * k))), max(1, int(round(H * k)))), Image.Resampling.LANCZOS)
+        bg.alpha_composite(piece_img, (int(round(ax - piece_img.width / 2)), int(round(ay - piece_img.height))))
+        rv = write_review(ctx, f"{key}.png", review_composite(bg, geom, room, 0.4, ctx.assets))
+        note(f"review: {rel_to_repo(rv)}")
+    save_post_record(ctx, key, {"key": key, "kind": "piece", "raw": rel_to_repo(raw), "raw_sidecar": sidecar_subset(sc), "outputs": outputs, "tools": tools, "chroma": {k: v for k, v in cinfo.items() if k != "params"}, "fit": finfo})
+    for k2, o in outputs.items():
+        note(f"{key} {k2}: {o['file']} {o['bytes']} bytes" + (f" WebP q{o['quality']}" if o.get("format") == "webp" else f" P{o['colors']}" if o.get("colors") else " truecolour"))
+    return 0
+
+
+KIT_PATH = TOOLS_ART_DIR / "config" / "kit.json"
+
+
+def kit_table() -> dict:
+    return json.loads(KIT_PATH.read_text(encoding="utf-8"))
+
+
+def kit_sheet(key: str) -> tuple[dict, str]:
+    """A sheet's table entry and the prefix its pieces' keys carry: ``kit-`` for the core set,
+    ``kit-<area>-`` for an area set."""
+    kit = kit_table()
+    name = key.removeprefix("kit-sheet-")
+    if key.startswith("kit-sheet-"):
+        if name in kit["sheets"]:
+            return kit["sheets"][name], "kit-"
+        for area, spec in kit.get("areas", {}).items():
+            if name.startswith(area + "-") and name[len(area) + 1:] in spec["sheets"]:
+                return spec["sheets"][name[len(area) + 1:]], f"kit-{area}-"
+        for area, sheets in kit.get("courses", {}).items():
+            if name.startswith(area + "-") and name[len(area) + 1:] in sheets:
+                return sheets[name[len(area) + 1:]], f"kit-{area}-"
+        if name.startswith("cut-") and name[len("cut-"):] in kit.get("recut", {}).get("sheets", {}):
+            return kit["recut"]["sheets"][name[len("cut-"):]], "kit-cut-"
+        if name.startswith("puzzle-") and name[len("puzzle-"):] in kit.get("puzzle", {}).get("sheets", {}):
+            return kit["puzzle"]["sheets"][name[len("puzzle-"):]], "kit-puzzle-"
+        if name.startswith("landmark-") and name[len("landmark-"):] in kit.get("landmarks", {}):
+            # a landmark is one prop on its own square canvas: a one-piece sheet
+            piece = kit["landmarks"][name[len("landmark-"):]]
+            return {"w": piece["w"], "h": piece["h"], "pieces": [{"name": name[len("landmark-"):], **piece}]}, "kit-landmark-"
+    raise ArtError(f"{key!r} is not a sheet key (kit-sheet-<name> or kit-sheet-<area>-<name> in config/kit.json)")
+
+
+def heal_tile(img: Image.Image, band: float = 0.25, axes: tuple[int, ...] = (1, 0)) -> Image.Image:
+    """``img`` made to tile along ``axes`` (1 is sideways, 0 is up and down), one at a time: rolled by
+    half its size along the axis, so its two edges meet in the middle as one seam, that seam covered by
+    the original's own middle (continuous there) under a feathered band ``band`` of the size wide. Each
+    pass keeps what the other made continuous. An RGBA image is blended premultiplied, so a keyed
+    layer's edge carries no fringe."""
+    mode = "RGBA" if "A" in img.getbands() else "RGB"
+    arr = np.asarray(img.convert(mode)).astype(np.float32)
+    if mode == "RGBA":
+        arr[..., :3] *= arr[..., 3:4] / 255.0
+
+    def ramp(n: int) -> np.ndarray:
+        # 1 within a quarter of the band of the centre line, 0 past three quarters, linear between
+        d = np.abs(np.arange(n, dtype=np.float32) - n / 2) / (n * band)
+        return np.clip(1.5 - 2.0 * d, 0, 1)
+
+    for axis in axes:
+        n = arr.shape[axis]
+        rolled = np.roll(arr, n // 2, axis=axis)
+        mask = ramp(n)[None, :, None] if axis == 1 else ramp(n)[:, None, None]
+        arr = rolled * (1 - mask) + arr * mask
+    if mode == "RGBA":
+        a = np.maximum(arr[..., 3:4], 1e-3)
+        arr[..., :3] = np.where(arr[..., 3:4] > 0, arr[..., :3] * 255.0 / a, 0)
+    return Image.fromarray(np.clip(np.round(arr), 0, 255).astype(np.uint8), mode)
+
+
+def tile_seam_ratio(img: Image.Image) -> dict:
+    """How visible the wrap seams are: the mean difference between the last and first columns
+    (rows) against the mean difference between neighbouring columns (rows) inside; near 1 tiles."""
+    arr = np.asarray(img.convert("RGBA")).astype(np.float32)
+    arr = arr[..., :3] * arr[..., 3:4] / 255.0  # premultiplied: a keyed layer's clear sky is one flat colour
+    inner_x = float(np.abs(np.diff(arr, axis=1)).mean()); inner_y = float(np.abs(np.diff(arr, axis=0)).mean())
+    seam_x = float(np.abs(arr[:, 0] - arr[:, -1]).mean()); seam_y = float(np.abs(arr[0] - arr[-1]).mean())
+    # a floor of two grey levels of inner detail, so a flat tile's invisible seam is not a high ratio
+    return {"seam_x": round(seam_x / max(inner_x, 2.0), 3), "seam_y": round(seam_y / max(inner_y, 2.0), 3)}
+
+
+def resize_tiling(img: Image.Image, size: int) -> Image.Image:
+    """A periodic image resized without the filter disturbing its edges: tiled three by three,
+    resized, the middle tile kept."""
+    w, h = img.size
+    big = Image.new("RGB", (3 * w, 3 * h))
+    for i in range(3):
+        for j in range(3):
+            big.paste(img, (i * w, j * h))
+    big = big.resize((3 * size, 3 * size), Image.Resampling.LANCZOS)
+    return big.crop((size, size, 2 * size, 2 * size))
+
+
+def cmd_texture(ctx: Ctx, a: argparse.Namespace) -> int:
+    """A kit texture (OP-229): the candidate healed to tile, resized to its logical size with the
+    tiling kept, shipped as WebP; the seam ratio recorded (and refused past --max-seam).
+
+    TODO-DOCS (OP-229): docs/ART-PIPELINE.md: the art kit section (texture, pieces, kit.json)."""
+    key = validate_key(a.key, allow_helpers=False, assets=ctx.assets)
+    if ctx.assets.get(key, {}).get("kind") != "texture":
+        raise ArtError(f"{key!r} is not a texture key (kit-tex-<name> in config/kit.json)")
+    W, H = logical_size(key, ctx.assets)
+    raw, sc = resolve_raw(ctx, key, a.raw)
+    img = open_raw(raw).convert("RGB")
+    before = tile_seam_ratio(img)
+    healed = heal_tile(img, a.band) if not a.no_heal else img
+    one = resize_tiling(healed, W)
+    after = tile_seam_ratio(one)
+    worst = max(after["seam_x"], after["seam_y"])
+    tools = [f"texture: heal band={a.band if not a.no_heal else 'none'} seam before x{before['seam_x']} y{before['seam_y']} after x{after['seam_x']} y{after['seam_y']}"]
+    if worst > a.max_seam:
+        raise ArtError(f"{key}: the tile's wrap seam is {worst}x its inner detail (limit {a.max_seam}); pick another candidate or widen --band")
+    data, info = webpmeta.encode_under_budget(one, ctx.budget)
+    outputs = {"1x": {**write_final(ctx, f"{key}.webp", data, (W, H), ctx.budget), **{k: info.get(k) for k in ("format", "quality", "colors", "mode", "budget_relaxed")}}}
+    tools.append(budget_line(info))
+    for name in remove_rasters(ctx.out, key, {f"{key}.webp"}):
+        note(f"removed stale final {name}")
+    # Review: the tile repeated two by two, so a seam shows at once.
+    rv = Image.new("RGB", (2 * W, 2 * H))
+    for i in range(2):
+        for j in range(2):
+            rv.paste(one, (i * W, j * H))
+    rvp = write_review(ctx, f"{key}.png", rv)
+    save_post_record(ctx, key, {"key": key, "kind": "texture", "raw": rel_to_repo(raw), "raw_sidecar": sidecar_subset(sc), "outputs": outputs, "tools": tools, "tiling": {"before": before, "after": after}})
+    note(f"{key} 1x: {key}.webp {outputs['1x']['bytes']} bytes WebP q{info.get('quality')}; seam x{after['seam_x']} y{after['seam_y']}")
+    note(f"review: {rel_to_repo(rvp)}")
+    return 0
+
+
+def sheet_blobs(alpha: np.ndarray, scale: int = 4, grow: int = 3, min_px: int = 400) -> list[dict]:
+    """The props on a keyed sheet as blobs: the alpha pooled down by ``scale``, grown by ``grow``
+    pooled pixels (so a lantern on its thread stays with its hook), labelled into connected
+    components; each blob's full-size bbox, area and centroid, largest first."""
+    h, w = alpha.shape
+    H, W = h // scale, w // scale
+    m = (alpha[:H * scale, :W * scale].reshape(H, scale, W, scale).max(axis=(1, 3)) > 8)
+    for _ in range(grow):
+        g = m.copy()
+        g[1:] |= m[:-1]; g[:-1] |= m[1:]; g[:, 1:] |= m[:, :-1]; g[:, :-1] |= m[:, 1:]
+        m = g
+    labels = np.zeros((H, W), dtype=np.int32)
+    parent: list[int] = [0]
+
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]; x = parent[x]
+        return x
+
+    nxt = 1
+    for y in range(H):
+        row = m[y]
+        for x in range(W):
+            if not row[x]:
+                continue
+            up = labels[y - 1, x] if y else 0
+            left = labels[y, x - 1] if x else 0
+            if up and left:
+                a, b = find(up), find(left)
+                labels[y, x] = a
+                if a != b:
+                    parent[b] = a
+            elif up or left:
+                labels[y, x] = up or left
+            else:
+                parent.append(nxt); labels[y, x] = nxt; nxt += 1
+    flat = np.array([find(i) for i in range(nxt)], dtype=np.int32)
+    labels = flat[labels]
+    out = []
+    for lab in np.unique(labels):
+        if lab == 0:
+            continue
+        ys, xs = np.nonzero(labels == lab)
+        # the blob's own pixels at full size (not the grown ones): the alpha inside its grown box
+        x0, y0 = int(max(0, (xs.min() - grow) * scale)), int(max(0, (ys.min() - grow) * scale))
+        x1, y1 = int(min(w, (xs.max() + 1 + grow) * scale)), int(min(h, (ys.max() + 1 + grow) * scale))
+        sub = alpha[y0:y1, x0:x1] > 8
+        if not sub.any():
+            continue
+        sy, sx = np.nonzero(sub)
+        area = int(sub.sum())
+        if area < min_px:
+            continue
+        out.append({"bbox": [int(x0 + sx.min()), int(y0 + sy.min()), int(x0 + sx.max() + 1), int(y0 + sy.max() + 1)], "area": area,
+                    "cx": x0 + float(sx.mean()), "cy": y0 + float(sy.mean()), "mask": (labels == lab)})
+    out.sort(key=lambda b: -b["area"])
+    return out
+
+
+def order_blobs(blobs: list[dict], cols: int, rows: int) -> list[dict]:
+    """The sheet's ``cols * rows`` largest blobs in reading order: split into rows at the widest gap
+    between centroid heights, each row left to right."""
+    keep = sorted(blobs[: cols * rows], key=lambda b: b["cy"])
+    if rows > 1 and len(keep) > rows:
+        gaps = [keep[i + 1]["cy"] - keep[i]["cy"] for i in range(len(keep) - 1)]
+        cuts = sorted(sorted(range(len(gaps)), key=lambda i: -gaps[i])[: rows - 1])
+        groups, start = [], 0
+        for c in cuts:
+            groups.append(keep[start:c + 1]); start = c + 1
+        groups.append(keep[start:])
+    else:
+        groups = [keep]
+    out = []
+    for g in groups:
+        out.extend(sorted(g, key=lambda b: b["cx"]))
+    return out
+
+
+def cmd_pieces(ctx: Ctx, a: argparse.Namespace) -> int:
+    """A kit shape sheet (OP-229): the candidate keyed out, its props found as blobs (the painter's
+    grid is never exact, so the six are taken in reading order of where they sit), each trimmed to
+    its own pixels and fitted into its piece's logical canvas at 2x, shipped as the piece's WebP
+    cut-outs (1x and 2x) with the alpha exact, one post record per piece."""
+    key = validate_key(a.key, allow_helpers=True, assets=ctx.assets)
+    sheet, prefix = kit_sheet(key)
+    raw, sc = resolve_raw(ctx, key, a.raw)
+    img = open_raw(raw)
+    kc = key_colour_for(ctx, key, a.key_colour, sc) or "#FF00FF"
+    rgba, cinfo = key_out(img, chroma_params(a, kc))
+    if a.clear_haze:
+        rgba, n = clear_key_haze(rgba, cinfo["backdrop"])
+        note(f"{key}: clear-haze {n} px")
+    cols, rows = {1: (1, 1), 3: (3, 1), 4: (2, 2)}.get(len(sheet["pieces"]), (3, 2))
+    alpha = np.asarray(rgba.getchannel("A"))
+    blobs = sheet_blobs(alpha, scale=4, grow=a.grow, min_px=a.min_blob)
+    n = cols * rows
+    if len(blobs) < n:
+        raise ArtError(f"{key}: {len(blobs)} prop(s) found, not {n}; the sheet painted fewer props or two touch (try --grow 1); pick another candidate")
+    extra = blobs[n:]
+    if extra:
+        note(f"warning: {key}: {len(extra)} small blob(s) past the {n} prop(s) dropped (largest {extra[0]['area']} px); a lantern on a thread or a leaf may be lost")
+    ordered = order_blobs(blobs, cols, rows)
+    only = set(a.only.split(",")) if a.only else None
+    review = rgba.convert("RGB")
+    drw = ImageDraw.Draw(review)
+    done = 0
+    scale = 4
+    for i, (piece, blob) in enumerate(zip(sheet["pieces"], ordered)):
+        pkey = f"{prefix}{piece['name']}"
+        x0, y0, x1, y1 = blob["bbox"]
+        drw.rectangle((x0, y0, x1 - 1, y1 - 1), outline=(0, 255, 0), width=3)
+        drw.text((x0 + 6, max(0, y0 - 16)), f"{i + 1} {pkey}", fill=(255, 255, 255))
+        if only and pkey not in only and piece["name"] not in only:
+            continue
+        # the blob's own pixels only: another prop's overhang into this box is cleared
+        own = np.kron(blob["mask"], np.ones((scale, scale), dtype=bool))[:alpha.shape[0], :alpha.shape[1]]
+        crop = rgba.crop((x0, y0, x1, y1))
+        ca = np.asarray(crop.getchannel("A")).astype(np.uint8) * own[y0:y1, x0:x1]
+        crop.putalpha(Image.fromarray(ca, "L"))
+        W, H = logical_size(pkey, ctx.assets)
+        canvas2x, finfo = fit_contain(crop, 2 * W, 2 * H, a.margin, 0.5, 0, a.valign)
+        one = downsample(canvas2x, W, H)
+        outputs, lines = finish_cutout_webp(ctx, pkey, one, canvas2x)
+        tools = [f"pieces: {key} prop {i + 1} of {n} at {x0},{y0},{x1},{y1} key={cinfo['backdrop']} t0={a.t0} t1={a.t1} despill={a.despill_band}{' clear-haze' if a.clear_haze else ''} fit=contain margin={a.margin} valign={a.valign} scale={finfo['scale']}", *lines]
+        save_post_record(ctx, pkey, {"key": pkey, "kind": "piece", "raw": rel_to_repo(raw), "raw_sidecar": sidecar_subset(sc), "outputs": outputs, "tools": tools,
+                                      "chroma": {k: v for k, v in cinfo.items() if k != "params"}, "fit": finfo, "sheet": {"key": key, "cell": i + 1, "bbox": [x0, y0, x1, y1]}})
+        note(f"{pkey}: {outputs['1x']['file']} {outputs['1x']['bytes']} bytes, @2x {outputs['2x']['bytes']} bytes (prop {i + 1}, {x1 - x0}x{y1 - y0} px)")
+        done += 1
+    rvp = write_review(ctx, f"{key}.png", review)
+    note(f"sheet {key}: {done} piece(s) cut; review: {rel_to_repo(rvp)}")
+    return 0
+
+
+def run_bands(alpha: np.ndarray, share: float = 0.2, solid: int = 128, attach_share: float = 0.02) -> list[tuple[int, int, int, int]]:
+    """The continuous runs on a keyed run image as boxes (x0, y0, x1, y1): the rows where at least
+    ``share`` of the width is solid (alpha over ``solid``) make a run; the run then takes in the
+    rows above and below it, while they hold a little solid paint inside its columns (a rail's
+    posts, roots under a bank), and its columns are where those rows are solid. A moon, a lantern
+    or a glow beside a run is narrow or faint, so it never makes a band and a faint glow never
+    joins one; a moon straight above a run joins it only across solid rows."""
+    on = alpha > solid
+    h, w = on.shape
+    counts = on.sum(axis=1)
+    rows = counts >= share * w
+    bands: list[tuple[int, int, int, int]] = []
+    y = 0
+    while y < h:
+        if not rows[y]:
+            y += 1
+            continue
+        y0 = y
+        while y < h and rows[y]:
+            y += 1
+        y1 = y
+        core0, core1 = y0, y1
+        cols = np.nonzero(on[y0:y1].any(axis=0))[0]
+        if len(cols) == 0:
+            continue
+        x0, x1 = int(cols.min()), int(cols.max()) + 1
+        need = attach_share * (x1 - x0)
+        while y0 > 0 and on[y0 - 1, x0:x1].sum() >= need:
+            y0 -= 1
+        while y1 < h and on[y1, x0:x1].sum() >= need:
+            y1 += 1
+        cols = np.nonzero(on[y0:y1].any(axis=0))[0]
+        bands.append((int(cols.min()), y0, int(cols.max()) + 1, y1, core0, core1))
+        y = max(y, y1)
+    return bands
+
+
+def own_run_alpha(crop: Image.Image, core: tuple[int, int], pad: int = 2) -> tuple[Image.Image, int]:
+    """``crop`` with only the run's own paint: the solid blobs that reach the run's core rows
+    (``core``, in the crop's coordinates), grown by ``pad`` quarter-size pixels so their soft
+    edges stay; a moon or a glow that sits in the box but never touches the run is cleared."""
+    alpha = np.asarray(crop.getchannel("A"))
+    solid = np.where(alpha > 128, alpha, 0).astype(np.uint8)
+    blobs = sheet_blobs(solid, scale=4, grow=0, min_px=16)
+    keep = None
+    for b in blobs:
+        if b["bbox"][1] < core[1] and b["bbox"][3] > core[0]:
+            keep = b["mask"] if keep is None else (keep | b["mask"])
+    if keep is None:
+        return crop, 0
+    for _ in range(pad):
+        g = keep.copy()
+        g[1:] |= keep[:-1]; g[:-1] |= keep[1:]; g[:, 1:] |= keep[:, :-1]; g[:, :-1] |= keep[:, 1:]
+        keep = g
+    own = np.kron(keep, np.ones((4, 4), dtype=bool))
+    full = np.zeros(alpha.shape, dtype=bool)
+    full[:own.shape[0], :own.shape[1]] = own[:alpha.shape[0], :alpha.shape[1]]
+    cleared = int(((alpha > 0) & ~full).sum())
+    out = crop.copy()
+    out.putalpha(Image.fromarray((alpha * full).astype(np.uint8), "L"))
+    return out, cleared
+
+
+def _grow(m: np.ndarray, n: int) -> np.ndarray:
+    for _ in range(n):
+        g = m.copy()
+        g[1:] |= m[:-1]; g[:-1] |= m[1:]; g[:, 1:] |= m[:, :-1]; g[:, :-1] |= m[:, 1:]
+        m = g
+    return m
+
+
+def _shrink(m: np.ndarray, n: int) -> np.ndarray:
+    for _ in range(n):
+        g = m.copy()
+        g[1:] &= m[:-1]; g[:-1] &= m[1:]; g[:, 1:] &= m[:, :-1]; g[:, :-1] &= m[:, 1:]
+        m = g
+    return m
+
+
+def clear_mist(img: Image.Image, max_sat: float = 0.3, min_val: float = 0.55, keep_near: int = 4, speck: int = 2) -> tuple[Image.Image, int]:
+    """Make the pale mist painted over the key transparent: bright, grey pixels that are not
+    within ``keep_near`` px of the subject's opaque body (its opaque paint shrunk by ``speck`` px,
+    so the mist's own opaque specks do not count as subject and a bright edge keeps its fringe)."""
+    arr = np.array(img if img.mode == "RGBA" else img.convert("RGBA"))
+    hsv = np.asarray(Image.fromarray(arr[..., :3], "RGB").convert("HSV")).astype(np.float32) / 255.0
+    a = arr[..., 3]
+    mist = (a > 0) & (hsv[..., 1] < max_sat) & (hsv[..., 2] > min_val)
+    near = _grow(_shrink(a >= 250, speck), keep_near + speck)
+    mist &= ~near
+    arr[mist, 3] = 0
+    return Image.fromarray(arr, "RGBA"), int(mist.sum())
+
+
+def cmd_runs(ctx: Ctx, a: argparse.Namespace) -> int:
+    """A recut run image (OP-251): three continuous runs of one material stacked on the key colour.
+    Each run is found as a band of rows mostly opaque, scaled so its height is twice its row's logical height, and
+    cut into a left cap, a right cap and middle pieces of the recut's lengths taken from different
+    stretches of the run (so no two are the same copy), each shipped as kit-cut-<row>-<part> at 1x
+    and 2x with the alpha exact."""
+    key = validate_key(a.key, allow_helpers=True, assets=ctx.assets)
+    kit = kit_table()
+    material = key.removeprefix("kit-sheet-cut-run-")
+    recut = kit.get("recut", {})
+    if not key.startswith("kit-sheet-cut-run-") or material not in recut.get("runs", {}):
+        raise ArtError(f"{key!r} is not a run key (kit-sheet-cut-run-<material> in config/kit.json)")
+    run = recut["runs"][material]
+    lengths, cap = [int(v) for v in recut.get("lengths", [320, 480, 640])], int(recut.get("cap", 160))
+    raw, sc = resolve_raw(ctx, key, a.raw)
+    img = open_raw(raw)
+    kc = key_colour_for(ctx, key, a.key_colour, sc) or "#FF00FF"
+    rgba, cinfo = key_out(img, chroma_params(a, kc))
+    if a.clear_haze:
+        rgba, n = clear_key_haze(rgba, cinfo["backdrop"])
+        note(f"{key}: clear-haze {n} px")
+    if a.clear_glow:
+        # the pale glow painted along a run on the key: pink-white, in the key's hue but washed out
+        rgba, n = clear_key_haze(rgba, cinfo["backdrop"], min_sat=a.clear_glow, min_val=0.6)
+        note(f"{key}: clear-glow {n} px")
+    if a.clear_mist:
+        rgba, n = clear_mist(rgba)
+        note(f"{key}: clear-mist {n} px")
+    for box in a.clear_box or []:
+        x0, y0, x1, y1 = parse_ints(box, 4, "--clear-box")
+        arr = np.array(rgba)
+        arr[y0:y1, x0:x1, 3] = 0
+        rgba = Image.fromarray(arr, "RGBA")
+        note(f"{key}: clear-box {box}")
+    alpha = np.asarray(rgba.getchannel("A"))
+    n = len(run["rows"])
+    bands = run_bands(alpha, a.band_share)
+    if len(bands) < n:
+        raise ArtError(f"{key}: {len(bands)} run(s) found, not {n}; the image painted fewer runs or two touch; pick another candidate")
+    ordered = sorted(sorted(bands, key=lambda b: -(b[5] - b[4]) * (b[2] - b[0]))[:n], key=lambda b: b[1])
+    review = rgba.convert("RGB")
+    drw = ImageDraw.Draw(review)
+    only = set(a.only.split(",")) if a.only else None
+    done = 0
+    need = 2 * cap + max(lengths)
+    for i, (row, (x0, y0, x1, y1, c0, c1)) in enumerate(zip(run["rows"], ordered)):
+        if only and not any(f"kit-cut-{row['name']}-{part}" in only or part in only for part in ("cap-left", "cap-right", *[f"mid-{L}" for L in lengths])):
+            continue
+        drw.rectangle((x0, y0, x1 - 1, y1 - 1), outline=(0, 255, 0), width=3)
+        crop, stray = own_run_alpha(rgba.crop((x0, y0, x1, y1)), (c0 - y0, c1 - y0))
+        if stray:
+            note(f"{key}: the {row['name']} run's box held {stray} px not its own (a moon, a glow), cleared")
+        # the box shrinks to the run's own paint
+        bb = crop.getbbox()
+        if bb and bb != (0, 0, crop.width, crop.height):
+            crop = crop.crop(bb); x0, y0, x1, y1 = x0 + bb[0], y0 + bb[1], x0 + bb[2], y0 + bb[3]
+        # the run at 2x: its height is twice the row's logical height; a run painted a little short
+        # for the longest middle is scaled by its width instead and squashed to the row's height
+        H2 = 2 * int(row["h"])
+        k = H2 / crop.height
+        squash = 1.0
+        if crop.width * k < 2 * need:
+            kw = 2 * need / crop.width
+            squash = kw / k
+            if squash > 1 + a.max_squash:
+                raise ArtError(f"{key}: the {row['name']} run is too short for a {max(lengths)} px middle piece ({int(crop.width * k / 2)} px at 1x between caps; squashing it {squash:.2f}x is over --max-squash {a.max_squash}); pick a candidate painted longer")
+            k = kw
+            note(f"{key}: the {row['name']} run squashed {squash:.3f}x to fit a {max(lengths)} px middle")
+        run2 = crop.resize((max(1, int(round(crop.width * k))), H2), Image.Resampling.LANCZOS)
+        parts: list[tuple[str, int, int]] = [("cap-left", 0, 2 * cap), ("cap-right", run2.width - 2 * cap, run2.width)]
+        inner0, inner1 = 2 * cap, run2.width - 2 * cap
+        span = inner1 - inner0
+        for j, L in enumerate(lengths):
+            w2 = 2 * L
+            if w2 > span:
+                raise ArtError(f"{key}: the {row['name']} run is too short for a {L} px middle piece (inner span {span // 2} px at 1x); pick a candidate painted wider")
+            # each length from a different stretch: spread the starts across the inner span
+            start = inner0 + int(round((span - w2) * (j / max(1, len(lengths) - 1))))
+            parts.append((f"mid-{L}", start, start + w2))
+        for part, px0, px1 in parts:
+            pkey = f"kit-cut-{row['name']}-{part}"
+            if only and pkey not in only and part not in only:
+                continue
+            W, Hl = logical_size(pkey, ctx.assets)
+            two = run2.crop((px0, 0, px1, H2))
+            if two.size != (2 * W, 2 * Hl):
+                two = two.resize((2 * W, 2 * Hl), Image.Resampling.LANCZOS)
+            one = downsample(two, W, Hl)
+            outputs, lines = finish_cutout_webp(ctx, pkey, one, two)
+            tools = [f"runs: {key} run {i + 1} of {n} at {x0},{y0},{x1},{y1} key={cinfo['backdrop']} t0={a.t0} t1={a.t1} despill={a.despill_band}{' clear-haze' if a.clear_haze else ''}{f' clear-glow={a.clear_glow}' if a.clear_glow else ''}{' clear-mist' if a.clear_mist else ''}{''.join(f' clear-box={b}' for b in (a.clear_box or []))}{f' squash={squash:.3f}' if squash != 1.0 else ''} part={part} span2x={px0}-{px1} of {run2.width}", *lines]
+            save_post_record(ctx, pkey, {"key": pkey, "kind": "piece", "raw": rel_to_repo(raw), "raw_sidecar": sidecar_subset(sc), "outputs": outputs, "tools": tools,
+                                          "chroma": {k: v for k, v in cinfo.items() if k != "params"}, "run": {"key": key, "row": i + 1, "bbox": [x0, y0, x1, y1], "part": part, "span2x": [px0, px1]}})
+            sx = x0 + px0 / k; ex = x0 + px1 / k
+            drw.rectangle((sx, y0, ex - 1, y1 - 1), outline=(255, 220, 0), width=2)
+            drw.text((sx + 4, max(0, y0 - 14)), part, fill=(255, 255, 255))
+            note(f"{pkey}: {outputs['1x']['file']} {outputs['1x']['bytes']} bytes, @2x {outputs['2x']['bytes']} bytes ({part} of run {i + 1})")
+            done += 1
+    rvp = write_review(ctx, f"{key}.png", review)
+    note(f"runs {key}: {done} piece(s) cut; review: {rel_to_repo(rvp)}")
+    return 0
+
+
+def cmd_columns(ctx: Ctx, a: argparse.Namespace) -> int:
+    """A recut column sheet (OP-259): tall columns of one material painted side by side on the key,
+    each running off the top and the bottom of the frame. Each column is found as a band of
+    mostly-opaque columns (the run finder on the image turned on its side), only its own paint
+    kept, scaled by its width to the piece's width at 2x and its middle kept to the piece's height,
+    so the top and the bottom are straight cuts through the material; a piece marked ``tile`` is
+    healed up and down so two stacked copies meet with no seam. Shipped as kit-cut-<piece> at 1x
+    and 2x with the alpha exact."""
+    key = validate_key(a.key, allow_helpers=True, assets=ctx.assets)
+    kit = kit_table()
+    name = key.removeprefix("kit-sheet-cut-col-")
+    columns = kit.get("recut", {}).get("columns", {})
+    if not key.startswith("kit-sheet-cut-col-") or name not in columns:
+        raise ArtError(f"{key!r} is not a column sheet key (kit-sheet-cut-col-<name> in config/kit.json)")
+    col = columns[name]
+    raw, sc = resolve_raw(ctx, key, a.raw)
+    img = open_raw(raw)
+    kc = key_colour_for(ctx, key, a.key_colour, sc) or "#FF00FF"
+    rgba, cinfo = key_out(img, chroma_params(a, kc))
+    if a.clear_haze:
+        rgba, n = clear_key_haze(rgba, cinfo["backdrop"])
+        note(f"{key}: clear-haze {n} px")
+    if a.clear_glow:
+        rgba, n = clear_key_haze(rgba, cinfo["backdrop"], min_sat=a.clear_glow, min_val=0.6)
+        note(f"{key}: clear-glow {n} px")
+    if a.clear_mist:
+        rgba, n = clear_mist(rgba)
+        note(f"{key}: clear-mist {n} px")
+    # on its side, a column is a run
+    side = rgba.transpose(Image.Transpose.TRANSPOSE)
+    alpha = np.asarray(side.getchannel("A"))
+    n = len(col["pieces"])
+    bands = run_bands(alpha, a.band_share)
+    if len(bands) < n:
+        raise ArtError(f"{key}: {len(bands)} column(s) found, not {n}; the image painted fewer columns or two touch; pick another candidate")
+    ordered = sorted(sorted(bands, key=lambda b: -(b[5] - b[4]) * (b[2] - b[0]))[:n], key=lambda b: b[1])
+    review = rgba.convert("RGB")
+    drw = ImageDraw.Draw(review)
+    only = set(a.only.split(",")) if a.only else None
+    done = 0
+    for i, (piece, (sx0, sy0, sx1, sy1, c0, c1)) in enumerate(zip(col["pieces"], ordered)):
+        pkey = f"kit-cut-{piece['name']}"
+        # back upright: the band's rows are the column's x, its columns the column's y
+        x0, y0, x1, y1 = sy0, sx0, sy1, sx1
+        drw.rectangle((x0, y0, x1 - 1, y1 - 1), outline=(0, 255, 0), width=3)
+        drw.text((x0 + 6, max(0, y0 - 16)), f"{i + 1} {pkey}", fill=(255, 255, 255))
+        if only and pkey not in only and piece["name"] not in only:
+            continue
+        crop_side, stray = own_run_alpha(side.crop((sx0, sy0, sx1, sy1)), (c0 - sy0, c1 - sy0))
+        if stray:
+            note(f"{key}: the {piece['name']} column's box held {stray} px not its own, cleared")
+        crop = crop_side.transpose(Image.Transpose.TRANSPOSE)
+        bb = crop.getbbox()
+        if bb and bb != (0, 0, crop.width, crop.height):
+            crop = crop.crop(bb)
+        # the keyed fringe along the column's sides (a cut side's last part-magenta pixels) goes
+        crop = crop.crop((a.trim, 0, crop.width - a.trim, crop.height))
+        W, H = logical_size(pkey, ctx.assets)
+        k = 2 * W / crop.width
+        col2 = crop.resize((2 * W, max(1, int(round(crop.height * k)))), Image.Resampling.LANCZOS)
+        if col2.height < 2 * H:
+            raise ArtError(f"{key}: the {piece['name']} column is too short for its piece ({col2.height // 2} px tall at 1x for {H}); pick a candidate painted taller or narrower")
+        top = (col2.height - 2 * H) // 2
+        two = col2.crop((0, top, 2 * W, top + 2 * H))
+        healed = bool(piece.get("tile"))
+        if healed:
+            two = heal_tile(two, band=a.band, axes=(0,))
+        one = downsample(two, W, H)
+        outputs, lines = finish_cutout_webp(ctx, pkey, one, two)
+        tools = [f"columns: {key} column {i + 1} of {n} at {x0},{y0},{x1},{y1} key={cinfo['backdrop']} t0={a.t0} t1={a.t1} despill={a.despill_band}{' clear-haze' if a.clear_haze else ''}{f' clear-glow={a.clear_glow}' if a.clear_glow else ''}{' clear-mist' if a.clear_mist else ''} scale={k:.3f} kept2x={top}-{top + 2 * H} of {col2.height}{f' healed-y band={a.band}' if healed else ''}", *lines]
+        save_post_record(ctx, pkey, {"key": pkey, "kind": "piece", "raw": rel_to_repo(raw), "raw_sidecar": sidecar_subset(sc), "outputs": outputs, "tools": tools,
+                                      "chroma": {k2: v for k2, v in cinfo.items() if k2 != "params"}, "column": {"key": key, "cell": i + 1, "bbox": [x0, y0, x1, y1], "kept2x": [top, top + 2 * H], "healed": healed}})
+        ky = y0 + top / k; ky1 = y0 + (top + 2 * H) / k
+        drw.rectangle((x0, ky, x1 - 1, ky1 - 1), outline=(255, 220, 0), width=2)
+        note(f"{pkey}: {outputs['1x']['file']} {outputs['1x']['bytes']} bytes, @2x {outputs['2x']['bytes']} bytes (column {i + 1}, {x1 - x0}x{y1 - y0} px, kept rows {int(ky)}-{int(ky1)})")
+        done += 1
+    rvp = write_review(ctx, f"{key}.png", review)
+    note(f"columns {key}: {done} piece(s) cut; review: {rel_to_repo(rvp)}")
+    return 0
+
+
+def trim_key_frame(img: Image.Image, key_colour: str, tol: float = 60.0, share: float = 0.98) -> tuple[Image.Image, tuple[int, int, int, int]]:
+    """Cut away the rows and columns at the edges that are almost wholly the key colour (a painted
+    panel's border); returns the cropped image and how much went from each side."""
+    arr = np.asarray(img.convert("RGB")).astype(np.float32)
+    kc = np.array(parse_hex(key_colour)[:3], dtype=np.float32)
+    # The painting's own border colour stands in for the nominal key when it is near it (the model
+    # paints its magenta a little off), the same way the keying samples the backdrop.
+    ring = np.concatenate([arr[:4].reshape(-1, 3), arr[-4:].reshape(-1, 3), arr[:, :4].reshape(-1, 3), arr[:, -4:].reshape(-1, 3)])
+    painted = np.median(ring, axis=0)
+    if np.sqrt(((painted - kc) ** 2).sum()) < 2 * tol:
+        kc = painted
+    near = np.sqrt(((arr - kc) ** 2).sum(-1)) < tol
+    rows, cols = near.mean(axis=1), near.mean(axis=0)
+    h, w = near.shape
+    top = 0
+    while top < h - 1 and rows[top] >= share:
+        top += 1
+    bottom = 0
+    while bottom < h - 1 - top and rows[h - 1 - bottom] >= share:
+        bottom += 1
+    left = 0
+    while left < w - 1 and cols[left] >= share:
+        left += 1
+    right = 0
+    while right < w - 1 - left and cols[w - 1 - right] >= share:
+        right += 1
+    if (left, top, right, bottom) == (0, 0, 0, 0):
+        return img, (0, 0, 0, 0)
+    return img.crop((left, top, w - right, h - bottom)), (left, top, right, bottom)
+
+
+def inpaint_key_hue(img: Image.Image, key_colour: str, min_sat: float, hue_window: float = 35.0, radius: int = 24) -> tuple[Image.Image, int]:
+    """Opaque pixels within ``hue_window`` of the key's hue and over ``min_sat`` saturation (the key
+    painted into the subject, which keying leaves as pink) take the colour of what is around them:
+    a wide blur of the other pixels, normalised by coverage, with each pixel's own light kept."""
+    from PIL import ImageFilter
+    rgba = img if img.mode == "RGBA" else img.convert("RGBA")
+    arr = np.array(rgba).astype(np.float32)
+    hsv = np.asarray(rgba.convert("RGB").convert("HSV")).astype(np.float32)
+    kr, kg, kb = parse_hex(key_colour)
+    key_hue = colorsys.rgb_to_hsv(kr / 255, kg / 255, kb / 255)[0] * 360.0
+    d = np.abs(hsv[..., 0] * (360.0 / 255.0) - key_hue)
+    d = np.minimum(d, 360.0 - d)
+    bad = (d <= hue_window) & (hsv[..., 1] / 255.0 > min_sat) & (arr[..., 3] > 0)
+    if not bad.any():
+        return rgba, 0
+    good = (~bad) & (arr[..., 3] > 0)
+    w = good.astype(np.float32)
+    rgb_w = arr[..., :3] * w[..., None]
+    blur = lambda m: np.asarray(Image.fromarray(np.clip(m, 0, 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(radius))).astype(np.float32)
+    cover = blur(w * 255.0) / 255.0
+    fill = np.stack([blur(rgb_w[..., c]) for c in range(3)], axis=-1) / np.maximum(cover, 1e-3)[..., None]
+    # keep each bad pixel's own light: scale the fill to the pixel's luminance
+    lum = lambda x: 0.2126 * x[..., 0] + 0.7152 * x[..., 1] + 0.0722 * x[..., 2]
+    scale = np.clip(lum(arr[..., :3]) / np.maximum(lum(fill), 1.0), 0.3, 1.5)
+    out = arr.copy()
+    out[..., :3][bad] = np.clip(fill[bad] * scale[bad][:, None], 0, 255)
+    return Image.fromarray(out.astype(np.uint8), "RGBA"), int(bad.sum())
+
+
+def cmd_layer(ctx: Ctx, a: argparse.Namespace) -> int:
+    """A kit backdrop layer (OP-229): a sky plate as painted, or a far or middle layer keyed out of its
+    backdrop; cropped to its aspect, healed to repeat sideways, resized to its logical size and shipped
+    as WebP (the alpha exact for a keyed layer); the sideways seam ratio recorded and refused past
+    --max-seam."""
+    key = validate_key(a.key, allow_helpers=False, assets=ctx.assets)
+    spec = ctx.assets.get(key, {})
+    if spec.get("kind") != "layer":
+        raise ArtError(f"{key!r} is not a layer key (kit-<area>-sky|far|mid-<x> in config/kit.json)")
+    W, H = logical_size(key, ctx.assets)
+    raw, sc = resolve_raw(ctx, key, a.raw)
+    img = open_raw(raw)
+    keyed = bool(spec.get("key_colour"))
+    tools = []
+    if keyed:
+        kc = key_colour_for(ctx, key, a.key_colour, sc)
+        if a.trim_key:
+            # The model sometimes paints the layer as a panel inside a border of the key colour; the border
+            # would become a transparent margin that no sideways heal can fill, so the key-only rows and
+            # columns at the edges are cut away first and the panel itself is the layer.
+            img, trim = trim_key_frame(img, kc)
+            tools.append(f"layer: trim-key left={trim[0]} top={trim[1]} right={trim[2]} bottom={trim[3]}")
+        img, cinfo = key_out(img, chroma_params(a, kc))
+        tools.append(f"layer: key={cinfo['backdrop']} t0={a.t0} t1={a.t1} despill={a.despill_band}")
+        if a.inpaint_key_hue is not None:
+            # the key's hue painted into the subject itself (magenta mist at a trunk's foot): those
+            # pixels take the colour of their surroundings, their light kept
+            img, n = inpaint_key_hue(img, cinfo["backdrop"], a.inpaint_key_hue)
+            tools.append(f"layer: inpaint-key-hue sat>{a.inpaint_key_hue} {n} px")
+    else:
+        cinfo = {}
+        img = img.convert("RGB")
+    img = crop_to_aspect(img, W, H, a.crop, 0)
+    one = img.resize((W, H), Image.Resampling.LANCZOS)
+    # Clears come before the heal, in the un-healed final's pixels (finish with --no-heal to measure them):
+    # the heal rolls the painting by half its width and blends its middle, which would ghost a feature.
+    if (a.clear_box or a.clear_tone) and not keyed:
+        raise ArtError(f"{key}: --clear-box and --clear-tone clear to transparent, which a sky plate has no alpha for; pick a candidate without the feature")
+    for box in a.clear_box or []:
+        x0, y0, x1, y1 = parse_ints(box, 4, "--clear-box")
+        one, n = clear_polygon(one.convert("RGBA"), f"{x0},{y0},{x1},{y0},{x1},{y1},{x0},{y1}", 1)
+        tools.append(f"layer: clear-box {box} {n} px")
+    for spec in a.clear_tone or []:
+        # a feature behind painted shapes (a moon behind treetops): inside the box, only the pixels near
+        # the feature's colour are cleared, the shapes in front of it kept
+        parts = spec.split(",")
+        if len(parts) not in (6, 7) or (len(parts) == 7 and parts[6] != "fill"):
+            raise ArtError(f"--clear-tone takes x0,y0,x1,y1,#RRGGBB,tolerance[,fill], not {spec!r}")
+        x0, y0, x1, y1 = (int(v) for v in parts[:4]); tone = np.array(parse_hex(parts[4])[:3], dtype=np.float32); tol = float(parts[5])
+        arr = np.array(one.convert("RGBA"))
+        sub = arr[y0:y1, x0:x1].astype(np.float32)
+        dist = np.sqrt(((sub[..., :3] - tone) ** 2).sum(-1))
+        keep = np.clip((dist - tol) / 24.0, 0, 1)
+        if len(parts) == 7:
+            # fill: the matching pixels take the median colour of the box's other opaque pixels (a moon
+            # painted into a layer's own sky, which the layer must keep opaque), the alpha untouched
+            others = sub[(keep >= 1) & (sub[..., 3] > 200)]
+            if not len(others):
+                raise ArtError(f"--clear-tone {spec}: nothing in the box to fill from")
+            fill = np.median(others[:, :3], axis=0)
+            sub[..., :3] = sub[..., :3] * keep[..., None] + fill * (1 - keep[..., None])
+            n = int((keep < 1).sum())
+        else:
+            was = sub[..., 3].copy()
+            sub[..., 3] = np.round(sub[..., 3] * keep)
+            n = int((sub[..., 3] < was).sum())
+        arr[y0:y1, x0:x1] = np.clip(np.round(sub), 0, 255).astype(np.uint8)
+        one = Image.fromarray(arr, "RGBA")
+        tools.append(f"layer: clear-tone {spec} {n} px")
+    if a.fade_top:
+        # a keyed layer cleared to a hard top edge (a far layer whose fade into the key went violet):
+        # its alpha ramps in over --fade-top px below the first opaque row, so the edge melts upward
+        if not keyed:
+            raise ArtError(f"{key}: --fade-top needs a keyed layer")
+        arr = np.array(one.convert("RGBA"))
+        alpha = arr[..., 3].astype(np.float32)
+        rows = np.nonzero((alpha > 0).any(axis=1))[0]
+        if len(rows):
+            y0 = int(rows[0])
+            ramp = np.clip((np.arange(H) - y0) / float(a.fade_top), 0, 1)
+            arr[..., 3] = np.round(alpha * ramp[:, None]).astype(np.uint8)
+            one = Image.fromarray(arr, "RGBA")
+            tools.append(f"layer: fade-top {a.fade_top} px from row {y0}")
+    before = tile_seam_ratio(one)
+    if not a.no_heal:
+        one = heal_tile(one, a.band, axes=(1,))
+    after = tile_seam_ratio(one)
+    tools.append(f"layer: heal band={a.band if not a.no_heal else 'none'} sideways seam before x{before['seam_x']} after x{after['seam_x']}")
+    if after["seam_x"] > a.max_seam and not a.no_heal:
+        raise ArtError(f"{key}: the layer's sideways seam is {after['seam_x']}x its inner detail (limit {a.max_seam}); pick another candidate or widen --band")
+    if keyed:
+        outputs, lines = finish_cutout_webp(ctx, key, one, None)
+    else:
+        data, info = webpmeta.encode_under_budget(one, ctx.budget)
+        outputs = {"1x": {**write_final(ctx, f"{key}.webp", data, (W, H), ctx.budget), **{k: info.get(k) for k in ("format", "quality", "colors", "mode", "budget_relaxed")}}}
+        lines = [budget_line(info)]
+        for name in remove_rasters(ctx.out, key, {f"{key}.webp"}):
+            note(f"removed stale final {name}")
+    tools.extend(lines)
+    # Review: the layer twice side by side on a dark board, so the sideways join shows at once.
+    rv = Image.new("RGBA", (2 * W, H), (40, 40, 48, 255))
+    for i in range(2):
+        rv.alpha_composite(one.convert("RGBA"), (i * W, 0))
+    rvp = write_review(ctx, f"{key}.png", rv.convert("RGB"))
+    save_post_record(ctx, key, {"key": key, "kind": "layer", "raw": rel_to_repo(raw), "raw_sidecar": sidecar_subset(sc), "outputs": outputs, "tools": tools,
+                                 **({"chroma": {k: v for k, v in cinfo.items() if k != "params"}} if cinfo else {}), "tiling": {"before": before, "after": after}})
+    note(f"{key} 1x: {key}.webp {outputs['1x']['bytes']} bytes; sideways seam x{after['seam_x']}")
+    note(f"review: {rel_to_repo(rvp)}")
+    return 0
+
+
+def cmd_webp(ctx: Ctx, a: argparse.Namespace) -> int:
+    """Published cut-outs the table has since marked ``"format": "webp"``, re-encoded from their
+    PNGs (the pixels approved and live, checked against their provenance lines) as WebP finals with
+    the alpha exact. The finish record keeps the PNGs' provenance (the candidate, the tools, the
+    notes) and adds what was re-encoded; publish then ships the WebPs and removes the PNGs."""
+    prov_path = Path(a.provenance) if a.provenance else PROVENANCE_PATH
+    latest = {str(line["asset"]): line for line in prov.read_lines(prov_path) if isinstance(line, dict) and line.get("asset")}
+    for key in a.keys:
+        validate_key(key, allow_helpers=False, assets=ctx.assets)
+        if is_room_background(key, ctx.assets) or not ships_as_webp(key, ctx.assets):
+            raise ArtError(f"{key!r} is not a cut-out the table marks \"format\": \"webp\" (mark it in config/assets.json; a painting is finished as WebP by `room`)")
+        W, H = logical_size(key, ctx.assets)
+        imgs: list[Image.Image] = []
+        sources: list[str] = []
+        for path, size in ((ctx.public / f"{key}.png", (W, H)), (ctx.public / f"{key}@2x.png", (2 * W, 2 * H))):
+            if not path.exists():
+                if not imgs:
+                    raise ArtError(f"no published {path.name} to re-encode (`piece` finishes {key} as WebP itself)")
+                continue
+            data = path.read_bytes()
+            line = latest.get(path.name)
+            if not line or line.get("sha256") != sha256_bytes(data):
+                raise ArtError(f"{path.name}: not the file its latest provenance line describes (see `pnpm art:finish check {key}`)")
+            v = pngmeta.verify_file(path, size, None)
+            if not v["ok"]:
+                raise ArtError(f"{path.name}: " + "; ".join(v["problems"]))
+            with Image.open(path) as im:
+                imgs.append(im.convert("RGBA"))
+            sources.append(f"{path.name} (sha256 {line['sha256'][:16]})")
+        outputs, lines = finish_cutout_webp(ctx, key, imgs[0], imgs[1] if len(imgs) > 1 else None)
+        base = latest[f"{key}.png"]
+        tools = list(base.get("tools") or []) + [f"webp: re-encoded from the published {' and '.join(sources)}, the alpha exact"] + lines
+        save_post_record(ctx, key, {"key": key, "kind": ctx.assets[key].get("kind"), "raw": rel_to_repo(ctx.public / f"{key}.png"), "raw_sidecar": prov.sidecar_of(prov_path, f"{key}.png"),
+                                    "outputs": outputs, "tools": tools}, earlier_edits=list(base.get("human_edits") or []))
+        for k2, o in outputs.items():
+            note(f"{key} {k2}: {o['file']} {o['bytes']} bytes WebP q{o['quality']}")
+    note(f"publish: pnpm art:finish publish {' '.join(a.keys)}")
+    return 0
+
+
+#: How close to clear (0) or opaque (255) a WebP layer's alpha snaps to that end. Lanczos rings at
+#: every edge of a cut-out, leaving faint alpha (1 to 4) outside it and nearly opaque alpha (251 to
+#: 254) inside it: under 2 % either way, never seen, yet libwebp keeps the colour under any alpha
+#: above 0 and codes every step exactly, so the ringing cost the tree's bamboo screen 60 KB (OP-162).
+ALPHA_SNAP = 4
+
+
+def snap_alpha(img: Image.Image, margin: int = ALPHA_SNAP) -> tuple[Image.Image, int]:
+    """``img`` (RGBA) with alpha at most ``margin`` set to 0 and at least 255 - ``margin`` set to
+    255, and how many pixels changed; colour untouched."""
+    rgba = img.convert("RGBA")
+    a = np.asarray(rgba.getchannel("A"))
+    low, high = (a > 0) & (a <= margin), (a < 255) & (a >= 255 - margin)
+    if not (low.any() or high.any()):
+        return rgba, 0
+    out = a.copy()
+    out[low], out[high] = 0, 255
+    rgba = rgba.copy()
+    rgba.putalpha(Image.fromarray(out, "L"))
+    return rgba, int(low.sum() + high.sum())
+
+
+def finish_overlay(ctx: Ctx, key: str, one: Image.Image, two: Image.Image | None, budget_2x: int, dither: str) -> tuple[dict, list[str]]:
+    """The finals of an overlay from its RGBA at 1x (and 2x): (outputs, budget lines). PNG, or WebP
+    with its alpha for one the table marks ``"format": "webp"``: the tree's painted layers (OP-157),
+    which a palette PNG under budget would band."""
+    W, H = logical_size(key, ctx.assets)
+    if ships_as_webp(key, ctx.assets):
+        wfields = ("quality", "mode", "budget_relaxed")
+        one, snapped = snap_alpha(one)
+        two = snap_alpha(two)[0] if two is not None else None
+        data, info = webpmeta.encode_under_budget(one, ctx.budget)
+        outputs = {"1x": {**write_final(ctx, f"{key}.webp", data, (W, H), ctx.budget), **{k: info.get(k) for k in wfields}}}
+        tools = [f"alpha: {snapped} px within {ALPHA_SNAP} of clear or opaque snapped to it",
+                 f"budget: WebP q{info['quality']}, {info['bytes']} bytes, alpha kept"]
+        if two is not None:
+            data2, info2 = webpmeta.encode_under_budget(two, max(ctx.budget, budget_2x))
+            outputs["2x"] = {**write_final(ctx, f"{key}@2x.webp", data2, (2 * W, 2 * H), max(ctx.budget, budget_2x)), **{k: info2.get(k) for k in wfields}}
+            tools.append(f"budget@2x: WebP q{info2['quality']}, {info2['bytes']} bytes")
+        for name in remove_rasters(ctx.out, key, {o["file"] for o in outputs.values()}):
+            note(f"removed stale final {name}")
+        return outputs, tools
+    fields = ("colors", "mode", "budget_relaxed", "dither")
+    outputs: dict = {}
+    data, info = encode_final(one, ctx.budget, None, dither, f"{key}.png")
+    outputs["1x"] = {**write_final(ctx, f"{key}.png", data, (W, H), ctx.budget), **{k: info.get(k) for k in fields}}
+    tools = [budget_line(info)]
+    if two is not None:
+        data2, info2 = encode_final(two, ctx.budget, budget_2x, dither, f"{key}@2x.png")
+        outputs["2x"] = {**write_final(ctx, f"{key}@2x.png", data2, (2 * W, 2 * H), max(ctx.budget, budget_2x)), **{k: info2.get(k) for k in fields}}
+        tools.append("budget@2x: " + budget_line(info2)[8:])
+    for name in remove_rasters(ctx.out, key, {o["file"] for o in outputs.values()}):
+        note(f"removed stale final {name}")
+    return outputs, tools
+
+
+def overlay_view(ctx: Ctx, key: str) -> tuple[dict, str]:
+    view = ctx.view_for(key)
+    if view is None:
+        raise ArtError(f"{key!r}: its room is wider than one screen and does not list it among its foregrounds (run `pnpm art:geometry` after changing the room data)")
+    return view
+
+
+def clear_polygon(img: Image.Image, poly: str, scale: float = 1) -> tuple[Image.Image, int]:
+    """``img`` (RGBA) made transparent inside the polygon ``poly`` (``x,y,x,y,...`` in room pixels of
+    the 1x final, scaled for a larger one), its edge feathered over a pixel or two; and how many
+    pixels lost alpha. For a prop cut by the frame's edge: an overlay scrolls faster than the room,
+    so between screens a prop the frame cut in half floats in mid-view (OP-162)."""
+    try:
+        v = [int(x) for x in poly.split(",")]
+    except ValueError:
+        v = []
+    if len(v) < 6 or len(v) % 2:
+        raise ArtError(f"--clear-poly takes at least three x,y points as comma-separated integers, not {poly!r}")
+    rgba = img.convert("RGBA")
+    mask = Image.new("L", rgba.size, 0)
+    ImageDraw.Draw(mask).polygon([(x * scale, y * scale) for x, y in zip(v[::2], v[1::2])], fill=255)
+    mask = mask.filter(ImageFilter.GaussianBlur(1.0 * scale))
+    a = np.asarray(rgba.getchannel("A")).astype(np.float32)
+    out = np.round(a * (1.0 - np.asarray(mask).astype(np.float32) / 255.0)).astype(np.uint8)
+    rgba = rgba.copy()
+    rgba.putalpha(Image.fromarray(out, "L"))
+    return rgba, int((out < a).sum())
+
+
+def fade_edges(img: Image.Image, spec: str, scale: float = 1) -> tuple[Image.Image, int]:
+    """``img`` (RGBA) with its alpha ramped (smoothstep) from clear at a side edge to full over ``spec``'s
+    LEFT,RIGHT pixels of the 1x final (scaled for a larger one); and how many pixels lost alpha. For a
+    middle-distance tile whose paint reaches the side edge the room fades it over (OP-163): the room's
+    linear fade leaves a cut edge faintly visible for most of its width, a ramp in the layer itself does not.
+
+    TODO-DOCS (OP-163): docs/ART-PIPELINE.md's overlay section: `--edge-fade LEFT,RIGHT` (final pixels,
+    recorded in the post record's tools)."""
+    try:
+        left, right = (int(v) for v in spec.split(","))
+    except ValueError:
+        raise ArtError(f"--edge-fade takes LEFT,RIGHT as two integers, not {spec!r}") from None
+    if left < 0 or right < 0 or left + right > img.width * scale:
+        raise ArtError(f"--edge-fade {spec!r} does not fit a final {img.width}px wide")
+    rgba = img.convert("RGBA")
+    x = np.arange(rgba.width, dtype=np.float32) + 0.5
+    ramp = np.ones_like(x)
+    if left:
+        t = np.clip(x / (left * scale), 0, 1)
+        ramp *= t * t * (3 - 2 * t)
+    if right:
+        t = np.clip((rgba.width - x) / (right * scale), 0, 1)
+        ramp *= t * t * (3 - 2 * t)
+    a = np.asarray(rgba.getchannel("A")).astype(np.float32)
+    out = np.round(a * ramp[None, :]).astype(np.uint8)
+    rgba = rgba.copy()
+    rgba.putalpha(Image.fromarray(out, "L"))
+    return rgba, int((out < a).sum())
+
+
+def key_screen(img: Image.Image, w: int, h: int, crop: str, shift_y: int, params: ChromaParams) -> tuple[Image.Image, dict]:
+    """The screen of ``img`` an overlay finishes (its w:h window at ``crop``), keyed on its own backdrop.
+
+    A candidate is usually one screen, and the window is all of it. A row of screens laid side by side
+    (their joins repainted across them, OP-162) is not keyed as one: each screen was painted on its own
+    shade of the key colour, and one backdrop estimated for the whole row leaves a darker screen's sky
+    half opaque."""
+    return key_out(crop_to_aspect(img, w, h, crop, shift_y), params)
+
+
+def cmd_overlay(ctx: Ctx, a: argparse.Namespace) -> int:
+    key = validate_key(a.key, allow_helpers=False, assets=ctx.assets)
+    if not is_overlay(key, ctx.assets):
+        raise ArtError(f"{key!r} is not an overlay key (room art named <room>-fg or <room>-<side>-fg)")
+    W, H = logical_size(key, ctx.assets)
+    geom, room = overlay_view(ctx, key)
+    raw, sc = resolve_raw(ctx, key, a.raw)
+    img = open_raw(raw)
+    kc = key_colour_for(ctx, key, a.key_colour, sc)
+    rgba, cinfo = key_screen(img, W, H, a.crop, a.shift_y, chroma_params(a, kc))
+    pal, gline, strength = grade_spec(ctx, key, a.grade, a.strength)
+    tools = [f"overlay: key={cinfo['backdrop']} t0={a.t0} t1={a.t1} despill={a.despill_band} crop={a.crop}"]
+    if gline:
+        tools.append(gline)
+
+    def cleared(im: Image.Image, scale: float) -> Image.Image:
+        # Deterministic fixes for what prompts cannot pin down: glow keyed out as opaque key colour,
+        # and props drifting over a closed sign's lettered board.
+        if a.clear_haze:
+            im, n = clear_key_haze(im, cinfo["backdrop"])
+            if scale == 1:
+                tools.append(f"overlay: clear-haze {n} px")
+        if a.clear_signs:
+            im, n = clear_sign_boards(im, geom, room, scale)
+            if scale == 1:
+                tools.append(f"overlay: clear-signs {n} px")
+        for poly in a.clear_poly or []:
+            im, n = clear_polygon(im, poly, scale)
+            if scale == 1:
+                tools.append(f"overlay: clear-poly {poly} {n} px")
+        if a.edge_fade:
+            im, n = fade_edges(im, a.edge_fade, scale)
+            if scale == 1:
+                tools.append(f"overlay: edge-fade {a.edge_fade} {n} px")
+        return im
+
+    one = cleared(apply_grade(resize_exact(rgba, W, H, a.crop, a.shift_y), pal, strength), 1)
+    two = cleared(apply_grade(resize_exact(rgba, 2 * W, 2 * H, a.crop, a.shift_y), pal, strength), 2) if a.with_2x else None
+    outputs, lines = finish_overlay(ctx, key, one, two, a.budget_2x, a.dither)
+    tools.extend(lines)
+    # The final as written: PNG, or WebP for the tree's layers.
+    final = Image.open(ctx.out / outputs["1x"]["file"]).convert("RGBA")
+    behind = ctx.behind_owls(key)
+    report = check_overlay(final, geom, room, key_colour=cinfo["backdrop"], behind=behind)
+    bg = background_for(ctx, key).convert("RGBA")
+    bg.alpha_composite(final)
+    rv = write_review(ctx, f"{key}.png", review_composite(bg, geom, room, 0.4, ctx.assets))
+    save_post_record(ctx, key, {"key": key, "kind": "overlay", "raw": rel_to_repo(raw), "raw_sidecar": sidecar_subset(sc), "outputs": outputs, "tools": tools, "chroma": {k: v for k, v in cinfo.items() if k != "params"}, "overlay_check": report})
+    for k2, o in outputs.items():
+        note(f"{key} {k2}: {o['file']} {o['bytes']} bytes" + (f" P{o['colors']}" if o.get("colors") else " truecolour"))
+    note(f"review: {rel_to_repo(rv)}")
+    what = "drawn behind the owls, key haze only" if behind else f"coverage {report['coverage'] * 100:.1f} % of the walkable interior"
+    note(f"overlay check: {what}; {'ok' if report['ok'] else 'FAILED'}")
+    for v in report["violations"]:
+        note(f"  - {v}")
+    if a.check and not report["ok"]:
+        return 1
+    return 0
+
+
+def open_painting(ctx: Ctx, room: str, flag: str | None) -> tuple[Path, Image.Image]:
+    """The room's approved painting at 2x: --painting, else the published <room>@2x.webp (which is
+    the middle screen once the wings are published; keep the original to stitch again)."""
+    path = Path(flag) if flag else ctx.public / f"{room}@2x.webp"
+    if not path.exists():
+        raise ArtError(f"no painting at {path}: publish {room} with its 2x first, or pass --painting")
+    img = Image.open(path).convert("RGB")
+    if img.size != (TILE_W, TILE_H):
+        raise ArtError(f"{path.name} is {img.width}x{img.height}; a room's painting at 2x is {TILE_W}x{TILE_H}")
+    return path, img
+
+
+def wings_of(ctx: Ctx, room: str) -> list[tuple[str, str]]:
+    """(side, key) of every wing config/assets.json lists for a room, west first."""
+    return [(side, f"{room}-{side}") for side in SIDES if f"{room}-{side}" in ctx.assets]
+
+
+def cmd_field(ctx: Ctx, a: argparse.Namespace) -> int:
+    """The flat guide of each arcade game's field at 2x (the generator's @canvas:arcade-<game>-bg)."""
+    games = a.games or list(FIELD_GAMES)
+    for game in games:
+        if game not in FIELD_GAMES:
+            raise ArtError(f"no arcade game {game!r} (have {', '.join(FIELD_GAMES)})")
+    for game in games:
+        out = ctx.work / "canvas" / f"arcade-{game}-bg.png"
+        n = pngmeta.save(render_field_guide(game), out)
+        note(f"field guide {game}: {rel_to_repo(out)} ({n} bytes)")
+    return 0
+
+
+def cmd_canvas(ctx: Ctx, a: argparse.Namespace) -> int:
+    keys = a.keys or [k for k in ctx.assets if wing_of(k)]
+    if not keys:
+        raise ArtError("no wing keys in config/assets.json")
+    for key in keys:
+        w = wing_of(key)
+        if not w or key not in ctx.assets or w[0] not in PUBLIC_ROOMS:
+            raise ArtError(f"{key!r} is not a wing key (<room>-west or <room>-east of a public room, listed in config/assets.json)")
+        room, side = w
+        src, painting = open_painting(ctx, room, a.painting)
+        out = ctx.work / "canvas" / f"{key}.png"
+        n = pngmeta.save(outpaint_canvas(painting, side), out)
+        note(f"canvas {key}: {rel_to_repo(out)} ({n} bytes; the {side} edge of {src.name} on grey)")
+    return 0
+
+
+def cmd_wing(ctx: Ctx, a: argparse.Namespace) -> int:
+    """Each wing stitched onto the painting, every screen finished as WebP, the overlay's ends moved."""
+    room = a.room
+    wings = wings_of(ctx, room)
+    if not wings:
+        raise ArtError(f"{room} has no wings in config/assets.json ({room}-west, {room}-east)")
+    src, painting = open_painting(ctx, room, a.painting)
+    prov_path = Path(a.provenance) if a.provenance else PROVENANCE_PATH
+    painting_sc = prov.sidecar_of(prov_path, src.name) if src.parent.resolve() == ctx.public.resolve() else None
+    painting_tools: list[str] = []
+    if painting_sc is None and src.parent.resolve() == ctx.out.resolve():
+        # A painting finished here but not published yet: its own finish record says where it came
+        # from (and, for a patched painting, what was pasted into it).
+        rec = load_post_record(ctx, src.name.split("@")[0].split(".")[0]) or load_post_record(ctx, room) or {}
+        painting_sc = rec.get("raw_sidecar")
+        painting_tools = [t for t in rec.get("tools", []) if t.startswith("patch:")]
+    panos: dict[str, Image.Image] = {}
+    picked: dict[str, tuple[Path, dict | None, dict]] = {}
+    for side, key in wings:
+        raw, sc = resolve_raw(ctx, key, getattr(a, side))
+        pano, rep = stitch(painting, open_raw(raw), side)
+        panos[side] = pano
+        picked[side] = (raw, sc, rep)
+        note(f"{key}: seed {(sc or {}).get('seed')} stitched, overlap difference {rep['overlap_diff']}, seam in columns {rep['seam_columns'][0]}-{rep['seam_columns'][1]} of the {rep['side']} join")
+    tiles = split_tiles(painting, panos)
+
+    reviews: list[Image.Image] = []
+    overlays: dict[str, Image.Image] = {}
+    if a.overlay == "ends":
+        fg2_path, fg1_path = ctx.public / f"{room}-fg@2x.png", ctx.public / f"{room}-fg.png"
+        if not fg2_path.exists() or not fg1_path.exists():
+            raise ArtError(f"--overlay ends needs the published {fg1_path.name} and {fg2_path.name}")
+        fg_sc = prov.sidecar_of(prov_path, fg2_path.name)
+        parts = split_overlay(np.asarray(Image.open(fg2_path).convert("RGBA")), np.asarray(Image.open(fg1_path).convert("RGBA")), tuple(side for side, _ in wings))
+        for part, (a2, a1) in parts.items():
+            key = tile_key(room, part, overlay=True)
+            if part != "mid" and not (a2[:, :, 3] > 8).any():
+                note(f"{key}: no overlay piece reaches the painting's {part} edge; nothing to write (leave it out of the room's foregrounds)")
+                continue
+            if key not in ctx.assets:
+                raise ArtError(f"{key!r} is not in config/assets.json: add it (and to the room's foregrounds)")
+            outputs, lines = finish_overlay(ctx, key, Image.fromarray(a1, "RGBA"), Image.fromarray(a2, "RGBA"), a.overlay_budget_2x, "none")
+            what = f"the rest of {fg2_path.name}" if part == "mid" else f"the pieces of {fg2_path.name} touching its {part} edge, moved to the room's {part} end"
+            tools = [f"wing: {what}"] + lines
+            view = ctx.view_for(key)
+            report = check_overlay(Image.open(ctx.out / f"{key}.png"), *view) if view else None
+            save_post_record(ctx, key, {"key": key, "kind": "overlay", "raw": rel_to_repo(fg2_path), "raw_sidecar": fg_sc, "outputs": outputs, "tools": tools, "overlay_check": report})
+            overlays[part] = Image.open(ctx.out / f"{key}.png").convert("RGBA")
+            for k2, o in outputs.items():
+                note(f"{key} {k2}: {o['file']} {o['bytes']} bytes" + (f" P{o['colors']}" if o.get("colors") else " truecolour"))
+            if report:
+                note(f"{key} overlay check: coverage {report['coverage'] * 100:.1f} % of the walkable interior; {'ok' if report['ok'] else 'FAILED'}")
+                for v in report["violations"]:
+                    note(f"  - {v}")
+    else:
+        note(f"--overlay drop: the wide {room} draws no overlay; leave {room}-fg out of its foregrounds")
+
+    for part, tile in tiles.items():
+        key = tile_key(room, part)
+        if part == "mid":
+            joins = ", ".join(f"{side} join to {k} (seed {(picked[side][1] or {}).get('seed')}, seam columns {picked[side][2]['seam_columns'][0]}-{picked[side][2]['seam_columns'][1]})" for side, k in wings)
+            raw_rel, sc, head = rel_to_repo(src), painting_sc, f"wing: the approved painting {src.name} with a blended band at each join: {joins}"
+            head = [head] + painting_tools
+        else:
+            raw, sc0, rep = picked[part]
+            raw_rel, sc, head = rel_to_repo(raw), sidecar_subset(sc0), [f"wing: {part} of {src.name}, joined along the cheapest seam through the {rep['side']} overlap (columns {rep['seam_columns'][0]}-{rep['seam_columns'][1]}, difference {rep['overlap_diff']}) with tones matched"]
+        outputs, lines = finish_room(ctx, key, tile, "centre", 0, None, None, True, a.budget_2x)
+        save_post_record(ctx, key, {"key": key, "kind": "room", "raw": raw_rel, "raw_sidecar": sc, "outputs": outputs, "tools": head + lines, "params": {"wing": room, "part": part, "overlay": a.overlay}})
+        for k2, o in outputs.items():
+            note(f"{key} {k2}: {o['file']} {o['bytes']} bytes WebP q{o['quality']}")
+        shot = Image.open(ctx.out / f"{key}.webp").convert("RGBA")
+        if part in overlays:
+            shot.alpha_composite(overlays[part])
+        reviews.append(room_review(ctx, key, shot))
+        write_review(ctx, f"{key}.png", reviews[-1])
+    strip = Image.new("RGB", (sum(r.width for r in reviews), max(r.height for r in reviews)))
+    x = 0
+    for r in reviews:
+        strip.paste(r, (x, 0))
+        x += r.width
+    rv = write_review(ctx, f"{room}-wide.png", strip)
+    note(f"review: {rel_to_repo(rv)} (west to east; every screen with its overlay and its view of the room geometry)")
+    note(f"publish: pnpm art:finish publish {' '.join([tile_key(room, p) for p in tiles] + [tile_key(room, p, overlay=True) for p in tiles if p in overlays])}")
+    return 0
+
+
+def owl_keys_from_sidecar(keys: dict, sc: dict | None) -> dict:
+    """The sidecar's key_colour and region colours override the hue table (the generator decides)."""
+    if not sc:
+        return keys
+    keys = json.loads(json.dumps(keys))
+    if sc.get("key_colour"):
+        keys["backdrop"] = sc["key_colour"]
+    regions = sc.get("regions") or {}
+    for name, col in regions.items():
+        if name in keys["regions"] and isinstance(col, str):
+            from artlib import parse_hex
+            import colorsys
+            r, g, b = parse_hex(col)
+            h, s, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+            keys["regions"][name]["hue"] = round(h * 360.0, 1)
+    return keys
+
+
+def cmd_owl(ctx: Ctx, a: argparse.Namespace) -> int:
+    species = getattr(a, "species", None)
+    master_key = f"owl-{species}-master" if species else "owl-master"
+    layer_keys = species_layers(species) if species else OWL_LAYERS
+    if a.flight:
+        return finish_flight(ctx, a, species, master_key)
+    raw, sc = resolve_raw(ctx, master_key, a.raw)
+    master = open_raw(raw)
+    keys = owl_layers.for_species(owl_keys_from_sidecar(owl_layers.load_keys(Path(a.keys) if a.keys else None), sc), species)
+    blink_from = None
+    blink_note = "programmatic"
+    if a.blink:
+        if not a.blink.startswith("from:"):
+            raise ArtError("--blink takes from:<png>")
+        blink_from = open_raw(Path(a.blink[5:]))
+        blink_note = f"from {Path(a.blink[5:]).name}"
+    labels_img = Image.open(a.labels) if a.labels else None
+    debug_dir = (ctx.work / "intermediates" / master_key) if a.debug else None
+    # The chroma flags work here as for pieces: --key-colour auto|#RRGGBB and --trust-key, so a
+    # hand-edited master on another shade of backdrop can be finished without editing a sidecar.
+    auto = bool(a.key_colour) and a.key_colour.lower() == "auto"
+    kc = None if auto else (key_colour_for(ctx, master_key, a.key_colour, sc) or keys["backdrop"])
+    chroma = chroma_params(a, kc)
+    res = owl_layers.split(master, keys, height=a.height, flip=a.flip, blink_from=blink_from, labels_img=labels_img, debug_dir=debug_dir, chroma=chroma)
+    outputs: dict[str, dict] = {}
+    for name, key in zip(OWL_LAYERS, layer_keys):
+        for tag, layer, mult in (("1x", res.layers_1x[name], 1), ("2x", res.layers_2x[name], 2)):
+            fname = f"{key}.png" if tag == "1x" else f"{key}@2x.png"
+            data, info = encode_under_budget(layer, ctx.budget)
+            outputs[fname] = {**write_final(ctx, fname, data, (200 * mult, 240 * mult), ctx.budget), "mode": layer.mode, "colors": None, "budget_relaxed": False, "key": key, "logical": tag}
+    rv = write_review(ctx, f"{master_key}-layers.png" if species else "owl-layers.png", owl_layers.review_sheet(res))
+    tools = [f"owl: {'species=' + species + ' ' if species else ''}height={a.height or keys['registration'].get('height', 220)} flip={a.flip} blink={blink_note} labels={'file' if a.labels else 'auto'} key={res.info.get('backdrop')} t0={a.t0} t1={a.t1} despill={a.despill_band} windows=" + ",".join(f"{n}:{r['hue']}±{r['window']}" for n, r in keys["regions"].items()) + f" floor={keys['luminance_floor']} lit_pct={keys['lit_percentile']}", "budget: LA/RGBA truecolour"]
+    if res.info.get("clipped_px"):
+        warn(f"owl layers: {res.info['clipped_px']} opaque px touch the canvas edge after registration; lower --height or check the silhouette")
+    save_post_record(ctx, master_key, {"key": master_key, "kind": "owl", "raw": rel_to_repo(raw), "raw_sidecar": sidecar_subset(sc), "outputs": outputs, "tools": tools, "split": res.info})
+    for fname, o in outputs.items():
+        note(f"{fname}: {o['bytes']} bytes ({o['mode']})")
+    note(f"review: {rel_to_repo(rv)}")
+    note(json.dumps({k: res.info[k] for k in ("region_px", "eyes_found", "blink", "registration") if k in res.info}))
+    return 0
+
+
+def finish_flight(ctx: Ctx, a: argparse.Namespace, species: str | None, master_key: str) -> int:
+    """In flight (OP-136): the kind's flight master (its master with the folded wings taken away,
+    pasted back by `patch`) split into its flight body, belly and accent, placed and shaded exactly as
+    the kind's own layers are. The master is split again with the same flags and must give its
+    published body back pixel for pixel (else its registration is not the one the park draws); its
+    registration and lit bases are then the flight master's. The face stays the master's own."""
+    fkey = flight_master(species)
+    base_raw, base_sc = resolve_raw(ctx, master_key, None)
+    raw, sc = resolve_raw(ctx, fkey, a.raw)
+    keys = owl_layers.for_species(owl_keys_from_sidecar(owl_layers.load_keys(Path(a.keys) if a.keys else None), base_sc), species)
+    auto = bool(a.key_colour) and a.key_colour.lower() == "auto"
+    chroma = chroma_params(a, None if auto else (key_colour_for(ctx, master_key, a.key_colour, base_sc) or keys["backdrop"]))
+    base = owl_layers.split(open_raw(base_raw), keys, height=a.height, flip=a.flip, chroma=chroma)
+    body = (species_layers(species) if species else OWL_LAYERS)[0]
+    published = ctx.public / f"{body}@2x.png"
+    if not published.exists():
+        raise ArtError(f"no published {published.name} to place the flight layers against (publish {master_key}'s layers first)")
+    if not np.array_equal(np.asarray(Image.open(published).convert("LA")), np.asarray(base.layers_2x["owl-body"].convert("LA"))):
+        raise ArtError(f"{master_key} split again does not give the published {published.name}: pass the flags its layers were finished with (its provenance line's owl: tool)")
+    res = owl_layers.split(open_raw(raw), keys, height=a.height, flip=a.flip, chroma=chroma, like=base.info)
+    outputs: dict[str, dict] = {}
+    for name, key in zip(TINTED_LAYERS, flight_layers(species)):
+        for tag, layer, mult in (("1x", res.layers_1x[name], 1), ("2x", res.layers_2x[name], 2)):
+            fname = f"{key}.png" if tag == "1x" else f"{key}@2x.png"
+            data, info = encode_under_budget(layer, ctx.budget)
+            outputs[fname] = {**write_final(ctx, fname, data, (200 * mult, 240 * mult), ctx.budget), "mode": layer.mode, "colors": None, "budget_relaxed": False, "key": key, "logical": tag}
+    rv = write_review(ctx, f"{fkey}-layers.png", owl_layers.review_sheet(res))
+    tools = patch_lines(sc) + [f"owl: {'species=' + species + ' ' if species else ''}flight, placed and shaded as {master_key} ({base_raw.name}, its published {published.name} reproduced) "
+                               f"height={a.height or keys['registration'].get('height', 220)} flip={a.flip} key={res.info.get('backdrop')} t0={a.t0} t1={a.t1} despill={a.despill_band}", "budget: LA/RGBA truecolour"]
+    save_post_record(ctx, fkey, {"key": fkey, "kind": "owl", "raw": rel_to_repo(raw), "raw_sidecar": sidecar_subset(sc), "outputs": outputs, "tools": tools, "split": res.info})
+    for fname, o in outputs.items():
+        note(f"{fname}: {o['bytes']} bytes ({o['mode']})")
+    note(f"review: {rel_to_repo(rv)}")
+    note(f"publish: pnpm art:finish publish {' '.join(flight_layers(species))}")
+    return 0
+
+
+def cmd_wings(ctx: Ctx, a: argparse.Namespace) -> int:
+    """Flight (OP-084): the picked wing painting -> owl-wing-body and owl-wing-accent at 1x and 2x."""
+    raw, sc = resolve_raw(ctx, WING_MASTER, a.raw)
+    master = open_raw(raw)
+    keys = owl_keys_from_sidecar(owl_layers.load_keys(Path(a.keys) if a.keys else None), sc)
+    auto = bool(a.key_colour) and a.key_colour.lower() == "auto"
+    kc = None if auto else (key_colour_for(ctx, WING_MASTER, a.key_colour, sc) or keys["backdrop"])
+    res = wing_layers.split_wing(master, keys, flip=a.flip, chroma=chroma_params(a, kc))
+    tools = [f"wings: flip={a.flip} key={res.info.get('backdrop')} root={wing_layers.ROOT} span={wing_layers.SPAN} windows=" + ",".join(f"{n}:{r['hue']}±{r['window']}" for n, r in keys["regions"].items() if n != "belly") + f" floor={keys['luminance_floor']} lit_pct={keys['lit_percentile']}", "budget: LA truecolour"]
+    for key in WING_LAYERS:
+        outputs: dict[str, dict] = {}
+        for tag, layer, mult in (("1x", res.layers_1x[key], 1), ("2x", res.layers_2x[key], 2)):
+            data, _info = encode_under_budget(layer, ctx.budget)
+            fname = f"{key}.png" if tag == "1x" else f"{key}@2x.png"
+            outputs[tag] = {**write_final(ctx, fname, data, (wing_layers.WING_W * mult, wing_layers.WING_H * mult), ctx.budget), "mode": layer.mode, "colors": None, "budget_relaxed": False, "key": key, "logical": tag}
+            note(f"{fname}: {outputs[tag]['bytes']} bytes ({layer.mode})")
+        save_post_record(ctx, key, {"key": key, "kind": "owl", "raw": rel_to_repo(raw), "raw_sidecar": sidecar_subset(sc), "outputs": outputs, "tools": tools, "split": res.info})
+    looks = (("#5A6E8C", "#C8783C"), ("#8B5A2B", "#F2E3C6"), ("#2F3E5C", "#00E5FF"))
+    sheet = Image.new("RGBA", (wing_layers.WING_W * 2 * len(looks) + 20 * (len(looks) + 1), wing_layers.WING_H * 2 + 40), (12, 30, 54, 255))
+    for i, (body, accent) in enumerate(looks):
+        sheet.alpha_composite(wing_layers.composite(res.layers_2x, body, accent), (20 + i * (wing_layers.WING_W * 2 + 20), 20))
+    rv = write_review(ctx, "owl-wing-layers.png", sheet)
+    note(f"review: {rel_to_repo(rv)}")
+    note(json.dumps({k: res.info[k] for k in ("region_px", "registration") if k in res.info}))
+    return 0
+
+
+def cmd_grade(ctx: Ctx, a: argparse.Namespace) -> int:
+    pal, sha = load_palette(a.realm)
+    img = Image.open(a.input)
+    img.load()
+    out = grade_image(img, pal, a.strength, a.chroma_boost)
+    n = pngmeta.save(out, Path(a.output))
+    note(f"graded {a.input} -> {a.output} ({n} bytes) with {pal['_file']} {sha} strength={a.strength if a.strength is not None else pal['strength']}")
+    return 0
+
+
+def parse_ints(s: str, n: int, what: str) -> tuple[int, ...]:
+    try:
+        v = tuple(int(x) for x in s.split(","))
+    except ValueError:
+        v = ()
+    if len(v) != n:
+        raise ArtError(f"{what} takes {n} comma-separated integers, not {s!r}")
+    return v
+
+
+def cmd_cut(ctx: Ctx, a: argparse.Namespace) -> int:
+    """A crop of a picked candidate around a detail to repaint (the generator's @canvas:<key>)."""
+    key = validate_key(a.key, assets=ctx.assets)
+    img, name, _ = open_base(ctx, a.base_key, a.base)
+    box = parse_ints(a.box, 4, "--box")
+    out = ctx.work / "canvas" / f"{key}.png"
+    try:
+        crop = cut_crop(img, box)
+    except ValueError as e:
+        raise ArtError(str(e)) from None
+    if a.half:
+        # Sent at half size, as a wing's canvas is: the edit job still asks for the crop's own size.
+        crop = crop.resize((crop.width // 2, crop.height // 2), Image.Resampling.LANCZOS)
+    n = pngmeta.save(crop, out)
+    note(f"cut {key}: {rel_to_repo(out)} ({n} bytes; {name} at x {box[0]}..{box[2]}, y {box[1]}..{box[3]}{', at half size' if a.half else ''})")
+    return 0
+
+
+def cmd_patch(ctx: Ctx, a: argparse.Namespace) -> int:
+    """A picked candidate with an edit of one of its crops pasted back where the edit changed it,
+    written as a new raw candidate of the key (select it with generate.mjs select)."""
+    key = validate_key(a.key, assets=ctx.assets)
+    base_img, base_name, base_sc = open_base(ctx, a.base_key, a.base)
+    edit, edit_sc = resolve_raw(ctx, a.edit_key, a.edit)
+    at = parse_ints(a.at, 2, "--at")
+    box = parse_ints(a.box, 4, "--box") if a.box else None
+    try:
+        img, rep = patch_edit(base_img, open_raw(edit), at, box, threshold=a.threshold, grow=a.grow, close=a.close, feather=a.feather, join=a.join)
+    except ValueError as e:
+        raise ArtError(str(e)) from None
+    data = pngmeta.encode(img, compress_level=6, optimize=False)
+    h = sha256_bytes(data)[:16]
+    d = ctx.work / "raw" / key
+    pngmeta.write_bytes(d / f"{h}.png", data)
+    src = lambda name, sc: {"key": (sc or {}).get("key"), "file": name, "seed": (sc or {}).get("seed"), "model": (sc or {}).get("model"), "provider": (sc or {}).get("provider")}
+    b = base_sc or {}
+    sc = {"schema": 1, "key": key, "kind": b.get("kind", ctx.assets.get(key, {}).get("kind")), "realm": b.get("realm"), "provider": b.get("provider"), "model": b.get("model"),
+          "hash16": h, "prompt_sha256": b.get("prompt_sha256"), "seed": b.get("seed"), "seed_returned": b.get("seed_returned"), "size": f"{img.width}x{img.height}",
+          "requested_size": b.get("requested_size"), "model_family": b.get("model_family"), "width": img.width, "height": img.height, "format": "png",
+          "key_colour": b.get("key_colour"), "refs": [], "source_url": None, "generated_at": ctx.now, "now_source": "patch", "cost_estimate_usd": 0, "provider_meta": {},
+          "patched": {"base": src(base_name, base_sc), "edit": src(edit.name, edit_sc), **rep}}
+    (d / f"{h}.json").write_text(json.dumps(sc, indent=2), encoding="utf-8")
+    note(f"patch {key}: {rel_to_repo(d / f'{h}.png')}, {rep['patched_px']} px from {edit.name} in x {rep['patch_bbox'][0]}..{rep['patch_bbox'][2]}, "
+         f"y {rep['patch_bbox'][1]}..{rep['patch_bbox'][3]}, tone shift {rep['tone_shift']}; select it with: node tools/art/generate.mjs select {key} {h}")
+    return 0
+
+
+def cmd_split(ctx: Ctx, a: argparse.Namespace) -> int:
+    """A tree screen's platforms or front props (OP-173, OP-159): the picked painting's own pixels
+    where a colour-coded edit of it is filled with one code colour, the key colour everywhere else,
+    written as a new raw candidate of the key (select it with generate.mjs select, finish it as any
+    keyed layer). The painting is the screen's back scenery, so the layers stay in register.
+
+    TODO-DOCS (OP-159): docs/ART-PIPELINE.md and docs/MAP.md section 10: the six-layer recipe: one
+    scene a screen, picked, shifted onto the ground line and mended at its joins as the screen's back
+    scenery; a colour-coded map of it (platforms green, front props blue) as an edit of its half-size
+    cut; `split <screen>-play|front --base-key <screen>-back --map-key <map> --colour #00FF00|#0000FF`."""
+    key = validate_key(a.key, assets=ctx.assets)
+    kc = ctx.assets.get(key, {}).get("key_colour")
+    if not kc:
+        raise ArtError(f"{key}: split writes a keyed layer, and the key has no key colour in the table")
+    base_img, base_name, base_sc = open_base(ctx, a.base_key, a.base)
+    box = parse_ints(a.box, 4, "--box") if a.box else None
+    if box:
+        # One screen of a row of screens mended at their joins (the patched row is the base key's pick).
+        try:
+            base_img = cut_crop(base_img, box)
+        except ValueError as e:
+            raise ArtError(f"{key}: {e}") from None
+    code, code_sc = resolve_raw(ctx, a.map_key, a.map)
+    try:
+        img, rep = split_layer(base_img, open_raw(code), parse_hex(a.colour), parse_hex(kc), tolerance=a.tolerance,
+                               min_area=a.min_area, close=a.close, max_hole=a.max_hole, grow=a.grow)
+    except ValueError as e:
+        raise ArtError(f"{key}: {e}") from None
+    data = pngmeta.encode(img, compress_level=6, optimize=False)
+    h = sha256_bytes(data)[:16]
+    d = ctx.work / "raw" / key
+    pngmeta.write_bytes(d / f"{h}.png", data)
+    src = lambda name, sc: {"key": (sc or {}).get("key"), "file": name, "seed": (sc or {}).get("seed"), "model": (sc or {}).get("model"), "provider": (sc or {}).get("provider")}
+    b = base_sc or {}
+    sc = {"schema": 1, "key": key, "kind": ctx.assets.get(key, {}).get("kind"), "realm": b.get("realm"), "provider": b.get("provider"), "model": b.get("model"),
+          "hash16": h, "prompt_sha256": b.get("prompt_sha256"), "seed": b.get("seed"), "seed_returned": b.get("seed_returned"), "size": f"{img.width}x{img.height}",
+          "requested_size": b.get("requested_size"), "model_family": b.get("model_family"), "width": img.width, "height": img.height, "format": "png",
+          "key_colour": kc, "refs": [], "source_url": None, "generated_at": ctx.now, "now_source": "split", "cost_estimate_usd": 0, "provider_meta": {},
+          "split": {"base": src(base_name, base_sc), **({"box": list(box)} if box else {}), "map": src(code.name, code_sc), **rep}}
+    (d / f"{h}.json").write_text(json.dumps(sc, indent=2), encoding="utf-8")
+    note(f"split {key}: {rel_to_repo(d / f'{h}.png')}, {rep['kept_px']} px of {base_name} in {rep['parts']} part(s) where {code.name} is {a.colour} "
+         f"(bbox {rep['kept_bbox']}); select it with: node tools/art/generate.mjs select {key} {h}")
+    return 0
+
+
+def cmd_match(ctx: Ctx, a: argparse.Namespace) -> int:
+    """A keyed candidate with its props' colours moved to another candidate's (OP-159): the mean and
+    spread of each RGB channel over the pixels well away from the key colour, the key colour and the
+    rim left as they are, written as a new raw candidate of the key (select it with generate.mjs
+    select, finish it as before). For two screens' overlays painted in different keys of the palette.
+
+    TODO-DOCS (OP-159): docs/ART-PIPELINE.md and docs/MAP.md section 10: `match <key> --to-key <key>`
+    when one screen's overlay (or another keyed layer) comes back paler or darker than its neighbour's."""
+    key = validate_key(a.key, assets=ctx.assets)
+    kc = ctx.assets.get(key, {}).get("key_colour")
+    if not kc:
+        raise ArtError(f"{key}: match is for a keyed layer, and the key has no key colour in the table")
+    ref_key = validate_key(a.to_key, assets=ctx.assets)
+    raw, sc = resolve_raw(ctx, key, a.raw)
+    ref, ref_sc = resolve_raw(ctx, ref_key, a.to)
+    rkc = ctx.assets.get(ref_key, {}).get("key_colour") or kc
+    try:
+        img, rep = match_colours(open_raw(raw), open_raw(ref), parse_hex(kc), parse_hex(rkc), distance=a.distance)
+    except ValueError as e:
+        raise ArtError(f"{key}: {e}") from None
+    data = pngmeta.encode(img, compress_level=6, optimize=False)
+    h = sha256_bytes(data)[:16]
+    d = ctx.work / "raw" / key
+    pngmeta.write_bytes(d / f"{h}.png", data)
+    r = ref_sc or {}
+    sc_out = {**(sc or {"schema": 1, "key": key}), "hash16": h, "size": f"{img.width}x{img.height}", "width": img.width, "height": img.height, "format": "png",
+              "source_url": None, "generated_at": ctx.now, "now_source": "match", "cost_estimate_usd": 0, "provider_meta": {},
+              "matched": {"base": raw.name, "to": {"key": ref_key, "file": ref.name, "seed": r.get("seed"), "model": r.get("model"), "provider": r.get("provider")}, **rep}}
+    (d / f"{h}.json").write_text(json.dumps(sc_out, indent=2), encoding="utf-8")
+    note(f"match {key}: {rel_to_repo(d / f'{h}.png')}, {raw.name}'s {rep['matched_px']} px of props moved from mean {rep['from_mean']} to {ref_key}'s "
+         f"{rep['to_mean']}; select it with: node tools/art/generate.mjs select {key} {h}")
+    return 0
+
+
+def shift_down(img: Image.Image, n: int, top: int = 0) -> Image.Image:
+    """The image moved down n pixels: its bottom n rows fall off, and the gap at the top mirrors the
+    painting's own top rows (rows 1 to n, upside down). What ran out of the frame (a bamboo stalk, a
+    branch) still runs out of it, and the border the keyer reads keeps the painting's own shades of
+    the key colour: a generated "flat" magenta is rarely the exact #FF00FF and varies across the sky.
+    Repeating the first row drew stalks as flat bars and swayed the keyer's estimate of the backdrop.
+
+    With ``top``, only the rows from ``top`` down move (an overlay's bottom band of leaves, lowered
+    below the walkway while its top band stays where it is), and the gap they leave mirrors the n rows
+    just above ``top``: the empty middle of an overlay, so the gap is the painting's own key colour."""
+    if not 0 <= top < img.height or not 0 < n < img.height - top:
+        raise ArtError(f"a shift of {n} px from row {top} does not fit an image {img.height} px tall")
+    if 0 < top < n:
+        raise ArtError(f"a band moved {n} px needs at least {n} rows above it to mirror into the gap; it starts at row {top}")
+    src = img.convert("RGB")
+    out = src.copy()
+    if top:
+        out.paste(src.crop((0, top - n, src.width, top)).transpose(Image.Transpose.FLIP_TOP_BOTTOM), (0, top))
+    else:
+        out.paste(src.crop((0, 1, src.width, n + 1)).transpose(Image.Transpose.FLIP_TOP_BOTTOM), (0, 0))
+    out.paste(src.crop((0, top, src.width, src.height - n)), (0, top + n))
+    return out
+
+
+def cmd_shift(ctx: Ctx, a: argparse.Namespace) -> int:
+    """A keyed candidate moved down by --dy room pixels, the strip it leaves at the top mirroring its top rows,
+    written as a new raw candidate of the key (select it with generate.mjs select). For a tree playfield
+    whose painted floor sits above the ground line its neighbouring screens share (OP-162)."""
+    key = validate_key(a.key, assets=ctx.assets)
+    raw, sc = resolve_raw(ctx, key, a.raw)
+    if not ((sc or {}).get("key_colour") or ctx.assets.get(key, {}).get("key_colour")):
+        raise ArtError(f"{key}: shift is for a keyed layer, whose top is the keyed-out sky, and the key has no key colour")
+    img = open_raw(raw)
+    _, h_room = logical_size(key, ctx.assets)
+    n = int(round(a.dy * img.height / h_room))
+    if not 0 < n <= img.height // 4:
+        raise ArtError(f"--dy {a.dy} is {n} px of a {img.height} px candidate: give a drop above 0 and at most a quarter of the height")
+    top = int(round(a.from_y * img.height / h_room))
+    out = shift_down(img, n, top)
+    data = pngmeta.encode(out, compress_level=6, optimize=False)
+    h = sha256_bytes(data)[:16]
+    d = ctx.work / "raw" / key
+    pngmeta.write_bytes(d / f"{h}.png", data)
+    sc_out = {**(sc or {"schema": 1, "key": key}), "hash16": h, "size": f"{out.width}x{out.height}", "width": out.width, "height": out.height, "format": "png",
+              "source_url": None, "generated_at": ctx.now, "now_source": "shift", "cost_estimate_usd": 0, "provider_meta": {},
+              "shifted": {"base": raw.name, "dy_room": a.dy, "dy_px": n, "fill": "mirror",
+                          **({"from_y_room": a.from_y, "from_y_px": top} if top else {})}}
+    (d / f"{h}.json").write_text(json.dumps(sc_out, indent=2), encoding="utf-8")
+    what = f"its rows from {top} px (room y {a.from_y})" if top else raw.name
+    note(f"shift {key}: {rel_to_repo(d / f'{h}.png')}, {what} moved down {n} px ({a.dy} room px); select it with: node tools/art/generate.mjs select {key} {h}")
+    return 0
+
+
+def cmd_ref(ctx: Ctx, a: argparse.Namespace) -> int:
+    """Prepare a committed anchor reference: at most --max px on the long side, no metadata, under budget."""
+    img = Image.open(a.input)
+    img.load()
+    img = img.convert("RGBA" if "A" in img.getbands() else "RGB")
+    if max(img.size) > a.max:
+        s = a.max / max(img.size)
+        img = img.resize((max(1, int(round(img.width * s))), max(1, int(round(img.height * s)))), Image.Resampling.LANCZOS)
+    data, info = encode_final(img, ctx.budget, None, "none", Path(a.output).name)
+    out = Path(a.output)
+    pngmeta.write_bytes(out, data)
+    v = pngmeta.verify_file(out, img.size, ctx.budget)
+    if not v["ok"]:
+        raise ArtError(f"{out.name}: " + "; ".join(v["problems"]))
+    note(f"ref {out.name}: {img.width}x{img.height}, {len(data)} bytes" + (f", P{info['colors']}" if info.get("colors") else ", truecolour") + " (no metadata)")
+    return 0
+
+
+def cmd_sheet(ctx: Ctx, a: argparse.Namespace) -> int:
+    key = validate_key(a.key, assets=ctx.assets)
+    d = ctx.work / "raw" / key
+    cands = sorted([p for p in d.iterdir() if p.suffix.lower() in (".png", ".jpg", ".jpeg")]) if d.is_dir() else []
+    if not cands:
+        raise ArtError(f"no raw candidates for {key!r} in {d}")
+    selected = (d / "SELECTED").read_text(encoding="utf-8").strip() if (d / "SELECTED").exists() else None
+    tw = a.width
+    cols = max(1, min(a.columns, len(cands)))
+    tiles = []
+    for p in cands:
+        im = Image.open(p).convert("RGB")
+        th = max(1, int(round(im.height * tw / im.width)))
+        sc = p.with_suffix(".json")
+        seed = json.loads(sc.read_text(encoding="utf-8")).get("seed") if sc.exists() else None
+        tiles.append((p.stem, seed, im.resize((tw, th), Image.Resampling.LANCZOS)))
+    th = max(t[2].height for t in tiles)
+    pad, cap = 10, 20
+    rows = (len(tiles) + cols - 1) // cols
+    sheet = Image.new("RGB", (cols * (tw + pad) + pad, rows * (th + pad + cap) + pad), (40, 40, 40))
+    draw = ImageDraw.Draw(sheet)
+    font = ImageFont.load_default(size=14)
+    for i, (h, seed, im) in enumerate(tiles):
+        x, y = pad + (i % cols) * (tw + pad), pad + (i // cols) * (th + pad + cap)
+        sheet.paste(im, (x, y))
+        label = f"{h}  seed {seed}" if seed is not None else h
+        if h == selected:
+            label += "  [SELECTED]"
+            draw.rectangle((x - 3, y - 3, x + tw + 2, y + im.height + 2), outline=(201, 162, 39), width=3)
+        draw.text((x, y + th + 3), label, fill=(240, 240, 240), font=font)
+    out = ctx.review / f"sheet-{key}.png"
+    n = pngmeta.save(sheet, out)
+    note(f"sheet {key}: {rel_to_repo(out)} ({len(tiles)} candidates, {n} bytes)")
+    return 0
+
+
+def expand_publish_keys(keys: list[str]) -> list[str]:
+    out: list[str] = []
+    for k in keys:
+        species = k[len("owl-"):].removesuffix("-*") if k.startswith("owl-") else None
+        if k in ("owl-*", "owl"):
+            out.extend(OWL_LAYERS)
+        elif species in OWL_SPECIES:
+            out.extend(species_layers(species))
+        else:
+            out.append(k)
+    return out
+
+
+def cmd_publish(ctx: Ctx, a: argparse.Namespace) -> int:
+    keys = expand_publish_keys(a.keys)
+    for key in keys:
+        validate_key(key, allow_helpers=False, assets=ctx.assets)
+    prov_path = Path(a.provenance) if a.provenance else PROVENANCE_PATH
+
+    # Pass 1: validate everything (finals, SVG conflicts and the provenance lines themselves)
+    # before the tree is touched, so a refused line (a note naming the user, an absolute path, a
+    # forbidden word) cannot leave a PNG in the public dir with no provenance and the SVG gone.
+    plan: list[tuple[str, Path | None, list[tuple[Path, bytes, dict]]]] = []
+    for key in keys:
+        W, H = logical_size(key, ctx.assets)
+        found = [ext for ext in RASTER_EXTS if (ctx.out / f"{key}.{ext}").exists()]
+        if not found:
+            raise ArtError(f"no final for {key!r} at {ctx.out / f'{key}.png'} (or .webp); run the room/piece/overlay/owl command first")
+        if len(found) > 1:
+            raise ArtError(f"{key!r} has both {key}.png and {key}.webp in {ctx.out}; rerun its finish (which removes the other) or delete the stale one")
+        ext = found[0]
+        one = ctx.out / f"{key}.{ext}"
+        two = ctx.out / f"{key}@2x.{ext}"
+        svg = ctx.public / f"{key}.svg"
+        if svg.exists() and not a.retire_svg:
+            raise ArtError(f"{svg.name} exists and the loader prefers SVG, so the {ext.upper()} would never show; pass --retire-svg to move it to work/art/retired-svg/")
+        base = owl_layer_base(key)
+        record_key = owl_master_of(key) if base else key
+        rec = load_post_record(ctx, record_key) or {}
+        outs = rec.get("outputs", {})
+        files: list[tuple[Path, bytes, dict]] = []
+        for path, expect, logical in [(one, (W, H), "1x")] + ([(two, (2 * W, 2 * H), "2x")] if two.exists() else []):
+            oinfo = outs.get(path.name) if base else outs.get(logical)
+            relaxed = bool(oinfo and oinfo.get("budget_relaxed"))
+            if ext == "webp" and logical == "2x":
+                budget = BUDGET_2X_ROOM
+            else:
+                budget = BUDGET_2X_RELAXED if (relaxed and logical == "2x" and ctx.assets[key].get("kind") == "room") else ctx.budget
+            v = verify_final(path, expect, budget)
+            if not v["ok"]:
+                raise ArtError(f"{path.name}: " + "; ".join(v["problems"]))
+            data = path.read_bytes()
+            line = prov.sanitize(prov.build_line(asset=path.name, key=key, logical=logical, sha256=sha256_bytes(data), nbytes=len(data), colors=(oinfo or {}).get("colors"),
+                                                 budget_relaxed=relaxed, sidecar=rec.get("raw_sidecar"), published_at=ctx.now, tools=rec.get("tools", []),
+                                                 human_edits=list(rec.get("human_edits", [])) + ctx.notes))
+            probs = prov.problems(line)
+            if probs:
+                raise ArtError(f"{path.name}: nothing published, its provenance line would be refused: " + "; ".join(probs))
+            files.append((path, data, line))
+        plan.append((key, svg if svg.exists() else None, files))
+
+    # Pass 2: retire the SVG, copy the finals and append the pre-validated lines. A write that
+    # still fails midway puts that key back as it was (SVG restored, targets removed or restored).
+    ctx.public.mkdir(parents=True, exist_ok=True)
+    written = 0
+    for key, svg, files in plan:
+        retired: tuple[Path, Path] | None = None
+        previous: dict[Path, bytes | None] = {}
+        try:
+            if svg is not None:
+                dest = ctx.work / "retired-svg" / svg.name
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(svg), str(dest))
+                retired = (svg, dest)
+                note(f"retired {svg.name} -> {rel_to_repo(dest)} (commit the deletion)")
+            for path, data, line in files:
+                target = ctx.public / path.name
+                previous[target] = target.read_bytes() if target.exists() else None
+                target.write_bytes(data)
+                prov.append(prov_path, line)
+                written += 1
+                note(f"published {path.name} ({len(data)} bytes) -> {rel_to_repo(target)}")
+        except Exception:
+            for target, old in previous.items():
+                try:
+                    if old is None:
+                        target.unlink()
+                    else:
+                        target.write_bytes(old)
+                except OSError:
+                    pass
+            if retired is not None:
+                shutil.move(str(retired[1]), str(retired[0]))
+            raise
+        # Only the files just published may remain for this key: the loader prefers a 2x on every
+        # dense screen and WebP over PNG, so an older <key>@2x.png, or a PNG left beside a new
+        # WebP (or the reverse), would keep showing the retired art somewhere.
+        for name in remove_rasters(ctx.public, key, {path.name for path, _, _ in files}):
+            note(f"removed stale {name} (not part of this finish; the loader would have kept showing the old art)")
+    note(f"{written} file(s) published; provenance appended to {rel_to_repo(prov_path)}")
+    if ctx.public.resolve() == PUBLIC_ART_DIR.resolve():
+        # A new or changed sprite gets its drawn area at once (OP-127).
+        write_sprites(ctx, SPRITES_PATH)
+    return 0
+
+
+def write_sprites(ctx: Ctx, path: Path) -> None:
+    manifest = sprites.build(ctx.public)
+    text = sprites.dumps(manifest)
+    if path.exists() and path.read_text(encoding="utf-8") == text:
+        note(f"sprites: {rel_to_repo(path)} unchanged")
+        return
+    path.write_text(text, encoding="utf-8")
+    note(f"sprites: {rel_to_repo(path)} written ({len(manifest['sprites'])} sprites)")
+
+
+TARGETS_DIR = TOOLS_ART_DIR / "targets"
+
+
+def cmd_target(ctx: Ctx, a: argparse.Namespace) -> int:
+    """An art target (OP-249): the approved candidate of a target key kept as reference art under
+    tools/art/targets/<key>.png (committed, never shipped to players), at its logical 1600 x 900, with a
+    provenance line of its own in tools/art/targets/provenance.jsonl, in the published art's format."""
+    key = validate_key(a.key, allow_helpers=True, assets=ctx.assets)
+    if not key.startswith("target-"):
+        raise ArtError(f"{key!r} is not a target key (target-<name> in targets.mjs)")
+    raw, sc = resolve_raw(ctx, key, a.raw)
+    img = open_raw(raw).convert("RGB")
+    W, H = 1600, 900
+    if img.size != (W, H):
+        img = resize_exact(img, W, H, a.crop, 0)
+    if a.ref:
+        # the kept target as a reference for kit-guided jobs: 1280 x 720, a PNG under the inline reference limit
+        kept = TARGETS_DIR / f"{key}.png"
+        if not kept.exists():
+            raise ArtError(f"{key}: no kept target at {rel_to_repo(kept)} (run `art:finish target {key}` first)")
+        guide = ctx.work / "guides" / f"{key}-ref.png"
+        guide.parent.mkdir(parents=True, exist_ok=True)
+        n = pngmeta.save(Image.open(kept).convert("RGB").resize((1280, 720), Image.Resampling.LANCZOS), guide)
+        note(f"target {key}: reference {rel_to_repo(guide)} ({n} bytes)")
+        return 0
+    if a.guide:
+        # the round before as the next round's reference: 1280 x 720, a PNG under the inline reference limit
+        guide = ctx.work / "guides" / f"{key}-round.png"
+        guide.parent.mkdir(parents=True, exist_ok=True)
+        n = pngmeta.save(img.resize((1280, 720), Image.Resampling.LANCZOS), guide)
+        note(f"target {key}: round guide {rel_to_repo(guide)} ({n} bytes)")
+        return 0
+    out_dir = Path(a.targets_dir) if a.targets_dir else TARGETS_DIR
+    out_dir.mkdir(parents=True, exist_ok=True)
+    dest = out_dir / f"{key}.png"
+    buf = io.BytesIO()
+    img.save(buf, format="PNG", optimize=True)
+    data = buf.getvalue()
+    line = prov.sanitize(prov.build_line(asset=dest.name, key=key, logical="1x", sha256=sha256_bytes(data), nbytes=len(data), colors=None,
+                                         budget_relaxed=False, sidecar=sidecar_subset(sc), published_at=ctx.now, tools=[f"target: {key} kept as reference art at {W}x{H}"],
+                                         human_edits=list(ctx.notes)))
+    probs = prov.problems(line)
+    if probs:
+        raise ArtError(f"{dest.name}: nothing kept, its provenance line would be refused: " + "; ".join(probs))
+    dest.write_bytes(data)
+    prov_path = out_dir / "provenance.jsonl"
+    with prov_path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(line, separators=(",", ":")) + "\n")
+    note(f"target {key}: {rel_to_repo(dest)} ({len(data)} bytes); provenance appended to {rel_to_repo(prov_path)}")
+    return 0
+
+
+LAYER_ORDER = {"sky": 0, "far": 1, "mid": 2}
+
+
+def layer_keys(ctx: Ctx) -> list[str]:
+    """Every backdrop layer key, by area, skies first (a far or middle layer hazes toward its area's sky as graded)."""
+    keys = [k for k, v in ctx.assets.items() if v.get("kind") == "layer"]
+    return sorted(keys, key=lambda k: (bands.layer_area(k), LAYER_ORDER[bands.layer_band(k)], k))
+
+
+def _stats_text(st: dict) -> str:
+    return f"L {st['L_mean']:.1f} p95 {st['L_p95']:.1f} contrast {st['contrast']:.1f} sat {st['sat']:.2f}"
+
+
+def bands_review(ctx: Ctx, area: str, rows: list[tuple[str, Image.Image, Image.Image, dict, dict]], skies: tuple[Image.Image | None, Image.Image | None], suffix: str = "") -> Path:
+    """work/art/review/bands-<area>.png: each layer before (left) and after (right), a keyed layer over
+    the area's sky-a as it was and as it is, with its statistics under each."""
+    cw, ch, pad, text_h = 800, 450, 8, 22
+    board = Image.new("RGB", (2 * cw + 3 * pad, len(rows) * (ch + text_h + pad) + pad), (24, 24, 30))
+    draw = ImageDraw.Draw(board)
+    for i, (key, before, after, st_b, st_a) in enumerate(rows):
+        y = pad + i * (ch + text_h + pad)
+        for j, (img, sky, st) in enumerate(((before, skies[0], st_b), (after, skies[1], st_a))):
+            x = pad + j * (cw + pad)
+            cell = Image.new("RGBA", (cw, ch), (40, 40, 48, 255))
+            if "A" in img.getbands() and sky is not None:
+                cell.alpha_composite(sky.convert("RGBA").resize((cw, ch), Image.Resampling.LANCZOS))
+            cell.alpha_composite(img.convert("RGBA").resize((cw, ch), Image.Resampling.LANCZOS))
+            board.paste(cell.convert("RGB"), (x, y))
+            draw.text((x + 4, y + ch + 4), f"{key} {'before' if j == 0 else 'after'}: {_stats_text(st)}", fill=(230, 226, 210))
+    return write_review(ctx, f"bands-{area}{suffix}.png", board)
+
+
+def cmd_bands(ctx: Ctx, a: argparse.Namespace) -> int:
+    """The value bands (OP-250): a published backdrop layer measured over its opaque pixels and pulled
+    into its layer's band (``artlib.bands``), re-encoded in place under the same budget with its alpha
+    untouched, and a provenance line appended with the parameters; ``--dry-run`` only prints the
+    statistics; ``--measure <png>`` prints a target screen's three bands (or any image's statistics)."""
+    if a.measure:
+        for f in a.measure:
+            img = Image.open(f)
+            img.load()
+            if img.size == (ROOM_W, ROOM_H) and "A" not in img.getbands():
+                parts = [f"{name}: {_stats_text(st)}" for name, st in bands.measure_target(img).items()]
+                note(f"{Path(f).name}  " + " | ".join(parts))
+            else:
+                note(f"{Path(f).name}  {_stats_text(bands.stats(img))}")
+        return 0
+    prov_path = Path(a.provenance) if a.provenance else PROVENANCE_PATH
+    src_dir = ctx.out if a.finals else ctx.public
+    keys = [k for k in layer_keys(ctx) if (src_dir / f"{k}.webp").exists()] if a.all else [validate_key(k, allow_helpers=False, assets=ctx.assets) for k in a.keys]
+    if not keys:
+        raise ArtError("name the layer keys to grade (kit-<area>-sky|far|mid-<x>) or pass --all")
+    for key in keys:
+        if ctx.assets.get(key, {}).get("kind") != "layer":
+            raise ArtError(f"{key!r} is not a backdrop layer key (kit-<area>-sky|far|mid-<x> in config/kit.json)")
+    keys = sorted(set(keys), key=lambda k: (bands.layer_area(k), LAYER_ORDER[bands.layer_band(k)], k))
+    latest = {str(line["asset"]): line for line in prov.read_lines(prov_path) if isinstance(line, dict) and line.get("asset")}
+    per_area: dict[str, list] = {}
+    sky_before: dict[str, Image.Image] = {}
+    failed: list[str] = []
+    graded = 0
+    for key in keys:
+        band, limits = bands.band_of(key)
+        area = bands.layer_area(key)
+        path = src_dir / f"{key}.webp"
+        if not path.exists():
+            raise ArtError(f"no {'finished' if a.finals else 'published'} {path.name} (the bands are graded on {'finished layers in ' + rel_to_repo(ctx.out) if a.finals else 'published layers; finish and publish it first'})")
+        data0 = path.read_bytes()
+        if a.finals:
+            # An unpublished final: its finish record stands in for the provenance line and takes the bands line,
+            # so publish carries it into tools/art/provenance.jsonl.
+            rec = load_post_record(ctx, key)
+            if not rec or rec.get("outputs", {}).get("1x", {}).get("sha256") != sha256_bytes(data0):
+                raise ArtError(f"{path.name}: not the file its finish record describes (run `pnpm art:finish layer {key}` first)")
+            line = {"tools": rec.get("tools") or [], "human_edits": rec.get("human_edits") or []}
+        else:
+            line = latest.get(path.name)
+            if not line or line.get("sha256") != sha256_bytes(data0):
+                raise ArtError(f"{path.name}: not the file its latest provenance line describes (see `pnpm art:finish check {key}`)")
+        img = Image.open(io.BytesIO(data0))
+        img.load()
+        if band == "sky":
+            sky_before.setdefault(area, img)
+        if any(str(t).startswith("bands:") for t in line.get("tools") or []) and not a.force:
+            st = bands.stats(img)
+            note(f"{key}: already graded ({_stats_text(st)}); --force grades it again from the published file")
+            continue
+        sky_rgb = None
+        if band != "sky":
+            sky_path = next((d / f"kit-{area}-sky-a.webp" for d in (src_dir, ctx.public) if (d / f"kit-{area}-sky-a.webp").exists()), src_dir / f"kit-{area}-sky-a.webp")
+            if sky_path.exists():
+                with Image.open(sky_path) as sky:
+                    sky_rgb = bands.sky_colour(sky)
+            else:
+                warn(f"{key}: no {sky_path.name} to sample the haze colour from; no haze applied")
+        out, params = bands.grade_to_band(img, band, sky_rgb, a.haze, a.blur, limits)
+        keyed = "A" in out.getbands()
+        data, info = webpmeta.encode_under_budget(out, ctx.budget)
+        if keyed and not webpmeta.same_alpha(data, out):
+            raise ArtError(f"{path.name}: the encoder changed the alpha; a layer's edge must stay exact")
+        back = Image.open(io.BytesIO(data))
+        back.load()
+        encoded = bands.stats(back)
+        probs = bands.problems(encoded, limits)
+        tools_line = bands.tools_line(params)
+        note(f"{key} [{band}] before: {_stats_text(params['before'])}")
+        note(f"{' ' * len(key)}        after:  {_stats_text(encoded)}  ({len(data)} bytes q{info['quality']})  {tools_line.split(' L ')[0]}")
+        if probs:
+            failed.append(f"{key}: {'; '.join(probs)}")
+            warn(f"{key}: still outside its {band} band after the grade: {'; '.join(probs)}")
+        if not a.dry_run and a.finals:
+            path.write_bytes(data)
+            v = verify_final(path, logical_size(key, ctx.assets), ctx.budget)
+            if not v["ok"]:
+                path.write_bytes(data0)
+                raise ArtError(f"{path.name}: " + "; ".join(v["problems"]))
+            rec["outputs"]["1x"].update({"bytes": len(data), "sha256": sha256_bytes(data), "quality": info["quality"]})
+            rec["tools"] = list(rec.get("tools") or []) + [tools_line, budget_line(info)]
+            rec["bands"] = {k: v for k, v in params.items() if k not in ("before", "after")} | {"before": params["before"], "after": encoded}
+            save_post_record(ctx, key, {k: v for k, v in rec.items() if k not in ("finished_at", "human_edits")}, earlier_edits=list(rec.get("human_edits") or []))
+            graded += 1
+            per_area.setdefault(area, []).append((key, img, back, params["before"], encoded))
+        elif not a.dry_run:
+            new_line = prov.sanitize(prov.build_line(asset=path.name, key=key, logical="1x", sha256=sha256_bytes(data), nbytes=len(data), colors=None, budget_relaxed=False,
+                                                     sidecar=prov.sidecar_of(prov_path, path.name), published_at=ctx.now,
+                                                     tools=list(line.get("tools") or []) + [tools_line, budget_line(info)],
+                                                     human_edits=list(line.get("human_edits") or []) + ctx.notes))
+            line_probs = prov.problems(new_line)
+            if line_probs:
+                raise ArtError(f"{path.name}: nothing written, its provenance line would be refused: " + "; ".join(line_probs))
+            path.write_bytes(data)
+            v = verify_final(path, logical_size(key, ctx.assets), ctx.budget)
+            if not v["ok"]:
+                path.write_bytes(data0)
+                raise ArtError(f"{path.name}: " + "; ".join(v["problems"]))
+            prov.append(prov_path, new_line)
+            latest[path.name] = new_line
+            graded += 1
+            per_area.setdefault(area, []).append((key, img, back, params["before"], encoded))
+    if not a.dry_run:
+        for area, rows in per_area.items():
+            sky_after = None
+            sky_path = next((d / f"kit-{area}-sky-a.webp" for d in (src_dir, ctx.public) if (d / f"kit-{area}-sky-a.webp").exists()), None)
+            if sky_path is not None:
+                sky_after = Image.open(sky_path)
+                sky_after.load()
+            rv = bands_review(ctx, area, rows, (sky_before.get(area, sky_after), sky_after), suffix="-finals" if a.finals else "")
+            note(f"review: {rel_to_repo(rv)}")
+    note(f"bands: {graded} layer(s) graded in place{' (dry run, nothing written)' if a.dry_run else ''}{' in ' + rel_to_repo(ctx.out) if a.finals else ''}, {len(failed)} still outside their band")
+    for f in failed:
+        print(f"FAIL: {f}")
+    return 1 if failed else 0
+
+
+def cmd_level(ctx: Ctx, a: argparse.Namespace) -> int:
+    """The recut's run rows levelled (OP-251): each row's pieces, 1x and 2x, brought to the row's one
+    colour across their width (``artlib.level``), re-encoded in place under the same budget with the
+    alpha exact, and a provenance line appended per file; ``--dry-run`` only prints what it would do."""
+    prov_path = Path(a.provenance) if a.provenance else PROVENANCE_PATH
+    if a.layer:
+        return level_layer(ctx, a, prov_path)
+    recut = kit_table().get("recut", {})
+    parts = ["cap-left", *[f"mid-{n}" for n in recut.get("lengths", [320, 480, 640])], "cap-right"]
+    all_rows = [r["name"] for run in recut.get("runs", {}).values() for r in run.get("rows", [])]
+    rows = all_rows if a.all or not a.rows else a.rows
+    unknown = [r for r in rows if r not in all_rows]
+    if unknown:
+        raise ArtError(f"not a recut row: {', '.join(unknown)} (rows: {', '.join(all_rows)})")
+    latest = {str(line["asset"]): line for line in prov.read_lines(prov_path) if isinstance(line, dict) and line.get("asset")}
+    done = 0
+    for row in rows:
+        keys = [f"kit-cut-{row}-{p}" for p in parts]
+        files = {(k, s): ctx.public / (f"{k}.webp" if s == "1x" else f"{k}@2x.webp") for k in keys for s in ("1x", "2x")}
+        missing = [f.name for f in files.values() if not f.exists()]
+        if missing:
+            raise ArtError(f"{row}: no published {', '.join(missing)}")
+        imgs: dict = {}
+        for (k, scale), f in files.items():
+            data0 = f.read_bytes()
+            line = latest.get(f.name)
+            if not line or line.get("sha256") != sha256_bytes(data0):
+                raise ArtError(f"{f.name}: not the file its latest provenance line describes (see `pnpm art:finish check {k}`)")
+            img = Image.open(io.BytesIO(data0))
+            img.load()
+            imgs[(k, scale)] = (img.convert("RGBA"), data0, line)
+        if any(str(t).startswith("level:") for (_, _, line) in imgs.values() for t in line.get("tools") or []) and not a.force:
+            note(f"{row}: already levelled; --force levels it again from the published files")
+            continue
+        target = level.row_target([imgs[(k, "1x")][0] for k in keys])
+        note(f"{row}: row colour L {target[0]:.1f} a {target[1]:.1f} b {target[2]:.1f}")
+        for (k, scale), (img, data0, line) in imgs.items():
+            out, params = level.level_piece(img, target, chroma=not a.no_chroma)
+            data, info = webpmeta.encode_under_budget(out, ctx.budget)
+            if not webpmeta.same_alpha(data, out):
+                raise ArtError(f"{files[(k, scale)].name}: the encoder changed the alpha; a cut-out's edge must stay exact")
+            tools_line = level.tools_line(params)
+            note(f"  {files[(k, scale)].name}: L {params['L_before']} to {params['L_after']}, gain {params['gain_min']} to {params['gain_max']} ({len(data)} bytes q{info['quality']})")
+            if a.dry_run:
+                continue
+            path = files[(k, scale)]
+            W, H = logical_size(k, ctx.assets)
+            size = (W, H) if scale == "1x" else (2 * W, 2 * H)
+            new_line = prov.sanitize(prov.build_line(asset=path.name, key=k, logical=scale, sha256=sha256_bytes(data), nbytes=len(data), colors=None, budget_relaxed=False,
+                                                     sidecar=prov.sidecar_of(prov_path, path.name), published_at=ctx.now,
+                                                     tools=list(line.get("tools") or []) + [tools_line, budget_line(info) if scale == "1x" else "budget@2x: " + budget_line(info)[8:]],
+                                                     human_edits=list(line.get("human_edits") or []) + ctx.notes))
+            line_probs = prov.problems(new_line)
+            if line_probs:
+                raise ArtError(f"{path.name}: nothing written, its provenance line would be refused: " + "; ".join(line_probs))
+            path.write_bytes(data)
+            v = verify_final(path, size, ctx.budget)
+            if not v["ok"]:
+                path.write_bytes(data0)
+                raise ArtError(f"{path.name}: " + "; ".join(v["problems"]))
+            prov.append(prov_path, new_line)
+            latest[path.name] = new_line
+            done += 1
+    note(f"level: {done} file(s) levelled in place{' (dry run, nothing written)' if a.dry_run else ''}")
+    return 0
+
+
+def level_layer(ctx: Ctx, a: argparse.Namespace, prov_path: Path) -> int:
+    """A backdrop layer levelled across (OP-251, OP-252): a light shaft or a bright stretch taken out by
+    bringing each column's smoothed colour to one (``--L``, else the layer's own mean lightness, and its
+    own mean a and b), in place with provenance; ``art:finish bands --force`` then softens it as usual."""
+    key = validate_key(a.layer, allow_helpers=False, assets=ctx.assets)
+    if ctx.assets.get(key, {}).get("kind") != "layer":
+        raise ArtError(f"{key!r} is not a backdrop layer key (kit-<area>-sky|far|mid-<x> in config/kit.json)")
+    path = ctx.public / f"{key}.webp"
+    data0 = path.read_bytes()
+    latest = {str(line["asset"]): line for line in prov.read_lines(prov_path) if isinstance(line, dict) and line.get("asset")}
+    line = latest.get(path.name)
+    if not line or line.get("sha256") != sha256_bytes(data0):
+        raise ArtError(f"{path.name}: not the file its latest provenance line describes (see `pnpm art:finish check {key}`)")
+    img = Image.open(io.BytesIO(data0))
+    img.load()
+    mode = img.mode
+    own = level.row_target([img.convert("RGBA")])
+    target = (a.L if a.L is not None else own[0], own[1], own[2])
+    smooth = a.smooth if a.smooth is not None else 0.12
+    out, params = level.level_piece(img.convert("RGBA"), target, smooth)
+    if "A" not in mode:
+        out = out.convert("RGB")
+    data, info = webpmeta.encode_under_budget(out, ctx.budget)
+    if "A" in out.getbands() and not webpmeta.same_alpha(data, out):
+        raise ArtError(f"{path.name}: the encoder changed the alpha; a layer's edge must stay exact")
+    tools_line = level.tools_line(params, smooth)
+    note(f"{key}: L {params['L_before']} to {params['L_after']}, gain {params['gain_min']} to {params['gain_max']} ({len(data)} bytes q{info['quality']})")
+    if a.dry_run:
+        return 0
+    new_line = prov.sanitize(prov.build_line(asset=path.name, key=key, logical="1x", sha256=sha256_bytes(data), nbytes=len(data), colors=None, budget_relaxed=False,
+                                             sidecar=prov.sidecar_of(prov_path, path.name), published_at=ctx.now,
+                                             tools=list(line.get("tools") or []) + [tools_line, budget_line(info)],
+                                             human_edits=list(line.get("human_edits") or []) + ctx.notes))
+    line_probs = prov.problems(new_line)
+    if line_probs:
+        raise ArtError(f"{path.name}: nothing written, its provenance line would be refused: " + "; ".join(line_probs))
+    path.write_bytes(data)
+    v = verify_final(path, logical_size(key, ctx.assets), ctx.budget)
+    if not v["ok"]:
+        path.write_bytes(data0)
+        raise ArtError(f"{path.name}: " + "; ".join(v["problems"]))
+    prov.append(prov_path, new_line)
+    return 0
+
+
+def cmd_sprites(ctx: Ctx, a: argparse.Namespace) -> int:
+    """The sprite manifest from the published art: rewritten, or with --check only compared."""
+    path = Path(a.manifest) if a.manifest else SPRITES_PATH
+    if a.check:
+        text = sprites.dumps(sprites.build(ctx.public))
+        if not path.exists() or path.read_text(encoding="utf-8") != text:
+            raise ArtError(f"{rel_to_repo(path)} does not match the art in {rel_to_repo(ctx.public)}: run `pnpm art:finish sprites`")
+        note(f"sprites: {rel_to_repo(path)} matches the art")
+        return 0
+    write_sprites(ctx, path)
+    return 0
+
+
+def cmd_check(ctx: Ctx, a: argparse.Namespace) -> int:
+    problems: list[str] = []
+    warnings: list[str] = []
+    pub = ctx.public
+    prov_path = Path(a.provenance) if a.provenance else PROVENANCE_PATH
+    try:
+        lines = prov.read_lines(prov_path)
+    except ArtError as e:
+        problems.append(str(e))
+        lines = []
+    relaxed = prov.relaxed_assets(prov_path) if lines else set()
+    latest: dict[str, tuple[int, dict]] = {}  # asset -> (line index, line): the newest line per published file
+    for i, line in enumerate(lines, 1):
+        probs = [p for p in prov.problems(line) if "forbidden" not in p] if isinstance(line, dict) else ["not an object"]
+        if not isinstance(line, dict) or line.get("schema") != 1:
+            probs.append("schema is not 1")
+        for p in probs:
+            problems.append(f"provenance line {i}: {p}")
+        if isinstance(line, dict) and line.get("asset"):
+            latest[str(line["asset"])] = (i, line)
+
+    keys = a.keys if a.keys else [k for k in ctx.assets if not k.startswith("sign-")]
+    pngs = {p.name: p for p in pub.glob("*.png")} if pub.is_dir() else {}
+    rasters = {p.name: p for ext in RASTER_EXTS for p in pub.glob(f"*.{ext}")} if pub.is_dir() else {}
+    checked = 0
+    for key in keys:
+        if key not in ctx.assets:
+            problems.append(f"{key}: not an art key")
+            continue
+        W, H = logical_size(key, ctx.assets)
+        formats = [ext for ext in RASTER_EXTS if f"{key}.{ext}" in rasters or f"{key}@2x.{ext}" in rasters]
+        if len(formats) > 1:
+            problems.append(f"{key}: both PNG and WebP files are published; the loader uses the WebP, so the PNG is stale (republish {key})")
+        if "webp" in formats and not ships_as_webp(key, ctx.assets):
+            problems.append(f"{key}: published as WebP, but only room backgrounds and the art the table marks webp ship as WebP")
+        elif "png" in formats and ctx.assets[key].get("format") == "webp":
+            problems.append(f"{key}: published as PNG, but the table marks it webp (`pnpm art:finish webp {key}`, then publish it)")
+        for ext in RASTER_EXTS:
+            one_name, two_name = f"{key}.{ext}", f"{key}@2x.{ext}"
+            if two_name in rasters and one_name not in rasters:
+                problems.append(f"{two_name}: published without {one_name} (screens that are not dense have nothing to load)")
+            if two_name in rasters and one_name in latest and two_name in latest and latest[one_name][0] > latest[two_name][0]:
+                problems.append(f"{two_name}: older than the latest {one_name} (the 1x was republished without a 2x; dense screens would show the old art)")
+        for name, expect in [(f"{key}.{ext}", (W, H)) for ext in RASTER_EXTS] + [(f"{key}@2x.{ext}", (2 * W, 2 * H)) for ext in RASTER_EXTS]:
+            p = rasters.get(name)
+            if not p:
+                continue
+            checked += 1
+            if name.endswith("@2x.webp"):
+                budget = BUDGET_2X_ROOM
+            else:
+                budget = BUDGET_2X_RELAXED if (name in relaxed and name.endswith("@2x.png")) else BUDGET_BYTES
+            v = verify_final(p, expect, budget)
+            for pr in v["problems"]:
+                problems.append(f"{name}: {pr}")
+            if (pub / f"{key}.svg").exists():
+                warnings.append(f"{key}: both {key}.svg and {name} exist; the loader uses the SVG")
+            # Every published file needs a provenance line, and the file must be the one that line describes.
+            if name not in latest:
+                problems.append(f"{name}: no provenance line (publish it with `pnpm art:finish publish {key}`)")
+            else:
+                want = latest[name][1].get("sha256")
+                if want and want != sha256_bytes(p.read_bytes()):
+                    problems.append(f"{name}: contents differ from the latest provenance line (stale or hand-edited; republish it)")
+        # An overlay is checked as published: PNG, or WebP for the tree's layers.
+        overlay_name = next((n for n in (f"{key}.png", f"{key}.webp") if n in rasters), None)
+        if is_overlay(key, ctx.assets) and overlay_name:
+            view = ctx.view_for(key)
+            if view is None:
+                warnings.append(f"{key}: no room draws it (its room is wider than one screen and leaves it out of its foregrounds)")
+            else:
+                rep = check_overlay(Image.open(rasters[overlay_name]), *view, key_colour=(ctx.assets.get("keys", {}).get(key) or {}).get("key_colour"), behind=ctx.behind_owls(key))
+                for v in rep["violations"]:
+                    problems.append(f"{overlay_name}: {v}")
+        if key in WING_LAYERS:
+            for name in (f"{key}.png", f"{key}@2x.png"):
+                p = pngs.get(name)
+                if p and Image.open(p).mode != "LA":
+                    problems.append(f"{name}: the wing is a tintable layer and must be LA (white with grey shading)")
+        base = owl_layer_base(key)
+        if base:
+            for name in (f"{key}.png", f"{key}@2x.png"):
+                p = pngs.get(name)
+                if not p:
+                    continue
+                im = Image.open(p)
+                arr = np.asarray(im.convert("RGBA"))
+                if base in TINTED_LAYERS:
+                    if im.mode not in ("LA", "RGBA", "P"):
+                        problems.append(f"{name}: tintable layer must be LA or RGBA with R=G=B, found {im.mode}")
+                    elif not (arr[..., 0] == arr[..., 1]).all() or not (arr[..., 1] == arr[..., 2]).all():
+                        problems.append(f"{name}: tintable layer has colour (R, G, B differ); it must be white with grey shading")
+                elif im.mode not in ("RGBA", "P"):
+                    problems.append(f"{name}: face/blink must be RGBA, found {im.mode}")
+                if base == "owl-body" and not (arr[-1, :, 3] >= 128).any():
+                    problems.append(f"{name}: the feet do not touch the bottom row")
+    # Forbidden words over committed tool files (no-op without a list).
+    scan = [TOOLS_ART_DIR / "prompts.mjs", TOOLS_ART_DIR / "jobs.json", prov_path] + sorted(PALETTES_DIR.glob("*.json")) + sorted((TOOLS_ART_DIR / "config").glob("*.json"))
+    hits = 0
+    for f in scan:
+        if f.exists():
+            hits += len(forbidden.check_file(f))
+    if hits:
+        problems.append(f"forbidden-word check: {hits} match(es), see stderr")
+    for w in warnings:
+        warn(w)
+    for p in problems:
+        print(f"FAIL: {p}")
+    note(f"check: {checked} published PNG/WebP file(s), {len(lines)} provenance line(s), {len(problems)} problem(s), {len(warnings)} warning(s)")
+    return 1 if problems else 0
+
+
+def _write_raw(work: Path, key: str, img: Image.Image, seed: int, key_colour: str | None, regions: dict | None, now: str, kind: str, realm: str) -> None:
+    d = work / "raw" / key
+    d.mkdir(parents=True, exist_ok=True)
+    data = pngmeta.encode(img, compress_level=1, optimize=False)
+    h = sha256_bytes(data)[:16]
+    (d / f"{h}.png").write_bytes(data)
+    sc = {"schema": 1, "key": key, "kind": kind, "realm": realm, "provider": "synthetic", "model": "artlib-synth", "hash16": h, "prompt_sha256": sha256_bytes(key.encode())[:64],
+          "seed": seed, "seed_returned": seed, "size": f"{img.width}x{img.height}", "width": img.width, "height": img.height, "format": "png", "key_colour": key_colour,
+          "refs": [], "source_url": None, "generated_at": now, "now_source": "flag", "cost_estimate_usd": 0, "provider_meta": {}}
+    if regions:
+        sc["regions"] = regions
+    (d / f"{h}.json").write_text(json.dumps(sc, indent=2), encoding="utf-8")
+    (d / "SELECTED").write_text(h + "\n", encoding="utf-8")
+
+
+def _latest_candidate(d: Path) -> Path | None:
+    if not d.is_dir():
+        return None
+    sel = d / "SELECTED"
+    cands = sorted([p for p in d.iterdir() if p.suffix.lower() in (".png", ".jpg")])
+    if sel.exists():
+        h = sel.read_text(encoding="utf-8").strip()
+        for p in cands:
+            if p.stem == h:
+                return p
+    return cands[-1] if cands else None
+
+
+def cmd_demo(ctx: Ctx, a: argparse.Namespace) -> int:
+    """Synthetic (or the generator's mock) input through guide, room, piece, overlay --check and owl."""
+    base = Path(a.keep) if a.keep else Path(tempfile.mkdtemp(prefix="owl-art-demo-"))
+    work = base / "work"
+    public = base / "public"
+    work.mkdir(parents=True, exist_ok=True)
+    now = ctx.now
+    s = float(a.scale)
+    sz = lambda w, h: (max(16, int(round(w * s))), max(16, int(round(h * s))))  # noqa: E731
+    from_work = Path(a.from_work) if a.from_work else None
+    used_mock = False
+    if from_work:
+        for key in ("hub", "guardian", "hub-fg", "owl-master"):
+            src = _latest_candidate(from_work / "raw" / key)
+            if src:
+                d = work / "raw" / key
+                d.mkdir(parents=True, exist_ok=True)
+                shutil.copy(src, d / src.name)
+                if src.with_suffix(".json").exists():
+                    shutil.copy(src.with_suffix(".json"), d / src.with_suffix(".json").name)
+                (d / "SELECTED").write_text(src.stem + "\n", encoding="utf-8")
+                used_mock = True
+        geo = from_work / "geometry.json"
+        if geo.exists():
+            shutil.copy(geo, work / "geometry.json")
+    if not used_mock:
+        # The same key-colour convention as the generator's job list (config/assets.json): green
+        # for pieces and overlays, magenta for the owl master with red body, green belly, blue accent.
+        _write_raw(work, "hub", synth_room(*sz(3200, 1800), 11, "hub"), 1101, None, None, now, "room", "hub")
+        subj, _ = synth_keyed_subject(*sz(1440, 1640), "#00FF00", (120, 140, 90), 0.4)
+        _write_raw(work, "guardian", subj, 1301, "#00FF00", None, now, "piece", "grove")
+        _write_raw(work, "hub-fg", synth_overlay(*sz(3200, 1800), "#00FF00", True), 1601, "#00FF00", None, now, "overlay", "hub")
+        owl, _ = synth_owl_master(*sz(1600, 1920))
+        _write_raw(work, "owl-master", owl, 1701, "#FF00FF", {"body": "#FF0000", "belly": "#00FF00", "accent": "#0000FF"}, now, "owl", "hub")
+    if not (work / "geometry.json").exists():
+        # The fixture's one-screen rooms, not this checkout's exported room data (whose wide rooms
+        # list their overlays by screen), so the demo runs the same everywhere.
+        (work / "geometry.json").write_text(json.dumps(fixture_geometry()), encoding="utf-8")
+    common = ["--work", str(work), "--geometry", str(work / "geometry.json"), "--now", now, "--public", str(public)]
+    # The overlay rules are enforced on both the synthetic overlay and the generator's mock one,
+    # which keep their props out of the walkable band on purpose.
+    steps = [
+        ["guide", "--all"],
+        ["room", "hub", "--grade", "hub"],
+        ["piece", "guardian"],
+        ["overlay", "hub-fg", "--check"],
+        ["owl"],
+        ["publish", "hub", "guardian", "owl-*", "hub-fg", "--provenance", str(base / "provenance.jsonl"), "--note", "demo run"],
+        ["check", "--all", "--provenance", str(base / "provenance.jsonl")],
+    ]
+    for step in steps:
+        note(f"\n== demo: {' '.join(step)}")
+        rc = main(step + common)
+        if rc != 0:
+            print(f"demo FAILED at: {' '.join(step)}", file=sys.stderr)
+            return 1
+    # Contract assertions on what was published.
+    expect = {"hub.webp": (1600, 900), "guardian.png": (720, 820), "guardian@2x.png": (1440, 1640), "hub-fg.png": (1600, 900)}
+    for name in OWL_LAYERS:
+        expect[f"{name}.png"] = (200, 240)
+        expect[f"{name}@2x.png"] = (400, 480)
+    failures = []
+    for name, size in expect.items():
+        p = public / name
+        if not p.exists():
+            failures.append(f"missing {name}")
+            continue
+        v = verify_final(p, size, BUDGET_BYTES)
+        failures += [f"{name}: {x}" for x in v["problems"]]
+    body = np.asarray(Image.open(public / "owl-body.png").convert("LA")) if (public / "owl-body.png").exists() else None
+    if body is not None:
+        if not (body[-1, :, 1] >= 128).any():
+            failures.append("owl-body.png: feet do not touch the bottom row")
+        if body[..., 0][body[..., 1] == 255].max() != 255:
+            failures.append("owl-body.png: lit base is not white")
+    lines = prov.read_lines(base / "provenance.jsonl")
+    if len(lines) != len(expect):
+        failures.append(f"provenance has {len(lines)} lines, expected {len(expect)}")
+    for f in failures:
+        print(f"FAIL: {f}")
+    note(f"\ndemo {'ok' if not failures else 'FAILED'}: {len(expect)} files, {len(lines)} provenance lines, work dir {base}" + ("" if a.keep else " (removed)"))
+    if not a.keep:
+        shutil.rmtree(base, ignore_errors=True)
+    return 1 if failures else 0
+
+
+# ----------------------------------------------------------------------------------------------
+# Argument parsing
+
+
+def add_common(sp: argparse.ArgumentParser) -> None:
+    sp.add_argument("--work", default=None, help="work directory (default ART_WORK_DIR or work/art)")
+    sp.add_argument("--geometry", default=None, help="geometry JSON (default <work>/geometry.json)")
+    sp.add_argument("--out", default=None, help="finals directory (default <work>/final)")
+    sp.add_argument("--now", default=None, help="ISO-8601 timestamp for records (default ART_NOW or the clock)")
+    sp.add_argument("--budget", type=int, default=None, help=f"PNG byte budget (default {BUDGET_BYTES})")
+    sp.add_argument("--note", action="append", default=[], help="a human edit to record (repeatable)")
+    sp.add_argument("--public", default=None, help=argparse.SUPPRESS)
+
+
+def add_chroma_flags(sp: argparse.ArgumentParser) -> None:
+    sp.add_argument("--key-colour", default=None, help="auto | #RRGGBB (default: the sidecar's key colour, else the key's default)")
+    sp.add_argument("--t0", type=float, default=40.0)
+    sp.add_argument("--t1", type=float, default=110.0)
+    sp.add_argument("--despill-band", type=int, default=6)
+    sp.add_argument("--min-area", type=float, default=0.002, help="speck threshold as a fraction of the largest component (never below 16 px; components touching the frame edge are never specks)")
+    sp.add_argument("--max-hole", type=int, default=64)
+    sp.add_argument("--feather", type=float, default=0.0)
+    sp.add_argument("--trust-key", action="store_true", help="key on --key-colour even when the border says otherwise")
+
+
+def add_grade_flags(sp: argparse.ArgumentParser) -> None:
+    sp.add_argument("--grade", default=None, help="realm palette (default: the key's realm) or none")
+    sp.add_argument("--strength", type=float, default=None)
+    sp.add_argument("--dither", choices=("none", "ordered", "fs"), default="none")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    ap = argparse.ArgumentParser(prog="postprocess.py", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="command", required=True)
+
+    sp = sub.add_parser("guide", help="layout guides from the room geometry")
+    sp.add_argument("room", nargs="?")
+    sp.add_argument("--all", action="store_true")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_guide)
+
+    sp = sub.add_parser("room", help="room background -> 1600x900 WebP (+ optional 3200x1800)")
+    sp.add_argument("key")
+    sp.add_argument("--raw", default=None)
+    sp.add_argument("--crop", default="centre", help="centre|top|bottom|fx,fy")
+    sp.add_argument("--shift-y", type=int, default=0)
+    sp.add_argument("--with-2x", action="store_true", help="also write <key>@2x.webp under --budget-2x")
+    sp.add_argument("--budget-2x", type=int, default=BUDGET_2X_ROOM, help=f"byte budget of the 2x WebP (default {BUDGET_2X_ROOM})")
+    add_grade_flags(sp)
+    add_common(sp)
+    sp.set_defaults(fn=cmd_room)
+
+    sp = sub.add_parser("texture", help="kit texture -> healed to tile, resized, WebP (OP-229)")
+    sp.add_argument("key")
+    sp.add_argument("--raw", default=None)
+    sp.add_argument("--band", type=float, default=0.25, help="width of the healing cross as a fraction of the tile")
+    sp.add_argument("--no-heal", action="store_true", help="ship the candidate as painted (it already tiles)")
+    sp.add_argument("--max-seam", type=float, default=1.6, help="refuse a tile whose wrap seam is more than this times its inner detail")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_texture)
+
+    sp = sub.add_parser("layer", help="kit backdrop layer -> keyed (far, mid) or as painted (sky), healed to repeat sideways, WebP (OP-229)")
+    sp.add_argument("key")
+    sp.add_argument("--raw", default=None)
+    add_chroma_flags(sp)
+    sp.add_argument("--crop", default="centre", help="centre|top|bottom|fx,fy")
+    sp.add_argument("--band", type=float, default=0.2, help="width of the sideways healing band as a fraction of the width")
+    sp.add_argument("--trim-key", action="store_true", help="cut away a border of the key colour the painting put round itself before keying")
+    sp.add_argument("--fade-top", type=int, default=0, help="ramp a keyed layer's alpha in over this many px below its first opaque row")
+    sp.add_argument("--inpaint-key-hue", type=float, default=None, help="after keying, repaint opaque pixels still in the key's hue above this saturation (the key painted into the subject) with the colour around them")
+    sp.add_argument("--no-heal", action="store_true")
+    sp.add_argument("--max-seam", type=float, default=1.6)
+    sp.add_argument("--clear-box", action="append", default=None, help="x0,y0,x1,y1 in the final's pixels made transparent (a moon painted into a keyed layer, which must not repeat); repeatable, keyed layers only")
+    sp.add_argument("--clear-tone", action="append", default=None, help="x0,y0,x1,y1,#RRGGBB,tolerance[,fill]: inside the box, pixels within the tolerance of the colour are made transparent (a moon behind painted treetops), or with fill painted over in the box's own colour (a moon in a layer's painted sky); repeatable, keyed layers only")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_layer)
+
+    sp = sub.add_parser("pieces", help="kit shape sheet -> chroma key, six cells cut into their pieces, WebP cut-outs 1x + 2x (OP-229)")
+    sp.add_argument("key")
+    sp.add_argument("--raw", default=None)
+    add_chroma_flags(sp)
+    sp.add_argument("--only", default=None, help="comma-separated piece names (or keys) to cut; default all six")
+    sp.add_argument("--grow", type=int, default=3, help="how far (in quarter-size pixels) a prop's parts may be apart and still count as one prop")
+    sp.add_argument("--clear-haze", action="store_true", help="make bright key-coloured haze (a glow painted over the key) transparent before cutting")
+    sp.add_argument("--min-blob", type=int, default=400, help="px below which a blob is not a prop")
+    sp.add_argument("--margin", type=float, default=0.02)
+    sp.add_argument("--valign", choices=("bottom", "centre", "top"), default="bottom")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_pieces)
+
+    sp = sub.add_parser("piece", help="set piece -> chroma key, fit, 1x + 2x")
+    sp.add_argument("key")
+    sp.add_argument("--raw", default=None)
+    add_chroma_flags(sp)
+    sp.add_argument("--floor-cut", type=int, default=None, help="drop everything below this source row")
+    sp.add_argument("--clear-glow", action="append", default=[], metavar="X0,Y0,X1,Y1", help="before keying, paint the backdrop over pixels leaning to the key's hue inside this box of the source (a lamp's light painted over the key); repeatable")
+    sp.add_argument("--glow-margin", type=int, default=24, help="how far a pixel must lean to the key's channels to count as glow (lower clears paler light)")
+    sp.add_argument("--fit", choices=("contain",), default="contain")
+    sp.add_argument("--margin", type=float, default=0.02)
+    sp.add_argument("--anchor-x", type=float, default=0.5)
+    sp.add_argument("--pad-bottom", type=int, default=0)
+    sp.add_argument("--valign", choices=("bottom", "centre", "top"), default="bottom", help="centre for items worn at a point (glasses), top for items hanging from a line (neckwear)")
+    sp.add_argument("--flip", action="store_true", help="mirror the subject (pets are drawn facing right in the game)")
+    sp.add_argument("--solid", type=int, default=0, metavar="PX", help="the subject is one opaque board (a sign): everything more than PX source px inside its outline is made fully opaque in its painted colour")
+    sp.add_argument("--no-2x", action="store_true")
+    add_grade_flags(sp)
+    add_common(sp)
+    sp.set_defaults(fn=cmd_piece)
+
+    sp = sub.add_parser("webp", help="published cut-outs the table marks webp: their PNGs re-encoded as WebP finals, the alpha exact")
+    sp.add_argument("keys", nargs="+")
+    sp.add_argument("--provenance", default=None, help=argparse.SUPPRESS)
+    add_common(sp)
+    sp.set_defaults(fn=cmd_webp)
+
+    sp = sub.add_parser("overlay", help="foreground overlay -> chroma key, 1600x900 RGBA")
+    sp.add_argument("key")
+    sp.add_argument("--raw", default=None)
+    add_chroma_flags(sp)
+    sp.add_argument("--crop", default="centre")
+    sp.add_argument("--shift-y", type=int, default=0)
+    sp.add_argument("--with-2x", action="store_true")
+    sp.add_argument("--budget-2x", type=int, default=BUDGET_2X_RELAXED)
+    sp.add_argument("--check", action="store_true", help="fail when the overlay rules are violated")
+    sp.add_argument("--clear-haze", action="store_true", help="make bright key-coloured haze (keyed glow) transparent")
+    sp.add_argument("--clear-signs", action="store_true", help="make the overlay transparent over closed signs' lettered boards")
+    sp.add_argument("--clear-poly", action="append", default=None, help="x,y,x,y,...: a polygon in room pixels of the final where the overlay is made transparent (a prop the frame cut, which would float mid-view); repeatable")
+    sp.add_argument("--edge-fade", default=None, help="LEFT,RIGHT: final pixels over which the layer's alpha ramps from clear at its side edges (a middle-distance tile whose paint reaches the edge the room fades it over)")
+    add_grade_flags(sp)
+    add_common(sp)
+    sp.set_defaults(fn=cmd_overlay)
+
+    sp = sub.add_parser("cut", help="a crop of a picked candidate around a detail to repaint (the generator's @canvas:<key>)")
+    sp.add_argument("key", help="the edit job's key (the crop is written to <work>/canvas/<key>.png)")
+    sp.add_argument("--base-key", required=True, help="the key whose candidate is cut (its SELECTED one unless --base)")
+    sp.add_argument("--base", default=None, help="a raw candidate file instead of the SELECTED one, or files side by side (a,b: a room's screens, to edit across their join)")
+    sp.add_argument("--box", required=True, help="x0,y0,x1,y1 in the candidate's pixels")
+    sp.add_argument("--half", action="store_true", help="write the crop at half size, for a crop whose PNG is over the generator's inline limit (the edit job asks for the full size)")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_cut)
+
+    sp = sub.add_parser("patch", help="paste an edit of a crop back into the picked candidate, only where it changed; writes a new raw candidate of <key>")
+    sp.add_argument("key", help="the key the patched candidate is for")
+    sp.add_argument("--base-key", required=True, help="the key whose candidate is patched (its SELECTED one unless --base)")
+    sp.add_argument("--base", default=None, help="a raw candidate file instead of the SELECTED one, or files side by side (a,b: a room's screens; finish each with room --crop left|right)")
+    sp.add_argument("--edit-key", required=True, help="the edit job's key (its SELECTED candidate unless --edit)")
+    sp.add_argument("--edit", default=None, help="a raw candidate file instead of the SELECTED one")
+    sp.add_argument("--at", required=True, help="x,y: where the edited crop's top-left corner sits in the candidate (the cut box's x0,y0)")
+    sp.add_argument("--box", default=None, help="x0,y0,x1,y1 in the edit's pixels: only here may the edit replace the painting (default: all of it)")
+    sp.add_argument("--threshold", type=float, default=30.0, help="how much a pixel must change (0-255, any channel) to count as edited")
+    sp.add_argument("--grow", type=int, default=6, help="px the patch grows past the changed pixels")
+    sp.add_argument("--close", type=int, default=8, help="px of gaps bridged inside the patch")
+    sp.add_argument("--feather", type=float, default=2.5, help="blur radius of the patch's edge")
+    sp.add_argument("--join", type=int, default=0, help="px at the box's left and right sides within which the edit joins the painting along the cheapest top-to-bottom cut (a band across a seam; with --threshold 0 the whole box)")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_patch)
+
+    sp = sub.add_parser("split", help="a tree screen's platforms or front props: the picked painting's pixels where a colour-coded edit of it shows one code colour; writes a new raw candidate of <key>")
+    sp.add_argument("key", help="the layer the cut-out is for (a keyed key in the table)")
+    sp.add_argument("--base-key", required=True, help="the key whose picked candidate is cut (the screen's back scenery)")
+    sp.add_argument("--base", default=None, help="a raw candidate file instead of the SELECTED one, or files side by side (a,b)")
+    sp.add_argument("--box", default=None, help="x0,y0,x1,y1: the screen to cut from the base (one screen of a row of screens mended at their joins)")
+    sp.add_argument("--map-key", required=True, help="the colour-coded edit's key (its SELECTED candidate unless --map)")
+    sp.add_argument("--map", default=None, help="a raw candidate file instead of the SELECTED one")
+    sp.add_argument("--colour", required=True, help="#RRGGBB: the code colour of the things kept (platforms #00FF00, front props #0000FF)")
+    sp.add_argument("--tolerance", type=float, default=CODE_TOLERANCE, help="RGB distance from the code colour that still counts as coded")
+    sp.add_argument("--min-area", type=int, default=400, help="px below which a coded fleck is dropped")
+    sp.add_argument("--close", type=int, default=4, help="px of gaps bridged in the mask")
+    sp.add_argument("--max-hole", type=int, default=2000, help="px below which an enclosed hole in the mask is filled")
+    sp.add_argument("--grow", type=int, default=3, help="px the mask grows past the coded outline")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_split)
+
+    sp = sub.add_parser("shift", help="move a keyed candidate down, its top rows mirrored into the gap; writes a new raw candidate of <key>")
+    sp.add_argument("key")
+    sp.add_argument("--dy", type=int, required=True, help="room pixels to move the painting down (its floor onto the ground line)")
+    sp.add_argument("--from-y", type=int, default=0, help="move only the rows from this room y down (an overlay's bottom band), the gap mirroring the rows above it")
+    sp.add_argument("--raw", default=None, help="a raw candidate file instead of the SELECTED one")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_shift)
+
+    sp = sub.add_parser("match", help="move a keyed candidate's colours to another's (mean and spread of the props); writes a new raw candidate of <key>")
+    sp.add_argument("key", help="the keyed layer whose candidate is matched")
+    sp.add_argument("--to-key", required=True, help="the keyed layer whose candidate it is matched to (its SELECTED one unless --to)")
+    sp.add_argument("--raw", default=None, help="a raw candidate file instead of the SELECTED one")
+    sp.add_argument("--to", default=None, help="a raw candidate file of --to-key instead of its SELECTED one")
+    sp.add_argument("--distance", type=float, default=SOLID_DISTANCE, help="RGB distance from the key colour past which a pixel counts as the props")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_match)
+
+    sp = sub.add_parser("field", help="layout guides of the arcade games' fields (the generator's @canvas:arcade-<game>-bg)")
+    sp.add_argument("games", nargs="*", help=f"games (default: all of {', '.join(FIELD_GAMES)})")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_field)
+
+    sp = sub.add_parser("canvas", help="a wing's outpaint canvas (the generator's @canvas:<key>)")
+    sp.add_argument("keys", nargs="*", help="wing keys (default: every <room>-west / <room>-east in config/assets.json)")
+    sp.add_argument("--painting", default=None, help="the approved painting at 2x (default: the published <room>@2x.webp)")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_canvas)
+
+    sp = sub.add_parser("wing", help="stitch a room's picked wings onto its painting; finish every screen (WebP 1x + 2x) and the end overlays")
+    sp.add_argument("room", choices=PUBLIC_ROOMS)
+    sp.add_argument("--west", default=None, help="raw candidate for <room>-west (default: its SELECTED candidate)")
+    sp.add_argument("--east", default=None, help="raw candidate for <room>-east (default: its SELECTED candidate)")
+    sp.add_argument("--painting", default=None, help="the approved painting at 2x (default: the published <room>@2x.webp)")
+    sp.add_argument("--overlay", choices=("ends", "drop"), default="ends", help="ends: the overlay's pieces at the painting's edges move to the room's ends; drop: the wide room draws no overlay")
+    sp.add_argument("--budget-2x", type=int, default=BUDGET_2X_ROOM, help=f"byte budget of each 2x WebP (default {BUDGET_2X_ROOM})")
+    sp.add_argument("--overlay-budget-2x", type=int, default=BUDGET_2X_RELAXED, help=f"relaxed byte budget of each 2x overlay PNG (default {BUDGET_2X_RELAXED})")
+    sp.add_argument("--provenance", default=None, help=argparse.SUPPRESS)
+    add_common(sp)
+    sp.set_defaults(fn=cmd_wing)
+
+    sp = sub.add_parser("owl", help="owl master -> five layers at 1x and 2x")
+    sp.add_argument("--species", choices=OWL_SPECIES, default=None, help="finish owl-<species>-master into the owl-<species>-* layers instead")
+    sp.add_argument("--raw", default=None)
+    sp.add_argument("--keys", default=None, help="owl-keys.json override")
+    sp.add_argument("--height", type=int, default=None)
+    sp.add_argument("--flip", action="store_true")
+    sp.add_argument("--blink", default=None, help="from:<png> (an eyes-closed edit of the master)")
+    sp.add_argument("--labels", default=None, help="hand-edited label map")
+    sp.add_argument("--debug", action="store_true", help="dump intermediates to <work>/intermediates/<master key>")
+    sp.add_argument("--flight", action="store_true", help="finish the kind's flight master (its folded wings taken away) into its flight body, belly and accent, placed as its own layers (OP-136)")
+    add_chroma_flags(sp)
+    sp.set_defaults(despill_band=4)  # the owl's flat fills need only a narrow despill band
+    add_common(sp)
+    sp.set_defaults(fn=cmd_owl)
+
+    sp = sub.add_parser("wings", help="the owls' wing painting (owl-wing-right) -> owl-wing-body and owl-wing-accent at 1x and 2x (OP-084)")
+    sp.add_argument("--raw", default=None)
+    sp.add_argument("--keys", default=None, help="owl-keys.json override")
+    sp.add_argument("--flip", action="store_true", help="mirror a winner painted as a left wing")
+    add_chroma_flags(sp)
+    sp.set_defaults(despill_band=4)
+    add_common(sp)
+    sp.set_defaults(fn=cmd_wings)
+
+    sp = sub.add_parser("grade", help="apply a realm palette grade to one image")
+    sp.add_argument("input")
+    sp.add_argument("output")
+    sp.add_argument("--realm", required=True)
+    sp.add_argument("--strength", type=float, default=None)
+    sp.add_argument("--chroma-boost", type=float, default=None)
+    add_common(sp)
+    sp.set_defaults(fn=cmd_grade)
+
+    sp = sub.add_parser("ref", help="prepare an anchor reference image for tools/art/refs (<= 1024 px, no metadata, under budget)")
+    sp.add_argument("input")
+    sp.add_argument("output")
+    sp.add_argument("--max", type=int, default=1024, help="longest side in px")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_ref)
+
+    sp = sub.add_parser("sheet", help="contact sheet of a key's raw candidates")
+    sp.add_argument("key")
+    sp.add_argument("--width", type=int, default=320)
+    sp.add_argument("--columns", type=int, default=3)
+    add_common(sp)
+    sp.set_defaults(fn=cmd_sheet)
+
+    sp = sub.add_parser("publish", help="copy finals into apps/park/public/art and log provenance")
+    sp.add_argument("keys", nargs="+", help="keys, or owl-* for the five owl layers")
+    sp.add_argument("--retire-svg", action="store_true", help="move <key>.svg to work/art/retired-svg/ so the PNG is used")
+    sp.add_argument("--provenance", default=None, help=argparse.SUPPRESS)
+    add_common(sp)
+    sp.set_defaults(fn=cmd_publish)
+
+    sp = sub.add_parser("runs", help="kit recut run image -> caps and middle pieces of three lengths per run (OP-251)")
+    sp.add_argument("key")
+    sp.add_argument("--raw", default=None)
+    add_chroma_flags(sp)
+    sp.add_argument("--only", default=None, help="comma-separated parts (cap-left, mid-480) or piece keys to cut; default all")
+    sp.add_argument("--band-share", type=float, default=0.2, help="share of the width a row must cover to belong to a run (a moon or lantern beside a run covers less)")
+    sp.add_argument("--clear-haze", action="store_true", help="make bright key-coloured haze transparent before the cut")
+    sp.add_argument("--clear-glow", type=float, default=None, help="also clear the washed-out glow in the key's hue down to this saturation (0.2 clears a pink-white halo)")
+    sp.add_argument("--clear-mist", action="store_true", help="clear the pale grey mist painted over the key (bright, grey, part-transparent paint away from the run's opaque edge)")
+    sp.add_argument("--max-squash", type=float, default=0.15, help="how much a run painted short may be squashed in height to fit the longest middle piece")
+    sp.add_argument("--clear-box", action="append", default=None, help="x0,y0,x1,y1 in the raw made transparent before the cut (a moon painted over a run's end); repeatable")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_runs)
+
+    sp = sub.add_parser("columns", help="kit recut column sheet -> full-height pieces cut straight top and bottom, a tile piece healed to stack (OP-259)")
+    sp.add_argument("key")
+    sp.add_argument("--raw", default=None)
+    add_chroma_flags(sp)
+    sp.add_argument("--only", default=None, help="comma-separated piece names or keys to cut; default all")
+    sp.add_argument("--band-share", type=float, default=0.2, help="share of the height a column must cover to count (anything beside a column covers less)")
+    sp.add_argument("--clear-haze", action="store_true", help="make bright key-coloured haze transparent before the cut")
+    sp.add_argument("--clear-glow", type=float, default=None, help="also clear the washed-out glow in the key's hue down to this saturation")
+    sp.add_argument("--clear-mist", action="store_true", help="clear the pale grey mist painted over the key")
+    sp.add_argument("--band", type=float, default=0.25, help="the heal band for a tile piece, as a fraction of its height")
+    sp.add_argument("--trim", type=int, default=3, help="px cut off each side of a column before scaling (the keyed fringe of a straight cut)")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_columns)
+
+    sp = sub.add_parser("target", help="keep an approved art target as reference art under tools/art/targets/ with provenance (OP-249)")
+    sp.add_argument("key")
+    sp.add_argument("--raw", default=None)
+    sp.add_argument("--crop", default="centre", help="centre|top|bottom|fx,fy")
+    sp.add_argument("--targets-dir", default=None, help=argparse.SUPPRESS)
+    sp.add_argument("--guide", action="store_true", help="write the selected candidate as work/art/guides/<key>-round.png, the next round's reference, instead of keeping it")
+    sp.add_argument("--ref", action="store_true", help="write the kept target as work/art/guides/<key>-ref.png, the reference kit-guided jobs carry, instead of keeping it")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_target)
+
+    sp = sub.add_parser("bands", help="pull published backdrop layers into their value bands in place, with provenance (OP-250)")
+    sp.add_argument("keys", nargs="*", help="layer keys (kit-<area>-sky|far|mid-<x>)")
+    sp.add_argument("--all", action="store_true", help="every published backdrop layer")
+    sp.add_argument("--dry-run", action="store_true", help="print the statistics before and after; write nothing")
+    sp.add_argument("--force", action="store_true", help="grade a layer again although its provenance says bands: already")
+    sp.add_argument("--finals", action="store_true", help="grade finished, unpublished layers in work/art/final instead; the finish record takes the bands line and publish carries it")
+    sp.add_argument("--measure", nargs="+", metavar="PNG", help="measure a target screen's three bands (or any image) and stop")
+    sp.add_argument("--haze", type=float, help="the haze toward the sky colour for far and middle layers (default 0.14 far, 0.07 mid)")
+    sp.add_argument("--blur", type=float, help="the blur in screen px for far and middle layers (default 1.6 far, 1.0 mid)")
+    sp.add_argument("--provenance", help="provenance file (default tools/art/provenance.jsonl)")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_bands)
+
+    sp = sub.add_parser("level", help="level the recut's run rows: one colour across each row's caps and middles, 1x and 2x, in place, with provenance (OP-251)")
+    sp.add_argument("rows", nargs="*", help="recut rows (plank, stone-thin, earth-path ...); none means every row")
+    sp.add_argument("--all", action="store_true", help="every recut row")
+    sp.add_argument("--dry-run", action="store_true", help="print what each piece would become; write nothing")
+    sp.add_argument("--force", action="store_true", help="level a row again although its provenance says level: already")
+    sp.add_argument("--no-chroma", action="store_true", help="level the light only, no a/b shift (a row whose caps carry much green, where the shift would redden the earth)")
+    sp.add_argument("--layer", help="level one backdrop layer across instead (a light shaft, a bright stretch); follow with `bands --force`")
+    sp.add_argument("--L", type=float, help="with --layer: the lightness to bring each column to (default the layer's own mean)")
+    sp.add_argument("--smooth", type=float, help="with --layer: the column smoothing as a fraction of the height (default 0.12)")
+    sp.add_argument("--provenance", help="provenance file (default tools/art/provenance.jsonl)")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_level)
+
+    sp = sub.add_parser("sprites", help="the sprite manifest: every published sprite's drawn area (packages/shared/src/sprites.json; publish rewrites it)")
+    sp.add_argument("--manifest", default=None, help=argparse.SUPPRESS)
+    sp.add_argument("--check", action="store_true", help="fail when the manifest does not match the art, rewriting nothing")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_sprites)
+
+    sp = sub.add_parser("check", help="verify published art against the loader contract")
+    sp.add_argument("keys", nargs="*")
+    sp.add_argument("--all", action="store_true")
+    sp.add_argument("--provenance", default=None, help=argparse.SUPPRESS)
+    add_common(sp)
+    sp.set_defaults(fn=cmd_check)
+
+    sp = sub.add_parser("demo", help="run the chain on synthetic input in a temp dir and assert the contract")
+    sp.add_argument("--keep", default=None, help="keep the demo directory here")
+    sp.add_argument("--scale", default="1.0", help="scale synthetic sizes (tests use 0.25)")
+    sp.add_argument("--from-work", default=None, help="use the generator's mock candidates from this work dir")
+    add_common(sp)
+    sp.set_defaults(fn=cmd_demo)
+    return ap
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = build_parser()
+    a = ap.parse_args(argv)
+    try:
+        ctx = Ctx(a)
+        return int(a.fn(ctx, a) or 0)
+    except ArtError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    except BudgetError as e:  # pragma: no cover (BudgetError is an ArtError)
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

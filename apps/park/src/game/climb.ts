@@ -1,0 +1,404 @@
+import type Phaser from 'phaser';
+import {
+  BAND_COUNT,
+  CLIMB_SLACK_MS,
+  LAYOUTS,
+  NIGHTS,
+  NO_INPUT,
+  OWL_W,
+  PLAY_FEATHERS_PER_DAY,
+  isBench,
+  leastClimbMs,
+  pilotFor,
+  pilotInput,
+  platforms,
+  routeOf,
+  waitToLaunch,
+  type ClimbInput,
+  type ClimbState,
+  type Layout,
+  type Ledge,
+  type Night,
+  type OwlLook,
+  type Pilot,
+  type RoomDef,
+  type RouteMove,
+} from '@owl-park/shared';
+import type { ActivityLink, ClimbReply } from '../collect/service';
+import type { Hud } from '../ui/hud';
+import { climbWouldEarn, endOfGameLine } from '../ui/spectator';
+import type { PreviewRect } from './BuilderScene';
+import type { ClimbScene } from './ClimbScene';
+import { sceneReady } from './lazyScenes';
+
+/** The realm whose portal opens the climb. */
+export const CLIMB_ROOM = 'glass';
+/** The approved phrase for a portal the keepers have not switched on. */
+export const PORTAL_OFF = 'Pardon Our Feathers';
+
+/** What the climb needs of the room it is in. */
+export interface ClimbHost {
+  scene: Phaser.Scene;
+  hud: Hud;
+  /** The room's activities (null until connected). */
+  acts(): ActivityLink | null;
+  look(): OwlLook;
+  /** The realms switch's `portal`, as the room last heard it. */
+  portalLive(): boolean;
+  /** Calm motion is on (a setting). */
+  calm(): boolean;
+  /** The feather balance changed. */
+  feathers(total: number): void;
+  /** A collectible was granted: the collection should be read again. */
+  awarded(variant: string): void;
+  /** A spectator's Get a Day Ticket (OP-191): the turnstiles' sale, with this line above the card before the store. */
+  offerTicket(line: string): void;
+}
+
+/** A run under way: its key, its night, and what the room has banked and paid so far. */
+interface Run {
+  seed: number;
+  startedAt: number;
+  night: Night;
+  layout: Layout;
+  banked: number;
+  /** The highest band sent to the room (answered or not). */
+  sent: number;
+  /** A band the room never answered, sent again with the next one or on reconnect. */
+  unanswered: number | null;
+  /** A band the room refused as too fast, tried once more when its floor has passed. */
+  retry: ReturnType<typeof setTimeout> | null;
+  added: number;
+  /** A spectator's run (OP-191): it earns nothing, and `would` is what its bands would have earned with a Day Ticket. */
+  practice: boolean;
+  would: number;
+  ref: string | null;
+  over: boolean;
+  /** The hints given, so each verb is taught once. */
+  taught: Set<string>;
+  /** The scripted climber at the controls (the browser tests), or null for the visitor's own. */
+  auto: Autopilot | null;
+  hintTimer: ReturnType<typeof setTimeout> | null;
+  /** The panes as last shown. */
+  panes: number;
+}
+
+const COARSE = () => typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+/** An obstacle's hint stays this long. */
+const HINT_MS = 5000;
+/** The autopilot rests this long on each balcony, as a visitor on the stairs would: the brisk feather is the high road's. */
+const AUTO_REST_MS = 1500;
+
+/**
+ * The scripted climber at the controls, for the browser tests (window.owlPark.climbAuto): it takes
+ * the main road with the shared pilot, move by move along the authored route, waiting out the
+ * lanterns and the moths as the floor test does, and resting on each bench. After a knock or the
+ * shade it finds its place on the route again from the platform it stands on.
+ */
+class Autopilot {
+  private pilot: Pilot | null = null;
+  private restUntil = 0;
+  private readonly route: readonly RouteMove[];
+  private readonly all: readonly Ledge[];
+  constructor(private readonly layout: Layout, private readonly night: Night) {
+    this.route = routeOf(layout, 'stairs');
+    this.all = platforms(layout);
+  }
+  private standingOn(s: ClimbState): Ledge | null {
+    return this.all.find((p) => Math.abs(p.y - s.y) < 0.5 && s.x - OWL_W / 2 < p.x + p.w && s.x + OWL_W / 2 > p.x) ?? null;
+  }
+  input(s: ClimbState): ClimbInput {
+    if (this.pilot) {
+      const to = this.pilot.move.to;
+      const onTarget = s.grounded && Math.abs(s.y - to.y) < 0.5 && s.x - OWL_W / 2 < to.x + to.w && s.x + OWL_W / 2 > to.x;
+      const crossed = this.pilot.move.kind === 'cross' && onTarget && Math.abs(s.x - (this.pilot.move.toward === 'R' ? to.x + to.w - OWL_W / 2 - 6 : to.x + OWL_W / 2 + 6)) < 10;
+      const done = this.pilot.move.kind === 'cross' ? crossed : onTarget;
+      const lost = s.hurtMs > 0 || s.shadeMs > 0 || (s.grounded && this.pilot.phase > 0 && !onTarget && s.stoodMs > 50);
+      if (done || lost) {
+        this.pilot = null;
+        if (done && isBench(this.layout, to)) this.restUntil = s.t + AUTO_REST_MS;
+      } else return pilotInput(s, this.pilot, this.layout, this.night);
+    }
+    if (!s.grounded || s.t < this.restUntil || s.hurtMs > 0) return NO_INPUT;
+    const standing = this.standingOn(s);
+    if (!standing) return NO_INPUT;
+    // The next move: the one after the route's last move onto this platform (a corridor is entered
+    // and then crossed: the crossing itself while the owl is short of its far end), or the first
+    // move that climbs from here.
+    let here = -1;
+    this.route.forEach((m, i) => {
+      if (m.to.x === standing.x && m.to.y === standing.y && m.to.w === standing.w) here = i;
+    });
+    const last = here >= 0 ? this.route[here]! : null;
+    const farEnd = last?.kind === 'cross' ? (last.toward === 'R' ? last.to.x + last.to.w - OWL_W / 2 - 6 : last.to.x + OWL_W / 2 + 6) : null;
+    const next = last && farEnd !== null && Math.abs(s.x - farEnd) >= 10 ? last : here >= 0 ? this.route[here + 1] : this.route.find((m) => m.to.y > s.y + 0.5);
+    if (!next) return NO_INPUT;
+    this.pilot = pilotFor(standing, next, waitToLaunch(s, standing, next, this.layout, this.night, this.all) ?? 0);
+    return pilotInput(s, this.pilot, this.layout, this.night);
+  }
+}
+
+/**
+ * The stained-glass climb in its room (designs/the-stained-glass-climb.md): Climb at the portal
+ * asks the room for a run (or the open one), the HUD's climb screen opens on its card, and the
+ * climb scene plays the shared simulation over the room. Each band line the owl reaches goes to
+ * the room as an `ascent`, which checks it against its floor and pays it; the clouds grant the
+ * realm's item once. Stop and Escape close the screen and send nothing: the run waits in the
+ * room for an hour.
+ */
+export class Climb {
+  private run: Run | null = null;
+  private frameRect: PreviewRect | null = null;
+  private destroyed = false;
+
+  constructor(private readonly host: ClimbHost) {}
+
+  /** Climb, at the portal: the room starts or returns the run, and the screen opens on its card. */
+  async play(): Promise<void> {
+    const acts = this.host.acts();
+    if (!acts || this.destroyed) return;
+    if (!this.host.portalLive()) {
+      this.host.hud.toast(PORTAL_OFF);
+      return;
+    }
+    // The climb's scene, fetched alongside the room's answer the first time (OP-204).
+    const scene = sceneReady(this.host.scene.scene, 'climb').then(
+      () => true,
+      () => false,
+    );
+    const reply = await acts.climb();
+    if (this.destroyed) return;
+    if (!reply.ok) {
+      const line = reply.reason === 'far' ? 'Stand at the portal to climb.' : reply.reason === 'closed' ? PORTAL_OFF : 'The park did not catch that. Try again in a moment.';
+      this.host.hud.toast(line);
+      return;
+    }
+    const ready = await scene;
+    if (this.destroyed) return;
+    if (!ready) {
+      this.host.hud.toast('The park did not catch that. Try again in a moment.');
+      return;
+    }
+    this.open(reply);
+  }
+
+  private open(reply: Extract<ClimbReply, { ok: true }>): void {
+    const night = NIGHTS[reply.night] ?? NIGHTS[reply.tier]!;
+    const layout = LAYOUTS[night.layout]!;
+    this.run?.retry && clearTimeout(this.run.retry);
+    this.run = { seed: reply.seed, startedAt: reply.startedAt, night, layout, banked: reply.banked, sent: reply.banked, unanswered: null, retry: null, added: 0, practice: reply.practice === true, would: 0, ref: null, over: false, taught: new Set(), auto: null, hintTimer: null, panes: night.panes };
+    this.host.hud.openClimb(
+      { tier: reply.tier, night: reply.night, banked: reply.banked, remainingCap: reply.remainingCap, cap: PLAY_FEATHERS_PER_DAY, bestBandToday: reply.bestBandToday, resumed: reply.resumed, previousForgotten: reply.previousForgotten },
+      { frame: (rect) => this.frame(rect), start: () => this.start(), again: () => void this.play() },
+    );
+  }
+
+  /** Start pressed on the card: the scene plays from the banked band. */
+  private start(): void {
+    const run = this.run;
+    if (!run || this.destroyed) return;
+    const view = this.view();
+    view.play({
+      layout: run.layout,
+      night: run.night,
+      banked: run.banked,
+      look: this.host.look(),
+      input: () => {
+        const auto = this.run?.auto;
+        const s = auto ? view.snapshot() : null;
+        const input = auto && s ? auto.input(s) : this.host.hud.climbInput();
+        view.held(input);
+        return input;
+      },
+      onStep: (s) => this.step(s),
+      calm: this.host.calm(),
+    });
+    if (this.frameRect) view.frame(this.frameRect);
+    this.host.hud.climbPanes(run.night.panes, run.night.panes);
+    this.teach('run', COARSE() ? 'Push the stick to run, tap Jump to jump' : 'Arrows run, Space jumps');
+  }
+
+  private teach(key: string, line: string, forMs = 0): void {
+    const run = this.run;
+    if (!run || run.taught.has(key)) return;
+    run.taught.add(key);
+    this.host.hud.climbHint(line);
+    if (run.hintTimer) clearTimeout(run.hintTimer);
+    run.hintTimer = forMs
+      ? setTimeout(() => {
+          run.hintTimer = null;
+          if (this.run === run) this.host.hud.climbHint('');
+        }, forMs)
+      : null;
+  }
+
+  /** The scripted climber takes or leaves the controls (the browser tests). */
+  autopilot(on: boolean): boolean {
+    const run = this.run;
+    if (!run) return false;
+    run.auto = on ? new Autopilot(run.layout, run.night) : null;
+    return true;
+  }
+
+  /** The climb's scene, started over the room if it is not running; the room stops drawing under it. */
+  private view(): ClimbScene {
+    const plugin = this.host.scene.scene;
+    if (!plugin.isActive('climb')) plugin.run('climb');
+    plugin.setVisible(false);
+    return plugin.get('climb') as ClimbScene;
+  }
+
+  private stopView(): void {
+    const plugin = this.host.scene.scene;
+    if (plugin.isActive('climb')) plugin.stop('climb');
+    plugin.setVisible(true);
+  }
+
+  private frame(rect: PreviewRect | null): void {
+    this.frameRect = rect;
+    if (!rect) {
+      // The screen closed (Stop, Escape, the card's Close): the run waits in the room; nothing is sent.
+      if (this.run?.retry) clearTimeout(this.run.retry);
+      if (this.run?.hintTimer) clearTimeout(this.run.hintTimer);
+      this.run = null;
+      this.stopView();
+      return;
+    }
+    (this.host.scene.scene.get('climb') as ClimbScene | null)?.frame(rect);
+  }
+
+  /** Every frame of the climb: the panes, the hints as the owl learns, and each new band line to the room. */
+  private step(s: ClimbState): void {
+    const run = this.run;
+    if (!run || run.over) return;
+    if (s.panes !== run.panes) {
+      run.panes = s.panes;
+      this.host.hud.climbPanes(s.panes, run.night.panes);
+    }
+    const coarse = COARSE();
+    // The verbs, each taught once as the tower first asks for it.
+    if (s.jumpsUsed >= 1 && run.taught.has('run') && !run.taught.has('double')) {
+      this.host.hud.climbHint('');
+      if (s.y >= 300) this.teach('double', 'Jump again in the air', HINT_MS);
+    }
+    if (s.y >= 560 && s.band === 0) this.teach('dash', coarse ? 'Tap Dash in the air to cross a wide gap' : 'Shift (or X) dashes: cross the wide gap in the air', HINT_MS);
+    if (s.band === 1 && s.y >= 1400) this.teach('wall', coarse ? 'Push into a wall to cling; tap Jump to kick off it' : 'Hold into a wall to cling; Space kicks off it', HINT_MS);
+    if (s.band >= 1 && run.taught.has('wall')) this.teach('panes', 'Your panes are your glass: a hazard cracks one, a bench relights them', HINT_MS);
+    if (s.band === 2 && s.y >= 2500) this.teach('lantern', coarse ? 'Lanterns swing: pass as one swings away, or hold the stick down to bounce off its glass' : 'Lanterns swing: time your jump, or hold Down to bounce off their glass', HINT_MS);
+    if (s.band === 2 && s.y >= 3000) this.teach('pogo', coarse ? 'This gap needs the bounce: talons down (stick down) on the lantern' : 'This gap needs the bounce: hold Down over the lantern', HINT_MS);
+    if (s.band === 3 && s.y >= 3800) this.teach('moth', 'Glass moths patrol: hop them, and mind the thorn ceiling', HINT_MS);
+    if (s.grounded && s.stoodMs > 0 && run.layout.ledges.some((l) => l.frail && Math.abs(l.y - s.y) < 0.5 && s.x - OWL_W / 2 < l.x + l.w && s.x + OWL_W / 2 > l.x)) this.teach('frail', 'Frail glass: move on before it gives', HINT_MS);
+    if (s.event === 'thorns') this.teach('thorns', 'Thorn glass: back to your last safe ground', HINT_MS);
+    if (s.event === 'shade') this.teach('shade', 'Your last pane cracked: the bench takes you back', HINT_MS);
+    if (s.band > run.sent) void this.ascend(s.band);
+  }
+
+  /** A band line reached: to the room, with any band it never answered. */
+  private async ascend(band: number): Promise<void> {
+    const run = this.run;
+    const acts = this.host.acts();
+    if (!run || !acts || run.over) return;
+    run.sent = Math.max(run.sent, band);
+    const reply = await acts.ascent(run.seed, band);
+    if (this.destroyed || this.run !== run) return;
+    if (!reply.ok) {
+      if (reply.reason === 'offline') {
+        run.unanswered = Math.max(run.unanswered ?? 0, band);
+        return;
+      }
+      if (reply.reason === 'too-fast') {
+        // The room's clock says the band came too soon: ask once more when its floor has passed.
+        if (run.retry) return;
+        const wait = Math.max(1000, leastClimbMs(run.night, band) + CLIMB_SLACK_MS - (Date.now() - run.startedAt) + 500);
+        run.retry = setTimeout(() => {
+          run.retry = null;
+          if (this.run === run && band > run.banked) {
+            run.sent = run.banked;
+            void this.ascend(band);
+          }
+        }, wait);
+        return;
+      }
+      run.over = true;
+      this.host.hud.climbResult({
+        line: reply.reason === 'forgotten' ? 'This climb was left too long and is forgotten.' : 'The park lost track of this climb.',
+        feathers: run.added > 0 ? run.added : null,
+        note: reply.reason === 'forgotten' ? 'Climb again from the portal for a fresh one.' : 'Try again from the portal.',
+      });
+      return;
+    }
+    run.unanswered = null;
+    run.ref = reply.ref;
+    run.added += reply.added;
+    if (reply.practice) {
+      run.practice = true;
+      run.would += climbWouldEarn(run.banked, reply.banked);
+    }
+    run.banked = Math.max(run.banked, reply.banked);
+    this.host.feathers(reply.feathers);
+    this.host.hud.climbHeader(run.banked, Math.max(0, PLAY_FEATHERS_PER_DAY - reply.total));
+    if (reply.item) this.host.awarded(reply.item.variant);
+    if (run.banked >= BAND_COUNT && run.practice) {
+      // A spectator at the clouds (OP-191): what the climb would have earned with a Day Ticket, and the offer before Play again.
+      run.over = true;
+      const offer = endOfGameLine(run.would);
+      this.host.hud.climbResult({ line: 'You reached the clouds!', feathers: null, ref: reply.ref, offer: { line: offer, get: () => this.host.offerTicket(offer) } });
+      return;
+    }
+    if (run.banked >= BAND_COUNT) {
+      run.over = true;
+      this.host.hud.climbResult({
+        line: reply.brisk > 0 ? 'You reached the clouds, briskly!' : 'You reached the clouds!',
+        feathers: run.added,
+        ...(reply.item ? { item: 'The Glass Circlet is yours.' } : reply.why === 'item-already-given' ? { item: 'The Glass Circlet is already yours.' } : {}),
+        ref: reply.ref,
+        ...(reply.why === 'capped' ? { note: 'No more feathers from games today.' } : reply.why === 'paid-today' ? { note: 'These storeys were paid today already.' } : {}),
+      });
+      return;
+    }
+    this.host.hud.climbBand({ band: reply.banked, added: reply.added, ...(reply.brisk > 0 ? { brisk: true } : {}), ...(reply.why ? { why: reply.why } : {}) });
+  }
+
+  /** Back online after a drop while the screen is up: the run from the room, and any band it never answered. */
+  async reconnected(): Promise<void> {
+    const run = this.run;
+    const acts = this.host.acts();
+    if (!run || !acts || run.over || this.destroyed) return;
+    const reply = await acts.climb();
+    if (this.destroyed || this.run !== run || !reply.ok) return;
+    if (reply.seed !== run.seed) {
+      run.over = true;
+      this.host.hud.climbResult({ line: 'This climb was left too long and is forgotten.', feathers: run.added > 0 ? run.added : null, note: 'Climb again from the portal for a fresh one.' });
+      return;
+    }
+    run.banked = Math.max(run.banked, reply.banked);
+    this.host.hud.climbHeader(run.banked, reply.remainingCap);
+    const again = run.unanswered;
+    if (again !== null && again > run.banked) {
+      run.sent = run.banked;
+      void this.ascend(again);
+    }
+  }
+
+  /** The run as tests see it: its seed, what is banked, the owl on the field, and whether the tower is painted. */
+  debug(): { seed: number; night: string; layout: Layout; banked: number; sent: number; over: boolean; ref: string | null; state: ClimbState | null; painted: boolean } | null {
+    const view = this.host.scene.scene.get('climb') as ClimbScene | null;
+    const run = this.run;
+    return run ? { seed: run.seed, night: run.night.key, layout: run.layout, banked: run.banked, sent: run.sent, over: run.over, ref: run.ref, state: view?.snapshot() ?? null, painted: view?.isPainted() ?? false } : null;
+  }
+
+  destroy(): void {
+    this.destroyed = true;
+    if (this.run?.retry) clearTimeout(this.run.retry);
+    if (this.run?.hintTimer) clearTimeout(this.run.hintTimer);
+    this.run = null;
+    this.stopView();
+  }
+}
+
+/** The climb, for its realm only. */
+export function climbFor(room: RoomDef, host: ClimbHost): Climb | null {
+  return room.id === CLIMB_ROOM ? new Climb(host) : null;
+}
+
+export type { ClimbInput };

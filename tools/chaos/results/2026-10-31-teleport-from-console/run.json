@@ -1,0 +1,64 @@
+{
+  "experiment": "teleport-from-console",
+  "n": 9,
+  "name": "A visitor's page worked from the console, to put its owl somewhere it cannot walk",
+  "run_id": "2026-10-31-teleport-from-console",
+  "git": {
+    "park": "af36264333b31370adf4996450ca22449a0eb4f7",
+    "harness": "af36264333b31370adf4996450ca22449a0eb4f7"
+  },
+  "dirty": false,
+  "environment": "this machine: the park under wrangler dev on port 8797, the stand-in store on port 8791",
+  "hypothesis": "Whatever a page sends from its console, the other visitors never see its owl off the floor or standing in mid-air, the room logs what it would not take (position_rejected), and a page that keeps asking for walks out of the room is closed (OP-149).",
+  "blast_radius": "Three extra scripted visitors in the throwaway park's hub, one at a time, for half a minute.",
+  "abort_rule": "Any steady-state check failing for more than 30 s during the experiment ends it and runs the rollback; the harness never leaves a fault injected.",
+  "start": "2026-10-31T12:31:17.833Z",
+  "end": "2026-10-31T12:32:01.860Z",
+  "verdict": "held",
+  "abort_fired": false,
+  "rollback_confirmed": true,
+  "observations": [
+    {
+      "what": "places the fleet was told the console's owls are at or walking to",
+      "value": "40 told, 0 off the floor",
+      "ok": true,
+      "component": "room server",
+      "fix": "walk each target from where the room has the owl, on its own floor (Room.ts move), and tell the others only that walk",
+      "at": "2026-10-31T12:31:55.293Z"
+    },
+    {
+      "what": "standing in mid-air told to the fleet",
+      "value": "not told",
+      "ok": true,
+      "component": "room server",
+      "fix": "drop a stance up on a perch where no perch that high is near the owl (Room.ts air, perchFor)",
+      "at": "2026-10-31T12:31:55.293Z"
+    },
+    {
+      "what": "the page that asked for walks out of the room",
+      "value": "closed: code 4003 (too many moves)",
+      "ok": true,
+      "component": "room server",
+      "fix": "drop a walk to a point outside the room and strike it like a burst of moves (Room.ts move)",
+      "at": "2026-10-31T12:31:55.293Z"
+    },
+    {
+      "what": "where the hub let in a page that said it was at its far end",
+      "value": "142 px from the spawn, 2466 px from where it said",
+      "ok": true,
+      "component": "room server",
+      "fix": "take a hello’s place only near the spawn or near where the owl left lately (Room.ts join)",
+      "at": "2026-10-31T12:31:55.293Z"
+    },
+    {
+      "what": "a hello from (9999, 9999)",
+      "value": "refused: 4002",
+      "ok": true,
+      "component": "room server",
+      "fix": "refuse a frame with a point outside the biggest room as malformed (packages/shared edge.ts parseClientFrame)",
+      "at": "2026-10-31T12:31:55.293Z"
+    }
+  ],
+  "filed": [],
+  "proposed": 0
+}

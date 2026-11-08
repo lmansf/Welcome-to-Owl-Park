@@ -1,0 +1,17 @@
+[
+  {
+    "kind": "PATCH",
+    "experiment": "1. The room server killed mid-session",
+    "run": "2026-10-30-room-server-killed",
+    "component": "room server",
+    "observation": {
+      "what": "owls let back in more than 60 px from where they stood",
+      "value": "8 of 10 (furthest 561 px)",
+      "at": "2026-10-30T06:58:14.927Z"
+    },
+    "fix": "keep where each owl stood through a restart: the room's memory of owls that left (Room.ts leavers) lives only in memory, so after a restart a hello's position is trusted only near the spawn",
+    "type": "Bug",
+    "assignee": "Claude Code",
+    "filed": false
+  }
+]

@@ -1,0 +1,46 @@
+import { AIR_DASH_SPEED } from './dash';
+import { distance, lerpVec } from './geometry';
+import type { Vec2, Walk } from './protocol';
+
+/** Owl walking speed in room pixels per second (rooms are 1600 px wide). */
+export const WALK_SPEED = 260;
+
+/** The pace a walk goes at: the walk's, or a dash's (OP-224, dash.ts) for a walk that is one. */
+export function walkSpeed(walk: Pick<Walk, 'dash'>): number {
+  return walk.dash ? AIR_DASH_SPEED : WALK_SPEED;
+}
+
+export function walkDurationMs(from: Vec2, to: Vec2, speed = WALK_SPEED): number {
+  return (distance(from, to) / speed) * 1000;
+}
+
+/**
+ * Where an owl is at time `now` for a walk that began at `walk.startedAt`.
+ * Used to place remote owls that were already mid-walk when we joined, and to
+ * drive local animation deterministically from wall-clock time.
+ */
+export function positionAlongWalk(walk: Walk, now: number, speed = walkSpeed(walk)): { pos: Vec2; done: boolean } {
+  const total = walkDurationMs(walk.from, walk.to, speed);
+  if (total <= 0) return { pos: { ...walk.to }, done: true };
+  const elapsed = now - walk.startedAt;
+  if (elapsed >= total) return { pos: { ...walk.to }, done: true };
+  if (elapsed <= 0) return { pos: { ...walk.from }, done: false };
+  return { pos: lerpVec(walk.from, walk.to, elapsed / total), done: false };
+}
+
+/**
+ * Whether `next` sets off, later than `now`, from where `current` ends: another owl's walk on from
+ * the one it is drawn walking (its next leg round a bend, OP-148). A page draws other owls a little
+ * behind the room, so it takes such a walk up as the one under way ends, instead of skipping the owl
+ * ahead to its start.
+ */
+export function followsOn(current: Walk | null, next: Walk, now: number): boolean {
+  return current !== null && distance(current.to, next.from) < 3 && next.startedAt > now;
+}
+
+/** Which way the owl faces while walking: -1 left, 1 right, 0 straight. */
+export function facing(walk: Walk): -1 | 0 | 1 {
+  const dx = walk.to.x - walk.from.x;
+  if (Math.abs(dx) < 1) return 0;
+  return dx < 0 ? -1 : 1;
+}

@@ -1,0 +1,295 @@
+"""Shared constants and small helpers for the art post-processing tools.
+
+Everything the post stage needs to agree on with the game lives here: the repository paths,
+the PNG size budget, the PNG chunk allowlist, the logical sizes mirrored from
+``apps/park/src/game/art.ts`` and the public key list. The committed ``config/assets.json``
+(owned by the generator half of the pipeline) wins over the built-in table when it exists, so
+the two halves cannot drift apart silently.
+
+Only the Python standard library, Pillow and numpy are used anywhere under ``tools/art``.
+"""
+
+from __future__ import annotations
+
+import datetime as _dt
+import hashlib
+import json
+import os
+import re
+from pathlib import Path
+
+TOOLS_ART_DIR = Path(__file__).resolve().parent.parent
+REPO_ROOT = TOOLS_ART_DIR.parent.parent
+PUBLIC_ART_DIR = REPO_ROOT / "apps" / "park" / "public" / "art"
+DEFAULT_WORK_DIR = REPO_ROOT / "work" / "art"
+PALETTES_DIR = TOOLS_ART_DIR / "palettes"
+CONFIG_DIR = TOOLS_ART_DIR / "config"
+PROVENANCE_PATH = TOOLS_ART_DIR / "provenance.jsonl"
+#: The sprite manifest (OP-127): every published sprite's drawn area, read by the park and the room server.
+SPRITES_PATH = REPO_ROOT / "packages" / "shared" / "src" / "sprites.json"
+LOCAL_DIR = TOOLS_ART_DIR / ".local"
+
+#: Every shipped file must encode under this many bytes (the "about 200 KB" rule).
+BUDGET_BYTES = 200_000
+#: Opt-in relaxed budget for a 3200x1800 PNG (an overlay), which cannot meet 200 KB.
+BUDGET_2X_RELAXED = 640_000
+#: The budget of a room's 3200x1800 WebP (rooms ship as WebP; their 1x keeps BUDGET_BYTES).
+BUDGET_2X_ROOM = 640_000
+#: The only chunks a published PNG may carry: no text, time, physical or colour-profile chunks.
+ALLOWED_CHUNKS = frozenset({"IHDR", "PLTE", "tRNS", "IDAT", "IEND"})
+
+ROOM_W, ROOM_H = 1600, 900
+OWL_W, OWL_H = 200, 240
+KEY_RE = re.compile(r"^[a-z][a-z0-9-]*$")
+
+NAVY, GOLD, CREAM = "#0C1E36", "#C9A227", "#F6F1E3"
+
+#: Logical sizes mirrored from apps/park/src/game/art.ts (kind: room | piece | owl).
+BUILTIN_ASSETS: dict[str, dict] = {
+    "hub": {"w": ROOM_W, "h": ROOM_H, "kind": "room"},
+    "hub-fg": {"w": ROOM_W, "h": ROOM_H, "kind": "room"},
+    "grove": {"w": ROOM_W, "h": ROOM_H, "kind": "room"},
+    "grove-fg": {"w": ROOM_W, "h": ROOM_H, "kind": "room"},
+    "market": {"w": ROOM_W, "h": ROOM_H, "kind": "room"},
+    "market-fg": {"w": ROOM_W, "h": ROOM_H, "kind": "room"},
+    "guardian": {"w": 720, "h": 820, "kind": "piece"},
+    "robot-owl": {"w": 900, "h": 900, "kind": "piece"},
+    "blockade-not-yet-fledged": {"w": 300, "h": 300, "kind": "piece"},
+    "blockade-hatching-soon": {"w": 300, "h": 300, "kind": "piece"},
+    "owl-body": {"w": OWL_W, "h": OWL_H, "kind": "owl"},
+    "owl-belly": {"w": OWL_W, "h": OWL_H, "kind": "owl"},
+    "owl-accent": {"w": OWL_W, "h": OWL_H, "kind": "owl"},
+    "owl-face": {"w": OWL_W, "h": OWL_H, "kind": "owl"},
+    "owl-blink": {"w": OWL_W, "h": OWL_H, "kind": "owl"},
+}
+
+OWL_LAYERS = ("owl-body", "owl-belly", "owl-accent", "owl-face", "owl-blink")
+TINTED_LAYERS = ("owl-body", "owl-belly", "owl-accent")
+#: Owl species with masters of their own: ``owl-<species>-master`` splits into ``owl-<species>-body`` and so on.
+OWL_SPECIES = ("barn", "burrowing", "snowy", "screech")
+#: Flight (OP-084): the owls' wing, split from one painted right wing into two tintable layers (wing_layers.py).
+WING_MASTER = "owl-wing-right"
+WING_LAYERS = ("owl-wing-body", "owl-wing-accent")
+#: In flight (OP-136) each kind's body, belly and accent are drawn without the folded wings painted on
+#: them, so the open wings are the only ones: split from ``owl-flight-master`` (``owl-<species>-flight-master``,
+#: an edit of the kind's master with the folded wings taken away) with that master's own registration.
+FLIGHT_LAYERS = ("owl-flight-body", "owl-flight-belly", "owl-flight-accent")
+
+
+def species_layers(species: str) -> tuple[str, ...]:
+    """A species' five layer keys, in OWL_LAYERS order (``owl-barn-body``, ...)."""
+    return tuple(name.replace("owl-", f"owl-{species}-", 1) for name in OWL_LAYERS)
+
+
+def flight_layers(species: str | None) -> tuple[str, ...]:
+    """A kind's three flight layer keys, in TINTED_LAYERS order (``owl-flight-body``, ``owl-barn-flight-body``, ...)."""
+    return FLIGHT_LAYERS if not species else tuple(name.replace("owl-", f"owl-{species}-", 1) for name in FLIGHT_LAYERS)
+
+
+def flight_master(species: str | None) -> str:
+    """The helper key a kind's flight layers are split from (``owl-flight-master``, ``owl-barn-flight-master``)."""
+    return f"owl-{species}-flight-master" if species else "owl-flight-master"
+
+
+def owl_layer_base(key: str) -> str | None:
+    """The great horned owl layer a key is or stands in for (``owl-barn-body`` -> ``owl-body``, and a
+    flight layer such as ``owl-barn-flight-body`` -> ``owl-body``); None for any other key."""
+    if key in OWL_LAYERS:
+        return key
+    for sp in OWL_SPECIES:
+        layers = species_layers(sp)
+        if key in layers:
+            return OWL_LAYERS[layers.index(key)]
+    for sp in (None, *OWL_SPECIES):
+        layers = flight_layers(sp)
+        if key in layers:
+            return TINTED_LAYERS[layers.index(key)]
+    return None
+
+
+def owl_master_of(key: str) -> str:
+    """The helper key a layer is split from: ``owl-master``, ``owl-<species>-master``, or a kind's flight master."""
+    for sp in (None, *OWL_SPECIES):
+        if key in flight_layers(sp):
+            return flight_master(sp)
+    for sp in OWL_SPECIES:
+        if key in species_layers(sp):
+            return f"owl-{sp}-master"
+    return "owl-master"
+
+#: Helper keys used by the generator for anchors and masters; never published as art.
+def _kit_sheet_keys() -> tuple[str, ...]:
+    kit = json.load(open(Path(__file__).resolve().parent.parent / "config" / "kit.json", encoding="utf-8"))
+    core = [f"kit-sheet-{n}" for n in kit["sheets"]]
+    areas = [f"kit-sheet-{a}-{n}" for a, area in kit.get("areas", {}).items() for n in area["sheets"]]
+    courses = [f"kit-sheet-{a}-{n}" for a, sheets in kit.get("courses", {}).items() for n in sheets]
+    landmarks = [f"kit-sheet-landmark-{n}" for n in kit.get("landmarks", {})]
+    recut = kit.get("recut", {})
+    runs = [f"kit-sheet-cut-run-{m}" for m in recut.get("runs", {})]
+    cuts = [f"kit-sheet-cut-{n}" for n in recut.get("sheets", {})]
+    cols = [f"kit-sheet-cut-col-{n}" for n in recut.get("columns", {}) if n != "about"]
+    puzzle = [f"kit-sheet-puzzle-{n}" for n in kit.get("puzzle", {}).get("sheets", {})]
+    return tuple(core + areas + courses + landmarks + runs + cuts + cols + puzzle)
+
+
+# The art targets (OP-249, targets.mjs): reference paintings kept under tools/art/targets/, never shipped.
+TARGET_KEYS = ("target-l4", "target-plaza", "target-clearing")
+
+
+HELPER_KEYS = _kit_sheet_keys() + TARGET_KEYS + ("owl-master", "owl-blink-src", "tree-master", "owl-barn-master", "owl-burrowing-master", "owl-snowy-master", "owl-screech-master", "owl-wing-right",
+               "owl-flight-master", "owl-barn-flight-master", "owl-burrowing-flight-master", "owl-snowy-flight-master", "owl-screech-flight-master",
+               "lobby-concept-a", "lobby-concept-b", "lobby-vane", "market-arcade-door", "glass-seam",
+               "arcade-bays-a", "arcade-bays-b1", "arcade-bays-c1", "arcade-bays-b2", "arcade-bays-c2", "arcade-bays-b3", "arcade-bays-c3",
+               "tree-l1-seam-w1-0", "tree-l1-seam-0-e1", "tree-l1-seam-e1-e2",
+               "tree-l4-0-scene", "tree-l4-e1-scene", "tree-l4-0-codes", "tree-l4-e1-codes", "tree-l4-seam-0-e1", "tree-l4-top-0-e1",
+               "tree-l3-0-scene", "tree-l3-e1-scene", "tree-l3-e2-scene",
+               "tree-l3-seam-0-e1", "tree-l3-seam-e1-e2", "tree-l3-0-codes", "tree-l3-e1-codes", "tree-l3-e2-codes",
+               "tree-l3-top-0", "tree-l3-top-e1", "tree-l3-top-e2",
+               "tree-l2-0-scene", "tree-l2-w1-scene", "tree-l2-w2-scene",
+               "tree-l2-seam-w2-w1", "tree-l2-seam-w1-0", "tree-l2-0-codes", "tree-l2-w1-codes", "tree-l2-w2-codes",
+               "tree-l2-top-0", "tree-l2-top-w1", "tree-l2-top-w2",
+               "tree-l5-w2-scene", "tree-l5-w1-scene", "tree-l5-0-scene", "tree-l5-e1-scene", "tree-l5-e2-scene", "tree-l5-e3-scene",
+               "tree-l5-seam-w2-w1", "tree-l5-seam-0-e1", "tree-l5-seam-e1-e2", "tree-l5-seam-e2-e3",
+               "tree-l5-w2-codes", "tree-l5-w1-codes", "tree-l5-0-codes", "tree-l5-e1-codes", "tree-l5-e2-codes", "tree-l5-e3-codes",
+               "tree-l5-top-w2", "tree-l5-top-w1", "tree-l5-top-0", "tree-l5-top-e1", "tree-l5-top-e2", "tree-l5-top-e3",
+               "tree-l0-w1-scene", "tree-l0-0-scene",
+               "tree-l0-seam-w1-0", "tree-l0-w1-codes", "tree-l0-0-codes", "tree-l0-top-w1", "tree-l0-top-0",
+               "tree-l0-c0-scene", "tree-l0-c1-scene", "tree-l0-c2-scene", "tree-l0-seam-c0-c1", "tree-l0-seam-c1-c2",
+               "tree-l0-c0-codes", "tree-l0-c1-codes", "tree-l0-c2-codes", "tree-l0-top-c0", "tree-l0-top-c1", "tree-l0-top-c2")
+PUBLIC_ROOMS = ("hub", "grove", "market", "lobby", "homes")
+OVERLAY_KEYS = ("hub-fg", "grove-fg", "market-fg")
+PIECE_KEYS = ("guardian", "robot-owl")
+
+
+
+def is_overlay(key: str, assets: dict) -> bool:
+    """Room art keyed out of its backdrop and drawn over another layer: ``<room>-fg`` in front of the
+    owls, an end screen's ``<room>-<side>-fg``, or a layer the table marks ``"overlay": true`` (the
+    tree's playfield, OP-157, drawn over its sky plate)."""
+    spec = assets.get(key, {})
+    return spec.get("kind") == "room" and (key.endswith("-fg") or spec.get("overlay") is True)
+
+
+def is_room_background(key: str, assets: dict) -> bool:
+    """One screen of a room's painting, shipped as WebP: ``<room>``, ``<room>-west`` or ``<room>-east``."""
+    return assets.get(key, {}).get("kind") == "room" and not is_overlay(key, assets)
+
+
+def ships_as_webp(key: str, assets: dict) -> bool:
+    """Art published as WebP: a room's painted screen, or other art the table marks ``"format":
+    "webp"`` (the arcade's game fields, opaque, and the nests' furniture, cut out with its alpha kept
+    exact); everything else ships as PNG."""
+    return is_room_background(key, assets) or assets.get(key, {}).get("format") == "webp"
+
+
+#: Which realm's palette grades which key.
+REALM_OF_KEY = {
+    "hub": "hub", "hub-fg": "hub",
+    "grove": "grove", "grove-fg": "grove", "guardian": "grove",
+    "market": "market", "market-fg": "market", "robot-owl": "market",
+}
+#: Set pieces: (room id, anchor name) as ambience.ts places them (origin bottom-centre).
+PIECE_ANCHOR = {"guardian": ("grove", "guardian"), "robot-owl": ("market", "robot")}
+
+
+class ArtError(Exception):
+    """A user-facing failure: the CLI prints the message and exits 1."""
+
+
+def load_assets(path: Path | None = None) -> dict[str, dict]:
+    """The key -> {w, h, kind} table, from config/assets.json when present, else built in.
+
+    The generator's file may nest the table under ``keys`` or ``assets``; anything that does not
+    look like a size table falls back to the built-in mirror of art.ts.
+    """
+    p = path or (CONFIG_DIR / "assets.json")
+    table: dict[str, dict] = {k: dict(v) for k, v in BUILTIN_ASSETS.items()}
+    try:
+        data = json.loads(Path(p).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return table
+    for container in (data.get("keys"), data.get("assets"), data):
+        if isinstance(container, dict) and all(isinstance(v, dict) for v in container.values()):
+            found = {k: v for k, v in container.items() if isinstance(v.get("w"), int) and isinstance(v.get("h"), int)}
+            if found:
+                for k, v in found.items():
+                    table[k] = {"w": v["w"], "h": v["h"], "kind": v.get("kind", table.get(k, {}).get("kind", "room")), **{kk: vv for kk, vv in v.items() if kk not in ("w", "h", "kind")}}
+                return table
+    return table
+
+
+def load_key_colours(path: Path | None = None) -> dict[str, str]:
+    """key -> chroma backdrop (#RRGGBB) from config/assets.json, public keys and helpers alike.
+
+    This is the single source of truth for which backdrop each job is generated on: the
+    generator reads the same file (prompts.mjs is validated against it), and the candidate's
+    sidecar carries the same value, so the post stage never keeps a table of its own.
+    """
+    p = path or (CONFIG_DIR / "assets.json")
+    out: dict[str, str] = {}
+    try:
+        data = json.loads(Path(p).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return out
+    for container in (data.get("keys"), data.get("helpers")):
+        if isinstance(container, dict):
+            for k, v in container.items():
+                if isinstance(v, dict) and isinstance(v.get("key_colour"), str):
+                    out[k] = v["key_colour"]
+    return out
+
+
+def logical_size(key: str, assets: dict | None = None) -> tuple[int, int]:
+    table = assets or load_assets()
+    if key not in table:
+        raise ArtError(f"unknown art key {key!r}; known keys: {', '.join(sorted(table))}")
+    return int(table[key]["w"]), int(table[key]["h"])
+
+
+def validate_key(key: str, allow_helpers: bool = True, assets: dict | None = None) -> str:
+    table = assets or load_assets()
+    if not KEY_RE.match(key):
+        raise ArtError(f"invalid key {key!r}: keys match ^[a-z][a-z0-9-]*$")
+    if key in table or (allow_helpers and key in HELPER_KEYS):
+        return key
+    raise ArtError(f"{key!r} is not a public art key")
+
+
+def parse_hex(s: str) -> tuple[int, int, int]:
+    s = s.strip()
+    if not re.fullmatch(r"#?[0-9a-fA-F]{6}", s):
+        raise ArtError(f"not a #RRGGBB colour: {s!r}")
+    s = s.lstrip("#")
+    return int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16)
+
+
+def hex_of(rgb) -> str:
+    r, g, b = (int(round(float(c))) for c in rgb[:3])
+    return "#%02X%02X%02X" % (max(0, min(255, r)), max(0, min(255, g)), max(0, min(255, b)))
+
+
+def now_iso(explicit: str | None = None) -> str:
+    """The timestamp written into sidecars: --now, else ART_NOW, else the clock (UTC, seconds)."""
+    if explicit:
+        return explicit
+    env = os.environ.get("ART_NOW")
+    if env:
+        return env
+    return _dt.datetime.now(_dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def sha256_file(path: Path) -> str:
+    return sha256_bytes(Path(path).read_bytes())
+
+
+def rel_to_repo(path: Path | str) -> str:
+    """A repository-relative, forward-slash path for logs; never an absolute path."""
+    p = Path(path).resolve()
+    try:
+        return p.relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        return p.name

@@ -1,0 +1,49 @@
+name: Security checks
+
+# Each night, the park's security checks from the outside (OP-151, tools/security/security-test.sh):
+# the page's headers and policy, CORS, refusals without a pass, body limits and no-store on the API.
+# About 16 requests a run; the rate-limit burst (RATE_CHECK=1) is never run here, so the free plan's
+# daily requests are not spent and no visitor is slowed. A FAIL fails the run, and GitHub emails the
+# owner about a failed run. The park's address is the repository variable PARK_URL, as for the uptime
+# check (uptime.yml); without it the run checks nothing and passes with a notice.
+#
+# TODO (OP-133): a failed run files a Finding on the Ticket Board through the board loop; until then
+# the failed run's email is the signal, and the log names each failing check.
+on:
+  schedule:
+    # 09:30 UTC: 05:30 in New York in summer, 04:30 in winter.
+    - cron: '30 9 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-nightly
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Is the park's address set?
+        id: url
+        env:
+          PARK_URL: ${{ vars.PARK_URL }}
+        run: |
+          if [ -z "$PARK_URL" ]; then
+            echo "::notice::PARK_URL is not set: nothing to check."
+            echo "set=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "set=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.url.outputs.set == 'true'
+        with:
+          persist-credentials: false
+      - name: Run the security checks
+        if: steps.url.outputs.set == 'true'
+        env:
+          PARK_URL: ${{ vars.PARK_URL }}
+        run: bash tools/security/security-test.sh

@@ -1,0 +1,313 @@
+/**
+ * The keepers' capacity page (/admin/capacity, OP-075): the busy-night controls, read and changed
+ * with the admin key like the other keepers' pages, no deploy. The line (off, on by itself past a
+ * number of owls, or on), the busy ribbon and its words, and every room's owls copy by copy, with
+ * opening, draining and closing a copy of a room (one object per room only). docs/CAPACITY.md says
+ * when to use which.
+ *
+ * The tree's card (OP-156): of every hundred new owls, how many start in the tree (map 2), kept with
+ * the realms switch as `realms.tree` (0 to 100; 0, as deployed, keeps the tree dark).
+ *
+ * Closed for setup (OP-205): the whole park shut while the keepers set something up, and open again
+ * with the same card, kept as `setup` ({on, words, reopenAt}). On, every owl in a room goes to the home
+ * screen, which shows the closed card in place of Play (OP-233, read from GET /api/closed), so no one
+ * walks back in; an owl on a keeper's token still does. An owl in its own nest goes within a minute. Off, Play works again at once
+ * in the rooms, and within a minute in the nests.
+ *
+ * The reopen time (OP-233): an optional time, in the keeper's own time zone on this page, kept as
+ * `setup.reopenAt` (milliseconds since 1970, or null). The home screen's closed card shows it in each
+ * visitor's own time zone; opening the park clears it.
+ * TODO-DOCS (OP-233): docs/CAPACITY.md gains the reopen time and `{"setup": {"reopenAt": <ms> | null}}`.
+ * TODO-DOCS (OP-205): docs/CAPACITY.md gains the setup card and `{"setup": {"on": true, "words": "..."}}`,
+ * and docs/PLAYBOOK.md the setup hour's steps (the ribbon first, then the switch, the keeper's walk, and off).
+ */
+import { SETUP_WORDS } from '@owl-park/shared';
+import { ADMIN_STYLE, adminPage } from './feedbackPage';
+
+const STYLE = `
+section.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin:0 0 14px}
+section.card h2{font-size:17px;margin:0 0 6px}
+section.card p{margin:0 0 10px;color:var(--dim)}
+section.card strong{color:var(--ink)}
+label{display:flex;gap:8px;align-items:center;color:var(--dim)}
+label input{flex:0 1 110px}
+#words,#setup-words{flex:1 1 280px}
+#setup-reopen{flex:0 1 220px}
+#setup-card[data-on="true"]{border-color:#e07a5f}
+table{width:100%;border-collapse:collapse;margin:0 0 6px}
+th,td{text-align:left;padding:6px 4px;border-bottom:1px solid var(--line);vertical-align:middle}
+td .tabs{gap:6px}
+td button{min-height:34px;padding:4px 10px}
+`;
+
+const SCRIPT = `
+const KEY = 'owl-park:admin-key';
+const $ = (s) => document.querySelector(s);
+const keyOf = () => { try { return sessionStorage.getItem(KEY) || ''; } catch { return ''; } };
+const saveKey = (k) => { try { if (k) sessionStorage.setItem(KEY, k); else sessionStorage.removeItem(KEY); } catch {} };
+const say = (t) => { $('#say').textContent = t; };
+const locked = (yes) => { $('#key').hidden = !yes; $('#board').hidden = yes; };
+const COPY_MAX = 9;
+let now = null;
+
+async function call(method, body) {
+  const res = await fetch('/api/admin/capacity', { method, headers: { 'X-Admin-Key': keyOf(), 'Content-Type': 'application/json' }, cache: 'no-store', ...(body ? { body: JSON.stringify(body) } : {}) });
+  if (res.status === 403) throw new Error('key');
+  const out = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(out.error || ('status ' + res.status));
+  return out;
+}
+
+function lineText(s) {
+  const l = s.line;
+  const inLine = s.waiting === 1 ? '1 owl is waiting' : s.waiting + ' owls are waiting';
+  const counted = s.count === null ? '' : ' Owls in the park when last counted: ' + s.count + '.';
+  if (l.mode === 'off') return 'No line: every owl walks in.' + counted;
+  const pace = s.rate > 0 ? ' Letting in about ' + Math.round(s.rate * 10) / 10 + ' a minute.' : '';
+  if (l.mode === 'auto') return (s.active ? 'The line is in front of the park: ' + inLine + '.' : 'A line starts by itself once the park holds ' + l.threshold + ' owls.') + pace + counted;
+  return 'Every new owl goes through the line, which lets owls in while the park holds fewer than ' + l.threshold + '. ' + inLine + '.' + pace + counted;
+}
+
+/** A time as a datetime-local field holds it: this browser's own time zone, to the minute. */
+function localInput(ms) {
+  const d = new Date(ms);
+  const p = (n) => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+function show(s) {
+  now = s;
+  $('#line-state').textContent = lineText(s);
+  for (const b of document.querySelectorAll('[data-line]')) b.setAttribute('aria-pressed', String(b.dataset.line === s.line.mode));
+  if (document.activeElement !== $('#threshold')) $('#threshold').value = s.line.threshold;
+  if (document.activeElement !== $('#hold')) $('#hold').value = s.line.holdMin;
+  const words = s.ribbon.words || $('#words').placeholder;
+  $('#ribbon-state').textContent = s.ribbon.on ? 'On for everyone: "' + words + '"' : (s.active ? 'On by itself while the line is: "' + words + '"' : 'Off.');
+  for (const b of document.querySelectorAll('[data-ribbon]')) b.setAttribute('aria-pressed', String((b.dataset.ribbon === 'on') === s.ribbon.on));
+  if (document.activeElement !== $('#words')) $('#words').value = s.ribbon.words || '';
+  // Closed for setup (OP-205), and the time the keepers expect to open (OP-233).
+  const st = s.setup || { on: false, words: null, reopenAt: null };
+  const back = st.reopenAt ? ' Back by ' + new Date(st.reopenAt).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }) + '.' : '';
+  $('#setup-card').dataset.on = String(!!st.on);
+  $('#setup-state').textContent = st.on
+    ? 'Closed for setup: every owl is on the home screen, which says "' + (st.words || $('#setup-words').placeholder) + '" and shows no Play.' + back + ' Only keepers walk in.'
+    : 'Open: the park takes owls as usual.' + (back ? ' When you close it, the closed card says:' + back : '');
+  for (const b of document.querySelectorAll('[data-setup]')) b.setAttribute('aria-pressed', String((b.dataset.setup === 'on') === !!st.on));
+  if (document.activeElement !== $('#setup-words')) $('#setup-words').value = st.words || '';
+  if (document.activeElement !== $('#setup-reopen')) $('#setup-reopen').value = st.reopenAt ? localInput(st.reopenAt) : '';
+  const room = s.sharding === 'room';
+  $('#copies-note').textContent = room
+    ? 'One object per room: a room can open copies. New owls go to the copy with the most free places; a draining copy takes none, and closes once empty.'
+    : 'The whole park runs in one object (ROOM_SHARDING=single), so copies would add no room. Switching to one object per room is a setting and a deploy: see docs/CAPACITY.md.';
+  const rows = s.rooms.map((r) => {
+    const cells = r.copies.map((c) => {
+      const label = c.n === 1 ? 'the room' : 'copy ' + c.n + (c.state === 'draining' ? ' (draining)' : '');
+      const tools = !room || c.n === 1 ? '' :
+        (c.state === 'open' ? '<button data-copy="draining" data-room="' + r.room + '" data-n="' + c.n + '">Drain</button>' : '<button data-copy="open" data-room="' + r.room + '" data-n="' + c.n + '">Reopen</button>') +
+        '<button data-copy="closed" data-room="' + r.room + '" data-n="' + c.n + '">Close</button>';
+      return '<div class="tabs"><span>' + label + ': <strong>' + c.count + '</strong> of ' + r.cap + '</span>' + tools + '</div>';
+    }).join('');
+    const used = new Set(r.copies.map((c) => c.n));
+    let next = 0;
+    for (let n = 2; n <= COPY_MAX; n++) if (!used.has(n)) { next = n; break; }
+    const open = room && next ? '<button data-copy="open" data-room="' + r.room + '" data-n="' + next + '">Open copy ' + next + '</button>' : '';
+    return '<tr><th scope="row">' + r.room + '</th><td>' + cells + '</td><td>' + open + '</td></tr>';
+  }).join('');
+  $('#rooms').innerHTML = rows;
+  for (const b of document.querySelectorAll('[data-copy]')) b.addEventListener('click', () => copy(b.dataset.room, Number(b.dataset.n), b.dataset.copy));
+  // The realms switch: a checkbox per gated room, the portal, and the night.
+  const rl = s.realms || { open: [], portal: false, night: null };
+  $('#realms-state').textContent = (rl.open.length ? 'Open: ' + rl.open.join(', ') + '.' : 'Every gated realm is closed.') + (rl.portal ? ' The portal is live.' : ' The portal is off.') + (rl.night ? ' Special night: ' + rl.night + '.' : ' The moon chooses the night.');
+  $('#realm-rooms').innerHTML = (s.gated || []).map((r) => '<label><input type="checkbox" data-realm="' + r + '"' + (rl.open.includes(r) ? ' checked' : '') + '> ' + r + ' open</label>').join('');
+  $('#portal').checked = !!rl.portal;
+  $('#night').innerHTML = '<option value="">The moon</option>' + (s.nights || []).map((n) => '<option value="' + n + '"' + (rl.night === n ? ' selected' : '') + '>' + n + '</option>').join('');
+  // The entries setting (OP-156): of every hundred new owls, how many start in the tree.
+  const tree = rl.tree || 0;
+  $('#tree-state').textContent = tree
+    ? 'The tree is open: ' + tree + ' in every hundred new owls start there, if the front gate lets them in; every owl may walk into it.'
+    : 'The tree is dark: only a keeper\u2019s token reaches it.';
+  if (document.activeElement !== $('#tree-share')) $('#tree-share').value = String(tree);
+}
+
+async function load() {
+  if (!keyOf()) return locked(true);
+  say('Loading…');
+  try {
+    show(await call('GET'));
+    locked(false);
+    say('');
+  } catch (e) {
+    if (e.message !== 'key') return say('The park did not answer just now. Try again in a moment.');
+    saveKey('');
+    locked(true);
+    say('That key did not open it.');
+  }
+}
+
+async function change(body, done) {
+  say('Saving…');
+  try {
+    show(await call('POST', body));
+    say(done);
+  } catch (e) {
+    say(e.message === 'key' ? 'That key did not open it.' : 'That did not take: ' + e.message + '.');
+  }
+}
+
+const ASK = {
+  off: 'Turn the line off? Everyone waiting walks in on their next look, and new owls walk straight in.',
+  auto: 'Start a line by itself whenever the park reaches the number of owls below?',
+  on: 'Put every new owl through the line now? Owls already inside stay in.',
+};
+
+function copy(room, n, state) {
+  const c = now && now.rooms.find((r) => r.room === room);
+  const cur = c && c.copies.find((x) => x.n === n);
+  if (state === 'closed' && cur && cur.count > 0 && !confirm('Copy ' + n + ' of ' + room + ' still has ' + cur.count + ' owls. Close it anyway? They stay until they leave, but none can come back to it.')) return;
+  if (state === 'open' && !cur && !confirm('Open copy ' + n + ' of ' + room + '? New owls start going to it at once.')) return;
+  change({ copy: { room, n, state } }, state === 'open' ? 'Copy ' + n + ' of ' + room + ' takes owls now.' : state === 'draining' ? 'Copy ' + n + ' of ' + room + ' takes no new owls now; close it once it is empty.' : 'Copy ' + n + ' of ' + room + ' is closed.');
+}
+
+$('#key').addEventListener('submit', (e) => {
+  e.preventDefault();
+  saveKey($('#key input').value.trim());
+  $('#key input').value = '';
+  load();
+});
+for (const b of document.querySelectorAll('[data-line]')) b.addEventListener('click', () => {
+  const mode = b.dataset.line;
+  if (!confirm(ASK[mode])) return;
+  change({ line: { mode, threshold: Number($('#threshold').value), holdMin: Number($('#hold').value) } }, 'Done. Every new owl sees it within half a minute.');
+});
+$('#line-save').addEventListener('click', () => change({ line: { threshold: Number($('#threshold').value), holdMin: Number($('#hold').value) } }, 'Saved.'));
+for (const b of document.querySelectorAll('[data-ribbon]')) b.addEventListener('click', () => change({ ribbon: { on: b.dataset.ribbon === 'on' } }, 'Done. Owls in the rooms see it at once, and the home screen within a minute.'));
+$('#words-save').addEventListener('click', () => change({ ribbon: { words: $('#words').value } }, 'Saved.'));
+for (const b of document.querySelectorAll('[data-setup]')) b.addEventListener('click', () => {
+  const on = b.dataset.setup === 'on';
+  if (on && !confirm('Close the whole park for setup? Every owl goes to the home screen now, and only keepers can walk in until you open it again.')) return;
+  if (!on && !confirm('Open the park again? Play works again at once.')) return;
+  change({ setup: { on } }, on ? 'Closed. Owls in the rooms go home at once, and owls in their nests within a minute.' : 'Open again. Play works at once in the rooms, and within a minute in the nests.');
+});
+$('#setup-words-save').addEventListener('click', () => change({ setup: { words: $('#setup-words').value } }, 'Saved.'));
+$('#setup-reopen-save').addEventListener('click', () => {
+  const v = $('#setup-reopen').value;
+  const at = v ? new Date(v).getTime() : NaN;
+  if (!Number.isFinite(at)) return say('Pick a day and a time first, or Clear time.');
+  if (at <= Date.now()) return say('That time has passed: pick one still to come.');
+  change({ setup: { reopenAt: at } }, 'Saved. The closed card shows it in each owl\u2019s own time zone.');
+});
+$('#setup-reopen-clear').addEventListener('click', () => change({ setup: { reopenAt: null } }, 'Cleared: the closed card gives no time.'));
+$('#realms-save').addEventListener('click', () => {
+  const open = [...document.querySelectorAll('[data-realm]')].filter((c) => c.checked).map((c) => c.dataset.realm);
+  const night = $('#night').value || null;
+  if (!open.includes('glass') && now && now.realms && now.realms.open.includes('glass') && !confirm('Close the realm? Every owl in it is sent back to the hub.')) return;
+  change({ realms: { open, portal: $('#portal').checked, night } }, 'Done. Owls in the rooms see it at once.');
+});
+$('#tree-save').addEventListener('click', () => {
+  const tree = Number($('#tree-share').value);
+  if (!Number.isInteger(tree) || tree < 0 || tree > 100) return say('A whole number from 0 to 100.');
+  const before = (now && now.realms && now.realms.tree) || 0;
+  if (tree > 0 && before === 0 && !confirm('Open the tree? New owls start there and every owl may walk in.')) return;
+  if (tree === 0 && before > 0 && !confirm('Close the tree? Every owl in it is sent back to the hub.')) return;
+  change({ realms: { tree } }, 'Done. New owls start where it says within half a minute.');
+});
+$('#refresh').addEventListener('click', load);
+$('#forget').addEventListener('click', () => { saveKey(''); say(''); locked(true); });
+load();
+`;
+
+function html(nonce: string, ribbonWords: string): string {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Owl Park capacity</title>
+<style nonce="${nonce}">${ADMIN_STYLE}${STYLE}</style>
+</head>
+<body>
+<main>
+<h1>Owl Park capacity</h1>
+<p class="lede">Busy nights: the line, the busy ribbon and copies of rooms; the realms switch; and closing the park for setup. No deploy needed. When to use which: docs/CAPACITY.md.</p>
+<form id="key">
+<input type="password" name="key" autocomplete="current-password" placeholder="Admin key" aria-label="Admin key" required>
+<button class="primary">Open</button>
+</form>
+<p id="say" role="status" aria-live="polite"></p>
+<div id="board" hidden>
+<section class="card" id="setup-card" aria-labelledby="setup-h">
+<h2 id="setup-h">Closed for setup</h2>
+<p id="setup-state"></p>
+<div class="tabs"><button data-setup="on">Close the park</button><button data-setup="off">Open the park</button></div>
+<p></p>
+<div class="tabs">
+<input id="setup-words" maxlength="90" placeholder="${SETUP_WORDS.replace(/"/g, '&quot;')}" aria-label="The closed card's words (empty: its own)">
+<button id="setup-words-save">Save words</button>
+</div>
+<p></p>
+<div class="tabs">
+<label for="setup-reopen">Back by (optional, your time)</label>
+<input id="setup-reopen" type="datetime-local">
+<button id="setup-reopen-save">Save time</button>
+<button id="setup-reopen-clear">Clear time</button>
+</div>
+</section>
+<section class="card" aria-labelledby="line-h">
+<h2 id="line-h">The line</h2>
+<p id="line-state"></p>
+<div class="tabs"><button data-line="off">Off</button><button data-line="auto">On by itself</button><button data-line="on">On</button></div>
+<p></p>
+<div class="tabs">
+<label>Owls in the park <input id="threshold" type="number" min="0" max="5000" step="1" inputmode="numeric"></label>
+<label>Hold a called place (minutes) <input id="hold" type="number" min="1" max="15" step="1" inputmode="numeric"></label>
+<button id="line-save">Save</button>
+</div>
+</section>
+<section class="card" aria-labelledby="ribbon-h">
+<h2 id="ribbon-h">The busy ribbon</h2>
+<p id="ribbon-state"></p>
+<div class="tabs"><button data-ribbon="on">On</button><button data-ribbon="off">Off</button></div>
+<p></p>
+<div class="tabs">
+<input id="words" maxlength="90" placeholder="${ribbonWords.replace(/"/g, '&quot;')}" aria-label="The ribbon's words (empty: the ribbon's own)">
+<button id="words-save">Save words</button>
+</div>
+</section>
+<section class="card" aria-labelledby="realms-h">
+<h2 id="realms-h">Realms and the climb</h2>
+<p id="realms-state"></p>
+<div class="tabs" id="realm-rooms"></div>
+<div class="tabs">
+<label><input type="checkbox" id="portal"> The climb's portal is live</label>
+<label>Night <select id="night"></select></label>
+<button id="realms-save">Save</button>
+</div>
+</section>
+<section class="card" aria-labelledby="tree-h">
+<h2 id="tree-h">The tree (map 2)</h2>
+<p id="tree-state"></p>
+<div class="tabs">
+<label>Of every hundred new owls, start <input id="tree-share" type="number" min="0" max="100" step="1" inputmode="numeric"> in the tree</label>
+<button id="tree-save">Save</button>
+</div>
+</section>
+<section class="card" aria-labelledby="copies-h">
+<h2 id="copies-h">Rooms and copies</h2>
+<p id="copies-note"></p>
+<table><thead><tr><th>Room</th><th>Owls, copy by copy</th><th></th></tr></thead><tbody id="rooms"></tbody></table>
+</section>
+<div class="tabs">
+<button id="refresh">Refresh</button>
+<button id="forget">Lock</button>
+</div>
+</div>
+</main>
+<script nonce="${nonce}">${SCRIPT}</script>
+</body>
+</html>`;
+}
+
+export function capacityPage(ribbonWords: string): Response {
+  return adminPage((nonce) => html(nonce, ribbonWords));
+}

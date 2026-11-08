@@ -1,0 +1,18 @@
+{"at":"2026-10-30T06:58:22.615Z","kind":"action","what":"start the park and the stand-in store"}
+{"at":"2026-10-30T06:58:36.263Z","kind":"note","what":"paused during the experiment: journey","why":"the journey's page would be an 81st owl in a hub this experiment fills to its 80"}
+{"at":"2026-10-30T06:58:41.715Z","kind":"sample","phase":"before","ok":true,"checks":[{"name":"health","ok":true,"value":200,"ms":26},{"name":"latency","ok":true,"value":6,"n":49},{"name":"errors","ok":true,"value":0,"n":49},{"name":"checkout","ok":true,"value":46,"detail":{"tickets":1,"sent":true}},{"name":"journey","ok":true,"value":1270,"detail":[{"step":"hub","ms":1270},{"step":"grove","ms":576,"walkMs":3394}]}]}
+{"at":"2026-10-30T06:58:41.716Z","kind":"action","what":"experiment 4 starts"}
+{"at":"2026-10-30T06:58:41.783Z","kind":"action","what":"the line set to start by itself at 80 owls"}
+{"at":"2026-10-30T06:58:43.948Z","kind":"action","what":"the hub filled","inside":80,"took_ms":2165}
+{"at":"2026-10-30T06:58:43.948Z","kind":"observation","what":"owls in the hub before the newcomers","value":80,"ok":true,"component":"room server"}
+{"at":"2026-10-30T06:58:43.968Z","kind":"action","what":"a newcomer as the hub filled","outcome":"turned away: code 4010 (room full)"}
+{"at":"2026-10-30T06:58:43.969Z","kind":"observation","what":"a newcomer as the hub filled","value":"turned away: code 4010 (room full)","ok":false,"component":"overflow","fix":"the line counts the park at most every 5 s and each Worker keeps its answer 3 s, so for up to 8 s after the park reaches the line's threshold a newcomer is told the room is full instead of waiting in the line: have a room that turns an owl away as full start the line at once (or keep the threshold below the room's cap by a few seconds' arrivals)"}
+{"at":"2026-10-30T06:58:46.733Z","kind":"sample","phase":"experiment","ok":false,"checks":[{"name":"health","ok":true,"value":200,"ms":16},{"name":"latency","ok":false,"value":400,"n":23},{"name":"errors","ok":true,"value":0,"n":23}]}
+{"at":"2026-10-30T06:58:51.748Z","kind":"sample","phase":"experiment","ok":true,"checks":[{"name":"health","ok":true,"value":200,"ms":13},{"name":"latency","ok":true,"value":22,"n":29},{"name":"errors","ok":true,"value":0,"n":29}]}
+{"at":"2026-10-30T06:58:53.033Z","kind":"action","what":"a newcomer once the line had counted","outcome":"sent to the line (4012): waiting, place 1"}
+{"at":"2026-10-30T06:58:53.033Z","kind":"observation","what":"a newcomer 9 s later, once the line has counted the park","value":"sent to the line (4012): waiting, place 1","ok":true,"component":"overflow","fix":"a newcomer past the line threshold waits in the line (close 4012) and takes a number"}
+{"at":"2026-10-30T06:58:53.040Z","kind":"observation","what":"the busy ribbon","value":"It's busy tonight; things may be slow","ok":true,"component":"overflow","fix":"the ribbon comes on by itself while the line is active"}
+{"at":"2026-10-30T06:58:53.041Z","kind":"observation","what":"move echo p95 inside while the hub filled","value":55,"unit":"ms (55 moves)","ok":true,"component":"room server"}
+{"at":"2026-10-30T06:58:53.041Z","kind":"observation","what":"moves lost inside while the hub filled","value":"0 of 55","ok":true,"component":"room server"}
+{"at":"2026-10-30T06:58:53.041Z","kind":"action","what":"roll back"}
+{"at":"2026-10-30T06:58:58.951Z","kind":"sample","phase":"after","ok":true,"checks":[{"name":"health","ok":true,"value":200,"ms":10},{"name":"latency","ok":true,"value":150,"n":47},{"name":"errors","ok":true,"value":0,"n":47},{"name":"checkout","ok":true,"value":30,"detail":{"tickets":1,"sent":true}},{"name":"journey","ok":true,"value":1207,"detail":[{"step":"hub","ms":1207},{"step":"grove","ms":550,"walkMs":3620}]}]}

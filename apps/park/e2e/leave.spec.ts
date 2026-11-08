@@ -1,0 +1,93 @@
+import type { Locator, Page } from '@playwright/test';
+import { expect, test } from './fixtures';
+import { mapCard, openPark, state, travelTo, walkToDoor } from './helpers';
+
+async function inRoom(page: Page, room: string | RegExp): Promise<void> {
+  await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toMatch(room);
+}
+
+/** Opens the Menu on one of its tabs. */
+async function openMenu(page: Page, tab: 'quests' | 'nest' | 'settings' = 'quests'): Promise<Locator> {
+  await page.locator('[data-menu-btn]').click();
+  const menu = page.getByRole('dialog', { name: 'Menu' });
+  await expect(menu).toBeVisible();
+  await menu.locator(`[data-tab="${tab}"]`).click();
+  await expect(menu.locator(`[data-tab="${tab}"]`)).toHaveAttribute('aria-selected', 'true');
+  return menu;
+}
+
+/** In the lobby, in front of the turnstiles and outside them. */
+async function outsideTheGate(page: Page): Promise<void> {
+  await inRoom(page, 'lobby');
+  const s = await state(page);
+  const gate = s.doors.find((d) => d.id === 'gate')!;
+  expect(Math.abs(s.pos.x - gate.x)).toBeLessThan(160);
+  expect(s.pos.y).toBeGreaterThan(gate.y + 40);
+}
+
+// Room changes and a nest made on first sight.
+test.describe.configure({ timeout: 90_000 });
+
+test.describe('leaving the park (this device)', () => {
+  test('walking off the hub floor where owls come in leads back to the lobby, outside the gate', async ({ page }) => {
+    await openPark(page, { room: 'hub', collector: 'e2e-leave-walk' });
+    const wayOut = (await state(page)).doors.find((d) => d.id === 'to-lobby');
+    expect(wayOut?.to).toBe('lobby');
+    await walkToDoor(page, 'to-lobby');
+    await outsideTheGate(page);
+    // Outside the park the Menu offers no way out of it; home is still on the map.
+    const menu = await openMenu(page, 'settings');
+    await expect(menu.locator('[data-screen="title"]')).toBeVisible();
+    await expect(menu.locator('[data-screen="leave"]')).toHaveCount(0);
+    await expect((await mapCard(page, 'nest')).locator('[data-travel="nest"]')).toHaveText('Travel home');
+  });
+
+  test('Leave the park asks first: Stay keeps the owl where it is, Leave takes it to the lobby', async ({ page }) => {
+    await openPark(page, { room: 'grove', collector: 'e2e-leave-menu' });
+    let menu = await openMenu(page);
+    await expect(menu.getByRole('tablist', { name: 'Menu' }).getByRole('tab')).toHaveText(['Quests', 'Collection', 'Nest', 'Map', 'Settings']);
+    await menu.locator('[data-tab="settings"]').click();
+    await menu.locator('[data-screen="leave"]').click();
+    const card = page.getByRole('dialog', { name: 'Leave the park' });
+    await expect(card).toContainText('Leave the park? Your ticket keeps running.');
+    // Stay comes first, so a stray key never leaves.
+    await expect(card.locator('[data-leave="stay"]')).toBeFocused();
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-leave-card.png` });
+    await card.locator('[data-leave="stay"]').click();
+    await expect(card).toBeHidden();
+    expect((await state(page)).room).toBe('grove');
+
+    menu = await openMenu(page, 'settings');
+    await menu.locator('[data-screen="leave"]').click();
+    await card.locator('[data-leave="leave"]').click();
+    await outsideTheGate(page);
+  });
+
+  test('travel home goes straight to the owl’s own nest, from the park and from the lobby', async ({ page }) => {
+    await openPark(page, { room: 'hub', collector: 'e2e-go-home' });
+    await travelTo(page, 'nest');
+    await inRoom(page, /^nest-/);
+    await expect.poll(async () => (await state(page)).nest?.mine, { timeout: 10_000 }).toBe(true);
+    const home = (await state(page)).room;
+    // At home neither way out is offered, and the map says where the owl is.
+    const here = await mapCard(page, 'nest');
+    await expect(here).toContainText('You are here.');
+    await expect(here.locator('[data-travel]')).toHaveCount(0);
+    const menu = page.getByRole('dialog', { name: 'Menu' });
+    await menu.locator('[data-tab="settings"]').click();
+    await expect(menu.locator('[data-screen="title"]')).toBeVisible();
+    await expect(menu.locator('[data-screen="leave"]')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+    // Out of the nest, the owl is on the street in front of its own door.
+    await walkToDoor(page, 'to-street');
+    await inRoom(page, 'homes');
+    const door0 = (await state(page)).doors.find((d) => d.id === 'nest-door-0')!;
+    expect(Math.abs((await state(page)).pos.x - door0.x)).toBeLessThan(200);
+
+    // And from the lobby, the same nest.
+    await openPark(page, { room: 'lobby', collector: 'e2e-go-home' });
+    await travelTo(page, 'nest');
+    await inRoom(page, home);
+  });
+});

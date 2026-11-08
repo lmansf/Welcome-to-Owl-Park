@@ -1,0 +1,424 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { WalletEntry } from '../net';
+import { CHECKOUT_FEATURES, CHECKOUT_WINDOW, CHECKOUT_WORDS, LOOK_MS, type Opener, type Started, type WatchClock } from './checkout';
+import { ACCOUNT_WORDS } from './account';
+import { ANSWER_AFTER_MS, RETURN_CHANNEL, askForGamePage, type ReturnChannel, type ReturnMessage } from './checkoutReturn';
+import { UPGRADE_WORDS, bringAside, createGateSale, gateBuy, passUpgrade, saleLines, withBring, type GateSale } from './gateSale';
+import { PREVIEW_WORDS } from './preview';
+import { goOn, type AskStore, type LinkMaker, type StoreAside, type StoreGo, type StoreUpgrade } from './storeCard';
+import { GATE_WORDS, PASS_AFTER_DAY_TICKET, PASS_WORDS, OPENING_WORDS, createFreePassCard, forgetOffers, gateRefusal, offerOnce } from './tickets';
+
+const CART = 'https://owl-test.myshopify.com/cart/100:1?attributes%5Bowl_checkout%5D=tok';
+const PAGE = 'https://owl-test.myshopify.com/collections/tickets';
+const PASS = 'https://owl-test.myshopify.com/cart/200:1?discount=HALF&attributes%5Bfrom_ticket%5D=OWL-DAYT-ICKT';
+const ticket = (id: string, over: Partial<WalletEntry> = {}): WalletEntry => ({ id, kind: 'day', status: 'unused', msLeft: 1, firstScan: null, validFrom: null, validUntil: null, voteToday: 'none', ...over });
+
+/**
+ * Just enough of a page for the turnstiles' sale and the pass offer to be drawn in a test (the unit
+ * tests run without a browser): elements with classes, data, children and clicks.
+ */
+class FakeEl {
+  textContent = '';
+  className = '';
+  type = '';
+  hidden = false;
+  readonly dataset: Record<string, string> = {};
+  children: FakeEl[] = [];
+  private readonly classes = new Set<string>();
+  private readonly clicks: Array<() => void> = [];
+  readonly classList = {
+    add: (c: string) => void this.classes.add(c),
+    remove: (c: string) => void this.classes.delete(c),
+    contains: (c: string) => this.classes.has(c),
+  };
+  constructor(readonly tagName: string) {}
+  set innerHTML(_v: string) {
+    this.children = [];
+  }
+  append(...nodes: FakeEl[]): void {
+    this.children.push(...nodes);
+  }
+  appendChild(node: FakeEl): FakeEl {
+    this.children.push(node);
+    return node;
+  }
+  setAttribute(): void {}
+  addEventListener(type: string, cb: () => void): void {
+    if (type === 'click') this.clicks.push(cb);
+  }
+  click(): void {
+    for (const cb of this.clicks) cb();
+  }
+  all(): FakeEl[] {
+    return this.children.flatMap((c) => [c, ...c.all()]);
+  }
+  /** The element whose `data-<key>` is `value`. */
+  find(key: string, value: string): FakeEl | undefined {
+    return this.all().find((e) => e.dataset[key] === value);
+  }
+}
+
+/** A window as the page holds it. */
+function fakeWindow() {
+  return { opener: {} as unknown, closed: false, focused: 0, location: { href: 'about:blank' }, document: { title: '', body: { textContent: '' } }, close() { this.closed = true; }, focus() { this.focused++; } };
+}
+
+/** An opener that writes down each window asked for. */
+function opener(win: ReturnType<typeof fakeWindow> | null = fakeWindow()) {
+  const calls: string[][] = [];
+  const open: Opener = (u, t, f) => (calls.push([u, t, f]), win as unknown as Window);
+  return { calls, open, win };
+}
+
+/** The link maker the card hands out, as a fake page's anchor. */
+const link: LinkMaker = (url, text) => {
+  const a = new FakeEl('a');
+  a.dataset['href'] = url;
+  a.textContent = text;
+  return a as unknown as HTMLAnchorElement;
+};
+
+const settle = () => new Promise((r) => setTimeout(r, 0));
+
+/** BroadcastChannels of one browser, as the pages see them (checkoutReturn.ts): each hears what the others post. */
+function fakeChannels() {
+  const open: FakeChannel[] = [];
+  class FakeChannel implements ReturnChannel {
+    readonly name = RETURN_CHANNEL;
+    onmessage: ((ev: { data: unknown }) => void) | null = null;
+    constructor() {
+      open.push(this);
+    }
+    postMessage(message: ReturnMessage): void {
+      for (const c of [...open]) if (c !== this) c.onmessage?.({ data: structuredClone(message) });
+    }
+    close(): void {
+      open.splice(open.indexOf(this), 1);
+    }
+  }
+  return { make: () => new FakeChannel(), open };
+}
+
+describe('a Day Ticket at the turnstiles (OP-180)', () => {
+  it('says why the turnstiles stayed shut, that a Day Ticket can be had right here, and the early preview’s warning while it runs', () => {
+    expect(GATE_WORDS.buy).toBe('You can get a Day Ticket right here.');
+    expect(saleLines({ line: 'You need a ticket to go in.', preview: false })).toEqual(['You need a ticket to go in. You can get a Day Ticket right here.']);
+    expect(saleLines({ line: "This ticket's time has run out.", preview: true })).toEqual(["This ticket's time has run out. You can get a Day Ticket right here.", PREVIEW_WORDS.gate]);
+  });
+
+  it('sells only to an owl with no ticket that works; one whose ticket waits is told why', () => {
+    for (const r of ['none', 'unknown', 'elsewhere', 'used', 'expired', 'revoked'] as const) expect(gateRefusal(r).buy).toBe(true);
+    for (const r of ['held', 'not-yet', 'no-length', 'offline'] as const) expect(gateRefusal(r).buy).toBe(false);
+  });
+
+  it('asking opens nothing: the way only runs on Continue', () => {
+    const o = opener();
+    let began = 0;
+    gateBuy({ ticketsUrl: PAGE, checkout: () => (began++, Promise.resolve(CART)) }, () => {});
+    expect(began).toBe(0);
+    expect(o.calls).toEqual([]);
+  });
+
+  it('Continue opens checkout’s window at once, then sends it to the cart link with the owl’s token, and hands on the opener', async () => {
+    const o = opener();
+    let release!: (url: string) => void;
+    const got: Array<[Started, Opener]> = [];
+    const go = gateBuy({ ticketsUrl: PAGE, checkout: () => new Promise((r) => (release = r)) }, (s, open) => got.push([s, open]));
+    goOn(go, o.open, link);
+    expect(o.calls).toEqual([['', CHECKOUT_WINDOW, CHECKOUT_FEATURES]]);
+    release(CART);
+    await settle();
+    expect(got).toEqual([[{ kind: 'popup', url: CART, win: o.win }, o.open]]);
+    expect(o.win!.location.href).toBe(CART);
+  });
+
+  it('with no token to be had, Continue sends the window to the store’s ticket page; with neither, nothing', async () => {
+    const o = opener();
+    const got: Started[] = [];
+    goOn(gateBuy({ ticketsUrl: PAGE }, (s) => got.push(s)), o.open, link);
+    await settle();
+    expect(got).toEqual([{ kind: 'fallback', url: PAGE, win: o.win }]);
+    goOn(gateBuy({ ticketsUrl: null, checkout: async () => null }, (s) => got.push(s)), opener().open, link);
+    await settle();
+    expect(got.at(-1)).toEqual({ kind: 'none' });
+  });
+});
+
+describe('the Annual Pass beside the Day Ticket (OP-198)', () => {
+  const PASS_CART = 'https://owl-test.myshopify.com/cart/200:1?attributes%5Bowl_checkout%5D=tok2';
+
+  it('names both buttons and says one line about the pass, from one set of words', () => {
+    expect(UPGRADE_WORDS).toEqual({ line: 'Or get the Annual Pass and come back all year.', day: 'Day Ticket', pass: 'Annual Pass' });
+  });
+
+  it('is offered only when the park can make the pass’s cart link', () => {
+    expect(passUpgrade({ ticketsUrl: PAGE }, () => {})).toBeUndefined();
+    const up = passUpgrade({ ticketsUrl: PAGE, checkoutPass: async () => PASS_CART }, () => {})!;
+    expect([up.line, up.goLabel, up.label]).toEqual([UPGRADE_WORDS.line, UPGRADE_WORDS.day, UPGRADE_WORDS.pass]);
+  });
+
+  it('its button opens checkout’s window in its own click, then sends it to the pass’s cart link, as Continue does for the Day Ticket', async () => {
+    const o = opener();
+    let began = 0;
+    const got: Array<[Started, Opener]> = [];
+    const up = passUpgrade({ ticketsUrl: PAGE, checkoutPass: async () => (began++, PASS_CART) }, (s, open) => got.push([s, open]))!;
+    // Offering it asks nothing of the store.
+    expect(began).toBe(0);
+    goOn(up.go, o.open, link);
+    expect(o.calls).toEqual([['', CHECKOUT_WINDOW, CHECKOUT_FEATURES]]);
+    await settle();
+    expect(got).toEqual([[{ kind: 'popup', url: PASS_CART, win: o.win }, o.open]]);
+    expect(o.win!.location.href).toBe(PASS_CART);
+  });
+
+  it('without the pass’s link, its button falls back to the store’s ticket page like the Day Ticket’s', async () => {
+    const o = opener();
+    const got: Started[] = [];
+    goOn(passUpgrade({ ticketsUrl: PAGE, checkoutPass: async () => null }, (s) => got.push(s))!.go, o.open, link);
+    await settle();
+    expect(got).toEqual([{ kind: 'fallback', url: PAGE, win: o.win }]);
+  });
+
+  it('is the pass’s one pitch: the half-price pass is not offered again after a Day Ticket bought in the park', () => {
+    expect(PASS_AFTER_DAY_TICKET).toBe(false);
+  });
+});
+
+describe('bringing an owl with a ticket on another screen here, beside buying (OP-183)', () => {
+  const sale: GateSale = { line: 'You need a ticket to go in.', preview: false, ticketsUrl: PAGE, wallet: async () => [], before: new Set() };
+
+  it('says it in plain words, and its button is the account’s own Bring your owl here', () => {
+    expect(GATE_WORDS.elsewhere).toBe('Have a ticket on another screen?');
+    expect(GATE_WORDS.bring).toBe('Bring your owl here');
+    expect(GATE_WORDS.bring).toBe(ACCOUNT_WORDS.restoreTitle);
+  });
+
+  it('is offered only where this screen can ask for the owl’s link: with the park’s accounts off, the card sells only', () => {
+    expect(withBring(sale, null)).toBe(sale);
+    expect(bringAside(withBring(sale, null))).toBeUndefined();
+    let asked = 0;
+    const brought = withBring(sale, () => asked++);
+    // The sale itself is left as it was.
+    expect(sale.bring).toBeUndefined();
+    const aside = bringAside(brought)!;
+    expect([aside.line, aside.label]).toEqual([GATE_WORDS.elsewhere, GATE_WORDS.bring]);
+    expect(asked).toBe(0);
+    aside.run();
+    expect(asked).toBe(1);
+  });
+});
+
+/** A clock the test turns by hand (as checkout.test.ts's). */
+function testClock() {
+  let now = 0;
+  let tick: (() => void) | null = null;
+  const clock: WatchClock = { now: () => now, every: (fn) => ((tick = fn), 1), stop: () => (tick = null), onReturn: () => () => {} };
+  return {
+    clock,
+    advance: async (ms: number) => {
+      now += ms;
+      tick?.();
+      await settle();
+    },
+  };
+}
+
+describe('the turnstiles’ sale on the page (OP-180)', () => {
+  beforeEach(() => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeEl(tag), head: new FakeEl('head') });
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function setup(o = opener(), goingIn = true) {
+    const root = new FakeEl('div');
+    const asked: Array<{ go: StoreGo; say: readonly string[] | undefined; aside: StoreAside | undefined; upgrade: StoreUpgrade | undefined }> = [];
+    const ask: AskStore = (go, _opener, say, aside, upgrade) => asked.push({ go, say, aside, upgrade });
+    const toasts: string[] = [];
+    const t = testClock();
+    const channel = fakeChannels();
+    let focused = 0;
+    const panel = createGateSale(root as unknown as HTMLElement, ask, (m) => toasts.push(m), t.clock, channel.make, () => focused++);
+    const card = () => root.find('gateSale', '')!;
+    let wallet: WalletEntry[] = [];
+    const bought: Array<[WalletEntry, Opener]> = [];
+    let looks = 0;
+    const sale: GateSale = { line: 'You need a ticket to go in.', preview: false, ticketsUrl: PAGE, checkout: async () => CART, wallet: async () => (looks++, wallet), before: new Set(), bought: (tk, open) => (bought.push([tk, open]), goingIn && tk.status !== 'held') };
+    return { root, asked, toasts, t, panel, card, sale, bought, o, channel, looks: () => looks, focused: () => focused, setWallet: (w: WalletEntry[]) => (wallet = w) };
+  }
+
+  it('the card offers the Annual Pass beside the Day Ticket when the pass’s link can be had (OP-198); its ticket comes the same way', async () => {
+    const s = setup();
+    s.panel.sell({ ...s.sale, checkoutPass: async () => 'https://owl-test.myshopify.com/cart/200:1?attributes%5Bowl_checkout%5D=tok2' });
+    const up = s.asked[0]!.upgrade!;
+    expect(up.label).toBe('Annual Pass');
+    goOn(up.go, s.o.open, link);
+    await settle();
+    expect(s.card().find('checkout', 'status')!.textContent).toBe(CHECKOUT_WORDS.open);
+    s.setWallet([ticket('OWL-ANNU-ALPS', { kind: 'annual' })]);
+    await s.t.advance(LOOK_MS);
+    expect(s.bought.map(([t]) => [t.id, t.kind])).toEqual([['OWL-ANNU-ALPS', 'annual']]);
+    // Without the pass's link, the Day Ticket alone.
+    s.panel.sell(s.sale);
+    expect(s.asked[1]!.upgrade).toBeUndefined();
+  });
+
+  it('asks once, right before the purchase; checkout open, the ticket comes, and what follows gets the card’s opener', async () => {
+    const s = setup();
+    s.panel.sell(s.sale);
+    expect(s.asked).toHaveLength(1);
+    expect(s.asked[0]!.say).toEqual(['You need a ticket to go in. You can get a Day Ticket right here.']);
+    // Continue.
+    goOn(s.asked[0]!.go, s.o.open, link);
+    await settle();
+    expect(s.card().classList.contains('open')).toBe(true);
+    expect(s.card().find('checkout', 'status')!.textContent).toBe(CHECKOUT_WORDS.open);
+    expect(s.panel.busy()).toBe(true);
+    // Walking into the turnstiles again meanwhile: no second card, only why.
+    s.panel.sell(s.sale);
+    expect(s.asked).toHaveLength(1);
+    expect(s.toasts).toEqual(['You need a ticket to go in.']);
+    // Back to checkout, once its window was closed, opens it again in that click without asking.
+    s.o.win!.closed = true;
+    s.card().find('checkout', 'back')!.click();
+    expect(s.o.calls.at(-1)).toEqual([CART, CHECKOUT_WINDOW, CHECKOUT_FEATURES]);
+    expect(s.asked).toHaveLength(1);
+    // The ticket comes.
+    s.setWallet([ticket('OWL-DAYT-ICKT')]);
+    await s.t.advance(LOOK_MS);
+    expect(s.toasts.at(-1)).toBe(CHECKOUT_WORDS.added);
+    expect(CHECKOUT_WORDS.added).toBe('Your ticket is here. In you go!');
+    expect(s.card().classList.contains('open')).toBe(false);
+    expect(s.bought.map(([t, open]) => [t.id, open])).toEqual([['OWL-DAYT-ICKT', s.o.open]]);
+    expect(s.panel.busy()).toBe(false);
+  });
+
+  it('the card offers to bring an owl here beside buying when the sale has a way (OP-183); its button opens nothing of the store', async () => {
+    const s = setup();
+    s.panel.sell(s.sale);
+    expect(s.asked[0]!.aside).toBeUndefined();
+    let restores = 0;
+    s.panel.sell(withBring(s.sale, () => restores++));
+    expect(s.asked).toHaveLength(2);
+    const aside = s.asked[1]!.aside!;
+    expect([aside.line, aside.label]).toEqual(['Have a ticket on another screen?', 'Bring your owl here']);
+    // The Day Ticket is still offered beside it, with the same words.
+    expect(s.asked[1]!.say).toEqual(['You need a ticket to go in. You can get a Day Ticket right here.']);
+    aside.run();
+    await settle();
+    expect(restores).toBe(1);
+    expect(s.o.calls).toEqual([]);
+    expect(s.panel.busy()).toBe(false);
+    expect(s.card().classList.contains('open')).toBe(false);
+  });
+
+  it('the owl wandered off from the turnstiles: the ticket is here and works at them; held, it waits on the store’s check', async () => {
+    const away = setup(opener(), false);
+    away.panel.sell(away.sale);
+    goOn(away.asked[0]!.go, away.o.open, link);
+    await settle();
+    away.setWallet([ticket('OWL-DAYT-ICKT')]);
+    await away.t.advance(LOOK_MS);
+    expect(away.bought).toHaveLength(1);
+    expect(away.toasts.at(-1)).toBe('Your ticket is here. It works at the turnstiles.');
+    const held = setup();
+    held.panel.sell(held.sale);
+    goOn(held.asked[0]!.go, held.o.open, link);
+    await settle();
+    held.setWallet([ticket('OWL-HELD-TCKT', { status: 'held' })]);
+    await held.t.advance(LOOK_MS);
+    expect(held.toasts.at(-1)).toBe('Your ticket is here. It works as soon as the store’s quick check is done.');
+  });
+
+  it('answers the store’s return page while checkout is watched, looks at the wallet at once and asks for the focus; not before, nor after', async () => {
+    const s = setup();
+    // No checkout yet: the return page hears nothing, and becomes the park.
+    expect(await askForGamePage(s.channel.make, 'r1', 400, () => settle().then(() => {}))).toBe(false);
+    s.panel.sell(s.sale);
+    goOn(s.asked[0]!.go, s.o.open, link);
+    await settle();
+    const looked = s.looks();
+    expect(await askForGamePage(s.channel.make, 'r2', 400, () => new Promise(() => {}))).toBe(true);
+    expect(s.looks()).toBe(looked + 1);
+    expect(s.focused()).toBe(1);
+    // The look finds the ticket: the owl goes in, at once, with no wait for the next look.
+    s.setWallet([ticket('OWL-DAYT-ICKT')]);
+    expect(await askForGamePage(s.channel.make, 'r3', 400, () => new Promise(() => {}))).toBe(true);
+    await settle();
+    expect(s.toasts.at(-1)).toBe(CHECKOUT_WORDS.added);
+    expect(s.panel.busy()).toBe(false);
+    // The ticket came before the store sent the buyer back: the return page still hears this page for a while, then no more.
+    expect(await askForGamePage(s.channel.make, 'r4', 400, () => new Promise(() => {}))).toBe(true);
+    await s.t.advance(ANSWER_AFTER_MS);
+    expect(await askForGamePage(s.channel.make, 'r5', 400, () => settle().then(() => {}))).toBe(false);
+  });
+
+  it('a blocked window gives the card’s link to tap; Cancel says so, and the turnstiles may sell again', async () => {
+    const s = setup(opener(null));
+    s.panel.sell(s.sale);
+    goOn(s.asked[0]!.go, s.o.open, link);
+    await settle();
+    expect(s.card().find('checkout', 'status')!.textContent).toBe(CHECKOUT_WORDS.blocked);
+    const a = s.card().find('checkout', 'link')!;
+    expect([a.tagName, a.dataset['href'], a.textContent]).toEqual(['a', CART, CHECKOUT_WORDS.openLink]);
+    s.card().find('checkout', 'cancel')!.click();
+    expect(s.card().find('checkout', 'status')!.textContent).toBe(CHECKOUT_WORDS.cancelled);
+    expect(s.panel.busy()).toBe(false);
+    s.panel.sell(s.sale);
+    expect(s.asked).toHaveLength(2);
+  });
+});
+
+describe('the half-price pass after a Day Ticket at the turnstiles (OP-180)', () => {
+  beforeEach(() => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeEl(tag), head: new FakeEl('head') });
+    forgetOffers();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('says it in plain words, and opens the pass with the opener of the purchase, asking nothing more', () => {
+    const root = new FakeEl('div');
+    const asked: StoreGo[] = [];
+    const card = createFreePassCard(root as unknown as HTMLElement, () => {}, (go) => asked.push(go));
+    const o = opener();
+    card.show({ link: PASS, words: 'day', claimed: async () => false, open: o.open });
+    const el = root.find('freePass', 'day')!;
+    expect(el.classList.contains('open')).toBe(true);
+    expect(el.all().map((e) => e.textContent)).toEqual([PASS_WORDS.offer, '', PASS_WORDS.get, PASS_WORDS.close]);
+    el.find('claim', '')!.click();
+    expect(o.calls).toEqual([[PASS, '_blank', 'noopener']]);
+    expect(asked).toEqual([]);
+    expect(el.classList.contains('open')).toBe(false);
+  });
+
+  it('opening night’s offer, with no purchase before it, asks first', () => {
+    const root = new FakeEl('div');
+    const asked: StoreGo[] = [];
+    const card = createFreePassCard(root as unknown as HTMLElement, () => {}, (go) => asked.push(go));
+    card.show({ link: PASS, words: 'night', claimed: async () => false });
+    const el = root.find('freePass', 'night')!;
+    expect(el.all()[0]!.textContent).toBe(OPENING_WORDS.offer);
+    el.find('claim', '')!.click();
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).toMatchObject({ link: PASS });
+  });
+
+  it('is offered once per ticket, kept where the browser lets the page keep it', () => {
+    let kept: string | null = null;
+    const store = { get: () => kept, set: (v: string) => void (kept = v) };
+    expect(offerOnce('OWL-AAAA-AAAA', store)).toBe(true);
+    expect(offerOnce('OWL-AAAA-AAAA', store)).toBe(false);
+    expect(offerOnce('OWL-BBBB-BBBB', store)).toBe(true);
+    // A new page load (the memory gone), the browser's copy remembers.
+    forgetOffers();
+    expect(offerOnce('OWL-AAAA-AAAA', store)).toBe(false);
+    // A browser that keeps nothing: the page still offers once.
+    forgetOffers();
+    const none = { get: () => null, set: () => {} };
+    expect(offerOnce('OWL-CCCC-CCCC', none)).toBe(true);
+    expect(offerOnce('OWL-CCCC-CCCC', none)).toBe(false);
+  });
+});
