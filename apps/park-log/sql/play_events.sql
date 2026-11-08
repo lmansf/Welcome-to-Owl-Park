@@ -31,9 +31,9 @@ create table game.play_event (
   ms integer check (ms between 0 and 86400000),
   practice boolean not null default false,
   created_at timestamptz not null default now(),
-  constraint play_event_course_check check (event = 'interact' or course_id is not null),
-  constraint play_event_thing_check check (event <> 'interact' or thing is not null),
-  constraint play_event_pos_check check (event = 'course_fall' or (pos_x is null and pos_y is null))
+  constraint play_event_interact_course_check check (event = 'interact' or course_id is not null),
+  constraint play_event_interact_thing_check check (event <> 'interact' or thing is not null),
+  constraint play_event_fall_pos_check check (event = 'course_fall' or (pos_x is null and pos_y is null))
 );
 comment on table game.play_event is 'Owl Park (OP-304): one row per course step (start, bench, part, fall, clear) or thing used, sent live by the park''s collections object. Anonymous: collector_id is a salted hash, session_id and run_id salted uuids. Deleted 90 days after it happened (game.prune_play_events).';
 comment on column game.play_event.session_id is 'The visit, as game.room_stay.session_id; null when the owl was in no room the park knew of.';
