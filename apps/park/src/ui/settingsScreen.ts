@@ -124,6 +124,7 @@ export function settingsRows(store: SettingsStore, redraw: () => void, feedback:
       h('On screen'),
       toggle('thumbstick', 'Thumbstick', 'Walk with the stick in the corner. Off: tap the floor to walk.', 'touch-only'),
       toggle('bubbles', 'Show what owls say', ''),
+      toggle('trail', 'Feather trail', 'Feathers lead to a doorway you haven’t been through yet.'),
       h('Sound'),
       toggle('sound', 'Sounds', 'A soft knock as the Menu opens.'),
       h('Motion'),

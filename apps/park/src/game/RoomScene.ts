@@ -175,6 +175,8 @@ import { TRIAL_BACKDROP_VEIL, trialBackdropVeiled } from './skinTrial';
 import { PUZZLE_ART_KEYS, artScale, drawnAsSizeBox, drawsSkinTrial, loadArt, opensSoft, prefetchRoomArt, releaseArt, roomArtCap, roomArtKeys, roomOpeningArt, sharpCopy, sharpenArt } from './art';
 import { SpeechBubbles } from './bubbles';
 import { doorwayUnder, doorwaysOff, roomsAhead, takesDoorway, upCounts } from './doors';
+import { TriedDoors, doorSpot, nearestDoor } from './featherTrail';
+import { FeatherTrail } from './featherTrailView';
 import { admitTarget } from './gateAdmit';
 import { enteredRoom, walkingMap } from './walkingMap';
 import { storedKeeper } from '../net/keeper';
@@ -227,6 +229,22 @@ const RESTART_NOTICE_MS = 9_000;
 export const NEST_SPAWN = 'mirror';
 /** Travel from the map fades out slower than a doorway, so going home or across the park is not a jolt (OP-114, OP-130). */
 export const NEST_FADE_MS = 400;
+/** The feather trail (OP-307): how long after the room is in it comes out, and how long an owl stands still with none out before it comes again. */
+const TRAIL_AFTER_MS = 1200;
+const TRAIL_IDLE_MS = 8000;
+
+/** This device's doorways tried (OP-307), read once. */
+let tried: TriedDoors | null = null;
+function triedDoors(): TriedDoors {
+  if (tried) return tried;
+  let storage: Storage | null = null;
+  try {
+    storage = localStorage;
+  } catch {
+    storage = null;
+  }
+  return (tried = new TriedDoors(storage));
+}
 /** Remote walks whose timestamps are this far off our clock are rebased to "now". */
 const CLOCK_TOLERANCE_MS = 1500;
 /** Air states this page sends the room (OP-084): a burst and a refill each a little under the room server's, so frames bunched by the network still fit. */
@@ -436,6 +454,11 @@ export class RoomScene extends Phaser.Scene {
   private readonly peerEmotes = new Map<string, string>();
   /** Phrases said here, in bubbles over the owls (C44), and when this owl last said one. */
   private bubbles: SpeechBubbles | null = null;
+  /** The feather trail toward a doorway not tried yet (OP-307), and whether Settings has it on; none in a course. */
+  private trail: FeatherTrail | null = null;
+  private trailOn = true;
+  /** When the owl last walked, or the trail was last laid: standing still a while lays it again once it is used up. */
+  private trailIdleAt = 0;
   private saidAt = Number.NEGATIVE_INFINITY;
   /** The visitor's own flight (OP-084), stepped from Jump at the flight's step on this page's clock (Date.now). */
   private flier: Flier = newFlier();
@@ -631,6 +654,7 @@ export class RoomScene extends Phaser.Scene {
     this.unwatchBoard = null;
     this.peerEmotes.clear();
     this.bubbles = null;
+    this.trail = null;
     this.tasks = this.registry.get('tasks') as TaskState;
     this.play = null;
     this.arcade = null;
@@ -948,9 +972,14 @@ export class RoomScene extends Phaser.Scene {
     if (settings) {
       ambience.setCalm(settings.get().calm);
       this.bubbles.setShown(settings.get().bubbles);
+      this.trailOn = settings.get().trail;
       const stop = settings.onChange((s) => {
         ambience.setCalm(s.calm);
         this.bubbles?.setShown(s.bubbles);
+        if (s.trail !== this.trailOn) {
+          this.trailOn = s.trail;
+          this.layTrail();
+        }
       });
       this.events.once(Phaser.Scenes.Events.SHUTDOWN, stop);
     }
@@ -1041,6 +1070,14 @@ export class RoomScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());
     this.cameras.main.fadeIn(350, 12, 30, 54);
     this.built = true;
+    // The feather trail (OP-307): the doorway the owl came in by counts as tried, and the feathers come out once the room is in.
+    if (!room.course) {
+      this.trail = new FeatherTrail(this, () => this.calm());
+      const back = this.cameFrom ? room.doors.find((d) => this.doorTo(d)?.room === this.cameFrom?.room) : undefined;
+      if (back) triedDoors().add(room.id, back.id);
+      this.trailIdleAt = Date.now();
+      this.time.delayedCall(TRAIL_AFTER_MS, () => this.layTrail());
+    }
     // Back from checkout in a page of its own (OP-190): in front of the turnstiles, and on through them with the ticket.
     const came = this.cameWith;
     this.cameWith = null;
@@ -1053,6 +1090,7 @@ export class RoomScene extends Phaser.Scene {
     this.standPerches(now);
     this.fly(now);
     let finished = this.me.tick(now);
+    this.tickTrail(now);
     this.camAt.x = this.me.x;
     this.camAt.y = this.me.y - this.flier.air.z;
     // A leg of a way around a bend done (OP-148): the next sets off at once, and the walk goes on.
@@ -1614,6 +1652,46 @@ export class RoomScene extends Phaser.Scene {
     this.talkingTo = null;
     void this.goTo(to.room, to.spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined }, NEST_FADE_MS, undefined, 'travel');
     return null;
+  }
+
+  /** The doorways of this room that lead somewhere open and the owl has not been through yet (OP-307). */
+  private untriedDoors(): DoorDef[] {
+    const tried = triedDoors();
+    return this.room.doors.filter((d) => {
+      const to = this.doorTo(d);
+      return to !== undefined && !this.realmClosed(to.room) && !tried.has(this.room.id, d.id);
+    });
+  }
+
+  /**
+   * The feather trail (OP-307): a glint on each doorway not tried yet, and feathers from the owl toward
+   * the nearest, along the way it would walk there (straight in a room seen from the side, where the owl
+   * flies). With the trail switched off, or every doorway tried, neither.
+   */
+  private layTrail(): void {
+    const trail = this.trail;
+    if (!trail || !this.built || this.leaving) return;
+    this.trailIdleAt = Date.now();
+    const doors = this.trailOn ? this.untriedDoors() : [];
+    trail.glint(doors);
+    const to = nearestDoor(this.me.pos, doors);
+    if (!to) return trail.clear();
+    const from = { ...this.me.pos };
+    const spot = doorSpot(to);
+    if (this.sideView()) return trail.lay([from, spot]);
+    const f = this.footingNow();
+    const aim = snapToWalkable(spot, f.walkable);
+    const legs = wayAround(from, aim, f.walkable, [...f.shut, ...doorwaysOff(this.room, from, aim, (id) => this.realmClosed(id), this.walking())]) ?? [];
+    trail.lay([from, ...legs, aim]);
+  }
+
+  /** Each frame: feathers the owl reaches fade; once they are all gone, standing still a while lays the trail again. */
+  private tickTrail(now: number): void {
+    const trail = this.trail;
+    if (!trail) return;
+    trail.tick(this.me.pos);
+    if (this.me.walk || trail.showing) this.trailIdleAt = now;
+    else if (now - this.trailIdleAt > TRAIL_IDLE_MS) this.layTrail();
   }
 
   /** The map's places and the gate as this page has them (OP-130): none walked into yet until it hears. */
@@ -3011,6 +3089,7 @@ export class RoomScene extends Phaser.Scene {
         }
         // A walk that ended past a doorway it crossed in its last frame goes through only as one that ends there would.
         if (!up && !takesDoorway(door.rect, (this.me.walk ?? (stepFrom ? walk : null))?.to ?? null, this.keyWalk, this.errand !== null, side)) continue;
+        triedDoors().add(this.room.id, door.id);
         if (door.id === 'gate') {
           void this.throughGate(door, cameIn);
           return;
@@ -3429,6 +3508,8 @@ export class RoomScene extends Phaser.Scene {
     this.hud.setDash(false);
     this.bubbles?.clear();
     this.bubbles = null;
+    this.trail?.destroy();
+    this.trail = null;
     this.acts?.close();
     this.acts = null;
     this.link = null;
