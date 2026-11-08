@@ -1,21 +1,25 @@
 name: CI
 
-# Two tiers (OP-123). A push to a branch other than main runs the quick tier: typecheck, unit tests
-# and build as three jobs at once, then the browser smoke set (the tests tagged @smoke), in under
-# five minutes. A pull request, a push to main, the nightly run and a run by hand take the full
-# tier: the same three jobs, then the whole browser suite split across twelve runners by the tests'
-# measured times (apps/park/e2e/shard.mjs), with their reports merged into one. A push that changes
-# only docs or Markdown runs nothing. A failed typecheck or unit test run cancels the rest of the run.
+# One tier for every run (OP-123, cut down for the runner queue Nov 2026). CI runs on a pull request,
+# on a push to main, each night and by hand; a push to any other branch runs nothing here, since every
+# change reaches main through a pull request and its run is the one that counts (a branch push used to
+# run a second, quicker tier on the same commit, taking runners from the queue). A run is typecheck,
+# unit tests and build as three jobs at once, then the whole browser suite split across twelve runners
+# by the tests' measured times (apps/park/e2e/shard.mjs), with their reports merged into one. A push
+# to main that changes only docs or Markdown runs nothing. A failed typecheck or unit test run cancels
+# the rest of the run.
 #
 # Beside the browser suite, mutation testing (OP-131) checks that the unit tests catch real bugs, in
-# three scopes (the room server, the Worker, the shared rules) run as eight shards side by side: on a
-# pull request that touches a shard's code, on main and on a run by hand, only the mutants of what
-# changed since the results kept from the last run; every mutant each night. The scores job puts each
-# scope's score in the run's summary and fails the run when one is under the break threshold; the
-# reports and the scores are kept with the run.
+# three scopes (the room server, the Worker, the shared rules) run as eight shards side by side. The
+# mutation scope job decides first which shards a pull request touches, so a pull request that touches
+# none starts no mutation runner at all; on main and on a run by hand every shard runs, on only the
+# mutants of what changed since the results kept from the last run; every mutant each night. The
+# scores job puts each scope's score in the run's summary and fails the run when one is under the break
+# threshold; the reports and the scores are kept with the run.
 #
 on:
   push:
+    branches: [main]
     paths-ignore: ['docs/**', '**/*.md']
   pull_request:
   schedule:
@@ -129,10 +133,41 @@ jobs:
       # The built page holds no database client or key (OP-150, tools/security/bundle-check.mjs).
       - run: pnpm security:bundle
 
+  # Which mutation shards this run needs: on a pull request, those whose code it touches; otherwise all.
+  # Deciding it here, on one runner, keeps a pull request that touches none from starting eight.
+  mutation-scope:
+    name: Mutation scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.pick.outputs.matrix }}
+      any: ${{ steps.pick.outputs.any }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: pick
+        name: The shards whose code this run touches
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            git fetch --depth=1 origin "$BASE"
+            changed=$(git diff --name-only FETCH_HEAD HEAD)
+            picked=$(jq -c --arg changed "$changed" '[.[] | . as $s | select($changed | split("\n") | any(test($s.touches)))]' <<< "$SHARDS")
+          else
+            picked="$SHARDS"
+          fi
+          echo "matrix={\"include\":$picked}" >> "$GITHUB_OUTPUT"
+          if [ "$(jq length <<< "$picked")" -gt 0 ]; then echo "any=true" >> "$GITHUB_OUTPUT"; else echo "any=false" >> "$GITHUB_OUTPUT"; fi
+          echo "Mutation shards for this run: $(jq -r 'map(.shard) | join(", ") | if . == "" then "none" else . end' <<< "$picked")" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.base_ref }}
+          SHARDS: '[{"shard":"room","scope":"room","package":"@owl-park/edge","dir":"apps/edge","touches":"^apps/edge/|^packages/shared/|^tools/mutation/|^patches/"},{"shard":"worker","scope":"worker","package":"@owl-park/edge","dir":"apps/edge","touches":"^apps/edge/|^packages/shared/|^tools/mutation/|^patches/"},{"shard":"climb-1","scope":"shared","package":"@owl-park/shared","dir":"packages/shared","touches":"^packages/shared/|^tools/mutation/|^patches/"},{"shard":"climb-2","scope":"shared","package":"@owl-park/shared","dir":"packages/shared","touches":"^packages/shared/|^tools/mutation/|^patches/"},{"shard":"climb-3","scope":"shared","package":"@owl-park/shared","dir":"packages/shared","touches":"^packages/shared/|^tools/mutation/|^patches/"},{"shard":"book","scope":"shared","package":"@owl-park/shared","dir":"packages/shared","touches":"^packages/shared/|^tools/mutation/|^patches/"},{"shard":"moves","scope":"shared","package":"@owl-park/shared","dir":"packages/shared","touches":"^packages/shared/|^tools/mutation/|^patches/"},{"shard":"floor","scope":"shared","package":"@owl-park/shared","dir":"packages/shared","touches":"^packages/shared/|^tools/mutation/|^patches/"}]'
+
   mutation:
     name: Mutation testing (${{ matrix.shard }})
-    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
-    needs: unit
+    if: needs.mutation-scope.outputs.any == 'true'
+    needs: [unit, mutation-scope]
     runs-on: ubuntu-latest
     # Every mutant of a shard, the nightly run, takes the longest; the incremental runs take minutes.
     timeout-minutes: 60
@@ -141,58 +176,35 @@ jobs:
       contents: read
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - { shard: room, scope: room, package: '@owl-park/edge', dir: apps/edge, touches: '^apps/edge/|^packages/shared/|^tools/mutation/|^patches/' }
-          - { shard: worker, scope: worker, package: '@owl-park/edge', dir: apps/edge, touches: '^apps/edge/|^packages/shared/|^tools/mutation/|^patches/' }
-          - { shard: climb-1, scope: shared, package: '@owl-park/shared', dir: packages/shared, touches: '^packages/shared/|^tools/mutation/|^patches/' }
-          - { shard: climb-2, scope: shared, package: '@owl-park/shared', dir: packages/shared, touches: '^packages/shared/|^tools/mutation/|^patches/' }
-          - { shard: climb-3, scope: shared, package: '@owl-park/shared', dir: packages/shared, touches: '^packages/shared/|^tools/mutation/|^patches/' }
-          - { shard: book, scope: shared, package: '@owl-park/shared', dir: packages/shared, touches: '^packages/shared/|^tools/mutation/|^patches/' }
-          - { shard: moves, scope: shared, package: '@owl-park/shared', dir: packages/shared, touches: '^packages/shared/|^tools/mutation/|^patches/' }
-          - { shard: floor, scope: shared, package: '@owl-park/shared', dir: packages/shared, touches: '^packages/shared/|^tools/mutation/|^patches/' }
+      matrix: ${{ fromJSON(needs.mutation-scope.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
-      - id: scope
-        name: Whether this pull request touches the shard's code
-        if: github.event_name == 'pull_request'
-        run: |
-          git fetch --depth=1 origin "$BASE"
-          if git diff --name-only FETCH_HEAD HEAD | grep -qE "$TOUCHES"; then echo "run=true" >> "$GITHUB_OUTPUT"; else echo "run=false" >> "$GITHUB_OUTPUT"; fi
-        env:
-          BASE: ${{ github.base_ref }}
-          TOUCHES: ${{ matrix.touches }}
       - uses: pnpm/action-setup@v4
-        if: steps.scope.outputs.run != 'false'
         with:
           version: 10
       - uses: actions/setup-node@v4
-        if: steps.scope.outputs.run != 'false'
         with:
           node-version: 22
           cache: pnpm
-      - if: steps.scope.outputs.run != 'false'
-        run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile
       - name: The results kept from the last run (Stryker's incremental file)
-        if: steps.scope.outputs.run != 'false'
         uses: actions/cache/restore@v4
         with:
           path: ${{ matrix.dir }}/reports/${{ matrix.shard }}/stryker-incremental.json
           key: mutation-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: mutation-${{ matrix.shard }}-
       - name: Stryker on ${{ github.event_name == 'schedule' && 'every mutant' || 'the mutants of what changed' }}
-        if: steps.scope.outputs.run != 'false'
         run: pnpm --filter ${{ matrix.package }} mutate ${{ github.event_name == 'schedule' && '--force' || '' }}
         env:
           MUTATION_SHARD: ${{ matrix.shard }}
       - name: Keep the results for the next run
-        if: ${{ !cancelled() && steps.scope.outputs.run != 'false' && hashFiles(format('{0}/reports/{1}/stryker-incremental.json', matrix.dir, matrix.shard)) != '' }}
+        if: ${{ !cancelled() && hashFiles(format('{0}/reports/{1}/stryker-incremental.json', matrix.dir, matrix.shard)) != '' }}
         uses: actions/cache/save@v4
         with:
           path: ${{ matrix.dir }}/reports/${{ matrix.shard }}/stryker-incremental.json
           key: mutation-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Upload the shard's report
-        if: ${{ !cancelled() && steps.scope.outputs.run != 'false' }}
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: mutation-${{ matrix.scope }}-${{ matrix.shard }}
@@ -248,64 +260,14 @@ jobs:
           # The nightly scores are the ones compared over time.
           retention-days: ${{ github.event_name == 'schedule' && 90 || 14 }}
 
-  smoke:
-    name: Browser smoke set
-    if: github.event_name == 'push' && github.ref != 'refs/heads/main'
-    needs: build
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - id: playwright
-        name: Playwright's version
-        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
-      - id: browser
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
-      - name: Install Playwright's browser
-        if: steps.browser.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install --with-deps chromium
-      - name: The browser's system packages, only if the runner lacks some
-        if: steps.browser.outputs.cache-hit == 'true'
-        working-directory: apps/park
-        # The runner image has them already; installing them anyway waits on the runner's own package
-        # updates, up to ten minutes on some runners. So the browser starts first, and only on a failure
-        # are they installed.
-        run: timeout 60 node -e "require('@playwright/test').chromium.launch().then((b) => b.close())" || pnpm exec playwright install-deps chromium
-      - name: The smoke set (computer and room server)
-        run: pnpm e2e --grep @smoke --project=desktop --project=edge
-        env:
-          CI: 'true'
-      - name: Upload screenshots and the report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: smoke-output
-          path: |
-            apps/park/e2e-screenshots
-            apps/park/playwright-report
-            apps/park/test-results
-          if-no-files-found: ignore
-          retention-days: 7
-
   e2e:
     name: Browser suite ${{ matrix.shard }}/12
-    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     # A shard runs a twelfth of the suite: about 4 minutes of tests on a quick runner, and up to 7 on the
-    # slowest seen (some runners are two thirds slower), so the run stays under ten minutes.
-    timeout-minutes: 30
+    # slowest seen (some runners are two thirds slower), so the run stays under ten minutes. A shard that
+    # hangs gives its runner back after 15 minutes, not 30.
+    timeout-minutes: 15
     strategy:
       fail-fast: true
       matrix:
