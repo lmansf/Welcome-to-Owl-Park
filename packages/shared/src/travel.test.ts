@@ -99,12 +99,12 @@ describe('travel on the new map (OP-305)', () => {
   it('travels to every place from the start, and into the park only once through the turnstiles', () => {
     for (const place of Object.keys(NEW_MAP_LANDINGS)) expect(canTravel(place, 3), place).toBe(true);
     expect(canTravel('no-such-place', 3)).toBe(false);
-    for (const place of ['m3-hall', 'glass', 'grove', 'market', 'hub', 'm3-under', 'arcade']) expect(needsGate(place, 3), place).toBe(true);
+    for (const place of ['m3-hall', 'glass', 'grove', 'market', 'hub', 'arcade']) expect(needsGate(place, 3), place).toBe(true);
     for (const place of ['lobby', 'homes', 'nest']) expect(needsGate(place, 3), place).toBe(false);
   });
 
   it('keeps the new map’s places in a told state and as places walked into', () => {
     expect(visitedPlace('m3-hall')).toBe('m3-hall');
-    expect(parseTravelState({ places: ['m3-under', 'hub'], gate: false })).toEqual({ places: ['m3-under', 'hub'], gate: false });
+    expect(parseTravelState({ places: ['m3-hall', 'hub'], gate: false })).toEqual({ places: ['m3-hall', 'hub'], gate: false });
   });
 });

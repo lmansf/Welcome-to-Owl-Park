@@ -57,7 +57,7 @@ describe('the map’s travel cards (OP-130)', () => {
 });
 
 describe('the map on the new map (OP-282)', () => {
-  const NEW_ROOMS = ['homes', 'lobby', 'm3-hall', 'glass', 'grove', 'market', 'hub', 'm3-under', 'arcade'];
+  const NEW_ROOMS = ['homes', 'lobby', 'm3-hall', 'glass', 'grove', 'market', 'hub', 'arcade'];
 
   it("shows 'You are here' in every room of the new map, and in a nest", () => {
     for (const room of NEW_ROOMS) expect(mapPlaceOf(room, true, [], 3), room).toBe(room);

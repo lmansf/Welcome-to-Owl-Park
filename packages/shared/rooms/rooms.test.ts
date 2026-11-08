@@ -602,10 +602,9 @@ describe("doorways keep the owl's lane (OP-124)", () => {
       'canopy-1:roots', 'canopy-1:to-trunk', 'canopy-2a:down', 'canopy-2a:hatch-up', 'canopy-2b:down', 'canopy-2b:hatch-up', 'canopy-2c:down', 'canopy-2c:hatch-up', 'canopy-3:down', 'canopy-roots:out',
       // Brushstroke Bridges (OP-235, brushstrokeBridges.ts): the way behind the waterfall into its cave, and back.
       'brush-2:falls', 'brush-falls:out',
-      // The new map's stairs between its levels (NEW_MAP), as the levels' own (the forest path's root stair now comes up into the hall).
-      'm3-ground:stair-l2-l1', 'm3-stair-1:stair-l3-l2', 'm3-stair-2:stair-l4-l3', 'm3-stair-2:stair-l5-l4', 'm3-stair-3:stair-l2-l1', 'm3-stair-3:stair-l3-l2', 'm3-under:stair-l1-l0',
-      // The Great Hollow (hollowHall.ts): the hatch down the root stair.
-      'm3-hall:down',
+      // The new map's stairs between its levels (NEW_MAP), as the levels' own. The hall's hatch now leads
+      // round a corner into the top-down arcade (OP-306), so neither it nor the root stair keeps a lane.
+      'm3-ground:stair-l2-l1', 'm3-stair-1:stair-l3-l2', 'm3-stair-2:stair-l4-l3', 'm3-stair-2:stair-l5-l4', 'm3-stair-3:stair-l2-l1', 'm3-stair-3:stair-l3-l2',
     ].sort());
   });
 
@@ -1231,8 +1230,9 @@ describe('the new map (map 3): the park as one tree', () => {
 
   it('every way between two of its rooms leads back the way it came, so no stair or doorway is one way', () => {
     // The old stairs are left over since the hall was switched on: they still lead out, and nothing leads back in (the next test).
-    // So is the cavern's side-view arcade since its door leads to the top-down arcade (OP-283).
-    const leftOver = new Set(['m3-stair-1', 'm3-stair-2', 'm3-stair-3', 'm3-ground', 'm3-cave']);
+    // So is the cavern's side-view arcade since its door leads to the top-down arcade (OP-283), and the root
+    // stair since the hall's hatch leads straight into the arcade (OP-306; links to it land in the arcade).
+    const leftOver = new Set(['m3-stair-1', 'm3-stair-2', 'm3-stair-3', 'm3-ground', 'm3-cave', 'm3-under']);
     const inMap = new Set([...Object.keys(NEW_MAP).filter((id) => !leftOver.has(id)), ...NEW_MAP_HALL, 'lobby', 'glass', 'grove', 'market', 'hub', 'arcade']);
     for (const id of inMap) {
       for (const { door, to } of ways(ROOMS[id]!)) {
@@ -1257,11 +1257,12 @@ describe('the new map (map 3): the park as one tree', () => {
       return seen;
     };
     const seen = reach('lobby');
-    for (const id of [...NEW_MAP_HALL, 'm3-under', 'glass', 'grove', 'market', 'hub', 'homes', 'arcade']) expect(seen.has(id), id).toBe(true);
-    // The cavern's arcade is the top-down one (OP-283), and its street door leads back the way the owl came.
+    for (const id of [...NEW_MAP_HALL, 'glass', 'grove', 'market', 'hub', 'homes', 'arcade']) expect(seen.has(id), id).toBe(true);
+    // The cavern's arcade is the top-down one (OP-283), and its street door leads back the way the owl came:
+    // up the hatch into the hall for an owl that came down it (OP-306), back to the market for one from there.
     expect(ways(ROOMS['m3-under']!).find((w) => w.door.id === 'to-arcade')?.to).toEqual({ room: 'arcade', spawn: 'from-cavern' });
     const street = ROOMS['arcade']!.doors.find((d) => d.id === 'to-market')!;
-    expect(doorTarget(street, 3, 'm3-under')).toEqual({ room: 'm3-under', spawn: 'from-arcade' });
+    expect(doorTarget(street, 3, 'm3-hall')).toEqual({ room: 'm3-hall', spawn: 'from-under' });
     expect(doorTarget(street, 3, 'market')).toEqual({ room: 'market', spawn: 'from-arcade' });
     expect(doorTarget(street, 1, 'market')).toEqual({ room: 'market', spawn: 'from-arcade' });
     expect(ROOMS['m3-under']!.spawns['from-arcade']).toBeDefined();
