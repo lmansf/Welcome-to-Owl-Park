@@ -137,7 +137,10 @@ function hallEdges(): EdgePlacement[] {
   const C = 'edge-hollow-ferns-c';
   return [
     // Leaf litter over the floors' seams first: everything else is drawn over it.
-    ...seams.map((x, i) => ({ id: `litter-${i}`, key: 'edge-hollow-litter', x: x - 190, y: HALL_BACK })),
+    // Leaf litter down each seam between two Commons' floors, from the wall to the front, so no straight join shows.
+    ...seams.flatMap((x, i) =>
+      [0, 1, 2].map((row) => ({ id: row ? `litter-${i}-${row}` : `litter-${i}`, key: 'edge-hollow-litter', x: x - 190 + (row % 2 ? 24 : 0), y: HALL_BACK + row * 280, ...(row % 2 ? { flip: true as const } : {}) })),
+    ),
     // Each plaza's worn ring, round the moonbeam in its middle.
     ...HALL_COMMONS.map((c) => ({ id: `ring-${c.level}`, key: 'edge-hollow-plaza-ring', x: commonsX(c.level) + 800 - 380, y: PLAZA_Y - 190 })),
     ...seams.map((x, i) => ({ id: `pillar-${i}`, key: 'edge-hollow-pillar', x: x - 60, y: -30 })),
