@@ -3,7 +3,8 @@ import { E2E_ACCOUNTS, E2E_ADMIN_KEY, E2E_STORE } from './e2e/helpers';
 
 /**
  * The room server's test settings: the admin key, a store that is the stand-in on this machine,
- * accounts on (OP-139), their mail kept by the same stand-in, and spectators on (OP-191).
+ * accounts on (OP-139), their mail kept by the same stand-in, Sign in with Google (OP-313) with Google
+ * stood in by it too, and spectators on (OP-191).
  */
 const EDGE_VARS = {
   ADMIN_KEY: E2E_ADMIN_KEY,
@@ -19,6 +20,11 @@ const EDGE_VARS = {
   ACCOUNT_SECRET: E2E_ACCOUNTS.secret,
   MAIL_FROM: E2E_ACCOUNTS.from,
   MAIL_TEST_ORIGIN: E2E_STORE.origin,
+  // Sign in with Google (OP-313) on, with Google's two addresses the same stand-in.
+  GOOGLE_SIGNIN: 'on',
+  GOOGLE_CLIENT_ID: E2E_ACCOUNTS.googleClientId,
+  GOOGLE_CLIENT_SECRET: E2E_ACCOUNTS.googleClientSecret,
+  GOOGLE_TEST_ORIGIN: E2E_STORE.origin,
 };
 
 export default defineConfig({

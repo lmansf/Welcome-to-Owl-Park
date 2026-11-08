@@ -64,4 +64,13 @@ export interface Env extends Cloudflare.Env {
   MAIL_FROM?: string;
   /** Browser tests only: a stand-in mail sender on this machine (http://localhost:<port>). Never set in production. */
   MAIL_TEST_ORIGIN?: string;
+  /**
+   * Sign in with Google (OP-313), with GOOGLE_SIGNIN on (wrangler.jsonc): the OAuth client made in
+   * Google Cloud for the park (a Web application whose redirect URI is <origin>/api/account/google/callback).
+   * Without both, Google sign-in stays off and the button never shows.
+   */
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+  /** Browser tests only: a stand-in for Google's sign-in page and token endpoint on this machine. Never set in production. */
+  GOOGLE_TEST_ORIGIN?: string;
 }

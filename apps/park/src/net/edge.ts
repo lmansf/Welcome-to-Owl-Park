@@ -33,7 +33,8 @@ import { COLLECTOR_KEY } from '../identity';
 import { EmoteGate, MoveBudget } from './budget';
 import { keeperToken } from './keeper';
 import { pageLog } from './pageLog';
-import { OPEN_ENTRY, type AccountConfirm, type AccountLink, type Entry, type LineLink, type ParkTransport, type RoomConnection, type RoomHandlers, type ScanReply, type TicketWallet, type WalletEntry } from './transport';
+import { goToGoogle } from './toGoogle';
+import { OPEN_ENTRY, type AccountConfirm, type AccountGoogle, type AccountLink, type Entry, type LineLink, type ParkTransport, type RoomConnection, type RoomHandlers, type ScanReply, type TicketWallet, type WalletEntry } from './transport';
 
 /** Remote owls are drawn this far behind the server clock so network jitter never shows. */
 const RENDER_DELAY_MS = 100;
@@ -351,7 +352,26 @@ export class EdgeTransport implements ParkTransport {
       if (r.status === 410) return 'gone';
       return r.status === 404 ? 'no-owl' : 'offline';
     },
+    googleReady: () => {
+      this.googleAsked ??= fetch(`${this.base}/api/account/google`, { cache: 'no-store' })
+        .then(async (res) => res.ok && ((await res.json()) as { ready?: unknown }).ready === true)
+        .catch(() => false);
+      return this.googleAsked;
+    },
+    google: async (kind): Promise<AccountGoogle> => {
+      // The page comes back from Google to its own query string (its room, its settings); tokens never ride in it.
+      const back = location.search.length <= 400 ? location.search : '';
+      const r = await this.accountPost('google/start', { for: kind, back }, kind === 'protect');
+      if (!r) return 'offline';
+      if (r.status === 429) return 'try-later';
+      // Only Google's own sign-in page; the page comes back from there.
+      if (r.status !== 200 || !goToGoogle(r.body['url'])) return r.status === 401 ? 'offline' : 'not-ready';
+      return new Promise<AccountGoogle>(() => {});
+    },
   };
+
+  /** Whether the park offers Sign in with Google (OP-313), asked once a page. */
+  private googleAsked: Promise<boolean> | null = null;
 
   /** An authenticated call to the park API; a refused pass is renewed once. */
   async api(path: string, init: RequestInit = {}): Promise<Response> {

@@ -18,7 +18,7 @@ import { forgetOwl, holdsOwl, loadLook, loadPlayerId, saveLook } from './identit
 import { OPEN_ENTRY, createTransport, type ScanReply, type WalletEntry } from './net';
 import { closeFeedbackCard, feedbackRewards, sendFeedbackNote } from './net/feedback';
 import { storedKeeper } from './net/keeper';
-import { readAccountLink, withoutAccountLink } from './net/accountLinks';
+import { readAccountLink, readGoogleNote, withoutAccountLink } from './net/accountLinks';
 import { readTicketLink, withoutTicketLink } from './net/ticketLinks';
 import { HOME_WORDS, createHomeScreen, walletSummary } from './ui/home';
 import { createHud } from './ui/hud';
@@ -749,13 +749,18 @@ if (accounts && accountScreens) {
 // An account link carries its token in the address's fragment, as a ticket link does: out of the
 // address bar at once, then the owls it brings (restore) or the owl it protects (protect). One opened
 // in the tab the park is already in changes only the fragment, so the page listens for that too.
+// Sign in with Google (OP-313) comes back the same way: the link its email would have been mailed, an
+// offer to protect this screen's owl (the email protects none yet), or a kind line when it went no further.
 const takeAccountLink = () => {
   const link = readAccountLink(location.hash);
-  if (!link) return;
+  const google = link ? null : readGoogleNote(location.hash);
+  if (!link && !google) return;
   history.replaceState(history.state, '', withoutAccountLink(location.href));
   if (!accountScreens) hud.toast("Owl links work on the park's own server.", 5000);
-  else if (link.kind === 'restore') accountScreens.openPictures(link.token);
-  else void accountScreens.confirm(link.token);
+  else if (google) accountScreens.googleEnded(google);
+  else if (link?.kind === 'restore') accountScreens.openPictures(link.token);
+  else if (link?.kind === 'offer') accountScreens.openOffer(link.token);
+  else if (link) void accountScreens.confirm(link.token);
 };
 takeAccountLink();
 window.addEventListener('hashchange', takeAccountLink);

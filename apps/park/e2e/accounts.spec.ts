@@ -187,3 +187,62 @@ test.describe('accounts without passwords (OP-139)', () => {
     await page.context().close();
   });
 });
+
+test.describe('sign in with Google beside the email box (OP-313), Google stood in on this machine', () => {
+  /** Who the stand-in Google says the next sign-ins are, or that the player says no there. */
+  const asGoogle = (page: Page, who: { email?: string; deny?: boolean }) => page.request.post(`${E2E_STORE.origin}/test/google`, { data: who });
+  /** The open account box's Google button pressed: the page goes to Google and back. */
+  const viaGoogle = async (page: Page) => {
+    const google = page.locator('.modal.account [data-account-google]');
+    await expect(google).toBeVisible({ timeout: 15_000 });
+    await Promise.all([page.waitForEvent('load', { timeout: 30_000 }), google.click()]);
+  };
+
+  test('protects an owl with Google instead of a mailed link, and another screen brings it over by Google and a tap', async ({ browser }) => {
+    test.slow(); // two live parks and five page loads between them
+    const phone = await screen(browser);
+    const code = await friendCodeOf(phone);
+    await phone.getByRole('dialog', { name: 'Menu' }).locator('[data-protect]').click();
+    const email = freshEmail('google');
+    await asGoogle(phone, { email });
+    await viaGoogle(phone);
+    await expect(phone.getByText('This owl is protected now.')).toBeVisible({ timeout: 20_000 });
+    // Back where it was, with nothing of the sign-in left in the address.
+    expect(new URL(phone.url()).search).toContain('transport=edge');
+    expect(new URL(phone.url()).hash).toBe('');
+    await expect((await openMenu(phone, 'nest')).locator('[data-protected]')).toHaveAttribute('data-protected', 'true');
+
+    const tabletCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const tablet = await tabletCtx.newPage();
+    await tablet.goto('/?transport=edge');
+    await tablet.locator('[data-home-btn="restore"]').click();
+    await viaGoogle(tablet);
+    await pick(tablet, code!);
+    expect(await friendCodeOf(tablet)).toBe(code);
+    await expect(phone.locator('[data-moved]')).toBeVisible({ timeout: 15_000 });
+    await phone.context().close();
+    await tabletCtx.close();
+  });
+
+  test('an email Google says protects no owl is offered for the owl on this screen, and a no at Google is met kindly', async ({ browser }) => {
+    const a = await screen(browser);
+    const before = await friendCodeOf(a);
+    await a.keyboard.press('Escape');
+    await a.goto('/?transport=edge');
+    // The player says no at Google: nothing changes, and the email box is there again with a kind line.
+    await asGoogle(a, { deny: true });
+    await a.locator('[data-home-btn="restore"]').click();
+    await viaGoogle(a);
+    await expect(a.locator('.modal.account [data-account-status]')).toContainText('Google sign-in was stopped, and nothing changed.', { timeout: 15_000 });
+    await expect(a.locator('.modal.account [data-account-email]')).toBeVisible();
+    // An email that protects no owl yet: offered for this screen's owl, and protected on the tap.
+    await asGoogle(a, { email: freshEmail('google.new') });
+    await viaGoogle(a);
+    await a.locator('.modal.account [data-account-offer]').click();
+    await expect(a.getByText('This owl is protected now.')).toBeVisible({ timeout: 15_000 });
+    const menu = await openMenu(a, 'nest');
+    await expect(menu.locator('[data-friend-code]')).toHaveAttribute('data-friend-code', before!);
+    await expect(menu.locator('[data-protected]')).toHaveAttribute('data-protected', 'true');
+    await a.context().close();
+  });
+});

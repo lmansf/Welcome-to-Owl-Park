@@ -145,7 +145,17 @@ export interface AccountLink {
   owls(token: string): Promise<OwlPicture[] | 'gone' | 'offline'>;
   /** The tap: this screen holds that owl from now on (the page starts again with it). */
   bind(token: string, code: string): Promise<'bound' | 'gone' | 'no-owl' | 'offline'>;
+  /** Whether the park offers Sign in with Google (OP-313) beside the email box: asked once, false while it is off. */
+  googleReady(): Promise<boolean>;
+  /**
+   * Sign in with Google instead of a mailed link (OP-313): the page goes to Google, which sends it back
+   * with the link the email would have carried. Resolves only when it could not go.
+   */
+  google(kind: 'protect' | 'restore'): Promise<AccountGoogle>;
 }
+
+/** Why a Google sign-in could not start (OP-313). */
+export type AccountGoogle = 'not-ready' | 'try-later' | 'offline';
 
 /** The line in front of the park (OP-075), as the home screen uses it. */
 export interface LineLink {
