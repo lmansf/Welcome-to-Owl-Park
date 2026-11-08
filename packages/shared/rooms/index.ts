@@ -17,6 +17,7 @@ import { realmStart, realmStartAnchors } from '../src/realmStart';
 
 export { STREET_DOORS, STREET_ROOM } from '../src/homes';
 export { NEW_MAP } from '../src/newMap';
+export { HALL_MIDDLE, HALL_ROOM, ROOT_RUNS, RUN_Y, rootId, type HallLevel } from './hollowHall';
 
 /**
  * Room registry shared by the browser client and the room server, so both clamp walks
