@@ -478,7 +478,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     <div class="hints" data-hints></div>
     <div class="notices" aria-live="polite" data-notices></div>
     <div class="toasts" aria-live="polite" data-toasts></div>
-    <div class="bottom">
+    <div class="bottom" data-park-keys>
       <div class="pad">
         <button class="pad-btn interact idle" data-pad-interact aria-label="Interact" aria-disabled="true">${INTERACT_ICON}<span class="lbl" data-pad-interact-label aria-hidden="true"></span></button>
         <button class="pad-btn jump" data-pad-jump aria-label="Jump" aria-keyshortcuts="Space">${JUMP_ICON}</button>

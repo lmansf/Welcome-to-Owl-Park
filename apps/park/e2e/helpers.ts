@@ -46,6 +46,7 @@ export interface ParkState {
   /** The room's art drawn as size boxes (`?sizes=1`). */
   sizeBoxes: string[];
   sizeLabels: string[];
+  doorSigns: string[];
   floorShown: boolean;
   /** The art tiles that scroll at rates of their own (the tree's sky and overlay, OP-156). */
   layers: Array<{ key: string; rate: number; x: number; y: number; w: number; h: number; fade: { left: number; right: number } }>;

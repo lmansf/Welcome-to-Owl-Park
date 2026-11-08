@@ -109,10 +109,23 @@ export function eventTime(e: { timeStamp?: number }): number {
   return Math.min(now, Math.max(now - 1000, t));
 }
 
-/** The space bar on a focused button or link presses it: that press is the button's, not a jump. */
+/**
+ * Where the space bar is always the jump, even on a focused button (OP-293): the play bar's buttons
+ * (Menu, Emotes, Say, the actions, the pad) keep the focus after a click, and the menu gives it back to
+ * the Menu button as it closes, so the next Space would open the menu on its map. Each has its own key.
+ */
+export const PARK_KEYS_ATTR = 'data-park-keys';
+
+/** Whether a key press comes from inside the play bar (PARK_KEYS_ATTR). */
+function inPlayBar(e: KeyboardEvent): boolean {
+  const t = e.target as HTMLElement | null;
+  return typeof t?.closest === 'function' && t.closest(`[${PARK_KEYS_ATTR}]`) !== null;
+}
+
+/** The space bar on a focused button or link presses it: that press is the button's, not a jump (but not in the play bar). */
 function pressesControl(e: KeyboardEvent): boolean {
   const t = e.target as HTMLElement | null;
-  return !!t && (t.tagName === 'BUTTON' || t.tagName === 'A' || t.tagName === 'SUMMARY' || t.getAttribute?.('role') === 'button');
+  return !!t && !inPlayBar(e) && (t.tagName === 'BUTTON' || t.tagName === 'A' || t.tagName === 'SUMMARY' || t.getAttribute?.('role') === 'button');
 }
 
 export function attachKeyboard(win: Window, actions: KeyActions): Keys {
@@ -146,7 +159,11 @@ export function attachKeyboard(win: Window, actions: KeyActions): Keys {
   };
   const onUp = (e: KeyboardEvent) => {
     held.delete(e.code);
-    if (e.code === 'Space') actions.jumpEnd(eventTime(e));
+    if (e.code === 'Space') {
+      // A button presses on the space bar's letting go: in the play bar that press is the jump's (OP-293).
+      if (inPlayBar(e)) e.preventDefault();
+      actions.jumpEnd(eventTime(e));
+    }
     // While Cmd is down, macOS sends no key-ups for the other keys: start afresh when it lifts.
     if (e.key === 'Meta') held.clear();
   };

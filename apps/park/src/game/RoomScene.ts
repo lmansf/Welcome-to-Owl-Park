@@ -195,6 +195,7 @@ import { PuzzleMarker, markKey, type PuzzleMarkKind, type PuzzleMarkLook } from 
 import { StreetDoors, addNestsSign, addParkSign } from './street';
 import { cameraBounds } from './hudInset';
 import { SizeLabels } from './sizeLabels';
+import { DoorSigns } from './doorSigns';
 import { drawWalkFloor } from './walkFloor';
 
 export interface RoomStart {
@@ -539,6 +540,8 @@ export class RoomScene extends Phaser.Scene {
   private fitOverlay: FitOverlay | null = null;
   /** The labels over the size boxes (`?sizes=1`): one per piece in the room. */
   private sizeLabels: SizeLabels | null = null;
+  /** The signs naming where the doorways lead, in a room seen from above. */
+  private doorSigns: DoorSigns | null = null;
   /** Whether this room draws its walkable floor plainly: every room seen from above. */
   private floorShown = false;
   /** The ledge painter (OP-156, `?paint=1` with a keeper's token), over a room of the tree. */
@@ -968,6 +971,7 @@ export class RoomScene extends Phaser.Scene {
     // What owls say shows in bubbles over everything in the room, the words the same size on any screen.
     this.bubbles = new SpeechBubbles(this, room.size.h + 150, () => this.cfg.pixelRatio / this.cameras.main.zoom);
     if (this.cfg.sizes) this.sizeLabels = new SizeLabels(this, room.size.h + 140, () => this.cfg.pixelRatio / this.cameras.main.zoom);
+    this.doorSigns = new DoorSigns(this, room, () => this.cfg.pixelRatio / this.cameras.main.zoom);
     const settings = this.registry.get('settings') as SettingsStore | undefined;
     if (settings) {
       ambience.setCalm(settings.get().calm);
@@ -1564,10 +1568,12 @@ export class RoomScene extends Phaser.Scene {
         return {
           ...p,
           tint: door.to ? (DOOR_TINTS[this.doorTo(door)?.room ?? door.to.room] ?? '#C9A227') : '#FFD36A',
-          ...(door.id === toPark ? { text: NEST_WORDS.toPark } : {}),
+          ...(door.id === toPark ? { text: NEST_WORDS.toPark } : door.label && door.to ? { text: door.label } : {}),
           label: spot
             ? `${spot.label}, off screen: walk there`
-            : door.id === toPark
+            : door.label && door.to && door.id !== toPark
+              ? `${door.label}, off screen: walk there`
+              : door.id === toPark
               ? `${NEST_WORDS.toPark}, off screen: walk there`
               : door.id === own
                 ? `${NEST_WORDS.yourNest}, off screen: walk there`
@@ -2075,6 +2081,8 @@ export class RoomScene extends Phaser.Scene {
     /** The room's art drawn as size boxes (`?sizes=1`, sizeBoxes.ts): each key whose box is up. */
     sizeBoxes: string[];
     sizeLabels: string[];
+    /** The words on the signs at the room's doorways (DoorDef.label). */
+    doorSigns: string[];
     floorShown: boolean;
     /** The map's places walked into and whether the owl is through the front gate, as this page has them (OP-130). */
     travel: TravelState;
@@ -2142,6 +2150,7 @@ export class RoomScene extends Phaser.Scene {
       soft: [...this.soft],
       sizeBoxes: roomArtKeys(this.room.id, drawnRoom(this.room, this.cfg)).filter((k) => drawnAsSizeBox(k) && this.textures.exists(k)),
       sizeLabels: this.sizeLabels?.keys() ?? [],
+      doorSigns: this.doorSigns?.labels() ?? [],
       floorShown: this.floorShown,
       travel: this.travelNow(),
       paint: this.painter?.debug() ?? null,
