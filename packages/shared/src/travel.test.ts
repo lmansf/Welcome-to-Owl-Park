@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { ROOMS } from '../rooms';
 import { CLOSE } from './edge';
+import { doorTarget } from './doorways';
 import { STREET_ROOM } from './homes';
-import { GATE_ARRIVAL, TREE_GATE_ARRIVAL, TRAVEL_LANDINGS, TRAVEL_WORDS, canTravel, gateAfter, needsGate, parseTravelState, throughGate, travelAfter, visitedPlace } from './travel';
+import { GATE_ARRIVAL, NEW_GATE_ARRIVAL, NEW_MAP_LANDINGS, TREE_GATE_ARRIVAL, TRAVEL_LANDINGS, TRAVEL_WORDS, canTravel, gateAfter, needsGate, parseTravelState, throughGate, travelLanding, travelAfter, visitedPlace } from './travel';
 import { LEFT_PARK_SPAWN, LOBBY_ROOM } from './wayout';
 
 describe('travel from the map (OP-130)', () => {
@@ -76,5 +77,37 @@ describe('travel from the map (OP-130)', () => {
     expect(CLOSE.NOT_THROUGH_GATE).toBe(4015);
     expect(TRAVEL_WORDS.gateFirst).toBe('Enter the park through the gate first.');
     expect(TRAVEL_WORDS.hold).toBe('Hold to travel.');
+  });
+});
+
+describe('travel on the new map (OP-305)', () => {
+  it('counts the Treetop Commons turnstiles into the Great Hollow as walking through the gate', () => {
+    const gate = ROOMS[LOBBY_ROOM]!.doors.find((d) => d.id === 'gate')!;
+    expect(doorTarget(gate, 3)).toEqual(NEW_GATE_ARRIVAL);
+    expect(throughGate('m3-hall', 'from-lobby')).toBe(true);
+    expect(gateAfter('m3-hall', 'from-lobby')).toBe(true);
+    // Coming back up from a Commons, or travelling in, is not the turnstiles.
+    for (const spawn of ['default', 'from-glass', undefined]) expect(throughGate('m3-hall', spawn), String(spawn)).toBe(false);
+  });
+
+  it('lands the owl at a spawn its room has, for every place on the new map', () => {
+    for (const [place, to] of Object.entries(NEW_MAP_LANDINGS)) expect(ROOMS[to.room]?.spawns[to.spawn], place).toBeDefined();
+    expect(travelLanding('hub', 3)).toEqual({ room: 'hub', spawn: 'default' });
+    // Today's park keeps its own: the great tree lands at the gate, outside the turnstiles.
+    expect(travelLanding('hub')).toEqual(TRAVEL_LANDINGS['hub']);
+    expect(travelLanding('m3-hall')).toBeUndefined();
+  });
+
+  it('travels to every place from the start, and into the park only once through the turnstiles', () => {
+    for (const place of Object.keys(NEW_MAP_LANDINGS)) expect(canTravel(place, [], 3), place).toBe(true);
+    expect(canTravel('no-such-place', [], 3)).toBe(false);
+    expect(canTravel('grove', [])).toBe(false);
+    for (const place of ['m3-hall', 'glass', 'grove', 'market', 'hub', 'm3-under', 'arcade']) expect(needsGate(place, 3), place).toBe(true);
+    for (const place of ['lobby', 'homes', 'nest']) expect(needsGate(place, 3), place).toBe(false);
+  });
+
+  it('keeps the new map’s places in a told state and as places walked into', () => {
+    expect(visitedPlace('m3-hall')).toBe('m3-hall');
+    expect(parseTravelState({ places: ['m3-under', 'hub'], gate: false })).toEqual({ places: ['m3-under', 'hub'], gate: false });
   });
 });

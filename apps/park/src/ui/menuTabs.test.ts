@@ -73,12 +73,21 @@ describe('the map on the new map (OP-282)', () => {
     expect(new Set(cells).size).toBe(places.length);
     for (const p of places) expect(p.col < cols && p.row < rows, p.id).toBe(true);
     for (const [a, b] of paths) expect(places.some((p) => p.id === a) && places.some((p) => p.id === b), `${a}-${b}`).toBe(true);
-    for (const p of places.filter((p) => !p.noTravel)) expect(placeCard(p.id, null, walked(NEW_ROOMS, true)).button, p.id).not.toBeNull();
+    for (const p of places) expect(placeCard(p.id, null, walked([], true), 3).button, p.id).not.toBeNull();
   });
 
-  it('keeps travel off the Great Hollow, the cavern and the Party Grove (travel to hub lands outside the turnstiles)', () => {
-    const still = mapLayout(3).places.filter((p) => p.noTravel).map((p) => p.id).sort();
-    expect(still).toEqual(['hub', 'm3-hall', 'm3-under']);
+  it('travels to every place of the new map from the start, not only the places walked into (OP-305)', () => {
+    expect(mapLayout(3).places.filter((p) => p.noTravel)).toEqual([]);
+    for (const room of NEW_ROOMS) expect(placeCard(room, 'nest', walked([], true), 3), room).toEqual({ line: null, button: { label: TRAVEL_WORDS.here, to: room } });
+  });
+
+  it('keeps the way into the park through the Treetop Commons turnstiles on the new map (OP-305)', () => {
+    // Outside, not through yet: a place inside offers the Commons, and the Commons says the turnstiles are the way.
+    expect(placeCard('grove', 'nest', walked([]), 3)).toEqual({ line: TRAVEL_WORDS.newGateFirst, button: { label: TRAVEL_WORDS.newGate, to: 'lobby' } });
+    expect(placeCard('m3-hall', 'lobby', walked([]), 3)).toEqual({ line: TRAVEL_WORDS.newGateFirst, button: null });
+    // The places outside the turnstiles travel without it.
+    expect(placeCard('homes', 'grove', walked([]), 3)).toEqual({ line: null, button: { label: TRAVEL_WORDS.here, to: 'homes' } });
+    expect(placeCard('lobby', 'nest', walked([]), 3)).toEqual({ line: null, button: { label: TRAVEL_WORDS.here, to: 'lobby' } });
   });
 });
 

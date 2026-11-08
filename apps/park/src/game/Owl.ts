@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { AIRBORNE, DEFAULT_SPECIES, GLIDING, GROUNDED, LIFTED, ON_GROUND, facing, hexToInt, parseVariant, positionAlongWalk, speciesOf, type Air, type OwlLook, type Vec2, type Walk, type Wear } from '@owl-park/shared';
+import { tintedTexture } from './canvasTint';
 import { artFacing, type OwlAnchors } from '../collect/pixels';
 import { OWL_H, OWL_LAYERS, OWL_W, SPECIES_FLIGHT_LAYERS, SPECIES_LAYERS, WING_H, WING_W, loadFlightArt, loadSpeciesArt } from './art';
 import { playEmote, playFlop, type EmoteHost } from './emotes';
@@ -64,24 +65,8 @@ function layersFor(scene: Phaser.Scene, look: OwlLook): readonly string[] {
   return own.every((k) => scene.textures.exists(k)) ? own : LAYERS;
 }
 
-/** A copy of a white layer multiplied by a colour, for renderers without tint support. */
-function tintedLayer(scene: Phaser.Scene, key: string, hex: string): string {
-  const out = `${key}:${hex.toLowerCase()}`;
-  if (scene.textures.exists(out)) return out;
-  const src = scene.textures.get(key).getSourceImage() as HTMLImageElement | HTMLCanvasElement;
-  const canvas = scene.textures.createCanvas(out, src.width, src.height);
-  if (!canvas) return key;
-  const ctx = canvas.context;
-  ctx.drawImage(src, 0, 0);
-  ctx.globalCompositeOperation = 'multiply';
-  ctx.fillStyle = hex;
-  ctx.fillRect(0, 0, src.width, src.height);
-  ctx.globalCompositeOperation = 'destination-in';
-  ctx.drawImage(src, 0, 0);
-  ctx.globalCompositeOperation = 'source-over';
-  canvas.refresh();
-  return out;
-}
+/** A copy of a white layer multiplied by a colour, for renderers without tint support (canvasTint.ts). */
+const tintedLayer = tintedTexture;
 
 type WearImageSlot = 'head' | 'face' | 'neck';
 

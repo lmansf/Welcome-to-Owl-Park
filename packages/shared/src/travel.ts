@@ -17,9 +17,12 @@ export const GATE_ARRIVAL = { room: 'hub', spawn: 'default' } as const;
 /** Through the tree's front gate (OP-158) an owl lands in the canopy under its entrance arch, at its default spawn. */
 export const TREE_GATE_ARRIVAL = { room: 'l5', spawn: 'default' } as const;
 
-/** Whether joining a room at this spawn is the owl walking through a front gate: today's park's or the tree's. */
+/** Through the new map's turnstiles (the Treetop Commons' gate) an owl lands in the Great Hollow by the knothole (OP-305). */
+export const NEW_GATE_ARRIVAL = { room: 'm3-hall', spawn: 'from-lobby' } as const;
+
+/** Whether joining a room at this spawn is the owl walking through a front gate: today's park's, the tree's or the new map's. */
 export function throughGate(room: string, spawn: string | undefined): boolean {
-  return [GATE_ARRIVAL, TREE_GATE_ARRIVAL].some((g) => room === g.room && spawn === g.spawn);
+  return [GATE_ARRIVAL, TREE_GATE_ARRIVAL, NEW_GATE_ARRIVAL].some((g) => room === g.room && spawn === g.spawn);
 }
 
 /**
@@ -52,21 +55,54 @@ export const TRAVEL_LANDINGS: Readonly<Record<string, Landing>> = {
   glass: { room: 'glass', spawn: 'from-hub' },
 };
 
-/** The place of the map a room counts as for travel once walked into; null for a nest (the owl's own is always there to go to). */
-export function visitedPlace(room: string): string | null {
-  return isNestRoom(room) ? null : room in TRAVEL_LANDINGS ? room : null;
+/**
+ * Where travel lands an owl walking the new map (OP-305): every place on its map, each where walking in
+ * by its main way arrives. The Party Grove is its own room here (today's park's great tree lands at
+ * the gate), and the Great Hollow and the root stair are places of their own.
+ */
+export const NEW_MAP_LANDINGS: Readonly<Record<string, Landing>> = {
+  lobby: { room: LOBBY_ROOM, spawn: 'default' },
+  homes: { room: STREET_ROOM, spawn: 'default' },
+  'm3-hall': { room: 'm3-hall', spawn: 'default' },
+  glass: { room: 'glass', spawn: 'from-hub' },
+  grove: { room: 'grove', spawn: 'default' },
+  market: { room: 'market', spawn: 'default' },
+  hub: { room: 'hub', spawn: 'default' },
+  'm3-under': { room: 'm3-under', spawn: 'from-arcade' },
+  arcade: { room: 'arcade', spawn: 'from-cavern' },
+};
+
+/** The landings for the park an owl walks: the new map's (3), or today's park's and the tree's. */
+export function landingsFor(walking: number = 1): Readonly<Record<string, Landing>> {
+  return walking === 3 ? NEW_MAP_LANDINGS : TRAVEL_LANDINGS;
 }
 
-/** Whether a place can be travelled to, given the places walked into: the owl's own nest always, any other once visited. */
-export function canTravel(place: string, visited: ReadonlySet<string> | readonly string[]): boolean {
+/** Where travel to a place lands an owl walking `walking`, if it has a landing there. */
+export function travelLanding(place: string, walking: number = 1): Landing | undefined {
+  return landingsFor(walking)[place];
+}
+
+/** The place of the map a room counts as for travel once walked into; null for a nest (the owl's own is always there to go to). */
+export function visitedPlace(room: string): string | null {
+  return isNestRoom(room) ? null : room in TRAVEL_LANDINGS || room in NEW_MAP_LANDINGS ? room : null;
+}
+
+/**
+ * Whether a place can be travelled to, given the places walked into: the owl's own nest always, any other
+ * once visited. On the new map (OP-305, the whole map open) every place on it from the start: the map is
+ * there to find the way, so nothing waits on having found it first. Into the park is still only through
+ * the gate (needsGate).
+ */
+export function canTravel(place: string, visited: ReadonlySet<string> | readonly string[], walking: number = 1): boolean {
   if (place === 'nest') return true;
+  if (walking === 3) return place in NEW_MAP_LANDINGS;
   if (!(place in TRAVEL_LANDINGS)) return false;
   return Array.isArray(visited) ? visited.includes(place) : (visited as ReadonlySet<string>).has(place);
 }
 
 /** Whether travel to a place needs the owl to have walked through the gate since it was last outside. */
-export function needsGate(place: string): boolean {
-  const to = TRAVEL_LANDINGS[place];
+export function needsGate(place: string, walking: number = 1): boolean {
+  const to = travelLanding(place, walking);
   return to !== undefined && insidePark(to.room);
 }
 
@@ -95,7 +131,7 @@ export function parseTravelState(v: unknown): TravelState | null {
   if (typeof v !== 'object' || v === null) return null;
   const { places, gate } = v as { places?: unknown; gate?: unknown };
   if (!Array.isArray(places) || typeof gate !== 'boolean') return null;
-  return { places: places.filter((p): p is string => typeof p === 'string' && p in TRAVEL_LANDINGS), gate };
+  return { places: places.filter((p): p is string => typeof p === 'string' && (p in TRAVEL_LANDINGS || p in NEW_MAP_LANDINGS)), gate };
 }
 
 /** Why the owl cannot travel to a place just now: already there, not walked into yet, not through the gate, or busy (a climb, a game, the turnstiles). */
@@ -114,6 +150,10 @@ export const TRAVEL_WORDS = {
   notYet: 'Walk there once, and you can travel there from the map.',
   busy: 'Finish what you are doing, then travel.',
   map: 'Places you have walked to light up: tap one to travel there. Into the park is always through the front gate.',
-  /** The same on the new map, whose way in is the Treetop Commons. */
-  newMap: 'Places you have walked to light up: tap one to travel there. Into the park is always through the Treetop Commons.',
+  /** The same on the new map, whose way in is the Treetop Commons and whose every place travels (OP-305). */
+  newMap: 'Tap a place to travel there. Into the park is always through the Treetop Commons.',
+  /** On the new map, the Treetop Commons' card while the owl has not walked through its turnstiles. */
+  newGateFirst: 'Walk through the turnstiles in the Treetop Commons first.',
+  /** The new map's way to its gate: the Treetop Commons. */
+  newGate: 'Travel to the Treetop Commons',
 } as const;
