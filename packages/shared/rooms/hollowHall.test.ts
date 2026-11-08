@@ -83,7 +83,7 @@ describe('the Great Hollow (Nov 7)', () => {
       // On the floor, by its own doorway, where an owl walking up to it reads it.
       expect(onFloor(d.labelAt!), d.id).toBe(true);
       expect(Math.abs(d.labelAt!.x - middle(d.id).x), d.id).toBeLessThan(5);
-      expect(Math.abs(d.labelAt!.y - middle(d.id).y), d.id).toBeLessThan(120);
+      expect(Math.abs(d.labelAt!.y - middle(d.id).y), d.id).toBeLessThan(180);
     }
   });
 

@@ -83,9 +83,14 @@ export const HALL_COMMONS: readonly CommonsOf[] = [
 
 /** Where a Commons begins (its west edge). */
 export const commonsX = (level: HallLevel) => HALL_COMMONS.findIndex((c) => c.level === level) * ROOM_W;
-/** Its realm's doorway, its course's gate and its idol, along its back wall (room x). */
-export const realmDoorX = (level: HallLevel) => commonsX(level) + 330;
-export const courseDoorX = (level: HallLevel) => commonsX(level) + 1270;
+/**
+ * Its realm's doorway, its course's gate and its idol, along its back wall (room x). The two doorways
+ * stand in from the Commons' edges, so the doorways either side of the hollow's middle (the ink-wash
+ * course's gate, the knothole, the trunk's door, the clearing's vine curtain) stand apart and their
+ * signs don't run into each other.
+ */
+export const realmDoorX = (level: HallLevel) => commonsX(level) + 500;
+export const courseDoorX = (level: HallLevel) => commonsX(level) + 1100;
 export const idolX = (level: HallLevel) => commonsX(level) + 800;
 /** The idol's base: the floor steps forward round it, IDOL_HALF either side of it, to IDOL_FRONT. */
 const IDOL_HALF = 150;
@@ -151,7 +156,8 @@ const DOORS: DoorDef[] = [
     to: { room: 'm3-under', spawn: 'from-l1' },
     marker: { x: HALL_MIDDLE, y: HALL_FRONT - 20 },
     label: 'Down to the arcade',
-    labelAt: { x: HALL_MIDDLE, y: HALL_FRONT - 92 },
+    // Over the hatch, not under it: the hatch's art stands over the floor's front edge.
+    labelAt: { x: HALL_MIDDLE, y: HALL_FRONT - 165 },
   },
 ];
 
@@ -162,7 +168,7 @@ const PIECES: RoomPiece[] = [
     ...(c.course
       ? [
           { id: `${c.level}-course-door`, key: c.door, x: courseDoorX(c.level), y: HALL_BACK, flip: true as const },
-          { id: `${c.level}-course-sign`, key: 'kit-sign-arrow', x: courseDoorX(c.level) - 190, y: HALL_BACK + 30 },
+          { id: `${c.level}-course-sign`, key: 'kit-sign-arrow', x: courseDoorX(c.level) + 190, y: HALL_BACK + 30, flip: true as const },
         ]
       : []),
   ]),
