@@ -73,11 +73,12 @@ export const INTERACTABLES: readonly InteractableDef[] = [
   ...(['glass', 'ink', 'grove', 'market'] as const).map((level, i): InteractableDef => ({ id: `m3-hall-leaves-${level}`, kind: 'leaf-pile', room: 'm3-hall', pos: { x: i * 1600 + 560, y: 820 } })),
   { id: 'm3-hall-leaves-hatch', kind: 'leaf-pile', room: 'm3-hall', pos: { x: 3420, y: 830 } },
   // Each Commons is a plaza (Nov 8): a moonbeam through the canopy in its middle, where a crowd gathers,
-  // and leaves blown against its front, so no stretch of it is an empty walk.
+  // and leaves blown against its front, so no stretch of it is an empty walk. The leaves lie in front of
+  // the roots along the front (OP-308, hollowHall.ts ROOT_RUNS), at their feet, never behind them.
   ...(['glass', 'ink', 'grove', 'market'] as const).flatMap((level, i): InteractableDef[] => [
     { id: `m3-hall-moonbeam-${level}`, kind: 'moonbeam', room: 'm3-hall', pos: { x: i * 1600 + 800, y: 1060 } },
-    { id: `m3-hall-leaves-${level}-front-west`, kind: 'leaf-pile', room: 'm3-hall', pos: { x: i * 1600 + 300, y: 1330 } },
-    { id: `m3-hall-leaves-${level}-front-east`, kind: 'leaf-pile', room: 'm3-hall', pos: { x: i * 1600 + 1300, y: 1330 } },
+    { id: `m3-hall-leaves-${level}-front-west`, kind: 'leaf-pile', room: 'm3-hall', pos: { x: i * 1600 + 300, y: 1420 } },
+    { id: `m3-hall-leaves-${level}-front-east`, kind: 'leaf-pile', room: 'm3-hall', pos: { x: i * 1600 + 1400, y: 1420 } },
   ]),
   // A realm's start (OP-276, realmStart.ts): the wind off its course blows leaves in at the way on, and
   // they pile against the trading nest, where an owl can browse what the realm has.

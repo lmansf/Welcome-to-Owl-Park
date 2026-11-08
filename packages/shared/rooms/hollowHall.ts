@@ -20,6 +20,7 @@
  */
 import { shapedFloor, type EdgePlacement } from '../src/edges';
 import type { Polygon } from '../src/geometry';
+import type { Perch } from '../src/perches';
 import type { Vec2 } from '../src/protocol';
 import { ROOM_W, type DoorDef, type RoomDef, type RoomKit, type RoomPiece } from '../src/room';
 
@@ -253,6 +254,89 @@ const PIECES: RoomPiece[] = [
   { id: 'root-hatch', key: 'kit-hatch-down', x: HALL_MIDDLE, y: HALL_FRONT + 15 },
 ];
 
+/**
+ * The root runs (OP-308, travel as play): roots come up through the floor along the front of the
+ * hollow, each run a fallen root to step up on, a knot of roots and a cut stump, every one a single
+ * jump above the last. Climb a run from beside the hatch and glide off its stump over the seam to the
+ * next Commons' run, climb that and glide off the end onto the floor by its leaf pile: west to the
+ * glass realm's end, east to the neon street's. Each glide is one a kid lands every other try or
+ * better (the bots fly it, bots/sim/hollowRuns.test.ts). Walking is the same as ever; a fall lands on the floor
+ * with nothing lost. The pieces are the arcade's root art, standing on the floor where an owl walks
+ * round them.
+ *
+ * Each perch is a strip of the plan RUN_HALF either side of RUN_Y, its top the art's cut surface
+ * measured off the art plus RUN_HALF, its piece's foot at the strip's back edge: an owl stood anywhere
+ * on it is drawn over the root, its feet on the cut surface in the strip's middle.
+ */
+export const RUN_Y = 1370;
+export const RUN_HALF = 20;
+
+export type RootKind = 'log' | 'knot' | 'stump';
+
+/** Each root's art, how high its standing surface is over its foot (measured off the art) and that surface's ends from the piece's middle. */
+export const ROOT_ART: Readonly<Record<RootKind, { key: string; stands: number; span: readonly [number, number] }>> = {
+  log: { key: 'kit-under-root-ledge-mid', stands: 112, span: [-150, 150] },
+  knot: { key: 'kit-under-root-knot', stands: 162, span: [-64, 56] },
+  stump: { key: 'kit-under-root-buttress-right', stands: 275, span: [-120, -20] },
+};
+
+export interface RootRun {
+  /** The Commons it stands in. */
+  level: HallLevel;
+  /** Its roots from the hatch's side outward, by kind and the piece's middle (room x). */
+  steps: ReadonlyArray<readonly [RootKind, number]>;
+  /** West of the hatch the runs climb west: the art turned round. */
+  flip?: true;
+}
+
+/** West of the hatch, then east, each from the middle outward: the ink-wash run glides to the glass realm's, the clearing's to the neon street's. */
+export const ROOT_RUNS: readonly RootRun[] = [
+  { level: 'ink', flip: true, steps: [['log', 2620], ['knot', 2400], ['stump', 2200]] },
+  { level: 'glass', flip: true, steps: [['log', 1220], ['knot', 1000], ['stump', 800]] },
+  { level: 'grove', steps: [['log', 3780], ['knot', 4000], ['stump', 4200]] },
+  { level: 'market', steps: [['log', 5180], ['knot', 5400], ['stump', 5600]] },
+];
+
+export const rootId = (level: HallLevel, kind: RootKind) => `root-${level}-${kind}`;
+
+/** A root's standing surface along the room (room x), its art turned round west of the hatch. */
+export function rootSpan(kind: RootKind, x: number, flip?: boolean): [number, number] {
+  const [a, b] = ROOT_ART[kind].span;
+  return flip ? [x - b, x - a] : [x + a, x + b];
+}
+
+export const ROOT_PERCHES: readonly Perch[] = ROOT_RUNS.flatMap((run) =>
+  run.steps.map(([kind, x]): Perch => {
+    const [x0, x1] = rootSpan(kind, x, run.flip);
+    return {
+      id: rootId(run.level, kind),
+      area: [
+        { x: x0, y: RUN_Y - RUN_HALF },
+        { x: x1, y: RUN_Y - RUN_HALF },
+        { x: x1, y: RUN_Y + RUN_HALF },
+        { x: x0, y: RUN_Y + RUN_HALF },
+      ],
+      top: ROOT_ART[kind].stands + RUN_HALF,
+      solid: true,
+    };
+  }),
+);
+
+const ROOT_PIECES: RoomPiece[] = ROOT_RUNS.flatMap((run) =>
+  run.steps.map(([kind, x]): RoomPiece => ({ id: rootId(run.level, kind), key: ROOT_ART[kind].key, x, y: RUN_Y - RUN_HALF, ...(run.flip ? { flip: true as const } : {}) })),
+);
+
+/**
+ * The hiding spot at the front of each Commons, clear of its roots (and of the art standing over the
+ * floor behind them), between its run and the next Commons' leaf pile.
+ */
+const FRONT_SPOT: Readonly<Record<HallLevel, Vec2>> = {
+  glass: { x: 1600, y: 1300 },
+  ink: { x: 3050, y: 1300 },
+  grove: { x: 4650, y: 1300 },
+  market: { x: 6000, y: 1300 },
+};
+
 /** Each Commons' realm wall and floor. */
 const HALL_KIT: RoomKit = {
   ground: HALL_FRONT,
@@ -283,7 +367,8 @@ export const HALL_ROOM: RoomDef = {
     ),
   },
   doors: DOORS,
-  pieces: PIECES,
+  pieces: [...PIECES, ...ROOT_PIECES],
+  perches: [...ROOT_PERCHES],
   edges: [...HALL_EDGES],
   // A Realm Vote idol in each Commons of a realm that has one, each over its own spot (RoomDef.idols).
   idols: HALL_COMMONS.flatMap((c) => (c.votesFor ? [{ realm: c.votesFor, door: voteDoor(c.level) }] : [])),
@@ -295,7 +380,7 @@ export const HALL_ROOM: RoomDef = {
     { x: commonsX(c.level) + 1450, y: 820 },
     { x: commonsX(c.level) + 300, y: 1180 },
     { x: commonsX(c.level) + 1300, y: 1150 },
-    { x: commonsX(c.level) + 700, y: 1360 },
+    FRONT_SPOT[c.level],
   ]),
   kit: HALL_KIT,
 };

@@ -3,8 +3,10 @@ import { doorTarget } from '../src/doorways';
 import { pointInPolygon } from '../src/geometry';
 import { INTERACTABLES } from '../src/interactables';
 import { kitProblems } from '../src/kit';
+import { KIT_ART } from '../src/kitArt';
+import { hopTier, perchTiers } from '../src/routes';
 import { idolRealms, mapOf, voteRealmAt } from '../src/room';
-import { HALL_BACK, HALL_COMMONS, HALL_FRONT, HALL_H, HALL_ID, HALL_MIDDLE, HALL_ROOM, HALL_W, OWL_ROOM_PX2, PLAZA_Y, commonsX, courseDoor, fromCourse, fromRealm, idolAt, realmDoor, voteDoor } from './hollowHall';
+import { HALL_BACK, HALL_COMMONS, HALL_FRONT, HALL_H, HALL_ID, HALL_MIDDLE, HALL_ROOM, HALL_W, OWL_ROOM_PX2, PLAZA_Y, ROOT_RUNS, RUN_HALF, RUN_Y, commonsX, rootId, type HallLevel, type RootKind, courseDoor, fromCourse, fromRealm, idolAt, realmDoor, voteDoor } from './hollowHall';
 import { ANCHORS, ROOMS, TREE_REALMS } from './index';
 
 const hall = ROOMS[HALL_ID]!;
@@ -111,9 +113,10 @@ describe('the Great Hollow (Nov 7)', () => {
     }
   });
 
-  it('gives every stretch of the plaza something close by to do: a doorway, an idol, a moonbeam or a leaf pile', () => {
+  it('gives every stretch of the plaza something close by to do: a doorway, an idol, a moonbeam, a leaf pile or a root to climb', () => {
     const things = [
       ...INTERACTABLES.filter((t) => t.room === HALL_ID).map((t) => t.pos),
+      ...(hall.perches ?? []).map((p) => ({ x: p.area.reduce((a, q) => a + q.x, 0) / p.area.length, y: p.area.reduce((a, q) => a + q.y, 0) / p.area.length })),
       ...hall.doors.map((d) => d.marker ?? { x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2 }),
     ];
     expect(INTERACTABLES.filter((t) => t.room === HALL_ID && t.kind === 'moonbeam')).toHaveLength(HALL_COMMONS.length);
@@ -124,5 +127,72 @@ describe('the Great Hollow (Nov 7)', () => {
         const near = Math.min(...things.map((t) => Math.hypot(t.x - x, t.y - y)));
         expect(near, `${x},${y}`).toBeLessThanOrEqual(560);
       }
+  });
+});
+
+describe('the Great Hollow’s root runs (OP-308)', () => {
+  const tiers = perchTiers(hall);
+  const perch = (level: HallLevel, kind: RootKind) => hall.perches!.find((p) => p.id === rootId(level, kind))!;
+  const span = (level: HallLevel, kind: RootKind) => {
+    const xs = perch(level, kind).area.map((p) => p.x);
+    return [Math.min(...xs), Math.max(...xs)] as const;
+  };
+
+  it('climbs each run a single jump at a time: a fallen root, a knot, a stump', () => {
+    for (const run of ROOT_RUNS) {
+      expect(run.steps.map(([k]) => k)).toEqual(['log', 'knot', 'stump']);
+      for (const [kind] of run.steps) expect(tiers[rootId(run.level, kind)], rootId(run.level, kind)).toBe(1);
+      expect(perch(run.level, 'log').top).toBeLessThan(perch(run.level, 'knot').top);
+      expect(perch(run.level, 'knot').top).toBeLessThan(perch(run.level, 'stump').top);
+    }
+  });
+
+  it('glides from the stump by the hatch over the seam to the next Commons’ run, both ways from the middle', () => {
+    for (const [from, to] of [
+      ['ink', 'glass'],
+      ['grove', 'market'],
+    ] as const) {
+      const a = span(from, 'stump');
+      const b = span(to, 'log');
+      const gap = Math.max(b[0] - a[1], a[0] - b[1]);
+      expect(gap, `${from} to ${to}`).toBeGreaterThan(600);
+      // A glide gets there, with the routes' room to spare; a jump alone doesn't.
+      expect(hopTier(perch(to, 'log').top - perch(from, 'stump').top, gap, 1)).toBe(3);
+    }
+    // Each run starts beside the hatch's side of its Commons and climbs away from the middle.
+    for (const run of ROOT_RUNS) {
+      const xs = run.steps.map(([, x]) => Math.abs(x - HALL_MIDDLE));
+      expect([...xs].sort((p, q) => p - q)).toEqual(xs);
+    }
+  });
+
+  it('stands every root on the floor where an owl walks round it, with the floor clear in front of the run', () => {
+    for (const p of hall.perches!) {
+      const xs = p.area.map((q) => q.x);
+      const ys = p.area.map((q) => q.y);
+      const [x0, x1] = [Math.min(...xs), Math.max(...xs)];
+      for (let x = x0; x <= x1; x += 10) expect(onFloor({ x, y: Math.max(...ys) + 40 }), `${p.id} at ${x}`).toBe(true);
+      // Its piece stands at the strip's back edge, so an owl stood on it is drawn over it.
+      const piece = hall.pieces!.find((q) => q.id === p.id)!;
+      expect(piece.y).toBe(Math.min(...ys));
+      expect(KIT_ART[piece.key], piece.key).toBeDefined();
+    }
+    // Between the roots of a run and the runs, the floor goes on along the run's line (a take-off spot).
+    for (const x of [HALL_MIDDLE - 300, HALL_MIDDLE + 300, 1600, 4800]) expect(onFloor({ x, y: RUN_Y }), String(x)).toBe(true);
+  });
+
+  it('hides nothing a visitor looks for behind a root: no leaf pile, hiding spot, spawn or doorway under its art', () => {
+    const boxes = hall.pieces!.filter((q) => hall.perches!.some((p) => p.id === q.id)).map((q) => {
+      const a = KIT_ART[q.key]!;
+      return { id: q.id, x0: q.x - a.w / 2, x1: q.x + a.w / 2, y0: q.y - a.h, y1: q.y + RUN_HALF * 2 };
+    });
+    const things = [
+      // A moonbeam is a ring of light across its whole plaza: a root at its rim hides none of it.
+      ...INTERACTABLES.filter((i) => i.room === HALL_ID && i.kind !== 'moonbeam').map((i) => ({ id: i.id, ...i.pos })),
+      ...(hall.spots ?? []).map((s, i) => ({ id: `spot-${i}`, ...s })),
+      ...Object.entries(hall.spawns).map(([id, p]) => ({ id, ...p })),
+      ...hall.doors.map((d) => ({ id: d.id, ...middle(d.id) })),
+    ];
+    for (const b of boxes) for (const t of things) expect(t.x > b.x0 - 40 && t.x < b.x1 + 40 && t.y > b.y0 && t.y < b.y1, `${t.id} behind ${b.id}`).toBe(false);
   });
 });
