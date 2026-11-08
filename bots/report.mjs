@@ -33,6 +33,7 @@ if (existsSync(browserDir)) {
 const browserFindings = [];
 const browserNotes = [];
 const failsBy = new Map();
+const errorsBy = new Map();
 const note = (key, what) => {
   const by = failsBy.get(key) ?? { what, projects: [] };
   failsBy.set(key, by);
@@ -45,16 +46,24 @@ for (const [project, recs] of browser) {
       if (r.opened && r.onScreen === false) browserNotes.push(`${project}, ${r.room} at ${r.spawn}: the owl came in off the screen`);
       if (r.opened && r.onFloor === false) browserNotes.push(`${project}, ${r.room} at ${r.spawn}: the owl came in on no floor (${Math.round(r.pos.x)}, ${Math.round(r.pos.y)})`);
       for (const c of r.covered) browserNotes.push(`${project}, ${r.room}: doorway ${c.door} sits under ${c.by}`);
-    } else if (r.to) {
+    } else if (r.to && !r.shut) {
       if (r.wentTo === null) {
         const at = r.stoppedAt ? `, the owl stopped at x ${r.stoppedAt.x}` : '';
         note(`walk:${r.room}:${r.door}`, `${r.room}: a walk to doorway ${r.door} from ${r.spawn} didn't go through${at}`).projects.push(project);
       } else if (r.wentTo !== r.to) browserNotes.push(`${project}, ${r.room}: doorway ${r.door} led to ${r.wentTo}, not ${r.to}`);
       if (r.offFloor.length > 0) browserNotes.push(`${project}, ${r.room}: on the walk to ${r.door} the owl stood on no floor at ${r.offFloor.map((p) => `(${p.x}, ${p.y})`).join(' ')}`);
     }
-    const thrown = [...new Set((r.errors ?? []).filter((e) => e.startsWith('thrown')))];
-    for (const e of thrown) browserNotes.push(`${project}, ${r.room}: the page threw "${e.slice(8, 160)}"`);
+    for (const e of new Set(r.errors ?? [])) {
+      const by = errorsBy.get(e) ?? new Set();
+      errorsBy.set(e, by.add(`${project} ${r.room}`));
+    }
   }
+}
+// Each error the page threw or logged, once, with how many rooms it came up in.
+for (const [e, where] of errorsBy) {
+  const [kind, ...rest] = e.split(': ');
+  const at = [...where].slice(0, 3).join(', ');
+  browserNotes.unshift(`the page ${kind === 'thrown' ? 'threw' : 'logged'} "${rest.join(': ').slice(0, 160)}" in ${where.size} room${where.size === 1 ? '' : 's'} (${at}${where.size > 3 ? ', …' : ''})`);
 }
 for (const [key, f] of failsBy) browserFindings.push({ key, what: `${f.what} (${f.projects.join(', ')})` });
 
@@ -96,15 +105,16 @@ if (sim) {
 } else lines.push('The sim did not run (no out/sim.json).', '');
 
 if (browser.size > 0) {
-  lines.push('| Browser | Rooms opened | Doorways walked through | Errors |');
-  lines.push('| --- | --- | --- | --- |');
+  lines.push('| Browser | Rooms opened | Doorways walked through | Shut to visitors | Errors |');
+  lines.push('| --- | --- | --- | --- | --- |');
   for (const [project, recs] of [...browser].sort()) {
     const entries = recs.filter((r) => r.kind === 'entry');
-    const doors = recs.filter((r) => r.kind === 'door' && r.to);
+    const doors = recs.filter((r) => r.kind === 'door' && r.to && !r.shut);
+    const shut = recs.filter((r) => r.kind === 'door' && r.shut).length;
     const rooms = new Set(entries.map((r) => r.room));
     const opened = new Set(entries.filter((r) => r.opened).map((r) => r.room));
     const errs = recs.reduce((n, r) => n + (r.errors?.length ?? 0), 0);
-    lines.push(`| ${project} | ${opened.size} of ${rooms.size} | ${doors.filter((r) => r.wentTo).length} of ${doors.length} | ${errs} |`);
+    lines.push(`| ${project} | ${opened.size} of ${rooms.size} | ${doors.filter((r) => r.wentTo).length} of ${doors.length} | ${shut} | ${errs} |`);
   }
   lines.push('');
 } else lines.push('The browser walk did not run.', '');

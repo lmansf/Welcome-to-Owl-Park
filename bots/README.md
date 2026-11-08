@@ -13,9 +13,11 @@ Two kinds of bot run side by side:
   share that lands is the hop's clear rate. From those it finds the fewest tries to every doorway, leaf
   pile, hiding spot, bench, part, lost feather and shrine, from every way into the room.
 - **The browser walk** (`browser/`, `pnpm --filter @owl-park/bots walk`): every room of the park opened
-  in Chromium at 1440x900 and at a phone's 390x844 with touch, from every spawn. It records errors the
-  page throws or logs, whether the owl comes in on the screen and on the floor, every doorway at floor
-  height walked through (and where it led), doorways a button covers on a phone, and a screenshot.
+  in Chromium at 1440x900 and on a 390-wide phone with touch held sideways (844x390, as the park asks a
+  phone to be), from every spawn. It records errors the page throws or logs, whether the owl comes in on
+  the screen and on the floor, every doorway at floor height walked through (and where it led), doorways
+  a button covers on a phone, and a screenshot. A doorway into a room that turns a visitor away (a
+  keepers' room, a realm not open yet) is counted as shut, not walked.
 
 `report.mjs` puts both together in the run's summary (the **Playtest** check) and keeps the
 screenshots and the full results with the run.

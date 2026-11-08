@@ -1959,7 +1959,8 @@ export class RoomScene extends Phaser.Scene {
     /** The phrases in bubbles over the owls right now: whose (this visitor's own id included), and which. */
     bubbles: Array<{ id: string; n: number }>;
     connected: boolean;
-    doors: Array<{ id: string; x: number; y: number; to: string | undefined }>;
+    /** `shut`: the room it leads to turns this owl away (a keepers' room, a realm the keepers have not opened). */
+    doors: Array<{ id: string; x: number; y: number; to: string | undefined; shut: boolean }>;
     /** Where the owl's eyes are, left (-) or right (+) of its feet: the way its painting faces. */
     eyes: number;
     /** The owl's body layer in use: `owl-body`, or its species' own (`owl-barn-body`). */
@@ -2024,7 +2025,7 @@ export class RoomScene extends Phaser.Scene {
       wind: { currents: this.room.winds?.length ?? 0, rides: this.windRides },
       course: this.course?.debug() ?? null,
       room: this.room.id,
-      doors: this.room.doors.map((d) => ({ id: d.id, x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2, to: this.doorTo(d)?.room })),
+      doors: this.room.doors.map((d) => ({ id: d.id, x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2, to: this.doorTo(d)?.room, shut: this.realmClosed(this.doorTo(d)?.room) })),
       pos: { ...this.me.pos },
       walking: this.me.walking,
       look: this.look,

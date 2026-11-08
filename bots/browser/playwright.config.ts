@@ -4,7 +4,8 @@ import { defineConfig, devices } from '@playwright/test';
  * The browser walk (bots/README.md): every room opened in the park as it runs on this machine (the dev
  * server, the local transport, no room server), at a desktop's width and at a phone's. It records what
  * it sees in out/browser for the report (report.mjs), which decides what fails; a test fails here only
- * when the page can't be walked at all.
+ * when the page can't be walked at all. The phone is held sideways (844x390), as the park asks a phone to
+ * be: upright, it covers the park with its turn-your-phone card.
  */
 export default defineConfig({
   testDir: '.',
@@ -18,7 +19,7 @@ export default defineConfig({
   use: { baseURL: 'http://localhost:5173', trace: 'off', screenshot: 'off' },
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } } },
-    { name: 'phone', use: { ...devices['iPhone 13'], browserName: 'chromium', viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true } },
+    { name: 'phone', use: { ...devices['iPhone 13'], browserName: 'chromium', viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true } },
   ],
   webServer: {
     command: 'pnpm dev',

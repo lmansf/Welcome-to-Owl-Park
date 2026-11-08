@@ -33,7 +33,7 @@ type ParkState = {
   height: number;
   walking: boolean;
   connected: boolean;
-  doors: Array<{ id: string; x: number; y: number; to: string | undefined }>;
+  doors: Array<{ id: string; x: number; y: number; to: string | undefined; shut?: boolean }>;
 };
 type Cam = { viewX: number; viewY: number; viewW: number; viewH: number; zoom: number; dpr: number; port: { x: number; y: number; w: number; h: number } };
 type Hook = { state(): ParkState | null; walkTo(x: number, y: number): void; camera(): Cam | null; game: { scale: { width: number; height: number }; canvas: HTMLCanvasElement } };
@@ -58,8 +58,10 @@ export interface DoorResult {
   room: string;
   door: string;
   spawn: string;
-  /** Where the room's doorway leads on this map (null: shut here, not walked). */
+  /** Where the room's doorway leads on this map (null: it leads nowhere here, not walked). */
   to: string | null;
+  /** The room it leads to turns a visitor away (a keepers' room, a realm not open yet): not walked. */
+  shut: boolean;
   /** The room the owl was in when the walk ended. */
   wentTo: string | null;
   ms: number;
@@ -190,7 +192,7 @@ for (const room of PLAN) {
       test(`walks through ${door.id}`, async ({ page }, info) => {
         test.setTimeout(DOOR_MS + 60_000);
         const errors = watchErrors(page);
-        const r: DoorResult = { kind: 'door', project: info.project.name, room: room.id, door: door.id, spawn, to: null, wentTo: null, ms: 0, errors, offFloor: [], stoppedAt: null };
+        const r: DoorResult = { kind: 'door', project: info.project.name, room: room.id, door: door.id, spawn, to: null, shut: false, wentTo: null, ms: 0, errors, offFloor: [], stoppedAt: null };
         if (!(await open(page, room.id, spawn))) {
           save(`${room.id}--door--${door.id}`, r);
           return;
@@ -198,7 +200,8 @@ for (const room of PLAN) {
         const s0 = await now(page);
         const live = s0?.doors.find((d) => d.id === door.id);
         r.to = live?.to ?? null;
-        if (!live?.to) {
+        r.shut = live?.shut === true;
+        if (!live?.to || r.shut) {
           save(`${room.id}--door--${door.id}`, r);
           return;
         }
