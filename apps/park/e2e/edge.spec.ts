@@ -112,9 +112,10 @@ test.describe('room server', () => {
     const b = await visitor(browser);
     const a = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
     // The hub's paintings come only when the test says: the room cannot open before.
+    // Visitors get the Party Grove's painted layers (partygrove-*); ?art=old pages get hub-*. Both are held.
     let paintingsCame!: () => void;
     const paintingsHeld = new Promise<void>((r) => (paintingsCame = r));
-    await a.route(/\/art\/hub[-.%@]/, async (route) => {
+    await a.route(/\/art\/(hub|partygrove)[-.%@]/, async (route) => {
       await paintingsHeld;
       await route.continue().catch(() => undefined);
     });
