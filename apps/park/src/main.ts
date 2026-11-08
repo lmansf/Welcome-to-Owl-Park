@@ -649,12 +649,22 @@ const home = createHomeScreen(document.getElementById('hud') as HTMLElement, {
   blocked: () => hud.isBlocking(),
   info: (kind, opener) => hud.openInfo(kind, opener),
 });
+// An account link that opened the page on the home screen waits for the home scene: it closes every
+// panel as it comes up, which would close the link's box (the owls to tap, or the offer) at once.
+let homeCameUp = !cfg.home;
+let waitingAccountLink: (() => void) | null = null;
 // The home scene came up (at the start, or from the Menu): its buttons, and the owl beside them.
 game.events.on(HOME_SHOWN, () => {
   atHome = true;
   loadScreen.hide();
   hud.setHome(true);
   hud.closePanels();
+  homeCameUp = true;
+  if (waitingAccountLink) {
+    const take = waitingAccountLink;
+    waitingAccountLink = null;
+    take();
+  }
   // Turned away by the line from a room: the owl is this device's, and it takes its place in the line.
   const queued = game.registry.get('queued') === true;
   if (queued) {
@@ -756,11 +766,15 @@ const takeAccountLink = () => {
   const google = link ? null : readGoogleNote(location.hash);
   if (!link && !google) return;
   history.replaceState(history.state, '', withoutAccountLink(location.href));
-  if (!accountScreens) hud.toast("Owl links work on the park's own server.", 5000);
-  else if (google) accountScreens.googleEnded(google);
-  else if (link?.kind === 'restore') accountScreens.openPictures(link.token);
-  else if (link?.kind === 'offer') accountScreens.openOffer(link.token);
-  else if (link) void accountScreens.confirm(link.token);
+  const take = () => {
+    if (!accountScreens) hud.toast("Owl links work on the park's own server.", 5000);
+    else if (google) accountScreens.googleEnded(google);
+    else if (link?.kind === 'restore') accountScreens.openPictures(link.token);
+    else if (link?.kind === 'offer') accountScreens.openOffer(link.token);
+    else if (link) void accountScreens.confirm(link.token);
+  };
+  if (homeCameUp) take();
+  else waitingAccountLink = take;
 };
 takeAccountLink();
 window.addEventListener('hashchange', takeAccountLink);
