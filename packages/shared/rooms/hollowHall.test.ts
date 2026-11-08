@@ -4,7 +4,7 @@ import { pointInPolygon } from '../src/geometry';
 import { INTERACTABLES } from '../src/interactables';
 import { kitProblems } from '../src/kit';
 import { idolRealms, mapOf, voteRealmAt } from '../src/room';
-import { HALL_BACK, HALL_COMMONS, HALL_FRONT, HALL_ID, HALL_MIDDLE, HALL_ROOM, HALL_W, commonsX, courseDoor, fromCourse, fromRealm, idolAt, realmDoor, voteDoor } from './hollowHall';
+import { HALL_BACK, HALL_COMMONS, HALL_FRONT, HALL_H, HALL_ID, HALL_MIDDLE, HALL_ROOM, HALL_W, OWL_ROOM_PX2, PLAZA_Y, commonsX, courseDoor, fromCourse, fromRealm, idolAt, realmDoor, voteDoor } from './hollowHall';
 import { ANCHORS, ROOMS, TREE_REALMS } from './index';
 
 const hall = ROOMS[HALL_ID]!;
@@ -97,5 +97,32 @@ describe('the Great Hollow (Nov 7)', () => {
     const piles = INTERACTABLES.filter((t) => t.room === HALL_ID);
     for (const c of HALL_COMMONS) expect(piles.some((p) => p.id === `m3-hall-leaves-${c.level}`), c.level).toBe(true);
     for (const p of piles) expect(onFloor(p.pos), p.id).toBe(true);
+  });
+
+  it('makes each Commons a plaza a crowd of 80 owls can gather in, more than a screen deep', () => {
+    expect(HALL_H).toBeGreaterThan(900);
+    for (const c of HALL_COMMONS) {
+      const x0 = commonsX(c.level);
+      let floor = 0;
+      for (let x = x0 + 10; x < x0 + 1600; x += 20) for (let y = HALL_BACK + 10; y < HALL_H; y += 20) if (onFloor({ x, y })) floor += 400;
+      expect(floor / OWL_ROOM_PX2, c.level).toBeGreaterThanOrEqual(80);
+      // Its middle, where its moonbeam falls, is open floor with room round it.
+      for (const [dx, dy] of [[0, 0], [-300, 0], [300, 0], [0, -150], [0, 150]] as const) expect(onFloor({ x: x0 + 800 + dx, y: PLAZA_Y + dy }), c.level).toBe(true);
+    }
+  });
+
+  it('gives every stretch of the plaza something close by to do: a doorway, an idol, a moonbeam or a leaf pile', () => {
+    const things = [
+      ...INTERACTABLES.filter((t) => t.room === HALL_ID).map((t) => t.pos),
+      ...hall.doors.map((d) => d.marker ?? { x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2 }),
+    ];
+    expect(INTERACTABLES.filter((t) => t.room === HALL_ID && t.kind === 'moonbeam')).toHaveLength(HALL_COMMONS.length);
+    for (let x = 80; x < HALL_W - 80; x += 40)
+      for (let y = HALL_BACK + 20; y < HALL_FRONT; y += 40) {
+        if (!onFloor({ x, y })) continue;
+        // A few seconds' walk at most (WALK_SPEED is 260 px a second).
+        const near = Math.min(...things.map((t) => Math.hypot(t.x - x, t.y - y)));
+        expect(near, `${x},${y}`).toBeLessThanOrEqual(560);
+      }
   });
 });

@@ -6,6 +6,7 @@ import type { Updraft } from './updraft';
 import type { WindCurrent } from './wind';
 import type { BrushStone } from './brush';
 import type { NeonSign } from './circuit';
+import type { EdgePlacement } from './edges';
 
 /**
  * Data-driven room definition. Art is swappable: point `background` and
@@ -94,6 +95,14 @@ export interface RoomDef {
    * trading nest and decor this way, so an artist's delivery replaces each without touching the room.
    */
   pieces?: RoomPiece[];
+  /**
+   * In a room seen from above (edges.ts, Nov 8): pieces that break up its rectangles of texture, each art
+   * under its own key: roots and ferns that eat into the floor's edges (cut out of `walkable` by the
+   * room's own definition, from the same profile, so what shows is where an owl stops), bark pillars over
+   * the seams between two walls, leaf litter over the seams between two floors and a ragged rim along
+   * the top. Drawn under the owls and under the floor's edge line.
+   */
+  edges?: EdgePlacement[];
   /** Ambient mood used by the scene for lighting and particles (`arcade`: neon indoors, no rain). */
   mood: 'hub' | 'dusk' | 'neon' | 'arcade';
   /**
