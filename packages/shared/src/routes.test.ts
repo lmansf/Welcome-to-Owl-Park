@@ -84,7 +84,7 @@ describe('route tiers (OP-084)', () => {
   });
 
   it("finds the grove's ladder single jumps to the loft, and its far treehouse a glide from there", () => {
-    expect(perchTiers(ROOMS['grove']!)).toEqual({ 'grove-log': 1, 'grove-rung': 1, 'grove-porch': 1, 'grove-loft': 1, 'grove-hut': 3 });
+    expect(perchTiers(ROOMS['grove']!)).toEqual({ 'grove-log': 1, 'grove-rung': 1, 'grove-porch': 1, 'grove-loft': 1, 'grove-hut': 3, 'grove-bank-west': 1, 'grove-lantern-mound': 1, 'grove-mushrooms': 1, 'grove-bank-east': 1 });
   });
 
   it("finds the market's roofs single jumps up, and its food stall and tent a jump and the flap from the plaza", () => {

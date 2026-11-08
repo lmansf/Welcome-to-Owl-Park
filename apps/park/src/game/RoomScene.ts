@@ -194,12 +194,13 @@ import { OWL_SCALE, OWL_W, Owl } from './Owl';
 import { QuestItemMarker, SpotGlow } from './QuestItem';
 import { PuzzleMarker, markKey, type PuzzleMarkKind, type PuzzleMarkLook } from './PuzzleMarker';
 import { StreetDoors, addNestsSign, addParkSign } from './street';
-import { cameraBounds } from './hudInset';
+import { cameraBounds, followLead } from './hudInset';
 import { SizeLabels } from './sizeLabels';
 import { DoorSigns } from './doorSigns';
 import { sideEdges } from './sideEdges';
 import { drawWalkFloor } from './walkFloor';
 import { drawEdges } from './edgeView';
+import { drawSkirts } from './plazaSkirt';
 import { setVignette } from './vignette';
 
 export interface RoomStart {
@@ -932,6 +933,8 @@ export class RoomScene extends Phaser.Scene {
     }
     // The kit's surfaces, platforms and pieces over its backdrops; its front props over the owls, under the overlay.
     if (art.kit) drawKit(this, art, { back: -0.97, play: -0.95, piece: -0.93, front: room.size.h + 50 });
+    // A plaza's floor: the painting's foot runs on over it, mirrored and fading, so the two meet with no seam (plazaSkirt.ts).
+    if (!room.drawn) drawSkirts(this, art);
     // Seen from above: roots, ferns, pillars and the rim that break up its rectangles (edges.ts), under the floor's edge line.
     this.edgesDrawn = drawEdges(this, room);
     // A soft shade in the view's corners, so a room seems to run on past the screen instead of stopping in a box.
@@ -3860,6 +3863,7 @@ export class RoomScene extends Phaser.Scene {
       cam.setViewport(Math.round(f.x * k), Math.round(f.y * k), Math.max(1, Math.round(f.w * k)), Math.max(1, Math.round(f.h * k)));
       cam.setZoom(Math.max(0.1, Math.min((f.w * k) / 340, (f.h * k) / 280, 4)));
       cam.setBounds(0, 0, this.room.size.w, this.room.size.h);
+      cam.setFollowOffset(0, 0);
       const x = this.mirror ? (this.me.pos.x + NEST_MIRROR.x) / 2 : this.me.pos.x;
       cam.centerOn(x, this.me.pos.y - 90);
       return;
@@ -3875,6 +3879,8 @@ export class RoomScene extends Phaser.Scene {
     const covered = this.sheetPx > 0 ? { top: 0, bottom: 0 } : this.hud.coveredEdges();
     const b = cameraBounds(this.room.size, covered, this.cfg.pixelRatio / cam.zoom);
     cam.setBounds(b.x, b.y, b.w, b.h);
+    // A room taller than a screen, seen from above: the owl stands lower on screen, the back of the room in view (hudInset.ts).
+    cam.setFollowOffset(0, followLead(this.room.size.h, seenFromSide(this.room), h / cam.zoom, ROOM_H));
     for (const { t, img } of this.parallax) this.placeParallax(t, img);
   }
 
