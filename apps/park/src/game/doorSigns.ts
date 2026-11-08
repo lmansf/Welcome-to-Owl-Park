@@ -68,6 +68,18 @@ export class DoorSigns {
     return this.signs.find((s) => s.id === this.focused)?.label ?? null;
   }
 
+  /**
+   * Whether this doorway's sign stands whole on screen now: then its words are there to read, and no
+   * chip at the screen's edge repeats them (the Great Hollow on a phone held sideways, Nov 8).
+   */
+  onScreen(id: string): boolean {
+    const sign = this.signs.find((s) => s.id === id);
+    if (!sign) return false;
+    const v = this.scene.cameras.main.worldView;
+    const b = sign.text.getBounds();
+    return v.width > 0 && b.left >= v.left && b.right <= v.right && b.top >= v.top && b.bottom <= v.bottom;
+  }
+
   /** Show the sign of this doorway alone (none for null or a doorway with no sign), fading. */
   focus(id: string | null): void {
     if (id === this.focused) return;
