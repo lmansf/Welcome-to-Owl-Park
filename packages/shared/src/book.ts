@@ -27,10 +27,11 @@ export const SOURCES: readonly Source[] = ['found', 'crafted', 'granted', 'bough
 
 /**
  * Things counted per collector and park day: feathers from leaf piles and from the activities (each
- * capped), today's gift, progress on each of the day's three tasks, and whether their bonus is paid.
+ * capped), today's gift, progress on each of the day's three tasks, whether their bonus is paid, and
+ * the sealed hollow's escape pay (escape.ts, OP-310).
  */
-export type EarnSource = 'leaves' | 'gift' | 'play' | 'task-0' | 'task-1' | 'task-2' | 'tasks-bonus';
-export const EARN_SOURCES: readonly EarnSource[] = ['leaves', 'gift', 'play', 'task-0', 'task-1', 'task-2', 'tasks-bonus'];
+export type EarnSource = 'leaves' | 'gift' | 'play' | 'task-0' | 'task-1' | 'task-2' | 'tasks-bonus' | 'escape';
+export const EARN_SOURCES: readonly EarnSource[] = ['leaves', 'gift', 'play', 'task-0', 'task-1', 'task-2', 'tasks-bonus', 'escape'];
 const TASK_SOURCES = ['task-0', 'task-1', 'task-2'] as const;
 
 export interface CollectorRow {

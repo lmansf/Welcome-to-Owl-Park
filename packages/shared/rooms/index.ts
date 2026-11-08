@@ -1,5 +1,6 @@
 import type { Polygon } from '../src/geometry';
 import { isNestRoom } from '../src/homes';
+import { ESCAPE_BACK_SPAWN, ESCAPE_DOOR, ESCAPE_ROOM, isEscapeRoom } from '../src/escape';
 import { doorTarget, type WalkMap } from '../src/doorways';
 import { isNewMapRoom } from '../src/newMap';
 import type { Perch } from '../src/perches';
@@ -1705,6 +1706,8 @@ for (const id of ['lobby', 'arcade', 'homes', 'market', 'glass', 'grove', 'hub']
   const perches = floorPerches(id);
   ROOMS[id] = { ...room, ...(perches.length ? { perches: [...(room.perches ?? []), ...perches] } : {}), pieces: [...(room.pieces ?? []), ...floorPieces(id)] };
 }
+// The sealed hollow's doorway (OP-310, escape.ts) stands on the clearing's front edge: an owl back out of it comes out here.
+ROOMS[ESCAPE_DOOR.room]!.spawns[ESCAPE_BACK_SPAWN] = { ...ESCAPE_DOOR.spawn };
 
 // ---- The Great Hollow (hollowHall.ts) ----
 //
@@ -1920,9 +1923,10 @@ export function relayout(room: string, p: Vec2, from: number): Vec2 {
   return { x, y: p.y };
 }
 
-/** The room with this id: one of ROOMS, or a nest made from NEST_ROOM; undefined for anything else. */
+/** The room with this id: one of ROOMS, a nest made from NEST_ROOM, or a group's sealed hollow made from ESCAPE_ROOM (OP-310); undefined for anything else. */
 export function roomFor(id: string): RoomDef | undefined {
   if (Object.hasOwn(ROOMS, id)) return ROOMS[id];
+  if (isEscapeRoom(id)) return { ...ESCAPE_ROOM, id };
   return isNestRoom(id) ? { ...NEST_ROOM, id } : undefined;
 }
 

@@ -268,6 +268,8 @@ export const CATALOGUE: readonly ItemDef[] = [
   ).map(([id, name, rarity]): ItemDef => ({ id, kind: 'pet', name, rarity, art: `item-${id}` })),
   // The Golden Mouse (the owner's ask): every course's clear together pays it (coursebook.ts). The Mouse's own art, gilded.
   { id: 'golden-mouse', kind: 'pet', name: 'Golden Mouse', rarity: E, art: 'item-mouse', reward: true, gild: true } satisfies ItemDef as ItemDef,
+  // The Hollow Moth (OP-310): the sealed hollow gives it once, the first time an owl escapes (escape.ts). The Moth's own art, gilded, until its own is made.
+  { id: 'hollow-moth', kind: 'pet', name: 'Hollow Moth', rarity: R, art: 'item-moth', reward: true, gild: true } satisfies ItemDef as ItemDef,
   ...(
     [
       ['aura', 'Aura', C],

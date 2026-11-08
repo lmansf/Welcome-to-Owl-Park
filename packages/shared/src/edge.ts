@@ -33,6 +33,7 @@
 import type { QuizZone, TaskView } from './activities';
 import { isArcadeGame, type ArcadeGame, type GameWall, type OwnBests, type RunPaid } from './arcade';
 import type { Award } from './book';
+import type { EscapeLockId, EscapePaid, EscapeRefusal, EscapeView } from './escape';
 import { parseNestEdit, type NestEdit, type NestRefusal, type NestView } from './homes';
 import { cleanLook } from './look';
 import type { NestGiftState, StreetDoor } from './nestbook';
@@ -284,7 +285,26 @@ export interface ClientPuzzle {
   r: number;
 }
 
-export type ClientFrame = ClientDash | ClientCourse | ClientHello | ClientMove | ClientLook | ClientBye | ClientRest | ClientAir | ClientEmote | ClientSay | ClientQuests | ClientTalk | ClientQuestAction | ClientUse | ClientGather | ClientAct | ClientStreet | ClientNest | ClientAdmit | ClientPuzzle;
+/**
+ * The sealed hollow (OP-310, escape.ts): at its doorway in the plaza, the `doors` the owl may take (the
+ * groups waiting for owls, and a fresh room for a new group); in a group's hollow, its `state`, `start`
+ * it, read a clue (`look`, carving `n` of the chest or the moon carving, `lock` 'dial'), `tug` a vine,
+ * `take` the key, work a lock (`open`, with the `code` for a code lock), or ask the hint owl (`hint`).
+ * The room checks where the owl stands. Answered with `escape`.
+ */
+export type EscapeAct = 'doors' | 'state' | 'start' | 'look' | 'tug' | 'take' | 'open' | 'hint';
+export const ESCAPE_ACTS: readonly EscapeAct[] = ['doors', 'state', 'start', 'look', 'tug', 'take', 'open', 'hint'];
+export interface ClientEscape {
+  t: 'escape';
+  a: EscapeAct;
+  lock?: string;
+  n?: number;
+  code?: PuzzleSymbol[];
+  vine?: string;
+  r: number;
+}
+
+export type ClientFrame = ClientDash | ClientCourse | ClientHello | ClientMove | ClientLook | ClientBye | ClientRest | ClientAir | ClientEmote | ClientSay | ClientQuests | ClientTalk | ClientQuestAction | ClientUse | ClientGather | ClientAct | ClientStreet | ClientNest | ClientAdmit | ClientPuzzle | ClientEscape;
 
 // ---- server -> client ----
 export interface ServerWelcome {
@@ -579,7 +599,28 @@ export interface ServerPuzzle {
   updates?: QuestUpdate[];
 }
 
+/**
+ * The sealed hollow (OP-310): the answer to an `escape` frame (with its `r` and `a`), or the group's run
+ * pushed to every owl in the room when it moved (a clue read, a tug, the stump sat on, a lock opened).
+ * `doors` answers at the doorway: the groups waiting for owls, and a fresh room. `paid` comes once, to
+ * each owl, when the group gets out: what its escape earned (a spectator's says `practice`).
+ */
+export interface ServerEscape {
+  t: 'escape';
+  r?: number;
+  a?: EscapeAct;
+  ok: boolean;
+  reason?: EscapeRefusal | 'offline';
+  left?: number;
+  view?: EscapeView;
+  hint?: string;
+  opened?: EscapeLockId;
+  paid?: EscapePaid;
+  doors?: { groups: Array<{ room: string; owls: number }>; fresh: string };
+}
+
 export type ServerFrame =
+  | ServerEscape
   | ServerPuzzle
   | ServerWelcome
   | ServerEnter
@@ -733,6 +774,28 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
       }
       return out;
     }
+    case 'escape': {
+      const { a, lock, n, code, vine } = v;
+      if (!isRequest(v['r']) || !(ESCAPE_ACTS as readonly unknown[]).includes(a)) return null;
+      const out: ClientEscape = { t: 'escape', a: a as EscapeAct, r: v['r'] };
+      if (lock !== undefined) {
+        if (typeof lock !== 'string' || !OBJECT_ID.test(lock)) return null;
+        out.lock = lock;
+      }
+      if (n !== undefined) {
+        if (!isCount(n, 15)) return null;
+        out.n = n;
+      }
+      if (code !== undefined) {
+        if (!Array.isArray(code) || code.length > 8 || !code.every((s) => (PUZZLE_SYMBOLS as readonly unknown[]).includes(s))) return null;
+        out.code = code as PuzzleSymbol[];
+      }
+      if (vine !== undefined) {
+        if (typeof vine !== 'string' || !OBJECT_ID.test(vine)) return null;
+        out.vine = vine;
+      }
+      return out;
+    }
     case 'act': {
       const a = v['a'];
       if (!isRequest(v['r']) || !(ACT_KINDS as readonly unknown[]).includes(a)) return null;
@@ -765,7 +828,7 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
   }
 }
 
-const SERVER_FRAME_TYPES = new Set(['puzzle', 'welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'say', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'wall', 'closed', 'notice', 'restart', 'realms', 'rest', 'air', 'admitted', 'course']);
+const SERVER_FRAME_TYPES = new Set(['escape', 'puzzle', 'welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'say', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'wall', 'closed', 'notice', 'restart', 'realms', 'rest', 'air', 'admitted', 'course']);
 
 /** Loose check for server frames on the client (a trusted source, but never crash on garbage). */
 export function parseServerFrame(text: string): ServerFrame | null {

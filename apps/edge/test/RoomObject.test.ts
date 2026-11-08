@@ -4,6 +4,16 @@ import {
   CLIMB_RUN_MAX_MS,
   CLOSE,
   ClimbBook,
+  ESCAPE_DOOR,
+  ESCAPE_FEATHERS,
+  ESCAPE_HINT_AFTER_MS,
+  ESCAPE_ITEM,
+  ESCAPE_LOCKS,
+  ESCAPE_PERCH_TOP,
+  ESCAPE_PLACES,
+  GROUNDED,
+  escapeLayout,
+  payEscape,
   CollectionBook,
   CourseBook,
   MemoryCourseStore,
@@ -225,6 +235,13 @@ class FakeCollections {
   }
   feathers(cid: string) {
     return this.answer(this.book.feathers(cid, Date.now()));
+  }
+  /** The sealed hollow's pay (OP-310): the real pay on the real book; never asked for a spectator. */
+  readonly escapeCalls: string[] = [];
+  escapePaid(cid: string) {
+    this.noAward(cid, 'escapePaid');
+    this.escapeCalls.push(cid);
+    return this.answer(payEscape(this.book, cid, Date.now()));
   }
   /** Puzzle runs (OP-255): the calls asked, and the collectors this fake says are in a run. */
   readonly puzzleCalls: Array<{ cid: string; op: string; other?: string; pos?: unknown }> = [];
@@ -2359,5 +2376,219 @@ describe('a socket that only heartbeats (OP-245)', () => {
     expect(quietFor({ joinedAt: 100 }, 400)).toBe(300);
     expect(quietFor({ joinedAt: 100, inputAt: 250 }, 400)).toBe(150);
     expect(NO_INPUT_CLOSE_MS).toBe(15 * 60_000); // just past the page's own goodbye, about 12 minutes in
+  });
+});
+
+describe('the sealed hollow in the room object (OP-310)', () => {
+  let cap: ReturnType<typeof captureLogs>;
+  beforeEach(() => {
+    cap = captureLogs();
+  });
+  afterEach(() => {
+    cap.restore();
+    // Whatever each test did, nothing was paid for a spectator.
+    expect(collections.faults).toEqual([]);
+  });
+  const SPEC_CID = 'c_specDDDD';
+  type Inner = { rooms: Map<string, { place(id: string, at: Vec2, top?: number): boolean }>; escapes: Map<string, { seed: string; phase: string; members: unknown[] }> };
+  const inner = (o: Obj) => o as unknown as Inner;
+  let r = 0;
+  /** Ask the room a hollow's step and give back its answer. */
+  async function ask(obj: Obj, ws: FakeSocket, frame: Record<string, unknown>) {
+    const n = ++r;
+    clock += 250;
+    await send(obj, ws, { t: 'escape', r: n, ...frame });
+    await settle();
+    const f = ws.of('escape').find((x) => x.r === n);
+    if (!f) throw new Error(`no answer to ${JSON.stringify(frame)}`);
+    return f;
+  }
+  /** Put an owl down somewhere in its room, on the floor or up on a perch. */
+  const put = (obj: Obj, room: string, id: string, at: Vec2, top = 0) => expect(inner(obj).rooms.get(room)!.place(id, at, top)).toBe(true);
+  /** An owl at the doorway in the plaza asks it for a hollow: a fresh one for a new group. */
+  async function freshHollow(obj: Obj): Promise<string> {
+    const ws = await join(obj, ESCAPE_DOOR.room, 'v_door');
+    put(obj, ESCAPE_DOOR.room, 'v_door', ESCAPE_DOOR.spawn);
+    const f = await ask(obj, ws, { a: 'doors' });
+    expect(f.ok).toBe(true);
+    return f.doors!.fresh;
+  }
+  async function spectator(obj: Obj, room: string, id: string) {
+    const ws = connect(room, id, SPEC_CID, undefined, true);
+    await hello(obj, ws);
+    return ws;
+  }
+  /** Walk a started group of at least two through all four locks (`a` and `b` the two owls that do it). */
+  async function clear(obj: Obj, room: string, a: FakeSocket, b: FakeSocket) {
+    const lay = escapeLayout(inner(obj).escapes.get(room)!.seed);
+    for (let n = 0; n < 3; n++) {
+      put(obj, room, 'v_a', lay.chest.carvings[n]!);
+      expect((await ask(obj, a, { a: 'look', lock: 'chest', n })).ok).toBe(true);
+    }
+    put(obj, room, 'v_a', ESCAPE_LOCKS[0]!.post);
+    expect(await ask(obj, a, { a: 'open', lock: 'chest', code: lay.chest.code })).toMatchObject({ ok: true, opened: 'chest' });
+    put(obj, room, 'v_a', ESCAPE_PLACES.moon);
+    put(obj, room, 'v_b', { x: 640, y: 1020 }, ESCAPE_PERCH_TOP);
+    expect((await ask(obj, a, { a: 'look', lock: 'dial' })).ok).toBe(true);
+    put(obj, room, 'v_a', ESCAPE_LOCKS[1]!.post);
+    expect(await ask(obj, a, { a: 'open', lock: 'dial', code: lay.dial.code })).toMatchObject({ ok: true, opened: 'dial' });
+    put(obj, room, 'v_a', ESCAPE_PLACES.vines[0]);
+    put(obj, room, 'v_b', ESCAPE_PLACES.vines[1]);
+    await ask(obj, a, { a: 'tug', vine: 'west' });
+    expect(await ask(obj, b, { a: 'tug', vine: 'east' })).toMatchObject({ ok: true, opened: 'roots' });
+    const key = (await ask(obj, b, { a: 'state' })).view!.key!;
+    put(obj, room, 'v_b', key, ESCAPE_PERCH_TOP);
+    expect((await ask(obj, b, { a: 'take' })).ok).toBe(true);
+    put(obj, room, 'v_b', ESCAPE_LOCKS[3]!.post);
+    expect(await ask(obj, b, { a: 'open', lock: 'way-out' })).toMatchObject({ ok: true, opened: 'way-out' });
+  }
+
+  it('lets a group of 2 in through the doorway, and start once both are there', async () => {
+    const obj = roomObject();
+    const room = await freshHollow(obj);
+    // Far from the doorway, the plaza has no hollow to give.
+    const far = await join(obj, ESCAPE_DOOR.room, 'v_far');
+    put(obj, ESCAPE_DOOR.room, 'v_far', { x: 900, y: 1000 });
+    expect(await ask(obj, far, { a: 'doors' })).toMatchObject({ ok: false, reason: 'far' });
+    const a = await join(obj, room, 'v_a', OWNER);
+    expect(a.closed).toBeNull();
+    expect(a.last('escape')!.view).toMatchObject({ phase: 'lobby', owls: 1, min: 2, max: 4, member: true });
+    expect(await ask(obj, a, { a: 'start' })).toMatchObject({ ok: false, reason: 'few' });
+    // The doorway shows the waiting group to the next owl, and a fresh room besides.
+    const door = state.sockets.find((s) => s.tags.includes('id:v_door'))!.ws;
+    const doors = (await ask(obj, door, { a: 'doors' })).doors!;
+    expect(doors.groups).toEqual([{ room, owls: 1 }]);
+    expect(doors.fresh).not.toBe(room);
+    const b = await join(obj, room, 'v_b', GUEST);
+    expect(a.last('escape')!.view!.owls).toBe(2);
+    expect(await ask(obj, b, { a: 'start' })).toMatchObject({ ok: true, view: { phase: 'running' } });
+    expect(a.last('escape')!.view!.phase).toBe('running');
+    // A started group is gone from the doorway.
+    expect((await ask(obj, door, { a: 'doors' })).doors!.groups).toEqual([]);
+  });
+
+  it('turns a 5th owl away, and any newcomer once the group has started', async () => {
+    const obj = roomObject();
+    const room = await freshHollow(obj);
+    for (const id of ['v_a', 'v_b', 'v_c', 'v_d']) expect((await join(obj, room, id)).closed).toBeNull();
+    const e = await join(obj, room, 'v_e');
+    expect(e.last('full')).toEqual({ t: 'full', room, cap: 4 });
+    expect(e.closed?.code).toBe(CLOSE.ROOM_FULL);
+    logged(cap.lines, 'room_join_refused', { room, reason: 'cap', cap: 4 });
+    const other = await freshHollow(obj);
+    const a = await join(obj, other, 'v_a2');
+    await join(obj, other, 'v_b2');
+    expect((await ask(obj, a, { a: 'start' })).ok).toBe(true);
+    const late = await join(obj, other, 'v_late');
+    expect(late.closed?.code).toBe(CLOSE.ROOM_FULL);
+    logged(cap.lines, 'room_join_refused', { room: other, reason: 'escape-started' });
+  });
+
+  it('gives every group its own seed: the answers differ between runs', async () => {
+    const obj = roomObject();
+    const seeds = new Set<string>();
+    for (let i = 0; i < 4; i++) {
+      const room = await freshHollow(obj);
+      await join(obj, room, `v_s${i}`);
+      seeds.add(inner(obj).escapes.get(room)!.seed);
+    }
+    expect(seeds.size).toBe(4);
+    expect(new Set([...seeds].map((s) => JSON.stringify(escapeLayout(s)))).size).toBe(4);
+    // A page never sees a seed.
+    for (const s of seeds) expect(everything()).not.toContain(s);
+  });
+
+  it('lights the moon carving only while another owl perches on the stump, and tells the group', async () => {
+    const obj = roomObject();
+    const room = await freshHollow(obj);
+    const a = await join(obj, room, 'v_a', OWNER);
+    const b = await join(obj, room, 'v_b', GUEST);
+    await ask(obj, a, { a: 'start' });
+    const lay = escapeLayout(inner(obj).escapes.get(room)!.seed);
+    for (let n = 0; n < 3; n++) {
+      put(obj, room, 'v_a', lay.chest.carvings[n]!);
+      await ask(obj, a, { a: 'look', lock: 'chest', n });
+    }
+    put(obj, room, 'v_a', ESCAPE_LOCKS[0]!.post);
+    await ask(obj, a, { a: 'open', lock: 'chest', code: lay.chest.code });
+    put(obj, room, 'v_a', ESCAPE_PLACES.moon);
+    put(obj, room, 'v_b', { x: 640, y: 1020 });
+    expect(await ask(obj, a, { a: 'look', lock: 'dial' })).toMatchObject({ ok: false, reason: 'dark', view: { lit: false } });
+    // b hops up onto the stump: its landing lights the carving, and a is told without asking.
+    const before = a.of('escape').length;
+    await send(obj, b, { t: 'air', air: { z: ESCAPE_PERCH_TOP, vz: 0, s: GROUNDED, f: 0 } });
+    expect(a.of('escape').length).toBe(before + 1);
+    expect(a.last('escape')!.view!.lit).toBe(true);
+    expect(a.last('escape')!.view!.locks[1]!.clues.every((c) => c.symbol === null)).toBe(true);
+    const read = await ask(obj, a, { a: 'look', lock: 'dial' });
+    expect(read.ok).toBe(true);
+    expect(read.view!.locks[1]!.clues.map((c) => c.symbol)).toEqual(lay.dial.code);
+    // b saw it read too.
+    expect(b.last('escape')!.view!.locks[1]!.clues.map((c) => c.symbol)).toEqual(lay.dial.code);
+    // b hops down: dark again for everyone.
+    await send(obj, b, { t: 'air', air: { z: 0, vz: 0, s: GROUNDED, f: 0 } });
+    expect(a.last('escape')!.view!.lit).toBe(false);
+  });
+
+  it('opens the root door on two tugs within the window, never on one alone', async () => {
+    const obj = roomObject();
+    const room = await freshHollow(obj);
+    const a = await join(obj, room, 'v_a');
+    const b = await join(obj, room, 'v_b');
+    await ask(obj, a, { a: 'start' });
+    const run = inner(obj).escapes.get(room)! as unknown as { opened: string[] };
+    run.opened.push('chest', 'dial');
+    put(obj, room, 'v_a', ESCAPE_PLACES.vines[0]);
+    put(obj, room, 'v_b', ESCAPE_PLACES.vines[1]);
+    expect(await ask(obj, a, { a: 'tug', vine: 'west' })).toMatchObject({ ok: true });
+    clock += 5000;
+    expect(await ask(obj, b, { a: 'tug', vine: 'east' })).not.toHaveProperty('opened');
+    expect(run.opened).not.toContain('roots');
+    clock += 1000;
+    expect(await ask(obj, a, { a: 'tug', vine: 'west' })).toMatchObject({ ok: true, opened: 'roots' });
+    expect(b.last('escape')!.view!.locks[2]!.open).toBe(true);
+  });
+
+  it('has the hint owl offer a hint after a stuck minute', async () => {
+    const obj = roomObject();
+    const room = await freshHollow(obj);
+    const a = await join(obj, room, 'v_a');
+    await join(obj, room, 'v_b');
+    await ask(obj, a, { a: 'start' });
+    put(obj, room, 'v_a', ESCAPE_PLACES.hintOwl);
+    expect(await ask(obj, a, { a: 'hint' })).toMatchObject({ ok: false, reason: 'not-yet', view: { hint: false } });
+    clock += ESCAPE_HINT_AFTER_MS;
+    expect((await ask(obj, a, { a: 'state' })).view!.hint).toBe(true);
+    expect(await ask(obj, a, { a: 'hint' })).toMatchObject({ ok: true, hint: ESCAPE_LOCKS[0]!.hint });
+  });
+
+  it('pays each ticket holder 60 feathers once a day and the Hollow Moth once; a spectator plays for nothing', async () => {
+    collections.spectators.add(SPEC_CID);
+    const obj = roomObject();
+    const room = await freshHollow(obj);
+    const a = await join(obj, room, 'v_a', OWNER);
+    const b = await join(obj, room, 'v_b', GUEST);
+    const g = await spectator(obj, room, 'v_g');
+    expect(g.closed).toBeNull();
+    expect(g.last('escape')!.view).toMatchObject({ member: true, practice: true });
+    await ask(obj, a, { a: 'start' });
+    await clear(obj, room, a, b);
+    expect(a.last('escape')!.paid).toEqual({ feathers: ESCAPE_FEATHERS, total: ESCAPE_FEATHERS, item: ESCAPE_ITEM });
+    expect(b.last('escape')!.paid).toEqual({ feathers: ESCAPE_FEATHERS, total: ESCAPE_FEATHERS, item: ESCAPE_ITEM });
+    expect(g.last('escape')!.paid).toEqual({ feathers: 0, total: -1, practice: true });
+    expect(collections.escapeCalls.sort()).toEqual([GUEST, OWNER].sort());
+    expect(collections.book.owned(OWNER, undefined, clock)).toContain(ESCAPE_ITEM);
+    // Asking again pays nothing more.
+    await ask(obj, a, { a: 'open', lock: 'way-out' });
+    expect(collections.escapeCalls).toHaveLength(2);
+    // The same day, another run: no feathers, no second moth.
+    for (const ws of [a, b, g]) await obj.webSocketClose(ws as unknown as WebSocket, 1000);
+    expect(inner(obj).escapes.has(room)).toBe(false);
+    const again = await freshHollow(obj);
+    const a2 = await join(obj, again, 'v_a', OWNER);
+    const b2 = await join(obj, again, 'v_b', GUEST);
+    await ask(obj, a2, { a: 'start' });
+    await clear(obj, again, a2, b2);
+    expect(a2.last('escape')!.paid).toEqual({ feathers: 0, total: ESCAPE_FEATHERS, why: 'paid-today' });
   });
 });

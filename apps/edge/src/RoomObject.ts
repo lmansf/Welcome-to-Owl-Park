@@ -81,6 +81,28 @@ import {
   type ClientHello,
   type ClientNest,
   type ClientPuzzle,
+  type ClientEscape,
+  ESCAPE_DOOR,
+  ESCAPE_MIN_OWLS,
+  ESCAPE_MAX_OWLS,
+  cleanEscape,
+  escapeHint,
+  escapeJoin,
+  escapeLeave,
+  escapeLook,
+  escapeOpen,
+  escapeStart,
+  escapeTake,
+  escapeTug,
+  escapeView,
+  isEscapeRoom,
+  newEscape,
+  onStump,
+  randomEscapeRoom,
+  type EscapeAnswer,
+  type EscapePaid,
+  type EscapeStanding,
+  type EscapeState,
   type LanternState,
   type LogFields,
   type Logger,
@@ -236,6 +258,12 @@ const OBJECTS_KEY = 'objects';
 /** Storage keys for the hub's lantern beam and the last stage quiz round settled. */
 const LANTERNS_KEY = 'lanterns';
 const QUIZ_KEY = 'quiz';
+/** Storage key for the sealed hollows' runs (OP-310), so a group's run outlasts the object's sleep (not the night's restart). */
+const ESCAPES_KEY = 'escapes';
+/** How close to the sealed hollow's doorway an owl asks for its groups (room px from the doorway's middle). */
+const ESCAPE_DOOR_REACH = 220;
+/** The most waiting groups the doorway lists. */
+const ESCAPE_GROUPS_SHOWN = 6;
 /** The busy ribbon (OP-075) is asked of the overflow object at most this often; it also tells the rooms when it changes. */
 const NOTICE_FRESH_MS = 60_000;
 /** Storage key for the realms switch as last heard (the stained-glass climb): a woken object starts from it, not from closed. */
@@ -390,6 +418,10 @@ export class RoomObject extends DurableObject<Env> {
   private readonly rejected = new Map<string, { n: number; toldAt: number; why: PositionRejection }>();
   /** Spectators' sockets whose first refused frame was told (OP-191's spectator_refused): once per socket. */
   private readonly refusedTold = new Set<string>();
+  /** Each sealed hollow's run (OP-310), by room id: made at its first owl's hello, let go when its last owl leaves. */
+  private readonly escapes = new Map<string, EscapeState>();
+  /** Whether each running hollow's moon carving glowed when its owls were last told, so a sit or a hop off is told once. */
+  private readonly escapeLit = new Map<string, boolean>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -427,6 +459,12 @@ export class RoomObject extends DurableObject<Env> {
         if (!roomDef(id)) continue;
         this.leftBehind.set(id, kept);
         this.rooms.get(id)?.restoreLeavers(kept);
+      }
+      // The sealed hollows' runs whose owls are still here (OP-310): a group's run outlasts the object's sleep.
+      const escapes = await ctx.storage.get<unknown>(ESCAPES_KEY);
+      for (const raw of Array.isArray(escapes) ? escapes : []) {
+        const run = cleanEscape(raw);
+        if (run && this.rooms.get(run.room)?.count) this.escapes.set(run.room, run);
       }
       // A restart told but not yet closed (OP-181): the alarm still closes it.
       const closing = await ctx.storage.get<unknown>(RESTART_KEY);
@@ -480,7 +518,7 @@ export class RoomObject extends DurableObject<Env> {
 
   /** A frame's handling time in a room (every nest together): once its window has run TICK_EVERY_MS, the window's 95th percentile is logged. */
   private sampleTick(roomId: string, ms: number): void {
-    const room = isNestRoom(roomId) ? 'nest' : roomId;
+    const room = isNestRoom(roomId) ? 'nest' : isEscapeRoom(roomId) ? 'escape' : roomId;
     const now = Date.now();
     let w = this.ticks.get(room);
     if (!w) this.ticks.set(room, (w = { since: now, n: 0, ms: [] }));
@@ -965,7 +1003,10 @@ export class RoomObject extends DurableObject<Env> {
       case 'hello':
         return this.kick(ws, CLOSE.BAD_PROTOCOL, 'duplicate hello');
       case 'move':
-        return room.move(att.id, frame);
+        room.move(att.id, frame);
+        // In a sealed hollow, an owl stepping off the stump puts out the moon carving (OP-310).
+        if (isEscapeRoom(att.room)) this.escapeStir(att.room);
+        return;
       case 'rest':
         if (room.rest(att.id, frame.asleep) && frame.asleep) this.logOf(att).info('room.rest', 'afk_sleep', 'An owl fell asleep, its visitor idle.');
         return;
@@ -974,7 +1015,10 @@ export class RoomObject extends DurableObject<Env> {
         return room.dash(att.id, frame);
       case 'air':
         // Flight (OP-084): a state of the owl, counted against its own allowance, never logged.
-        return void room.air(att.id, frame.air);
+        room.air(att.id, frame.air);
+        // In a sealed hollow, an owl landing on the stump lights the moon carving (OP-310).
+        if (isEscapeRoom(att.room)) this.escapeStir(att.room);
+        return;
       case 'look': {
         const { look, recheck } = this.vetLook(att, frame.look);
         room.look(att.id, look);
@@ -1033,6 +1077,9 @@ export class RoomObject extends DurableObject<Env> {
       case 'course':
         if (!room.admit(att.id)) return;
         return this.serial(att, () => this.course(ws, att, room, frame));
+      case 'escape':
+        if (!room.admit(att.id)) return;
+        return this.serial(att, () => this.escape(ws, att, room, frame));
     }
   }
 
@@ -1140,6 +1187,8 @@ export class RoomObject extends DurableObject<Env> {
     // Back on a new socket (OP-134): before the room saw its old one go, or soon after its connection dropped.
     const replaced = room.has(att.id);
     const back = room.leaverOf(att.id);
+    // A sealed hollow lets in only its own group: while it waits, up to ESCAPE_MAX_OWLS; once started, nobody new (OP-310).
+    if (isEscapeRoom(att.room) && !this.escapeAdmits(ws, att)) return false;
     const result = room.join(peerOf(ws), att.id, { ...hello, look }, att.sid, { ...opts, welcome, ...(att.spec ? { spectator: true } : {}) });
     const log = this.logOf(att);
     if (result === 'full') {
@@ -1171,6 +1220,8 @@ export class RoomObject extends DurableObject<Env> {
     if (att.room === QUIZ_ROOM) await this.scheduleAlarm();
     // The arcade's score wall as it stands, with this owl's own bests.
     if (isArcadeRoom(att.room)) this.serial(att, () => this.sendWall(ws, att));
+    // Into a sealed hollow's group, and everyone inside sees who is waiting (OP-310).
+    if (isEscapeRoom(att.room)) this.escapeArrived(att);
     // Arriving in a room counts for quests that ask to visit it (none asks for a nest; nor for a spectator's arrival, OP-191).
     if (!isNestRoom(att.room)) this.serial(att, () => this.pushEvent(ws, att, { kind: 'visit', room: att.room }));
     return true;
@@ -1334,6 +1385,7 @@ export class RoomObject extends DurableObject<Env> {
 
   /** A nest nobody is in or at the door of is let go: its room, and the view kept while owls were there. */
   private forget(roomId: string): void {
+    if (isEscapeRoom(roomId)) return this.escapeTidy(roomId);
     const nestId = nestIdOf(roomId);
     if (!nestId || this.rooms.get(roomId)?.count) return;
     for (const a of this.admitting.values()) if (a.room === roomId) return;
@@ -1508,6 +1560,193 @@ export class RoomObject extends DurableObject<Env> {
       const board = credited?.includes(m) ? await stub.board(m) : undefined;
       for (const s of sockets) this.send(s, { t: 'puzzle', quest, ok: true, ...(theirs.view ? { view: theirs.view } : {}), ...(board ? { board } : {}) });
     }
+  }
+
+  // ---------- the sealed hollow (OP-310, escape.ts): one group's co-op escape room, its run kept here ----------
+
+  /** Where each owl in a hollow stands now, as the run's rules take it: its feet and what it stands on. */
+  private escapeStanding(room: Room, run: EscapeState): EscapeStanding {
+    const out = new Map<string, { pos: { x: number; y: number }; ground: number }>();
+    for (const m of run.members) {
+      const pos = room.positionOf(m.owl);
+      if (pos) out.set(m.owl, { pos, ground: room.groundOf(m.owl) });
+    }
+    return out;
+  }
+
+  /** Keep the hollows' runs in storage, so a group's run outlasts the object's sleep. */
+  private saveEscapes(): void {
+    this.ctx.waitUntil(this.ctx.storage.put(ESCAPES_KEY, [...this.escapes.values()]));
+  }
+
+  /** The sockets in a hollow now, with their attachments. */
+  private escapeSockets(roomId: string): Array<{ ws: WebSocket; att: Attachment }> {
+    const out: Array<{ ws: WebSocket; att: Attachment }> = [];
+    for (const ws of this.ctx.getWebSockets(`room:${roomId}`)) {
+      const att = ws.deserializeAttachment() as Attachment | null;
+      if (att?.state && att.room === roomId) out.push({ ws, att });
+    }
+    return out;
+  }
+
+  /** Every owl in the hollow sees its run as it now stands (each its own view: whether it is in the group, whether it plays for nothing). */
+  private escapePush(roomId: string, except: string | null = null): void {
+    const run = this.escapes.get(roomId);
+    const room = this.rooms.get(roomId);
+    if (!run || !room) return;
+    const standing = this.escapeStanding(room, run);
+    const now = Date.now();
+    this.escapeLit.set(roomId, onStump(run, standing).length > 0);
+    for (const { ws, att } of this.escapeSockets(roomId)) {
+      if (att.id === except) continue;
+      this.send(ws, { t: 'escape', ok: true, view: escapeView(run, att.id, standing, now) });
+    }
+  }
+
+  /** At a hollow's hello: its group's own owls come in; a fifth owl, or a newcomer once started, is turned away as from a full room. */
+  private escapeAdmits(ws: WebSocket, att: Attachment): boolean {
+    let run = this.escapes.get(att.room);
+    if (!run) {
+      run = newEscape(att.room, randomSid() + randomSid(), Date.now());
+      this.escapes.set(att.room, run);
+    }
+    const res = escapeJoin(structuredClone(run), { owl: att.id, cid: att.cid ?? null, spec: att.spec === true });
+    if (res.ok) return true;
+    // TODO-DOCS (OP-310): docs/LOGGING.md: room_join_refused reason `escape-started` (a sealed hollow whose group has started); a full one logs `cap`.
+    this.logOf(att).info('room.join', 'room_join_refused', 'An owl was turned away from a sealed hollow: its group is full or has started.', { reason: res.reason === 'full' ? 'cap' : 'escape-started', cap: ESCAPE_MAX_OWLS });
+    this.send(ws, { t: 'full', room: att.room, cap: ESCAPE_MAX_OWLS });
+    closeSocket(ws, CLOSE.ROOM_FULL, 'room full');
+    if (!this.rooms.get(att.room)?.count && run.phase === 'lobby' && !run.members.length) this.escapes.delete(att.room);
+    return false;
+  }
+
+  /** An owl is in its hollow: into the group (its place kept once started), and everyone sees it. */
+  private escapeArrived(att: Attachment): void {
+    const run = this.escapes.get(att.room);
+    if (!run) return;
+    if (escapeJoin(run, { owl: att.id, cid: att.cid ?? null, spec: att.spec === true }).ok) this.saveEscapes();
+    this.escapePush(att.room);
+  }
+
+  /**
+   * An owl left a hollow: out of the group while it waits (a started group keeps its place, should it
+   * come back on a dropped line). Its last owl gone, the run and the room are let go: a group's hollow is
+   * its own, and the night's restart (OP-181), closing every socket, ends a run in progress this way.
+   */
+  private escapeTidy(roomId: string): void {
+    const room = this.rooms.get(roomId);
+    for (const a of this.admitting.values()) if (a.room === roomId) return;
+    const run = this.escapes.get(roomId);
+    if (!room?.count) {
+      this.rooms.delete(roomId);
+      this.acts.delete(roomId);
+      this.escapeLit.delete(roomId);
+      if (run) {
+        this.escapes.delete(roomId);
+        this.saveEscapes();
+      }
+      return;
+    }
+    if (!run) return;
+    let moved = false;
+    for (const m of [...run.members]) if (!room.has(m.owl)) moved = escapeLeave(run, m.owl) || moved;
+    if (moved) this.saveEscapes();
+    this.escapePush(roomId);
+  }
+
+  /** An owl moved in a running hollow: when that lit the moon carving or put it out, everyone is told. */
+  private escapeStir(roomId: string): void {
+    const run = this.escapes.get(roomId);
+    const room = this.rooms.get(roomId);
+    if (!run || !room || run.phase !== 'running') return;
+    const lit = onStump(run, this.escapeStanding(room, run)).length > 0;
+    if (lit !== (this.escapeLit.get(roomId) ?? false)) this.escapePush(roomId);
+  }
+
+  /**
+   * The sealed hollow's frames (OP-310). At its doorway in the plaza: the groups waiting there, and a
+   * fresh room for a new group. In a hollow: its run, step by step, where the room says the owl stands.
+   * Anyone may play, a spectator too (OP-191); only an escape's pay is a ticket holder's.
+   */
+  private async escape(ws: WebSocket, att: Attachment, room: Room, frame: ClientEscape): Promise<void> {
+    const { r, a } = frame;
+    const answer = (extra: Omit<Extract<ServerFrame, { t: 'escape' }>, 't' | 'r' | 'a'>) => this.send(ws, { t: 'escape', r, a, ...extra });
+    if (room.sessionOf(att.id) !== att.sid) return;
+    if (a === 'doors') {
+      if (att.room !== ESCAPE_DOOR.room || !room.near(att.id, ESCAPE_DOOR.at, ESCAPE_DOOR_REACH)) return answer({ ok: false, reason: 'far' });
+      const groups = [...this.escapes.values()]
+        .filter((g) => g.phase === 'lobby' && g.members.length > 0 && g.members.length < ESCAPE_MAX_OWLS)
+        .sort((x, y) => y.members.length - x.members.length || x.createdAt - y.createdAt)
+        .slice(0, ESCAPE_GROUPS_SHOWN)
+        .map((g) => ({ room: g.room, owls: g.members.length }));
+      let fresh = randomEscapeRoom(() => crypto.getRandomValues(new Uint32Array(1))[0]! / 4294967296);
+      while (this.escapes.has(fresh) || this.rooms.has(fresh)) fresh = randomEscapeRoom(() => crypto.getRandomValues(new Uint32Array(1))[0]! / 4294967296);
+      return answer({ ok: true, doors: { groups, fresh } });
+    }
+    const run = isEscapeRoom(att.room) ? this.escapes.get(att.room) : undefined;
+    if (!run) return answer({ ok: false, reason: 'unknown' });
+    const now = Date.now();
+    const standing = this.escapeStanding(room, run);
+    let res: EscapeAnswer;
+    switch (a) {
+      case 'state':
+        return answer({ ok: true, view: escapeView(run, att.id, standing, now) });
+      case 'start': {
+        const here = run.members.filter((m) => room.has(m.owl)).length;
+        res = escapeStart(run, att.id, Math.max(here, 0), now);
+        break;
+      }
+      case 'look':
+        res = escapeLook(run, att.id, frame.lock, frame.n ?? 0, standing, now);
+        break;
+      case 'tug':
+        res = escapeTug(run, att.id, frame.vine, standing, now);
+        break;
+      case 'take':
+        res = escapeTake(run, att.id, standing, now);
+        break;
+      case 'open':
+        res = escapeOpen(run, att.id, frame.lock, frame.code, standing, now);
+        break;
+      case 'hint':
+        res = escapeHint(run, att.id, standing, now);
+        break;
+      default:
+        return answer({ ok: false, reason: 'unknown' });
+    }
+    const view = escapeView(run, att.id, standing, now);
+    if (!res.ok) return answer({ ok: false, reason: res.reason, ...(res.left !== undefined ? { left: res.left } : {}), view });
+    answer({ ok: true, view, ...(res.hint ? { hint: res.hint } : {}), ...(res.opened ? { opened: res.opened } : {}) });
+    if (!res.moved) return;
+    this.saveEscapes();
+    this.escapePush(att.room, att.id);
+    if (res.escaped) await this.escapeSettle(run);
+  }
+
+  /**
+   * The group is out: each owl of it still in the hollow is told what its escape earned, once. A ticket
+   * holder's pay is the collections object's (ESCAPE_FEATHERS once a park day, the Hollow Moth once ever);
+   * a spectator's escape is practice and asks it nothing (OP-191).
+   */
+  private async escapeSettle(run: EscapeState): Promise<void> {
+    for (const { ws, att } of this.escapeSockets(run.room)) {
+      const m = run.members.find((x) => x.owl === att.id);
+      if (!m || run.settled.includes(m.owl)) continue;
+      run.settled.push(m.owl);
+      let paid: EscapePaid;
+      if (m.spec || att.spec || !att.cid) paid = { feathers: 0, total: -1, practice: true };
+      else {
+        try {
+          paid = await this.collections().escapePaid(att.cid, visitOf(att));
+          if (paid.item) this.owned.get(att.cid)?.set.add(paid.item);
+        } catch (e) {
+          this.logOf(att).error('room.play', 'write_failed', 'An owl that escaped the sealed hollow was not paid: the collections object did not answer.', { error: e });
+          paid = { feathers: 0, total: -1 };
+        }
+      }
+      this.send(ws, { t: 'escape', ok: true, paid, view: escapeView(run, att.id, new Map(), Date.now()) });
+    }
+    this.saveEscapes();
   }
 
   /**

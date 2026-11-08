@@ -1,4 +1,4 @@
-import { isNestRoom, isPaintable, type RoomDef } from '@owl-park/shared';
+import { ESCAPE_COUNT, ESCAPE_MAX_OWLS, isEscapeRoom, isNestRoom, isPaintable, type RoomDef } from '@owl-park/shared';
 import { ROOMS as PARK_ROOMS, roomFor } from '@owl-park/shared/rooms';
 import type { Env } from './env';
 import { moduleLog } from './logs';
@@ -13,7 +13,7 @@ export function roomDef(id: string): RoomDef | undefined {
   return roomFor(id);
 }
 
-/** Whether a socket may ask for this room: one of the park's, or any well-formed nest. */
+/** Whether a socket may ask for this room: one of the park's, any well-formed nest, or any well-formed sealed hollow (OP-310). */
 export function isRoomId(id: string): boolean {
   return roomDef(id) !== undefined;
 }
@@ -27,11 +27,11 @@ export function paintableRoom(id: string): RoomDef | null {
 /** Owls in one nest at once, its owner aside: the owner always gets into its own nest. */
 export const NEST_CAP = 12;
 
-const DEFAULT_CAPS: Record<string, number> = { lobby: 80, hub: 80, grove: 40, market: 40, arcade: 40, homes: 40, nest: NEST_CAP, l1: 80 };
+const DEFAULT_CAPS: Record<string, number> = { lobby: 80, hub: 80, grove: 40, market: 40, arcade: 40, homes: 40, nest: NEST_CAP, l1: 80, [ESCAPE_COUNT]: ESCAPE_MAX_OWLS };
 
-/** A room's cap from ROOM_CAPS or the defaults. Every nest shares the `nest` entry. */
+/** A room's cap from ROOM_CAPS or the defaults. Every nest shares the `nest` entry, every sealed hollow the `escapes` one (a group: ESCAPE_MAX_OWLS). */
 export function roomCap(env: Env, roomId: string): number {
-  const key = isNestRoom(roomId) ? 'nest' : roomId;
+  const key = isNestRoom(roomId) ? 'nest' : isEscapeRoom(roomId) ? ESCAPE_COUNT : roomId;
   try {
     const caps = env.ROOM_CAPS ? (JSON.parse(env.ROOM_CAPS) as Record<string, number>) : {};
     const c = Object.hasOwn(caps, key) ? caps[key] : undefined;
@@ -75,13 +75,14 @@ export function spectatorLimit(env: Env, roomId: string): number {
 export const NESTS_COUNT = 'nests';
 
 /**
- * Population counts as every visitor may see them: the park's rooms by id, and all the nests
- * summed under one `nests` key, so no count ever names a nest. A page only adds them up.
+ * Population counts as every visitor may see them: the park's rooms by id, all the nests summed under
+ * one `nests` key and all the sealed hollows under one `escapes` key (OP-310), so no count ever names a
+ * nest or a group's room. A page only adds them up.
  */
 export function publicCounts(rooms: Iterable<readonly [string, { readonly count: number }]>): Record<string, number> {
   const out: Record<string, number> = {};
   for (const [id, r] of rooms) {
-    const key = isNestRoom(id) ? NESTS_COUNT : id;
+    const key = isNestRoom(id) ? NESTS_COUNT : isEscapeRoom(id) ? ESCAPE_COUNT : id;
     out[key] = (out[key] ?? 0) + r.count;
   }
   return out;

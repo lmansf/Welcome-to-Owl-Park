@@ -322,7 +322,7 @@ export function createOwlBuilder(root: HTMLElement, state: CollectionState, acti
     detail.appendChild(what);
     const sel = selected;
     const slot = equipSlotOf(v);
-    if (!state.owns(sel)) detail.appendChild(el('div', 'what', v.item.reward ? 'Not yet yours: clear every course to earn it.' : 'Not yet yours: earn it on a quest, or look for it in the feather shop.'));
+    if (!state.owns(sel)) detail.appendChild(el('div', 'what', v.item.reward ? (v.item.id === 'hollow-moth' ? 'Not yet yours: escape the sealed hollow with friends to earn it.' : 'Not yet yours: clear every course to earn it.') : 'Not yet yours: earn it on a quest, or look for it in the feather shop.'));
     else if (slot) {
       const on = actions.wear()?.[slot] === sel;
       detail.appendChild(
