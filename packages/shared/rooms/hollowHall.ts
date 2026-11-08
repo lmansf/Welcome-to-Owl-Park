@@ -126,7 +126,7 @@ const HALL_EAST = HALL_W - 40;
 
 /**
  * The hollow's edges (edges.ts; the owner's ask, Nov 8: the map should not read as big rectangles):
- * roots out of the wall's foot between the doorways, a mossy mound under each idol, root buttresses
+ * roots out of the wall's foot beside the doorways, a mossy mound under each idol, root buttresses
  * rounding the back corners, ferns end to end along the front with the root stair's hatch left clear,
  * and over each seam between two Commons a bark pillar, its roots flaring into the floor and leaf
  * litter across the floor. A ragged rim of bark runs along the top. The bumps are cut out of the
@@ -159,20 +159,24 @@ function hallEdges(): EdgePlacement[] {
     ...seams.map((x, i) => ({ id: `pillar-${i}`, key: 'edge-hollow-pillar', x: x - 60, y: -30 })),
     ...[0, 1, 2, 3].map((i) => ({ id: `rim-${i}`, key: 'edge-hollow-rim', x: i * ROOM_W, y: 0, ...(i % 2 ? { flip: true as const } : {}) })),
     back('corner-west', 'edge-hollow-corner-back', HALL_WEST),
-    back('roots-glass-1', 'edge-hollow-roots-a', 460),
+    // Roots out of the wall's foot either side of each Commons' pair of doorways, never in front of one.
+    back('roots-glass-1', 'edge-hollow-roots-a', realmDoorX('glass') - 275),
     ...HALL_COMMONS.filter((c) => c.votesFor).map((c) => back(`mound-${c.level}`, 'edge-hollow-idol-mound', idolX(c.level) - 150)),
-    back('roots-glass-2', 'edge-hollow-roots-a', 980, true),
+    back('roots-glass-2', 'edge-hollow-roots-a', courseDoorX('glass') + 150, true),
     back('flare-0', 'edge-hollow-root-flare', seams[0]! - 160),
     // The ink-wash Commons keeps the middle of its wall clear for the idol it will have.
-    back('roots-ink-1', 'edge-hollow-roots-a', 2060),
-    back('roots-ink-2', 'edge-hollow-roots-a', 2560, true),
+    back('roots-ink-1', 'edge-hollow-roots-a', realmDoorX('ink') - 275),
+    // Only a few roots fit between its course gate and the knothole.
+    back('roots-ink-2', 'edge-hollow-roots-small', courseDoorX('ink') + 112, true),
     // Between the knothole and the trunk's door there is only room for a few roots.
     back('flare-1', 'edge-hollow-roots-small', seams[1]! - 60),
-    back('roots-grove-1', 'edge-hollow-roots-a', 3660),
-    back('roots-grove-2', 'edge-hollow-roots-a', 4180, true),
+    // And only a few between the trunk's door and the clearing's vine curtain.
+    back('roots-grove-1', 'edge-hollow-roots-small', realmDoorX('grove') - 225),
+    back('roots-grove-2', 'edge-hollow-roots-a', courseDoorX('grove') + 150, true),
     back('flare-2', 'edge-hollow-root-flare', seams[2]! - 160, true),
-    back('roots-market-1', 'edge-hollow-roots-a', 5260),
-    back('roots-market-2', 'edge-hollow-roots-a', 5780, true),
+    back('roots-market-1', 'edge-hollow-roots-a', realmDoorX('market') - 275),
+    // Short of the east corner's buttress.
+    back('roots-market-2', 'edge-hollow-roots-a', courseDoorX('market') + 110, true),
     back('corner-east', 'edge-hollow-corner-back', HALL_EAST - 180, true),
     front('corner-front-west', 'edge-hollow-corner-front', HALL_WEST),
     ...ferns(HALL_WEST + 140, [A, B, C, A, B, C, A], 'west'),
