@@ -10,14 +10,26 @@ const FEATHER_TINT = 0xffd36a;
 const FEATHER_ALPHA = 0.85;
 /** A feather about as long as an owl's foot to its knee: big enough to spot on a phone (the symbol is 32 px). */
 const FEATHER_SCALE = 1.5;
-const GLINT_TINT = 0xfff2c2;
-/** The glint's size: the dot is 16 px, so about an owl's head across at its fullest. */
-const GLINT_SCALE = 2.6;
+/** A dark edge under each feather and glint, so gold still reads on a pale floor (a flat bright shape vanishes there). */
+const EDGE_TINT = 0x2b1d08;
+const EDGE_ALPHA = 0.55;
+/** The glint: a four-pointed sparkle over the doorway, gold like the feathers (the symbol is 32 px). */
+const GLINT_TINT = 0xffe08a;
+const GLINT_SCALE = 1.4;
+
+type Shape = Phaser.GameObjects.Container;
+
+/** A gold symbol with its dark edge beneath it, as one thing to place, fade and float. */
+function edged(scene: Phaser.Scene, x: number, y: number, key: string, tint: number, scale: number): Shape {
+  const edge = scene.add.image(0, 0, key).setTint(EDGE_TINT).setAlpha(EDGE_ALPHA).setScale(scale * 1.25);
+  const top = scene.add.image(0, 0, key).setTint(tint).setScale(scale);
+  return scene.add.container(x, y, [edge, top]);
+}
 
 /** The trail and the glints drawn in one room. */
 export class FeatherTrail {
-  private feathers: Phaser.GameObjects.Image[] = [];
-  private readonly glints = new Map<string, Phaser.GameObjects.Image>();
+  private feathers: Shape[] = [];
+  private readonly glints = new Map<string, Shape>();
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -35,8 +47,8 @@ export class FeatherTrail {
     for (const d of doors) {
       if (this.glints.has(d.id)) continue;
       const m = doorSpot(d);
-      const g = this.scene.add.image(m.x, m.y - 26, 'fx-dot').setTint(GLINT_TINT).setScale(GLINT_SCALE).setAlpha(0.9).setDepth(m.y + 2).setBlendMode(Phaser.BlendModes.ADD);
-      if (!this.calm()) this.scene.tweens.add({ targets: g, alpha: 0.35, scale: GLINT_SCALE * 0.55, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: (d.rect.x % 7) * 120 });
+      const g = edged(this.scene, m.x, m.y - 30, symbolTexture(this.scene, 'star4'), GLINT_TINT, GLINT_SCALE).setDepth(m.y + 2);
+      if (!this.calm()) this.scene.tweens.add({ targets: g, scale: 0.6, angle: 45, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: (d.rect.x % 7) * 120 });
       this.glints.set(d.id, g);
     }
   }
@@ -46,7 +58,7 @@ export class FeatherTrail {
     this.clear();
     const key = symbolTexture(this.scene, 'feather');
     trailPoints(way).forEach((p, i) => {
-      const f = this.scene.add.image(p.x, p.y - 18, key).setTint(FEATHER_TINT).setScale(FEATHER_SCALE).setAlpha(0).setDepth(p.y + 1).setRotation(((i % 3) - 1) * 0.35);
+      const f = edged(this.scene, p.x, p.y - 18, key, FEATHER_TINT, FEATHER_SCALE).setAlpha(0).setDepth(p.y + 1).setRotation(((i % 3) - 1) * 0.35);
       this.scene.tweens.add({ targets: f, alpha: FEATHER_ALPHA, duration: 500, delay: i * 140 });
       if (!this.calm()) this.scene.tweens.add({ targets: f, y: p.y - 26, duration: 1400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: i * 140 });
       this.feathers.push(f);
