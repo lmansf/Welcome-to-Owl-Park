@@ -407,6 +407,7 @@ test.describe('room server', () => {
   });
 
   test('leaving the park keeps a ticket running, the turnstiles let the owl back in, and travel home finds its nest', async ({ browser, request }) => {
+    test.slow(); // Two owls, leaving, re-entering and travelling home can exhaust 90 s on software-rendered CI.
     const issued = await request.post('/api/admin/tickets', { headers: { 'X-Admin-Key': E2E_ADMIN_KEY }, data: { kind: 'day', quantity: 1 } });
     expect(issued.status()).toBe(200);
     const { link } = (await issued.json()) as { link: string };

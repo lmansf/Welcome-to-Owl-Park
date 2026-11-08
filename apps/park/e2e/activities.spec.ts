@@ -81,8 +81,13 @@ test.describe('activities (this device)', () => {
   });
 
   test("the robot owl plays a tune and the owl copies it note by note", async ({ page }) => {
+    test.slow(); // Cold art plus browser assertions can exceed the default on software-rendered CI.
     await openPark(page, { collector: 'e2e-copy', tz: 'UTC', room: 'market' });
     await walk(page, 1480, 755);
+    // Browser round trips must not spend the visitor's six-second note window. Only Date is fixed;
+    // frames and timers still draw the real card. The activity unit tests cover deadline expiry.
+    const copyTime = Date.UTC(2026, 10, 8, 18);
+    await page.clock.setFixedTime(new Date(copyTime));
     await act(page, 'act:copy');
     const card = page.locator('.play-card.copy');
     await expect(card).toBeVisible();
@@ -92,9 +97,12 @@ test.describe('activities (this device)', () => {
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-copy.png` });
     const game = (await state(page)).play?.copy;
     expect(game?.tune).toHaveLength(3);
+    await page.clock.setFixedTime(new Date(copyTime + 3_000));
     await expect(card).toHaveAttribute('data-phase', 'play', { timeout: 6_000 });
     const before = await feathers(page);
     for (const [i, note] of game!.tune.entries()) {
+      // Honour the room's 250 ms note rate limit while keeping browser latency off the game clock.
+      await page.clock.setFixedTime(new Date(copyTime + 3_000 + i * 300));
       // Each note has a few seconds: press it at once rather than wait for the card to sit still,
       // which on a slow machine drawing the neon street can take longer than the note's window.
       await card.locator(`[data-note="${note}"]`).dispatchEvent('click');
@@ -106,6 +114,7 @@ test.describe('activities (this device)', () => {
     expect(await feathers(page)).toBeGreaterThanOrEqual(before + 1);
     // A wrong note ends the game.
     const next = (await state(page)).play!.copy!.tune;
+    await page.clock.setFixedTime(new Date(copyTime + 8_000));
     await expect(card).toHaveAttribute('data-phase', 'play', { timeout: 8_000 });
     await card.locator(`[data-note="${next[0] === 'hoot' ? 'flap' : 'hoot'}"]`).dispatchEvent('click');
     await expect(page.getByText(/^Not quite: the robot owl played/)).toBeVisible();
