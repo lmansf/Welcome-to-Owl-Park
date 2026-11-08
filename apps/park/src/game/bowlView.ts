@@ -17,7 +17,7 @@
  * over it at full size), and drawn under the room's pieces and owls: an owl stands in front of the wall.
  */
 import type Phaser from 'phaser';
-import type { RoomBowl, RoomDef } from '@owl-park/shared';
+import { KIT_ART, type RoomBowl, type RoomDef } from '@owl-park/shared';
 
 /** The canvas is painted at this fraction of the room's size. */
 export const BOWL_SCALE = 1 / 3;
@@ -36,7 +36,6 @@ const C = {
   shade: [8, 5, 16] as const,
   wood: 'rgba(122, 85, 50, 0.26)',
   ring: 0x2a1708,
-  ringLit: 0xd8b07a,
 } as const;
 
 /** The rim at angle `t` (0 east, clockwise on screen), and its outward normal. */
@@ -276,15 +275,34 @@ function steady(i: number): number {
   return x - Math.floor(x);
 }
 
+/**
+ * The shadow each piece standing on the floor casts at its foot (a doorway, a root), soft-edged: it
+ * stands up off the floor and does not lie painted on it.
+ */
+function drawFootShadows(g: Phaser.GameObjects.Graphics, pieces: RoomDef['pieces']): void {
+  for (const p of pieces ?? []) {
+    const art = KIT_ART[p.key];
+    if (!art) continue;
+    const w = ((art.right ?? art.w) - (art.left ?? 0)) * (p.scale ?? 1) * 0.9;
+    const h = Math.min(70, w * 0.22);
+    for (const [k, a] of [
+      [1.25, 0.08],
+      [1, 0.12],
+      [0.7, 0.16],
+    ] as const)
+      g.fillStyle(0x000000, a).fillEllipse(p.x, p.y - h * 0.15, w * k, h * k);
+  }
+}
+
 /** The heartwood's grain over the floor, crisp at full size: its growth rings and the cracks across them. */
 function drawGrain(g: Phaser.GameObjects.Graphics, b: RoomBowl): void {
   const ts = angles(0, 2 * Math.PI, 240);
   for (let i = 1; i <= RINGS; i++) {
     const k = (i - 0.35) / RINGS;
     const at = (dk: number) => ts.map((t) => ringPoint(b, k * wobble(k, t) + dk, t));
-    // A groove: a dark line, its lit edge just inside it.
-    g.lineStyle(7, C.ring, 0.2).strokePoints(at(0), true, true);
-    g.lineStyle(3, C.ringLit, 0.1).strokePoints(at(-0.004), true, true);
+    // A shallow groove, soft at its edges, so it reads as grain and never as a step to jump.
+    g.lineStyle(16, C.ring, 0.05).strokePoints(at(0), true, true);
+    g.lineStyle(5, C.ring, 0.16).strokePoints(at(0), true, true);
   }
   for (let j = 0; j < CHECKS; j++) {
     const t = (j / CHECKS) * 2 * Math.PI + (steady(j) - 0.5) * 0.18;
@@ -313,7 +331,9 @@ export function drawBowl(
     tex.refresh();
   }
   const image = scene.add.image(0, 0, key).setOrigin(0).setDisplaySize(room.size.w, room.size.h).setDepth(BOWL_DEPTH.paint);
-  drawGrain(scene.add.graphics().setDepth(BOWL_DEPTH.grain), b);
+  const grain = scene.add.graphics().setDepth(BOWL_DEPTH.grain);
+  drawGrain(grain, b);
+  drawFootShadows(grain, room.pieces);
   // The wall's edges, crisp at full size: the lit lip of its top, the dark line of its foot along the back.
   const ts = angles(0, 2 * Math.PI, 240);
   const lines = scene.add.graphics().setDepth(BOWL_DEPTH.lines);
