@@ -66,8 +66,6 @@ export const INTERACTABLES: readonly InteractableDef[] = [
   { id: 'm3-ground-leaves-fungus', kind: 'leaf-pile', room: 'm3-ground', pos: { x: 2175, y: 770 }, top: 282 },
   // ...and the boarded stall roofs by the market square gather the ones the fence lets through.
   { id: 'm3-ground-leaves-roof', kind: 'leaf-pile', room: 'm3-ground', pos: { x: 3900, y: 770 }, top: 350 },
-  // Down the root stair, the leaves that fall through the roots settle on the log ledge on the trunk.
-  { id: 'm3-under-leaves-ledge', kind: 'leaf-pile', room: 'm3-under', pos: { x: 2070, y: 770 }, top: 264 },
   // The Great Hollow: leaves blown in at the knothole drift to the front of each Commons, one pile a
   // Commons, between its realm's doorway and its idol, and one more by the root stair's hatch.
   ...(['glass', 'ink', 'grove', 'market'] as const).map((level, i): InteractableDef => ({ id: `m3-hall-leaves-${level}`, kind: 'leaf-pile', room: 'm3-hall', pos: { x: i * 1600 + 560, y: 820 } })),
@@ -93,9 +91,11 @@ export const INTERACTABLES: readonly InteractableDef[] = [
   { id: 'lobby-leaves-fountain', kind: 'leaf-pile', room: 'lobby', pos: { x: 860, y: 790 } },
   { id: 'lobby-leaves-bench', kind: 'leaf-pile', room: 'lobby', pos: { x: 1100, y: 775 } },
   { id: 'lobby-leaves-booth', kind: 'leaf-pile', room: 'lobby', pos: { x: 1650, y: 765 } },
-  // The arcade (OP-306): leaves blow in at the open street doorway and skid along the wet tiles until
-  // something stops them: the chrome pillar in the passage past Hoot & Hop, the wall under the
-  // scoreboard, and the second chrome pillar before Talon Toss.
+  // The arcade (OP-306): leaves fall down the hatch from the Great Hollow and pile at the foot of the
+  // stair, where the root stair's pile went when it folded into the arcade; the draught carries the rest
+  // along the wet tiles until something stops them: the chrome pillar in the passage past Hoot & Hop,
+  // the wall under the scoreboard, and the second chrome pillar before Talon Toss.
+  { id: 'arcade-leaves-stair', kind: 'leaf-pile', room: 'arcade', pos: { x: 150, y: 850 } },
   { id: 'arcade-leaves-pillar', kind: 'leaf-pile', room: 'arcade', pos: { x: 1250, y: 780 } },
   { id: 'arcade-leaves-scoreboard', kind: 'leaf-pile', room: 'arcade', pos: { x: 2550, y: 790 } },
   { id: 'arcade-leaves-pillar-east', kind: 'leaf-pile', room: 'arcade', pos: { x: 3080, y: 770 } },

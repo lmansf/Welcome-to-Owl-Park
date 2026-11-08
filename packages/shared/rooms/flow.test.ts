@@ -23,19 +23,16 @@ function doorwaysFrom(start: string): Map<string, number> {
   return far;
 }
 
-/** The areas of the new map a guest goes looking for (OP-305): the realms' Commons, each course's start, the Party Grove, the cavern and the arcade. */
-const AREAS = ['m3-hall', 'glass', 'grove', 'market', 'brush-1', 'canopy-1', 'circuit-1', 'hub', 'm3-under', 'arcade'];
-/** Three doorways down today, by the root stair; its own doorway off the Great Hollow lands next. */
-const NOT_YET = new Set(['arcade']);
-
+/** The areas of the new map a guest goes looking for (OP-305): the realms' Commons, each course's start, the Party Grove and the arcade. */
+const AREAS = ['m3-hall', 'glass', 'grove', 'market', 'brush-1', 'canopy-1', 'circuit-1', 'hub', 'arcade'];
 describe('the new map’s flow: hub and spokes from the Treetop Commons (OP-305)', () => {
   it('reaches every area within two doorways of the Commons', () => {
     const far = doorwaysFrom(LOBBY_ROOM);
-    for (const room of AREAS) expect(far.get(room), room).toBeLessThanOrEqual(NOT_YET.has(room) ? 3 : 2);
+    for (const room of AREAS) expect(far.get(room), room).toBeLessThanOrEqual(2);
   });
 
   it('walks back to the Commons from every area in as few doorways', () => {
-    for (const room of AREAS) expect(doorwaysFrom(room).get(LOBBY_ROOM), room).toBeLessThanOrEqual(NOT_YET.has(room) ? 3 : 2);
+    for (const room of AREAS) expect(doorwaysFrom(room).get(LOBBY_ROOM), room).toBeLessThanOrEqual(2);
   });
 
   it('puts every area but the courses on the map, a tap away', () => {

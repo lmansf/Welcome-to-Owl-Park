@@ -2,6 +2,7 @@
  * Runtime configuration. Everything here is public: it ships in the browser bundle.
  * Query-string overrides exist for tests and demos (e.g. ?transport=local&room=grove).
  */
+import { roomForLink } from '@owl-park/shared';
 import { PHONE_ROOM_BUDGET } from './game/artFiles';
 import { sizeBoxesWanted } from './game/sizeBoxes';
 import { skinTrialWanted } from './game/skinTrial';
@@ -124,6 +125,9 @@ export function readConfig(): ParkConfig {
   else if (requested === 'edge') transport = 'edge';
   else if (edgeUrl) transport = 'edge';
   else transport = 'local';
+  // A link to a room folded into another (OP-306) lands in that one, at its own way in.
+  const linked = q.get('room');
+  const room = linked === null ? 'lobby' : roomForLink(linked);
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
   return {
     transport,
@@ -131,8 +135,8 @@ export function readConfig(): ParkConfig {
     shopUrl: ((env.VITE_SHOP_URL as string | undefined) ?? '').trim(),
     ticketsUrl: ((env.VITE_TICKETS_URL as string | undefined) ?? '').trim(),
     home: !q.has('room') && q.get('home') !== '0',
-    room: q.get('room') ?? 'lobby',
-    spawn: q.get('spawn') ?? undefined,
+    room,
+    spawn: room === linked || linked === null ? (q.get('spawn') ?? undefined) : undefined,
     id: q.get('id') ?? undefined,
     look: q.get('look') ?? undefined,
     collector: q.get('collector') ?? undefined,

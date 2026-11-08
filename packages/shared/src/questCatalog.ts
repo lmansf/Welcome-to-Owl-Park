@@ -133,7 +133,7 @@ export const STORY_QUESTS: readonly QuestDef[] = [
     requires: ['story-welcome'],
   },
   {
-    // The new map's way down the tree (map 3): two piles in the Great Hollow and one on the root stair, so the way down has errands of its own.
+    // The new map's way down the tree (map 3): two piles in the Great Hollow and one at the foot of the arcade's stair, so the way down has errands of its own.
     id: 'story-pip-stair-leaves',
     title: 'Leaves on the stair',
     giver: 'pip',
@@ -142,9 +142,9 @@ export const STORY_QUESTS: readonly QuestDef[] = [
     length: 'long',
     cadence: 'story',
     // Four steps as before, so a quest under way keeps its place: the Commons' pile is now in the hollow.
-    steps: [flop(1, 'm3-hall'), flop(1, 'm3-hall'), flop(1, 'm3-under'), emote('hoot', { npc: 'pip' })],
+    steps: [flop(1, 'm3-hall'), flop(1, 'm3-hall'), flop(1, 'arcade'), emote('hoot', { npc: 'pip' })],
     reward: { feathers: 50, item: null },
-    offer: 'The leaves come down the tree faster than I can sweep. Flop into two piles in the great hollow and one on the root stair, then come back and hoot for me.',
+    offer: 'The leaves come down the tree faster than I can sweep. Flop into two piles in the great hollow and one in the arcade below it, then come back and hoot for me.',
     thanks: 'The hollow is clear and the lanterns shine again. Here, for your trouble.',
     requires: ['story-welcome'],
   },
