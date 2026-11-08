@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LINE_DEFAULTS, REALMS_DEFAULTS, RIBBON_DEFAULTS, hashForLog } from '@owl-park/shared';
 import type { Env } from '../src/env';
+import { ART_TRIAL_HOSTS } from '@owl-park/shared/headers';
 import { HSTS, PERMISSIONS_POLICY, REPORT_EVERY_MS, forgetViolations, originAllowed, parkPolicy, withNonce } from '../src/guard';
 import { forgetGate } from '../src/gateSwitch';
 import { API_LIMITS, Counter, forgetLimits, isPublicCall, isTicketCall } from '../src/limits';
@@ -103,6 +104,18 @@ describe('the park’s page and every answer (OP-140)', () => {
     expect(r.headers.get('ETag')).toBeNull();
     const again = await call('/index.html');
     expect(again.headers.get('Content-Security-Policy')).not.toContain(nonce);
+  });
+
+  it('lets only an art trial’s page (?art=<name>) fetch the trial’s files from where they are kept', () => {
+    const plain = parkPolicy(new URL('https://park.example/?room=hub'), 'n');
+    const trial = parkPolicy(new URL('https://park.example/?room=hub&art=partygrove'), 'n');
+    for (const host of ART_TRIAL_HOSTS) {
+      expect(plain).not.toContain(host);
+      expect(trial).toContain(`img-src 'self' data: blob: ${host};`);
+      expect(trial).toContain(`connect-src 'self' wss://park.example https://in.heycatch.ai ${host};`);
+    }
+    // A name that is not letters and digits opens nothing.
+    for (const bad of ['', 'Party', '../x', 'a b']) expect(parkPolicy(new URL(`https://park.example/?art=${encodeURIComponent(bad)}`), 'n')).toBe(parkPolicy(new URL('https://park.example/'), 'n'));
   });
 
   it('keeps HSTS to a year on the hostname that answers, never its subdomains or a preload list, and never on this machine’s http', async () => {

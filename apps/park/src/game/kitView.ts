@@ -2,6 +2,7 @@ import type Phaser from 'phaser';
 import { KIT_ART, kitCells, kitDrawPlan, mapOf, type KitDraw, type KitLayer, type KitOp, type RoomDef } from '@owl-park/shared';
 import { kitDemoFor } from '@owl-park/shared/rooms/kit';
 import { TREE_PLAY_TINT } from './treeView';
+import { artTrialRoom } from './artTrial';
 
 /**
  * The level assembler's drawing (OP-234): a room built from the art kit, drawn at runtime from its
@@ -22,8 +23,14 @@ import { TREE_PLAY_TINT } from './treeView';
  * flag that stands the kit's l4 in for the painted one) and the greybox tool (`pnpm kit:greybox`).
  */
 
-/** The room drawn for `room`: a kit room as it is; a painted one, unless the page asks for the paintings (`?kit=0`), as the kit room that stands in for it. */
-export function drawnRoom(room: RoomDef, cfg: { kit: boolean }): RoomDef {
+/**
+ * The room drawn for `room`: a kit room as it is; a painted one, unless the page asks for the paintings
+ * (`?kit=0`), as the kit room that stands in for it. On an art trial's page (`?art=`, artTrial.ts) the
+ * trial's room is drawn from the trial's layers.
+ */
+export function drawnRoom(room: RoomDef, cfg: { kit: boolean; art?: string | null }): RoomDef {
+  const trial = artTrialRoom(room, cfg.art);
+  if (trial !== room) return trial;
   if (room.kit || !cfg.kit) return room;
   return kitDemoFor(room.id) ?? room;
 }
