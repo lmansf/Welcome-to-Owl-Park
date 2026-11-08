@@ -726,13 +726,15 @@ export function kitProblems(room: RoomDef): string[] {
   // Rolling ground (OP-238): each hill stood on as its profile, its pieces fit for their angles, its ends met.
   for (const h of kit.hills ?? []) out.push(...kitHillProblems(room, h));
 
-  // A room seen from above (the Great Hollow) is walked across its floor polygons, not along a ground
-  // line, and has no paths: every bit of its floor is drawn by a surface of the kit.
+  // A room seen from above (the Great Hollow, a plaza) is walked across its floor polygons, not along a
+  // ground line, and has no paths: every bit of its floor is drawn by a surface of the kit, or by its
+  // painting where a plaza runs on below one (plaza.ts).
   if (!seenFromSide(room) && !kit.paths?.length) {
+    const painted = (x: number, y: number) => (room.backgrounds ?? []).some((t) => (t.rate ?? 1) === 1 && !t.plain && x >= t.x && x < t.x + ROOM_W && y >= t.y && y < t.y + ROOM_H);
     for (const poly of room.walkable) {
       const xs = poly.map((p) => p.x);
       const ys = poly.map((p) => p.y);
-      const bare = (x: number, y: number) => pointInPolygon({ x, y }, poly) && !(kit.surfaces ?? []).some((s) => pointInRect({ x, y }, s.rect));
+      const bare = (x: number, y: number) => pointInPolygon({ x, y }, poly) && !painted(x, y) && !(kit.surfaces ?? []).some((s) => pointInRect({ x, y }, s.rect));
       search: for (let x = Math.min(...xs); x <= Math.max(...xs); x += 16)
         for (let y = Math.min(...ys); y <= Math.max(...ys); y += 16)
           if (bare(x, y)) {

@@ -96,6 +96,18 @@ export const INTERACTABLES: readonly InteractableDef[] = [
   // The arcade (OP-306): leaves blow in at the open street doorway and skid along the wet tiles until
   // something stops them: the chrome pillar in the passage past Hoot & Hop, the wall under the
   // scoreboard, and the second chrome pillar before Talon Toss.
+  // The Treetop Commons' plaza (Nov 8): a moonbeam in its middle where a crowd gathers, leaves blown into its corners and along its front.
+  { id: 'lobby-moonbeam', kind: 'moonbeam', room: 'lobby', pos: { x: 1600, y: 1110 } },
+  { id: 'lobby-leaves-plaza-west', kind: 'leaf-pile', room: 'lobby', pos: { x: 430, y: 1180 } },
+  { id: 'lobby-leaves-plaza-east', kind: 'leaf-pile', room: 'lobby', pos: { x: 2780, y: 1180 } },
+  { id: 'lobby-leaves-planters-west', kind: 'leaf-pile', room: 'lobby', pos: { x: 1000, y: 1270 } },
+  { id: 'lobby-leaves-planters-east', kind: 'leaf-pile', room: 'lobby', pos: { x: 2200, y: 1270 } },
+  // The arcade hall's floor (Nov 8): a moonbeam through a skylight over each of its two gathering rings, leaves blown in from the street.
+  { id: 'arcade-moonbeam-west', kind: 'moonbeam', room: 'arcade', pos: { x: 1200, y: 1110 } },
+  { id: 'arcade-moonbeam-east', kind: 'moonbeam', room: 'arcade', pos: { x: 3600, y: 1110 } },
+  { id: 'arcade-leaves-street', kind: 'leaf-pile', room: 'arcade', pos: { x: 300, y: 1230 } },
+  { id: 'arcade-leaves-floor', kind: 'leaf-pile', room: 'arcade', pos: { x: 2400, y: 1200 } },
+  { id: 'arcade-leaves-end', kind: 'leaf-pile', room: 'arcade', pos: { x: 4500, y: 1230 } },
   { id: 'arcade-leaves-pillar', kind: 'leaf-pile', room: 'arcade', pos: { x: 1250, y: 780 } },
   { id: 'arcade-leaves-scoreboard', kind: 'leaf-pile', room: 'arcade', pos: { x: 2550, y: 790 } },
   { id: 'arcade-leaves-pillar-east', kind: 'leaf-pile', room: 'arcade', pos: { x: 3080, y: 770 } },

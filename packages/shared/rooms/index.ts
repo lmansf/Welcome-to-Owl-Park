@@ -11,6 +11,7 @@ import { CANOPY_COURSE, CANOPY_ROOMS } from './updraftCanopy';
 import { BRUSH_COURSE, BRUSH_ROOMS } from './brushstrokeBridges';
 import { CIRCUIT_COURSE, CIRCUIT_ROOMS } from './neonCourse';
 import { HALL_ANCHORS, HALL_ID, HALL_ROOM, fromRealm } from './hollowHall';
+import { growToPlaza } from './plaza';
 import type { CourseDef } from '../src/course';
 import { realmStart, realmStartAnchors } from '../src/realmStart';
 
@@ -1557,6 +1558,41 @@ ROOMS['m3-under'] = newMapLevel('m3-under', 'l0', {
 });
 // The side-view copy of the tree's arcade the cavern led to before OP-283; nothing leads in now.
 ROOMS['m3-cave'] = newMapLevel('m3-cave', 'l0-arcade', { 'to-l0': at('m3-under', 'from-arcade') });
+
+// ---- Plazas (plaza.ts) ----
+//
+// The owner's ask, Nov 8: the top-down rooms should feel like a town center, somewhere 80 owls could
+// gather. Each painted common room runs on below its painting into a plaza: the Treetop Commons in
+// front of the turnstiles, and the arcade hall in front of its cabinets.
+
+/** Where the plazas' floors end, their gathering spots' middles (each a moonbeam in a worn ring). */
+export const LOBBY_PLAZA = { front: 1335, rings: [{ x: 1600, y: 1110 }] } as const;
+export const ARCADE_PLAZA = { front: 1335, rings: [{ x: 1200, y: 1110 }, { x: 3600, y: 1110 }] } as const;
+
+ROOMS['lobby'] = growToPlaza(ROOMS['lobby']!, {
+  ...LOBBY_PLAZA,
+  rings: [...LOBBY_PLAZA.rings],
+  oldFront: 888,
+  west: 0,
+  east: 2 * ROOM_W - 40,
+  texture: 'kit-tex-entrance-plaza-stone',
+  join: 'edge-commons-join',
+  ring: 'edge-commons-ring',
+  corner: 'edge-commons-corner-front',
+  frontBumps: ['edge-commons-planters-a', 'edge-commons-planters-b', 'edge-commons-planters-a', 'edge-commons-planters-b', 'edge-commons-planters-a'],
+});
+ROOMS['arcade'] = growToPlaza(ROOMS['arcade']!, {
+  ...ARCADE_PLAZA,
+  rings: [...ARCADE_PLAZA.rings],
+  oldFront: 888,
+  west: 0,
+  east: 3 * ROOM_W - 10,
+  texture: 'kit-tex-neon-wet-pavement',
+  join: 'edge-arcade-join',
+  ring: 'edge-arcade-ring',
+  corner: 'edge-arcade-corner-front',
+  frontBumps: ['edge-arcade-clutter-a', 'edge-arcade-clutter-b', 'edge-arcade-clutter-a', 'edge-arcade-clutter-b', 'edge-arcade-clutter-a', 'edge-arcade-clutter-b', 'edge-arcade-clutter-a'],
+});
 
 // ---- The Great Hollow (hollowHall.ts) ----
 //

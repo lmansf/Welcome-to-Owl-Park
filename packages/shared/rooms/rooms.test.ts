@@ -6,7 +6,7 @@ import { FURNITURE, NEST_SPOTS, isStreetRoom, nestDoorIndex } from '../src/homes
 import type { Vec2 } from '../src/protocol';
 import { ROOM_H, ROOM_MAX_H, ROOM_MAX_W, ROOM_W, backgroundTiles, findSpawn, foregroundTiles, mapOf, seenFromSide, tileFade, tilePlacement, type DoorDef, type RoomDef } from '../src/room';
 import { OWL_SPECIES, SPECIES } from '../src/species';
-import { ANCHORS, CLOSED_SIGNS, GATED_ROOMS, GUARDIANS, NEST_MIRROR, NEST_PARK_SIGN, NEST_ROOM, ROOMS, STREET_DOORS, STREET_ROOM, TREE_ARRIVAL, TREE_GROUND, TREE_REALMS, getRoom, roomFor } from './index';
+import { ANCHORS, CLOSED_SIGNS, GATED_ROOMS, GUARDIANS, NEST_MIRROR, NEST_PARK_SIGN, NEST_ROOM, ROOMS, STREET_DOORS, STREET_ROOM, TREE_ARRIVAL, TREE_GROUND, TREE_REALMS, ARCADE_PLAZA, getRoom, roomFor } from './index';
 import { INTERACTABLES } from '../src/interactables';
 import { resolveTarget, steerTarget } from '../src/resolveTarget';
 import { NPCS } from '../src/npcs';
@@ -68,6 +68,14 @@ describe('room size and art tiles', () => {
       if (!tiles.length && mapOf(room) !== 2 && room.kit?.surfaces?.length) {
         const area = room.kit.surfaces.reduce((sum, s) => sum + s.rect.w * s.rect.h, 0);
         expect(area, 'its surfaces cover the room').toBe(room.size.w * room.size.h);
+        return;
+      }
+      // A painted room grown into a plaza (plaza.ts): its painting's screens on top, its kit's floor under them.
+      if (tiles.length && mapOf(room) !== 2 && room.kit?.surfaces?.length) {
+        const surfaces = room.kit.surfaces.reduce((sum, s) => sum + s.rect.w * s.rect.h, 0);
+        // Where a surface tucks under the painting's foot, it covers nothing the painting doesn't.
+        const overlap = room.kit.surfaces.reduce((sum, s) => sum + s.rect.w * Math.max(0, Math.min(s.rect.y + s.rect.h, ROOM_H) - s.rect.y), 0);
+        expect(cells.size * ROOM_W * ROOM_H + surfaces - overlap, 'its painting and its floor below cover the room').toBe(room.size.w * room.size.h);
         return;
       }
       expect(cells.size * ROOM_W * ROOM_H, 'background tiles cover the room').toBe(room.size.w * room.size.h);
@@ -359,8 +367,8 @@ describe('the arcade', () => {
   const arcade = ROOMS['arcade']!;
   const spot = (id: string) => arcade.doors.find((d) => d.id === id)!;
 
-  it('is a hall three screens long, painted as arcade, arcade-mid and arcade-end', () => {
-    expect(arcade.size).toEqual({ w: 3 * ROOM_W, h: ROOM_H });
+  it('is a hall three screens long, painted as arcade, arcade-mid and arcade-end, its floor run on below into a plaza', () => {
+    expect(arcade.size).toEqual({ w: 3 * ROOM_W, h: ARCADE_PLAZA.front + 15 });
     expect(backgroundTiles(arcade).map((t) => [t.key, t.x, t.y])).toEqual([
       ['arcade', 0, 0],
       ['arcade-mid', ROOM_W, 0],
