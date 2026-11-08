@@ -187,13 +187,14 @@ import { NestMirror } from './mirror';
 import { NestDecor, pieceThumb } from './nest';
 import { firstGlint, firstNestWelcome, streetDoors, streetSpawnBack, type StreetDoor } from './nestPlan';
 import { NpcOwl } from './Npc';
-import { OWL_SCALE, Owl } from './Owl';
+import { OWL_SCALE, OWL_W, Owl } from './Owl';
 import { QuestItemMarker, SpotGlow } from './QuestItem';
 import { PuzzleMarker, markKey, type PuzzleMarkKind, type PuzzleMarkLook } from './PuzzleMarker';
 import { StreetDoors, addNestsSign, addParkSign } from './street';
 import { cameraBounds } from './hudInset';
 import { SizeLabels } from './sizeLabels';
 import { DoorSigns } from './doorSigns';
+import { sideEdges } from './sideEdges';
 import { drawWalkFloor } from './walkFloor';
 
 export interface RoomStart {
@@ -3552,7 +3553,9 @@ export class RoomScene extends Phaser.Scene {
 
   /** Where the owl can walk at the height it is now (OP-084, perches.ts): the floor and the perch tops at or below it, less the floor shut for now. */
   private footingNow(): { walkable: Polygon[]; shut: Shut[] } {
-    return footing(this.room, this.flier.air.z, this.course ? [...this.shutFloor(), ...this.course.shut()] : this.shutFloor());
+    // The room's two sides, so the whole owl stays on screen at the end of a floor (OP-296).
+    const edges = sideEdges(this.room, this.me ? (OWL_W * Math.abs(this.me.scaleX)) / 2 : 0);
+    return footing(this.room, this.flier.air.z, [...edges, ...this.shutFloor(), ...(this.course?.shut() ?? [])]);
   }
 
   /** What the owl stands on, or would come down on, now: a perch's top, else the floor (0). */
