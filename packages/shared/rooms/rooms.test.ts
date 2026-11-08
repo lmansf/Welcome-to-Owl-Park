@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, inject, it } from 'vitest';
 import { CABINETS } from '../src/arcade';
 import { arrivalPoint, doorAxis, doorTarget, inExit, laneThrough } from '../src/doorways';
 import { distance, distanceToRect, isWalkable, pointInRect, rectCenter } from '../src/geometry';
@@ -99,7 +99,9 @@ describe('the floor', () => {
       ];
       // A doorway or the idol's gathering spot may reach past the floor's edge; its middle is on the floor or next to it.
       for (const [name, p] of things) expect(floor.has(cell(p)) || [0, 1, -1].some((d) => floor.has(cell({ x: p.x, y: p.y + d * 2 * STEP }))), `${room.id} ${name} reachable`).toBe(true);
-    });
+      // The oval's full 10 px flood fill calls instrumented geometry hundreds of thousands of times.
+      // Keep the entire connectivity check under Stryker, with time for its per-call coverage tracking.
+    }, inject('mutationRun') && room.id === 'm3-hall' ? 180_000 : undefined);
 
     it(`${room.id}: set pieces stand on the room's own screens`, () => {
       for (const [name, a] of Object.entries(ANCHORS[room.id] ?? {})) {
