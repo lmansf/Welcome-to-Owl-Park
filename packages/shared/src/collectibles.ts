@@ -75,6 +75,8 @@ export interface Present {
   variant: string;
   /** What the page says the first time it sees the present in a collection (visitor-facing). */
   note: string;
+  /** When its note stops being said (epoch ms), for a note of a season (OP-297); the present itself stays. */
+  noteUntil?: number;
 }
 
 /**
@@ -83,7 +85,8 @@ export interface Present {
  */
 export const PRESENTS: readonly Present[] = [
   // Halloween 2026 (the owner's gift, 2026-10-21): the Bat pet in its original colours.
-  { variant: 'bat~0', note: 'Happy Halloween! Every owl gets a Bat pet, a present from the park. It is waiting in your collection.' },
+  // Its greeting ends with Halloween, once Oct 31 is over everywhere (noon UTC on Nov 1).
+  { variant: 'bat~0', note: 'Happy Halloween! Every owl gets a Bat pet, a present from the park. It is waiting in your collection.', noteUntil: Date.UTC(2026, 10, 1, 12) },
 ];
 export const DEFAULT_TIME_ZONE = 'UTC';
 
