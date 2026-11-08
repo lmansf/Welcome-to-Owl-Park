@@ -1038,6 +1038,7 @@ export class RoomScene extends Phaser.Scene {
     // Phones play the tree on their side (OP-155 (d)): held upright in a tree room, a card asks to turn them.
     this.hud.setSideways(seenFromSide(room));
     this.showWaysOut();
+    if (isNestRoom(room.id)) void this.knowOwnNest();
     // The owl builder's kind and colours: today's pledge and the worn collectibles stay as they are.
     this.hud.onLookChange((look) => this.changeLook({ ...this.look, body: look.body, belly: look.belly, accent: look.accent, ...(look.species ? { species: look.species } : {}) }));
     this.hud.onAction((id) => this.actions.find((a) => a.id === id)?.run());
@@ -3493,6 +3494,19 @@ export class RoomScene extends Phaser.Scene {
     if (d?.kind === 'own') void this.askStreet();
     else this.hud.toast(NEST_WORDS.closedForNow);
     return false;
+  }
+
+  /**
+   * Whether this nest is the owl's own, from its home nest (OP-303): the room server says so too as it
+   * sends the nest, but when the park cannot connect it says nothing, and the map still puts the owl
+   * in Your nest, not on the street. Only ever yes: whose nest it is stays the room server's to say.
+   */
+  private async knowOwnNest(): Promise<void> {
+    const gen = this.gen;
+    const nestId = await this.collection.service.homeNest().catch(() => null);
+    if (gen !== this.gen || this.leaving || this.nestMine || !nestId || nestRoomId(nestId) !== this.room.id) return;
+    this.nestMine = true;
+    this.showWaysOut();
   }
 
   /** The nest as it stands: on arrival, after each change its owner makes, and in answer to the owner's own. */

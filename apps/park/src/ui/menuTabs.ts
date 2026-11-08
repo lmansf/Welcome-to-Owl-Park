@@ -2,6 +2,7 @@ import { ARCADE_NAME, NEST_WORDS, TRAVEL_WORDS, WAY_OUT_WORDS, WHICH_OWL_WORDS, 
 import type { CollectionState } from '../collect/state';
 import { rasterNames } from '../game/artNames';
 import { PUBLISHED_ART, versioned } from '../game/publishedArt';
+import { ROOMS } from '../rooms';
 import type { WalletEntry } from '../net/transport';
 import type { SettingsStore } from '../settings';
 import { ACCOUNT_WORDS } from './account';
@@ -255,6 +256,8 @@ export const NEW_MAP_PLACES: readonly Place[] = [
   { id: 'homes', name: 'The nests’ street', col: 1, row: 0 },
   { id: 'lobby', name: 'The Treetop Commons', col: 1, row: 1 },
   { id: 'm3-hall', name: 'The Great Hollow', col: 1, row: 2 },
+  // The ink-wash realm has no room yet: its Commons leads only to its course, so the course is its place (OP-303).
+  { id: 'ink', name: 'Brushstroke Bridges', col: 0, row: 2, noTravel: true },
   { id: 'glass', name: 'The glass realm', col: 0, row: 3 },
   { id: 'grove', name: 'The treehouse clearing', col: 1, row: 3 },
   { id: 'market', name: 'The neon street', col: 2, row: 3 },
@@ -269,6 +272,7 @@ export const NEW_MAP_PATHS: ReadonlyArray<[string, string]> = [
   ['nest', 'homes'],
   ['homes', 'lobby'],
   ['lobby', 'm3-hall'],
+  ['m3-hall', 'ink'],
   ['m3-hall', 'glass'],
   ['m3-hall', 'grove'],
   ['m3-hall', 'market'],
@@ -283,9 +287,14 @@ export function mapLayout(walking: number): { places: readonly Place[]; paths: R
   return walking === 3 ? { places: NEW_MAP_PLACES, paths: NEW_MAP_PATHS, cols: 3, rows: 5 } : { places: MAP_PLACES, paths: MAP_PATHS, cols: 3, rows: 5 };
 }
 
+/** On the new map, a parkour course's rooms are its realm's place, by course id (OP-303): each is entered from that realm's Commons. */
+export const NEW_MAP_COURSE_PLACES: Readonly<Record<string, string>> = { brush: 'ink', canopy: 'grove', circuit: 'market' };
+
 /** The map's place for a room the owl is in: any owl's nest is "a nest"; the owl's own is Your nest. */
 export function mapPlaceOf(room: string, ownNest: boolean, open: readonly string[] = [], walking = 1): string | null {
   if (room.startsWith('nest-') || room === 'nest') return ownNest ? 'nest' : 'homes';
+  const course = walking === 3 ? ROOMS[room]?.course?.id : undefined;
+  if (course !== undefined && Object.hasOwn(NEW_MAP_COURSE_PLACES, course)) return NEW_MAP_COURSE_PLACES[course]!;
   return mapLayout(walking).places.some((p) => p.id === room && (!p.closed || open.includes(p.id))) ? room : null;
 }
 
