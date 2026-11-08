@@ -263,7 +263,6 @@ export const NEW_MAP_PLACES: readonly Place[] = [
   { id: 'market', name: 'The neon street', col: 2, row: 3 },
   // On the new map 'hub' is the Party Grove, and travel lands in it (NEW_MAP_LANDINGS), not at the gate.
   { id: 'hub', name: 'The Party Grove', col: 2, row: 2 },
-  { id: 'm3-under', name: 'The root stair', col: 1, row: 4 },
   { id: 'arcade', name: ARCADE_NAME, col: 2, row: 4 },
 ];
 
@@ -277,8 +276,7 @@ export const NEW_MAP_PATHS: ReadonlyArray<[string, string]> = [
   ['m3-hall', 'grove'],
   ['m3-hall', 'market'],
   ['m3-hall', 'hub'],
-  ['m3-hall', 'm3-under'],
-  ['m3-under', 'arcade'],
+  ['m3-hall', 'arcade'],
   ['market', 'arcade'],
 ];
 

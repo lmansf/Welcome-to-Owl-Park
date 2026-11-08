@@ -12,7 +12,6 @@ const HUBS = new Set([LOBBY_ROOM, 'm3-hall', 'hub']);
 const ON_PURPOSE: Readonly<Record<string, string>> = {
   'brush-falls': 'a reward cave off the ink course: a seal and a lost feather, one doorway in',
   'canopy-roots': 'a reward den off the Updraft Canopy: a lost feather, one doorway in',
-  arcade: 'down the root stair today; its own doorway off the Great Hollow makes it a loop (OP-305)',
 };
 
 /** Every room the new map reaches from the Commons, with the rooms its doorways lead to. */

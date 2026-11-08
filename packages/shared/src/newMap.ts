@@ -23,3 +23,14 @@ export const NEW_MAP_HALL: readonly string[] = ['m3-hall'];
 export function isNewMapRoom(id: string | undefined): boolean {
   return id !== undefined && (Object.hasOwn(NEW_MAP, id) || NEW_MAP_HALL.includes(id));
 }
+
+/**
+ * Rooms folded into another (OP-306): an old link to one lands in the room it became part of. The root
+ * stair's way down now leads straight into the arcade, so its links land there.
+ */
+export const FOLDED_ROOMS: Readonly<Record<string, string>> = { 'm3-under': 'arcade' };
+
+/** The room a link to `id` lands in: the one it was folded into, else itself. */
+export function roomForLink(id: string): string {
+  return Object.hasOwn(FOLDED_ROOMS, id) ? FOLDED_ROOMS[id]! : id;
+}
