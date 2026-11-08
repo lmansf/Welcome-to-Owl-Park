@@ -166,13 +166,13 @@ export const HALL_MOONBEAMS: ReadonlyArray<{ id: string; pos: Vec2 }> = [
 
 /**
  * The leaf piles: blown in at the knothole, they drift round the rim, so two lie in each Commons either
- * side of its plaza, one by the hatch, one by the trunk's door, two by the knothole, two either side of
+ * side of its plaza, clear of its two doorways' signs and landing spots, one by the hatch, one by the trunk's door, two by the knothole, two either side of
  * the heart and one out in front of it, between the trunk's door and the hatch.
  */
 export const HALL_LEAVES: ReadonlyArray<{ id: string; pos: Vec2 }> = [
   ...(['glass', 'ink', 'grove', 'market'] as const).flatMap((level) => [
-    { id: `leaves-${level}`, pos: ringAt(commonsS(level) - 420, 0.8) },
-    { id: `leaves-${level}-far`, pos: ringAt(commonsS(level) + 420, 0.8) },
+    { id: `leaves-${level}`, pos: ringAt(commonsS(level) - 600, 0.74) },
+    { id: `leaves-${level}-far`, pos: ringAt(commonsS(level) + 600, 0.74) },
   ]),
   { id: 'leaves-hatch', pos: rimAt(wayS('down') + 380, 260) },
   { id: 'leaves-party', pos: rimAt(wayS('to-party') - 380, 260) },
