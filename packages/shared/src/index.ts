@@ -15,6 +15,7 @@ export * from './species';
 export * from './parktime';
 export * from './npcs';
 export * from './interactables';
+export * from './plazaFloor';
 export * from './quests';
 export * from './questCatalog';
 export * from './questbook';

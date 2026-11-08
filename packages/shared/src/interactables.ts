@@ -5,17 +5,23 @@
  * (browsing a stall, basking in the moonbeam). The room server checks reach and state.
  */
 import type { Raised } from './perches';
+import { FLOOR_INTERACTABLES } from './plazaFloor';
 import type { Vec2 } from './protocol';
 import { START_LEAVES, START_STALL } from './realmStart';
 
-export type InteractableKind = 'leaf-pile' | 'stall' | 'moonbeam';
+/** Leaf piles, stalls and moonbeams; and out on the plazas' floors (plazaFloor.ts), bird baths, mushrooms, telescopes and shiny things. */
+export type InteractableKind = 'leaf-pile' | 'stall' | 'moonbeam' | 'bird-bath' | 'mushroom' | 'telescope' | 'shiny';
 
 /** A thing to use; one with a `top` sits up on that perch (OP-084), and only an owl standing on it reaches it. */
 export interface InteractableDef extends Raised {
   id: string;
   kind: InteractableKind;
   room: string;
+  /** Where the owl stands to use it. */
   pos: Vec2;
+  /** Its art (a kit key), drawn with its foot just behind `pos` (plazaFloor.ts); none for a thing the game draws itself. */
+  piece?: string;
+  flip?: true;
 }
 
 export interface KindRules {
@@ -35,6 +41,11 @@ export const KIND_RULES: Readonly<Record<InteractableKind, KindRules>> = {
   'leaf-pile': { label: 'Flop into the leaves', noun: 'leaf pile', plural: 'leaf piles', verb: 'Flop into', reach: 90, shared: true },
   stall: { label: 'Browse the stall', noun: 'market stall', plural: 'market stalls', verb: 'Browse', reach: 110, shared: false },
   moonbeam: { label: 'Bask in the moonbeam', noun: 'moonbeam', plural: 'moonbeams', verb: 'Bask in', reach: 120, shared: false },
+  'bird-bath': { label: 'Splash in the bird bath', noun: 'bird bath', plural: 'bird baths', verb: 'Splash in', reach: 110, shared: false },
+  mushroom: { label: 'Bounce on the mushrooms', noun: 'mushroom patch', plural: 'mushroom patches', verb: 'Bounce on', reach: 100, shared: false },
+  telescope: { label: 'Look through the telescope', noun: 'telescope', plural: 'telescopes', verb: 'Look through', reach: 110, shared: false },
+  // Shared like a leaf pile: picked up, it is gone for everyone until another turns up, and it may be a feather's worth.
+  shiny: { label: 'Pick up the shiny thing', noun: 'shiny thing', plural: 'shiny things', verb: 'Pick up', reach: 90, shared: true },
 };
 
 export const INTERACTABLES: readonly InteractableDef[] = [
@@ -144,6 +155,8 @@ export const INTERACTABLES: readonly InteractableDef[] = [
   { id: 'arcade-leaves-street', kind: 'leaf-pile', room: 'arcade', pos: { x: 300, y: 1230 } },
   { id: 'arcade-leaves-floor', kind: 'leaf-pile', room: 'arcade', pos: { x: 2400, y: 1200 } },
   { id: 'arcade-leaves-end', kind: 'leaf-pile', room: 'arcade', pos: { x: 4500, y: 1230 } },
+  // Out on the plazas' floors (Nov 8): a few little scenes in each, things to splash in, bounce on, look through and pick up.
+  ...FLOOR_INTERACTABLES,
 ];
 
 const BY_ID: Readonly<Record<string, InteractableDef>> = Object.fromEntries(INTERACTABLES.map((i) => [i.id, i]));
