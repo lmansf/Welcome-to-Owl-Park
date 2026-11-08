@@ -1575,7 +1575,9 @@ ROOMS['lobby'] = growToPlaza(ROOMS['lobby']!, {
   oldFront: 888,
   west: 0,
   east: 2 * ROOM_W - 40,
-  texture: 'kit-tex-entrance-plaza-stone',
+  // The painting's own cobbles, run on down, in its lamplit dusk.
+  texture: 'kit-tex-ground-cobble-path',
+  tint: 0x9a8a80,
   join: 'edge-commons-join',
   ring: 'edge-commons-ring',
   corner: 'edge-commons-corner-front',

@@ -273,6 +273,8 @@ export interface KitSurface {
   id: string;
   texture: string;
   rect: Rect;
+  /** A colour its texture is drawn multiplied by (0xRRGGBB), to sit with a painting's light (a plaza under a dusk painting, plaza.ts). */
+  tint?: number;
 }
 
 /**

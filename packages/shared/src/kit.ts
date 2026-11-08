@@ -57,6 +57,8 @@ export interface KitDraw {
   layer: KitLayer;
   flip?: boolean;
   alpha?: number;
+  /** A colour it is drawn multiplied by (a surface's own tint, KitSurface.tint). */
+  tint?: number;
   /** What it is drawn for, and that thing's id (the greybox shades by it, the tests count by it). */
   role: 'surface' | 'path' | 'ledge' | 'hill' | 'stair' | 'door' | 'barrier' | 'prop' | 'decal';
   id: string;
@@ -464,7 +466,7 @@ export function kitDrawPlan(room: Pick<RoomDef, 'kit' | 'doors' | 'size'>): KitD
   if (!kit) return [];
   const out: KitDraw[] = [];
   const g = kit.ground;
-  for (const s of kit.surfaces ?? []) out.push({ key: s.texture, ...s.rect, tile: sizeOf(s.texture).tile, layer: 'back', role: 'surface', id: s.id });
+  for (const s of kit.surfaces ?? []) out.push({ key: s.texture, ...s.rect, tile: sizeOf(s.texture).tile, layer: 'back', role: 'surface', id: s.id, ...(s.tint !== undefined ? { tint: s.tint } : {}) });
   for (const c of kit.columns ?? []) columnDraws(c, out);
   for (const p of kit.paths ?? []) runDraws(p, g, p.depth ?? room.size.h - (g - p.top), 'path', out);
   for (const h of kit.hills ?? []) hillDraws(h, g, room.size.h, out);

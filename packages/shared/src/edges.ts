@@ -457,6 +457,28 @@ function underOps(key: string, a: EdgeArt): KitOp[] {
 
 /** An edge piece's placeholder: plain shapes in the tree's palette, where its art will be. Null for a key that is not one. */
 export function edgePlaceholder(key: string): KitOp[] | null {
+  const ops = edgePlaceholderOps(key);
+  return ops && key.startsWith('edge-arcade-') ? ops.map((o) => ({ ...o, c: ARCADE_RECOLOUR[o.c] ?? o.c })) : ops;
+}
+
+/**
+ * The arcade's stand-ins are the tree's shapes in the arcade's colours: no moss on a night street, but
+ * puddles, neon spill and cable, so the plaza's join, ring and kerbs sit in the wet pavement.
+ */
+export const ARCADE_RECOLOUR: Readonly<Record<number, number>> = {
+  [P.moss]: 0x1d2440,
+  [P.mossLight]: 0x2fd3e0,
+  [P.leaf]: 0xd0379b,
+  [P.leafLight]: 0xff7ad9,
+  [P.bark]: 0x2a2d3e,
+  [P.barkDark]: 0x14151f,
+  [P.wood]: 0x58607e,
+  [P.woodDark]: 0x34394f,
+  [P.gold]: 0xffc24a,
+  [P.navyDeep]: 0x0b0a18,
+};
+
+function edgePlaceholderOps(key: string): KitOp[] | null {
   const a = EDGE_ART[key];
   if (!a) return null;
   switch (a.kind) {

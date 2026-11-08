@@ -54,7 +54,7 @@ export function drawKit(scene: Phaser.Scene, room: RoomDef, depths: KitDepths): 
   const quiet = seenFromSide(room) ? TREE_PLAY_TINT : undefined;
   let frames = 0;
   for (const d of plan) {
-    const tint = d.layer === 'back' ? quiet : undefined;
+    const tint = d.tint ?? (d.layer === 'back' ? quiet : undefined);
     images += drawPiece(scene, d, depths[d.layer], tint);
     // Drawn straight after the body they frame, at its depth, so the caps an owl lands on (drawn later) stay over them.
     for (const s of kitFrames(d, room.size, plan)) frames += drawStrip(scene, s, depths[d.layer], tint);

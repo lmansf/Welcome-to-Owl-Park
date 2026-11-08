@@ -24,6 +24,8 @@ export interface PlazaSpec {
   east: number;
   /** The seamless kit texture the new floor is laid in (a `kit-tex-` key). */
   texture: string;
+  /** A colour the texture is drawn multiplied by, so it sits in the painting's light (KitSurface.tint). */
+  tint?: number;
   /** The piece laid flat over the join, end to end across it. */
   join: string;
   /** The worn ring laid round each gathering spot, its middle on each of `rings`. */
@@ -50,7 +52,7 @@ export function growToPlaza(room: RoomDef, spec: PlazaSpec): RoomDef {
     kit: {
       ...(room.kit ?? { ground: h - 15 }),
       // Under the painting's foot, so its floor's last pixels are the painting's and the rest the plaza's.
-      surfaces: [...(room.kit?.surfaces ?? []), { id: 'plaza-floor', texture: spec.texture, rect: { x: 0, y: ROOM_H - 4, w: room.size.w, h: h - ROOM_H + 4 } }],
+      surfaces: [...(room.kit?.surfaces ?? []), { id: 'plaza-floor', texture: spec.texture, rect: { x: 0, y: ROOM_H - 4, w: room.size.w, h: h - ROOM_H + 4 }, ...(spec.tint !== undefined ? { tint: spec.tint } : {}) }],
     },
   };
 }
