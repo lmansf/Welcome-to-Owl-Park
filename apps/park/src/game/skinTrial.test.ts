@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { KIT_ART } from '@owl-park/shared';
-import { artBox, fitRect, isRightEnd, skinTrialWanted, trialFilesOf, updraftBitsKey } from './skinTrial';
+import { artBox, fitRect, fitSize, isRightEnd, skinTrialWanted, trialFilesOf, updraftBitsKey } from './skinTrial';
 
 const memory = () => {
   const m = new Map<string, string>();
@@ -57,5 +57,15 @@ describe('skin trials (?skin=)', () => {
   it('mirror the one end piece at a run’s right end', () => {
     expect(isRightEnd('kit-clearing-perch-end--cut-earth-path-cap-right')).toBe(true);
     expect(isRightEnd('kit-clearing-perch-end--cut-earth-path-cap-left')).toBe(false);
+  });
+  it('keeps a fitted piece in its stand-in\'s shape, so a short sheet cell still lands on the walk line', () => {
+    // C11 is 240 x 60; the bough end perch it stands in for is 240 x 200 with its top at 120.
+    const tall = KIT_ART['kit-clearing-perch-small--clearing-bough-end-perch']!;
+    const size = fitSize(tall, 240);
+    expect(size).toEqual({ w: 240, h: 200, k: 1 });
+    const to = fitRect(tall, size.k)!;
+    expect(to.y1).toBeLessThanOrEqual(size.h);
+    // A 240-wide cell for a 320 x 120 bough perch: scaled by width, same shape.
+    expect(fitSize(KIT_ART['kit-clearing-perch-small--clearing-bough-perch']!, 240)).toEqual({ w: 240, h: 90, k: 0.75 });
   });
 });

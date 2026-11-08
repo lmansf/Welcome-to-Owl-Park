@@ -96,6 +96,17 @@ export function fitRect(spec: Pick<KitArtSpec, 'w' | 'h' | 'top' | 'foot' | 'lef
   return { x0: Math.round(left * k), y0: Math.round(spec.top * k), x1: Math.round(right * k), y1: Math.round(spec.foot * k) };
 }
 
+/**
+ * The size of a trial piece's redrawn texture: the image's width, and the stand-in's own shape, so the
+ * texture keeps the box drawKit stretches it to. A sheet cell is often shorter than the stand-in it
+ * replaces (C11 is 240 x 60 where a bough end perch is 240 x 200); drawn at the cell's size, the
+ * fitted art would land below the texture and the piece would vanish or show only its tip.
+ */
+export function fitSize(spec: Pick<KitArtSpec, 'w' | 'h'>, imgWidth: number): { w: number; h: number; k: number } {
+  const k = imgWidth / spec.w;
+  return { w: imgWidth, h: Math.max(1, Math.round(spec.h * k)), k };
+}
+
 /** Whether a stand-in is a run's right end: the trial's one end piece is mirrored there. */
 export function isRightEnd(key: string): boolean {
   return /cap-right$/.test(KIT_ART[key]?.standIn ?? key);
@@ -109,7 +120,8 @@ export function isRightEnd(key: string): boolean {
 export function fitTrialArt(img: CanvasImageSource & { width: number; height: number }, key: string): HTMLCanvasElement | null {
   const spec = KIT_ART[key];
   if (!spec?.slot || spec.kind !== 'piece') return null;
-  const k = img.width / spec.w;
+  const size = fitSize(spec, img.width);
+  const k = size.k;
   const to = fitRect(spec, k);
   if (!to) return null;
   const src = document.createElement('canvas');
@@ -124,8 +136,8 @@ export function fitTrialArt(img: CanvasImageSource & { width: number; height: nu
   const from = artBox(alpha, src.width, src.height);
   if (!from) return null;
   const out = document.createElement('canvas');
-  out.width = img.width;
-  out.height = img.height;
+  out.width = size.w;
+  out.height = size.h;
   const g = out.getContext('2d', { willReadFrequently: true });
   if (!g) return null;
   g.save();
