@@ -1,32 +1,28 @@
 import { test } from '@playwright/test';
 import { openPark, settleCamera } from './helpers';
 
-// Temporary QA pictures for the map's edges (this branch only, never merged).
+// Temporary QA pictures for the map's edges (this branch only, never merged): the merge gate's sizes.
 const SHOTS: Array<[string, string?]> = [
   ['m3-hall', 'from-glass'],
-  ['m3-hall', 'from-lobby'],
-  ['m3-hall', 'from-market'],
   ['m3-hall', 'default'],
   ['m3-hall', 'from-under'],
-  ['lobby'],
-  ['homes'],
   ['hub'],
-  ['glass'],
-  ['grove'],
-  ['market'],
-  ['arcade'],
-  ['canopy-1'],
-  ['brush-1'],
-  ['circuit-1'],
-  ['circuit-2'],
   ['canopy-3'],
-  ['l1'],
+  ['circuit-2'],
+  ['brush-2'],
 ];
-for (const [room, spawn] of SHOTS) {
-  test(`qa ${room} ${spawn ?? 'default'}`, async ({ page }) => {
-    await openPark(page, { room, kit: '1', ...(spawn ? { spawn } : {}) });
-    await settleCamera(page);
-    await page.waitForTimeout(1200);
-    await page.screenshot({ path: `qa-shots/${test.info().project.name}-${room}-${spawn ?? 'default'}.jpg`, type: 'jpeg', quality: 70 });
-  });
-}
+const SIZES: Array<[string, number, number]> = [
+  ['1440x900', 1440, 900],
+  ['1024x768', 1024, 768],
+];
+for (const [room, spawn] of SHOTS)
+  for (const [name, width, height] of SIZES) {
+    test(`qa ${room} ${spawn ?? 'default'} ${name}`, async ({ page }) => {
+      test.skip(test.info().project.name !== 'desktop');
+      await page.setViewportSize({ width, height });
+      await openPark(page, { room, kit: '1', ...(spawn ? { spawn } : {}) });
+      await settleCamera(page);
+      await page.waitForTimeout(1200);
+      await page.screenshot({ path: `qa-shots/${name}-${room}-${spawn ?? 'default'}.jpg`, type: 'jpeg', quality: 70 });
+    });
+  }
