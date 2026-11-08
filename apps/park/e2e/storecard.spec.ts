@@ -108,6 +108,7 @@ test.describe('the card before the store (OP-153)', () => {
     ['a phone', PHONE],
   ] as const) {
     test(`on ${name}: a spectator's Get a Day Ticket asks before checkout; Not now opens nothing, and Continue opens checkout`, async ({ browser, request }) => {
+      test.slow(); // CI traces exhausted 90 s while tabbing, before Enter: keep the complete cancel/keyboard/checkout flow.
       await pastTheClose((await flip(request, 'ticket'))['closedAt'] as number);
       const a = await arrive(browser, device);
       const shot = device === PHONE ? 'phone' : 'desktop';

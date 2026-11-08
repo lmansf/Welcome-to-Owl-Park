@@ -150,7 +150,7 @@ import { openPosOverlay, type PosOverlay } from '../ui/posOverlay';
 import { keeperToken } from '../net/keeper';
 import type { Away } from '../ui/away';
 import { castVote } from '../net/vote';
-import { GATED_ROOMS, NEST_MIRROR, ROOMS, TREE_ARRIVAL, getRoom, groundOf, roomFor } from '../rooms';
+import { GATED_ROOMS, NEST_MIRROR, ROOMS, TREE_ARRIVAL, getRoom, groundOf, roomFor, roomOnMap } from '../rooms';
 import { drawKit, drawnRoom } from './kitView';
 import { TREE_RAISED_BAND, dressTreeRoom, type TreeDress, type TreeDressing } from './treeView';
 import type { DecorateView } from '../ui/decorate';
@@ -200,6 +200,7 @@ import { SizeLabels } from './sizeLabels';
 import { DoorSigns } from './doorSigns';
 import { sideEdges } from './sideEdges';
 import { drawWalkFloor } from './walkFloor';
+import { BOWL_SHADOW, drawBowl } from './bowlView';
 import { drawEdges } from './edgeView';
 import { drawSkirts } from './plazaSkirt';
 import { setVignette } from './vignette';
@@ -593,7 +594,8 @@ export class RoomScene extends Phaser.Scene {
   }
 
   init(data: RoomStart): void {
-    this.room = getRoom(data.room);
+    // On the new map a realm whose idol now stands in the Great Hollow has none of its own (roomOnMap).
+    this.room = roomOnMap(getRoom(data.room), walkingMap());
     this.ownRoom = this.room;
     this.painter = null;
     enteredRoom(this.room);
@@ -949,6 +951,8 @@ export class RoomScene extends Phaser.Scene {
     if (!room.drawn) drawSkirts(this, art);
     // Seen from above: roots, ferns, pillars and the rim that break up its rectangles (edges.ts), under the floor's edge line.
     this.edgesDrawn = drawEdges(this, room);
+    // An oval floor seen from almost straight above (the Great Hollow): its wall with height round it, the floor shaded so it recedes.
+    drawBowl(this, room);
     // A soft shade in the view's corners, so a room seems to run on past the screen instead of stopping in a box.
     setVignette(true);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => setVignette(false));
@@ -1044,7 +1048,10 @@ export class RoomScene extends Phaser.Scene {
       });
     }
 
-    this.me = new Owl(this, this.playerId, this.look, spawn, itemScale(this.cfg.pixelRatio)).setRoomScale(room.owlScale ?? 1).setRaisedBand(this.raisedBand());
+    this.me = new Owl(this, this.playerId, this.look, spawn, itemScale(this.cfg.pixelRatio))
+      .setRoomScale(room.owlScale ?? 1)
+      .setRaisedBand(this.raisedBand())
+      .setShadowDepth(room.bowl ? BOWL_SHADOW : 1);
     this.me.groundUnder = this.groundUnder;
     this.me.slopeUnder = this.slopeBelow;
     this.me.calm = () => this.calm();
@@ -1420,7 +1427,10 @@ export class RoomScene extends Phaser.Scene {
     const now = Date.now();
     let owl = this.peers.get(s.id);
     if (!owl) {
-      owl = new Owl(this, s.id, s.look, s.pos, itemScale(this.cfg.pixelRatio)).setRoomScale(this.room.owlScale ?? 1).setRaisedBand(this.raisedBand());
+      owl = new Owl(this, s.id, s.look, s.pos, itemScale(this.cfg.pixelRatio))
+        .setRoomScale(this.room.owlScale ?? 1)
+        .setRaisedBand(this.raisedBand())
+        .setShadowDepth(this.room.bowl ? BOWL_SHADOW : 1);
       owl.groundUnder = this.groundUnder;
       owl.slopeUnder = this.slopeBelow;
       owl.calm = () => this.calm();
@@ -1595,7 +1605,8 @@ export class RoomScene extends Phaser.Scene {
     // Where a tap walk is going (a walk on held keys or the stick goes nowhere in particular).
     const goal = this.me.walk && !this.keyWalk ? (this.walkGoal ?? this.me.walk.to) : null;
     const owlAt = `${Math.round(this.me.pos.x / 20)},${Math.round(this.me.pos.y / 20)},${goal ? `${Math.round(goal.x)},${Math.round(goal.y)}` : '-'}`;
-    const at = `${v.x},${v.y},${v.width},${v.height},${window.innerWidth},${window.innerHeight},${owlAt}`;
+    const signSeen = this.signFocused && this.doorSigns?.onScreen(this.signFocused) ? 1 : 0;
+    const at = `${v.x},${v.y},${v.width},${v.height},${window.innerWidth},${window.innerHeight},${owlAt},${signSeen}`;
     if (at === this.hintsFor.at && this.room.doors === this.hintsFor.doors) return;
     this.hintsFor = { at, doors: this.room.doors };
     // Seen from the side, each doorway is pointed at on its own landing, and only the near ones (hints.ts).
@@ -1610,7 +1621,8 @@ export class RoomScene extends Phaser.Scene {
       const focus = signFocus(all, this.me.pos, goal, this.signFocused);
       this.signFocused = focus;
       this.doorSigns?.focus(focus);
-      targets = all.filter((t) => t.id === focus || keep.has(t.id));
+      // Its sign on the floor names it once it is on screen: then no chip repeats it at the screen's edge.
+      targets = all.filter((t) => (t.id === focus && !this.doorSigns?.onScreen(t.id)) || keep.has(t.id));
     } else targets = nearTargets(all, view, SIDE_HINT_REACH);
     const places = placeHints(targets, view, { w: window.innerWidth, h: window.innerHeight, ...HINT_INSETS, ...(TOUCH_SCREEN ? { bottom: touchBottom(TOUCH_HINT_BOTTOM, window.innerHeight) } : {}) });
     const shown = places.map((p) => `${p.id}:${Math.round(p.x)},${Math.round(p.y)},${p.angle.toFixed(2)}`).join('|');

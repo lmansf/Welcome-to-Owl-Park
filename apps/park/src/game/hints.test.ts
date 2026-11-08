@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ROOMS, groundOf } from '@owl-park/shared/rooms';
-import { SIDE_HINT_OVER, SIGN_HOLD, SIGN_REACH, doorHintTarget, nearTargets, nearestOffSides, placeHints, signFocus, touchBottom, type ScreenBox, type ViewRect } from './hints';
+import { SIDE_HINT_OVER, SIGN_HOLD, SIGN_REACH, doorHintTarget, nearTargets, nearestOffSides, placeHints, signFocus, signX, touchBottom, type ScreenBox, type ViewRect } from './hints';
 
 // A 1000 x 600 screen showing room pixels 1000-2000 by 0-600 (one CSS pixel per room pixel).
 const view: ViewRect = { x: 1000, y: 0, w: 1000, h: 600 };
@@ -90,19 +90,19 @@ describe('hints seen from the side (an Updraft Canopy room, as an owl stands by 
   });
 });
 
-describe('hints seen from above (the Great Hollow, a long room of doorways)', () => {
+describe('hints seen from above (the Great Hollow, a huge oval of doorways)', () => {
   const HALL = ROOMS['m3-hall']!;
   const doorways = HALL.doors.filter((d) => d.to).map((d) => doorHintTarget(d, null));
-  // A phone held upright at the glass Commons' realm doorway: about 500 room px across.
-  const phone: ViewRect = { x: 80, y: 200, w: 500, h: 700 };
+  // A phone held upright at the glass realm's doorway, at the back of the oval: about 500 room px across.
+  const phone: ViewRect = { x: 1730, y: 100, w: 500, h: 700 };
 
-  it('points at the nearest two doorways off each side, not at every doorway down the room', () => {
+  it('points at the nearest two doorways off each side, not at every doorway round the room', () => {
     expect(doorways.filter((t) => t.x > phone.x + phone.w).length).toBeGreaterThan(4);
     const near = nearestOffSides(doorways, phone);
-    const right = near.filter((t) => t.x > phone.x + phone.w);
-    // The glass course's gate and the ink-wash realm's doorway are shut, so they have no chip.
-    expect(right.map((t) => t.id)).toEqual(['course-ink', 'up']);
-    expect(near.filter((t) => t.x < phone.x)).toEqual([]);
+    // East of it, the hatch down and the knothole up; west, the ink-wash course's gate (the glass
+    // course's gate and the ink-wash realm's doorway are shut, so they have no chip).
+    expect(near.filter((t) => t.x > phone.x + phone.w).map((t) => t.id)).toEqual(['up', 'down']);
+    expect(near.filter((t) => t.x < phone.x).map((t) => t.id)).toEqual(['course-ink']);
   });
 
   it('always keeps a doorway it is told to keep, however far', () => {
@@ -128,19 +128,38 @@ describe('one doorway sign at a time, seen from above (OP-309)', () => {
   });
 
   it('shows the doorway a tap walk is going to, however far, over the one the owl passes', () => {
-    expect(signFocus(doorways, HALL.spawns['from-party']!, { x: 5300, y: 640 })).toBe('to-market');
+    const market = doorways.find((d) => d.id === 'to-market')!;
+    expect(signFocus(doorways, HALL.spawns['from-party']!, { x: market.x - 60, y: market.y })).toBe('to-market');
     // A walk to open floor names no doorway: the nearest by the owl shows.
-    expect(signFocus(doorways, HALL.spawns['from-party']!, { x: 4000, y: 1100 })).toBe('to-party');
+    expect(signFocus(doorways, HALL.spawns['from-party']!, { x: 3200, y: 1480 })).toBe('to-party');
   });
 
   it('keeps the sign showing between two near doorways until another is clearly nearer, so they never flicker', () => {
-    // Halfway between the stair up and the way to the Party Grove, a step either way.
-    const mid = { x: 3200, y: 700 };
-    const shown = signFocus(doorways, mid, null);
-    expect(['up', 'to-party']).toContain(shown);
-    const other = shown === 'up' ? 'to-party' : 'up';
-    const step = (shown === 'up' ? 1 : -1) * (SIGN_HOLD / 2 - 5);
-    expect(signFocus(doorways, { x: mid.x + step, y: mid.y }, null, shown)).toBe(shown);
-    expect(signFocus(doorways, { x: mid.x + 4 * step, y: mid.y }, null, shown)).toBe(other);
+    // Two doorways 400 apart (the oval's ways stand far wider apart than this), the owl between them.
+    const pair = [
+      { id: 'west', x: 1000, y: 500 },
+      { id: 'east', x: 1400, y: 500 },
+    ];
+    const mid = { x: 1200, y: 500 };
+    const shown = signFocus(pair, mid, null);
+    expect(['west', 'east']).toContain(shown);
+    const other = shown === 'west' ? 'east' : 'west';
+    const step = (shown === 'west' ? 1 : -1) * (SIGN_HOLD / 2 - 5);
+    expect(signFocus(pair, { x: mid.x + step, y: mid.y }, null, shown)).toBe(shown);
+    expect(signFocus(pair, { x: mid.x + 4 * step, y: mid.y }, null, shown)).toBe(other);
+  });
+});
+
+describe('a sign by a doorway at the screen’s edge slides in so all its words show', () => {
+  const view = { x: 1000, w: 400 };
+  it('stays over its own spot when it fits', () => {
+    expect(signX(1200, 200, view, 10)).toBe(1200);
+  });
+  it('slides in from either edge, never past it', () => {
+    expect(signX(1000, 200, view, 10)).toBe(1110);
+    expect(signX(1400, 200, view, 10)).toBe(1290);
+  });
+  it('stands in the middle when it is wider than the screen', () => {
+    expect(signX(900, 600, view, 10)).toBe(1200);
   });
 });

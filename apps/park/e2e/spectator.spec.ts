@@ -107,6 +107,7 @@ test.describe('spectators (OP-191)', () => {
   });
 
   test('an owl without a ticket walks on in as a spectator: one line with the Day Ticket, the badge, and the Quests tab locked', { tag: '@smoke' }, async ({ browser, request }) => {
+    test.slow(); // Gate entry, two ticket offers, a room change and context cleanup share one budget.
     await pastTheClose((await flip(request, 'ticket'))['closedAt'] as number);
     // The park says spectators come in (only while SPECTATORS is on).
     const { pass } = (await (await request.get('/api/pass')).json()) as { pass: string };
