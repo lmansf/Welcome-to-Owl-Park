@@ -1,0 +1,164 @@
+# A preview link on every pull request: the branch's park, built offline, at its own pages.dev address,
+# so a change can be played before it merges. The link lands on the pull request as a deployment
+# ("View deployment") and in one comment that is edited in place on each push.
+#
+# What a preview is: the same offline park as the GitHub Pages copy (docs/DEPLOY.md, section A). It has
+# no room server: other owls are tabs on the same device, and nothing it does reaches the live park,
+# its tickets, the store, accounts or any database. The build gets no store or ticket links, its page
+# may only talk to its own address (a connect-src 'self' policy, which also keeps analytics from
+# counting preview visits), and search engines are told to leave it alone (noindex, robots.txt).
+# Anything that needs the live server (quests on the server, stalls, votes, other owls online) is
+# still checked on the live park after the merge.
+#
+# One-time setup (free; Cloudflare Pages' free plan has no cap on preview deployments):
+#   - An API token with Account -> Cloudflare Pages -> Edit, saved as the repository secret
+#     CLOUDFLARE_PAGES_TOKEN. Without it the workflow tries CLOUDFLARE_API_TOKEN (the Worker deploy's),
+#     which works when that token has the Pages permission and is a repository secret.
+#   - CLOUDFLARE_ACCOUNT_ID as a repository secret (the deploy's own).
+# The first run makes the Pages project (PREVIEW_PROJECT below) if the account lacks it. Until a token
+# is there the job says so in its summary and passes, so pull requests stay green.
+#
+# Safety: the build job runs the branch's code with no secrets; the deploy job never checks the branch
+# out, it only uploads the built files. A pull request from a fork gets no preview.
+name: Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PREVIEW_PROJECT: owl-park-preview
+
+jobs:
+  build:
+    name: Build the preview
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build the offline park
+        run: pnpm build
+        env:
+          VITE_TRANSPORT: local
+          VITE_EDGE_URL: ''
+          VITE_SHOP_URL: ''
+          VITE_TICKETS_URL: ''
+          VITE_SITE_URL: ''
+          # The fit overlay (?boxes=1) is a QA tool; a preview may show it.
+          VITE_BOXES: 'on'
+      - name: Check the page holds no database client or key (OP-150)
+        run: pnpm security:bundle
+      - name: Mark the build as a preview (no indexing, no outside calls)
+        run: node tools/preview/mark.mjs apps/park/dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: preview-dist
+          path: apps/park/dist
+          retention-days: 3
+          if-no-files-found: error
+
+  deploy:
+    name: Preview link
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      deployments: write
+      pull-requests: write
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
+      CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PR: ${{ github.event.pull_request.number }}
+      SHA: ${{ github.event.pull_request.head.sha }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - id: ready
+        name: Whether a Cloudflare token is there
+        run: |
+          if [ -z "$CF_TOKEN" ] || [ -z "$CF_ACCOUNT" ]; then
+            echo "on=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### No preview yet"
+              echo "Previews are off until the repository has the secrets CLOUDFLARE_PAGES_TOKEN (Cloudflare Pages: Edit) and CLOUDFLARE_ACCOUNT_ID. See the top of .github/workflows/preview.yml."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice::No preview: the Cloudflare Pages token is not set (see .github/workflows/preview.yml)."
+          else
+            echo "on=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/download-artifact@v4
+        if: steps.ready.outputs.on == 'true'
+        with:
+          name: preview-dist
+          path: dist
+      - id: deployment
+        name: Open a GitHub deployment for the pull request
+        if: steps.ready.outputs.on == 'true'
+        run: |
+          id=$(jq -n --arg ref "$SHA" --arg env "preview-pr-$PR" --arg pr "$PR" \
+              '{ref: $ref, environment: $env, auto_merge: false, required_contexts: [], transient_environment: true, production_environment: false, description: ("Offline preview of #" + $pr)}' \
+            | gh api "repos/$GH_REPO/deployments" -X POST --input - --jq .id)
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          gh api "repos/$GH_REPO/deployments/$id/statuses" -X POST -f state=in_progress > /dev/null
+      - name: Make the Pages project if the account lacks it
+        if: steps.ready.outputs.on == 'true'
+        continue-on-error: true
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ env.CF_TOKEN }}
+          accountId: ${{ env.CF_ACCOUNT }}
+          command: pages project create ${{ env.PREVIEW_PROJECT }} --production-branch main
+      - id: pages
+        name: Upload the preview
+        if: steps.ready.outputs.on == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ env.CF_TOKEN }}
+          accountId: ${{ env.CF_ACCOUNT }}
+          command: pages deploy dist --project-name ${{ env.PREVIEW_PROJECT }} --branch pr-${{ github.event.pull_request.number }} --commit-hash ${{ github.event.pull_request.head.sha }} --commit-dirty=true
+      - name: Put the link on the pull request
+        if: steps.ready.outputs.on == 'true'
+        env:
+          ALIAS: ${{ steps.pages.outputs.pages-deployment-alias-url }}
+          EXACT: ${{ steps.pages.outputs.deployment-url }}
+          DEPLOYMENT: ${{ steps.deployment.outputs.id }}
+        run: |
+          url="${ALIAS:-$EXACT}"
+          gh api "repos/$GH_REPO/deployments/$DEPLOYMENT/statuses" -X POST \
+            -f state=success -f environment_url="$url" -f log_url="$GITHUB_SERVER_URL/$GH_REPO/actions/runs/$GITHUB_RUN_ID" > /dev/null
+          short=$(printf '%s' "$SHA" | cut -c1-7)
+          body=$(printf '%s\n\n%s\n\n%s\n\n%s' \
+            "<!-- owl-park-preview -->" \
+            "**Preview:** $url (this commit only: $EXACT)" \
+            "Built from $short. Offline park: no room server, store, tickets or accounts; other owls are tabs on one device. Flags work as on the live park, for example \`?sizes=1\` or \`?boxes=1\`." \
+            "Updated on every push; this comment is edited, not reposted.")
+          existing=$(gh api "repos/$GH_REPO/issues/$PR/comments" --paginate \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- owl-park-preview -->"))) | .id' | head -1)
+          if [ -n "$existing" ]; then
+            gh api "repos/$GH_REPO/issues/comments/$existing" -X PATCH -f body="$body" > /dev/null
+          else
+            gh api "repos/$GH_REPO/issues/$PR/comments" -X POST -f body="$body" > /dev/null
+          fi
+          { echo "### Preview"; echo "$url"; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Mark the deployment failed
+        if: failure() && steps.deployment.outputs.id != ''
+        env:
+          DEPLOYMENT: ${{ steps.deployment.outputs.id }}
+        run: gh api "repos/$GH_REPO/deployments/$DEPLOYMENT/statuses" -X POST -f state=failure > /dev/null
