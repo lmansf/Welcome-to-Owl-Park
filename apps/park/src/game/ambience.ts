@@ -229,7 +229,11 @@ export function addSetPieces(
     scene.tweens.add({ targets: glow, alpha: 0.4, duration: 3200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   }
   // A realm start's pieces (OP-276): its quest post, trading nest and decor, each standing at its foot among the owls.
-  for (const p of room.pieces ?? []) if (scene.textures.exists(p.key)) piece(scene, p.x, p.y, p.key).setDepth(p.y).setFlipX(!!p.flip);
+  for (const p of room.pieces ?? []) {
+    if (!scene.textures.exists(p.key)) continue;
+    const img = piece(scene, p.x, p.y, p.key).setDepth(p.y).setFlipX(!!p.flip);
+    if (p.scale) img.setDisplaySize(img.displayWidth * p.scale, img.displayHeight * p.scale);
+  }
   for (const door of room.doors) {
     const m = door.marker;
     if (!m) continue;

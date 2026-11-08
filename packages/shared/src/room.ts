@@ -244,6 +244,8 @@ export interface RoomPiece {
   x: number;
   y: number;
   flip?: true;
+  /** Drawn this much its art's size (1 when left out): a doorway in the near wall seen from almost straight above. */
+  scale?: number;
 }
 
 export interface RoomKit {
@@ -296,6 +298,13 @@ export interface KitSurface {
   id: string;
   texture: string;
   rect: Rect;
+  /** A colour its texture is drawn multiplied by (0xRRGGBB), to sit with a painting's light (a plaza under a dusk painting, plaza.ts). */
+  tint?: number;
+  /**
+   * How far (room px) the painting above runs on over its top, mirrored at the painting's foot and
+   * fading out, so the painted floor eases into the texture with no seam (a plaza, plaza.ts).
+   */
+  skirt?: number;
 }
 
 /**

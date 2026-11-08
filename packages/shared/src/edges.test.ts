@@ -123,3 +123,12 @@ describe("kit rooms' platform frames", () => {
     expect(strips.map((s) => s.id)).toEqual(['p:right']);
   });
 });
+
+describe("the arcade's edge stand-ins", () => {
+  it('use no moss or leaf colours, so the plaza sits in the night street', () => {
+    const tree = new Set([0x3e5a3a, 0x6e8b4e, 0x4f7a3e, 0x8dae5a]);
+    const keys = Object.keys(EDGE_ART).filter((k) => k.startsWith('edge-arcade-'));
+    expect(keys.length).toBeGreaterThan(0);
+    for (const key of keys) for (const op of edgePlaceholder(key) ?? []) expect(tree.has(op.c), key).toBe(false);
+  });
+});

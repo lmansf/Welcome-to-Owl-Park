@@ -94,6 +94,50 @@ export const INTERACTABLES: readonly InteractableDef[] = [
   { id: 'arcade-leaves-pillar', kind: 'leaf-pile', room: 'arcade', pos: { x: 1250, y: 780 } },
   { id: 'arcade-leaves-scoreboard', kind: 'leaf-pile', room: 'arcade', pos: { x: 2550, y: 790 } },
   { id: 'arcade-leaves-pillar-east', kind: 'leaf-pile', room: 'arcade', pos: { x: 3080, y: 770 } },
+  // The Treetop Commons' plaza (Nov 8): a moonbeam in its middle where a crowd gathers, leaves blown into its corners and along its front.
+  { id: 'lobby-moonbeam', kind: 'moonbeam', room: 'lobby', pos: { x: 1600, y: 1110 } },
+  { id: 'lobby-leaves-plaza-west', kind: 'leaf-pile', room: 'lobby', pos: { x: 430, y: 1180 } },
+  { id: 'lobby-leaves-plaza-east', kind: 'leaf-pile', room: 'lobby', pos: { x: 2780, y: 1180 } },
+  { id: 'lobby-leaves-planters-west', kind: 'leaf-pile', room: 'lobby', pos: { x: 1000, y: 1270 } },
+  { id: 'lobby-leaves-planters-east', kind: 'leaf-pile', room: 'lobby', pos: { x: 2200, y: 1270 } },
+  // The arcade hall's floor (Nov 8): a moonbeam through a skylight over each of its two gathering rings, leaves blown along it from the doorway.
+  { id: 'arcade-moonbeam-west', kind: 'moonbeam', room: 'arcade', pos: { x: 1200, y: 1110 } },
+  { id: 'arcade-moonbeam-east', kind: 'moonbeam', room: 'arcade', pos: { x: 3600, y: 1110 } },
+  // The lane under the nests, grown into a plaza (Nov 8): a moonbeam in its ring, leaves blown under the banks and along its front.
+  { id: 'homes-moonbeam', kind: 'moonbeam', room: 'homes', pos: { x: 2300, y: 1110 } },
+  { id: 'homes-leaves-bank', kind: 'leaf-pile', room: 'homes', pos: { x: 560, y: 1080 } },
+  { id: 'homes-leaves-mound', kind: 'leaf-pile', room: 'homes', pos: { x: 1250, y: 1240 } },
+  { id: 'homes-leaves-front', kind: 'leaf-pile', room: 'homes', pos: { x: 2950, y: 1220 } },
+  // The night market's street (Nov 8): a moonbeam through the lights over each puddle ring, leaves washed to its kerbs.
+  { id: 'market-moonbeam-west', kind: 'moonbeam', room: 'market', pos: { x: 900, y: 1110 } },
+  { id: 'market-moonbeam-east', kind: 'moonbeam', room: 'market', pos: { x: 2400, y: 1110 } },
+  { id: 'market-leaves-west', kind: 'leaf-pile', room: 'market', pos: { x: 260, y: 1230 } },
+  { id: 'market-leaves-middle', kind: 'leaf-pile', room: 'market', pos: { x: 1650, y: 1240 } },
+  { id: 'market-leaves-east', kind: 'leaf-pile', room: 'market', pos: { x: 3000, y: 1230 } },
+  // The glass street (Nov 8): a moonbeam on its ring of glass tiles, leaves by the lanterns and at its front corners.
+  { id: 'glass-moonbeam', kind: 'moonbeam', room: 'glass', pos: { x: 800, y: 1260 } },
+  { id: 'glass-leaves-lantern-west', kind: 'leaf-pile', room: 'glass', pos: { x: 230, y: 1010 } },
+  { id: 'glass-leaves-lantern-east', kind: 'leaf-pile', room: 'glass', pos: { x: 1380, y: 1010 } },
+  { id: 'glass-leaves-front-west', kind: 'leaf-pile', room: 'glass', pos: { x: 330, y: 1560 } },
+  { id: 'glass-leaves-front-east', kind: 'leaf-pile', room: 'glass', pos: { x: 1270, y: 1560 } },
+  // The grove's clearing (Nov 8): a moonbeam through the canopy over each of its three rings, leaves drifted against its mounds.
+  { id: 'grove-moonbeam-west', kind: 'moonbeam', room: 'grove', pos: { x: 900, y: 1060 } },
+  { id: 'grove-moonbeam-middle', kind: 'moonbeam', room: 'grove', pos: { x: 2600, y: 1060 } },
+  { id: 'grove-moonbeam-east', kind: 'moonbeam', room: 'grove', pos: { x: 3900, y: 1060 } },
+  { id: 'grove-leaves-bank-west', kind: 'leaf-pile', room: 'grove', pos: { x: 380, y: 1060 } },
+  { id: 'grove-leaves-mound', kind: 'leaf-pile', room: 'grove', pos: { x: 1700, y: 1080 } },
+  { id: 'grove-leaves-mushrooms', kind: 'leaf-pile', room: 'grove', pos: { x: 3250, y: 1080 } },
+  { id: 'grove-leaves-bank-east', kind: 'leaf-pile', room: 'grove', pos: { x: 4480, y: 1060 } },
+  // The Party Grove's plaza (Nov 8): a moonbeam over each of its two rings, either side of the way back into the trunk, leaves blown into its corners and along its front.
+  { id: 'hub-moonbeam-west', kind: 'moonbeam', room: 'hub', pos: { x: 1150, y: 1060 } },
+  { id: 'hub-moonbeam-east', kind: 'moonbeam', room: 'hub', pos: { x: 3650, y: 1060 } },
+  { id: 'hub-leaves-plaza-west', kind: 'leaf-pile', room: 'hub', pos: { x: 380, y: 1140 } },
+  { id: 'hub-leaves-plaza-front-west', kind: 'leaf-pile', room: 'hub', pos: { x: 1800, y: 1150 } },
+  { id: 'hub-leaves-plaza-front-east', kind: 'leaf-pile', room: 'hub', pos: { x: 3000, y: 1150 } },
+  { id: 'hub-leaves-plaza-east', kind: 'leaf-pile', room: 'hub', pos: { x: 4480, y: 1140 } },
+  { id: 'arcade-leaves-street', kind: 'leaf-pile', room: 'arcade', pos: { x: 300, y: 1230 } },
+  { id: 'arcade-leaves-floor', kind: 'leaf-pile', room: 'arcade', pos: { x: 2400, y: 1200 } },
+  { id: 'arcade-leaves-end', kind: 'leaf-pile', room: 'arcade', pos: { x: 4500, y: 1230 } },
 ];
 
 const BY_ID: Readonly<Record<string, InteractableDef>> = Object.fromEntries(INTERACTABLES.map((i) => [i.id, i]));

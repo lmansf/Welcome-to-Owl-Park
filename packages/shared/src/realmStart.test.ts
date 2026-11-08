@@ -37,11 +37,13 @@ describe("every realm's start, one screen from above (OP-276)", () => {
     describe(realm, () => {
       const room = ROOMS[realm]!;
 
-      it('is one screen, painted by its start-screen slot, its floor the template', () => {
-        expect(room.size).toEqual({ w: ROOM_W, h: ROOM_H });
+      it('is one screen wide, painted by its start-screen slot, its floor the template (or the template opened onto a plaza below it)', () => {
+        expect(room.size.w).toBe(ROOM_W);
         expect(room.backgrounds).toEqual([{ key: `kit-${realm}-start-screen`, x: 0, y: 0 }]);
         expect(KIT_ART[`kit-${realm}-start-screen`]?.slot).toBe('start-screen');
-        expect(room.walkable).toEqual([START_FLOOR]);
+        if (room.size.h === ROOM_H) expect(room.walkable).toEqual([START_FLOOR]);
+        // Grown (plaza.ts, Nov 8): the template's back and sides are kept, corner for corner, and its front opened.
+        else for (const p of START_FLOOR.filter((q) => q.y < 800)) expect(room.walkable[0]).toContainEqual(p);
       });
 
       it('leads where it did: the knot-hole back to the tree, the vote spot, and the way on to its course', () => {
@@ -84,7 +86,7 @@ describe("every realm's start, one screen from above (OP-276)", () => {
         expect(owl.look.wear?.head).toBeTruthy();
         const leaves = interactablesIn(realm).filter((i) => i.kind === 'leaf-pile');
         expect(leaves.length).toBeGreaterThanOrEqual(1);
-        for (const l of leaves) expect(onFloor(l.pos)).toBe(true);
+        for (const l of leaves) expect(room.walkable.some((poly) => pointInPolygon(l.pos, poly)), l.id).toBe(true);
         const own = QUESTS.filter((q) => q.giver === owl.id);
         expect(own.length).toBeGreaterThanOrEqual(1);
         expect(own.some((q) => q.steps.some((s) => s.goal.kind === 'interact' && s.goal.what === 'leaf-pile' && s.goal.room === realm))).toBe(true);

@@ -181,6 +181,18 @@ function wayArt(id: HallWay): string | null {
 }
 
 /**
+ * How big a doorway in the near wall is drawn: seen from almost straight above, it stands low over the
+ * floor's front edge, and on a phone it never fills the screen's foot (Nov 8, the trunk's door did).
+ */
+export const FRONT_ART = 0.6;
+
+/** How tall a way's doorway art is drawn (room px). */
+function artTall(id: HallWay): number {
+  const art = wayArt(id);
+  return (art ? (KIT_ART[art]?.h ?? 320) : 320) * (atFront(id) ? FRONT_ART : 1);
+}
+
+/**
  * Where a way's sign stands: on the floor in front of it, where an owl walking up to it reads it. At
  * the front its doorway's art stands up over the floor before it, so its sign stands clear above that.
  */
@@ -189,9 +201,14 @@ export function signInset(id: HallWay): number {
   // At an end the doorway's art stands beside the floor: its sign stands out from under it.
   if (atEnd(id)) return 260;
   if (!atFront(id)) return 150;
-  const art = wayArt(id);
-  return Math.min(480, (art ? (KIT_ART[art]?.h ?? 320) : 320) + 60);
+  return Math.min(300, artTall(id) + 20);
 }
+
+/**
+ * How far in from the rim an owl coming in by a way lands: at the front just inside its doorway's
+ * sign, close enough that the sign shows (hints.ts SIGN_REACH, 300 from the doorway's middle).
+ */
+const arriveAt = (id: HallWay) => (atFront(id) ? Math.min(280, signInset(id) + 30) : ARRIVE);
 
 /** A way's doorway on the rim: its strip straddles the rim, across it at the back and front, down it at the two ends. */
 function rimDoor(id: HallWay, to: DoorDef['to'], closedSign?: DoorDef['closedSign'], label?: string): DoorDef {
@@ -261,6 +278,7 @@ const PIECES: RoomPiece[] = HALL_WAYS.flatMap((id): RoomPiece[] => {
       x: foot.x,
       y: foot.y,
       ...(id.startsWith('course-') && p.x < HALL_CX ? { flip: true as const } : {}),
+      ...(atFront(id) ? { scale: FRONT_ART } : {}),
     },
   ];
 });
@@ -437,12 +455,12 @@ export const HALL_ROOM: RoomDef = {
   spawns: {
     default: { x: HALL_CX, y: HALL_CY + 260 },
     'from-lobby': wayAt('up', ARRIVE),
-    'from-party': wayAt('to-party', signInset('to-party') + 60),
+    'from-party': wayAt('to-party', arriveAt('to-party')),
     'from-under': wayAt('down', 330),
     ...Object.fromEntries(
       HALL_COMMONS.flatMap((c) => [
-        [fromRealm(c.level), wayAt(realmDoor(c.level), atFront(realmDoor(c.level)) ? signInset(realmDoor(c.level)) + 60 : ARRIVE)],
-        [fromCourse(c.level), wayAt(courseDoor(c.level), atFront(courseDoor(c.level)) ? signInset(courseDoor(c.level)) + 60 : ARRIVE)],
+        [fromRealm(c.level), wayAt(realmDoor(c.level), arriveAt(realmDoor(c.level)))],
+        [fromCourse(c.level), wayAt(courseDoor(c.level), arriveAt(courseDoor(c.level)))],
       ]),
     ),
   },

@@ -101,7 +101,7 @@ test.describe('busy nights (OP-075)', () => {
     await keeper.context().close();
   });
 
-  test('the ribbon: on for everyone in a room and on the home screen, hidden for a visit, back with new words, then off', async ({ browser, request }) => {
+  test('the ribbon: on for everyone in a room and on the home screen, hidden on this device, back with new words, then off', async ({ browser, request }) => {
     test.slow(); // two live parks in one browser, both drawn with software WebGL on CI runners: 78 s here, past 90 s on a slow runner
     const inside = await straightIn(browser, COMPUTER);
     await inPark(inside);
@@ -118,7 +118,7 @@ test.describe('busy nights (OP-075)', () => {
     await ribbonClear(inside, ['[data-test-notice]', '[data-menu-btn]', '[data-emotes-btn]', '[data-say-btn]']);
     await inside.screenshot({ path: 'e2e-screenshots/ribbon-computer.png' });
     await dropNotice(inside);
-    // Hidden for the visit: a reload keeps it hidden, until the words change.
+    // Hidden on this device: a reload keeps it hidden, until the words change.
     await phone.getByRole('button', { name: 'Hide this note' }).click();
     await expect(ribbon(phone)).toBeHidden();
     await phone.reload();

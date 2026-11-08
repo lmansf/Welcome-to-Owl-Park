@@ -183,7 +183,7 @@ describe('the Great Hollow (Nov 7; an oval, Nov 8)', () => {
       // At the front its doorway's art stands up over the floor before it: the sign stands above that art.
       const art = hall.pieces!.find((p) => Math.hypot(p.x - middle(d.id).x, p.y - middle(d.id).y) < 120);
       if (art && atFront(d.id as (typeof HALL_WAYS)[number]) && d.id !== 'down')
-        expect(d.labelAt!.y, d.id).toBeLessThan(art.y - KIT_ART[art.key]!.h);
+        expect(d.labelAt!.y, d.id).toBeLessThan(art.y - KIT_ART[art.key]!.h * (art.scale ?? 1));
     }
   });
 

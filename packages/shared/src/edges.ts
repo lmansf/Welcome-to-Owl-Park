@@ -62,6 +62,16 @@ export interface EdgeArt {
  * A bump's `base` is where the floor's line would run without it; the art fills the box above its
  * profile (a back bump) or below it (a front one).
  */
+/** A grown plaza's four pieces (plaza.ts): its ring, two front bumps and its front corner. */
+function plazaPieces(room: string, bumps: string): Record<string, EdgeArt> {
+  return {
+    [`edge-${room}-ring`]: { w: 760, h: 380, kind: 'ring' },
+    [`edge-${room}-${bumps}-a`]: { w: 420, h: 60, kind: 'bump', side: 'front', base: 32, depth: 28, ease: 'both', square: 2, wobble: 0.16 },
+    [`edge-${room}-${bumps}-b`]: { w: 520, h: 60, kind: 'bump', side: 'front', base: 32, depth: 22, ease: 'both', square: 2, wobble: 0.2 },
+    [`edge-${room}-corner-front`]: { w: 140, h: 92, kind: 'bump', side: 'front', base: 64, depth: 60, ease: 'left', square: 2, wobble: 0.06 },
+  };
+}
+
 export const EDGE_ART: Readonly<Record<string, EdgeArt>> = {
   // The Great Hollow: roots out of the foot of its wall, between the doorways.
   'edge-hollow-roots-a': { w: 160, h: 150, kind: 'bump', side: 'back', base: 90, depth: 56, ease: 'both', square: 2, wobble: 0.14 },
@@ -87,6 +97,26 @@ export const EDGE_ART: Readonly<Record<string, EdgeArt>> = {
   'edge-hollow-plaza-ring': { w: 760, h: 380, kind: 'ring' },
   // The ragged rim of the hollow along the top of its wall, one a screen.
   'edge-hollow-rim': { w: 1600, h: 150, kind: 'rim' },
+  // The Treetop Commons' plaza (the lobby, grown to hold a crowd, Nov 8): a worn ring round its moonbeam,
+  // planters along its front and its rounded front corners (the east one mirrored).
+  'edge-commons-ring': { w: 760, h: 380, kind: 'ring' },
+  'edge-commons-planters-a': { w: 420, h: 60, kind: 'bump', side: 'front', base: 32, depth: 28, ease: 'both', square: 2, wobble: 0.16 },
+  'edge-commons-planters-b': { w: 520, h: 60, kind: 'bump', side: 'front', base: 32, depth: 22, ease: 'both', square: 2, wobble: 0.2 },
+  'edge-commons-corner-front': { w: 140, h: 92, kind: 'bump', side: 'front', base: 64, depth: 60, ease: 'left', square: 2, wobble: 0.06 },
+  // The arcade hall's floor, grown the same way: a worn ring under each skylight, crates and cables
+  // along its front and its rounded front corners.
+  'edge-arcade-ring': { w: 760, h: 380, kind: 'ring' },
+  'edge-arcade-clutter-a': { w: 420, h: 60, kind: 'bump', side: 'front', base: 32, depth: 28, ease: 'both', square: 2, wobble: 0.16 },
+  'edge-arcade-clutter-b': { w: 520, h: 60, kind: 'bump', side: 'front', base: 32, depth: 22, ease: 'both', square: 2, wobble: 0.2 },
+  'edge-arcade-corner-front': { w: 140, h: 92, kind: 'bump', side: 'front', base: 64, depth: 60, ease: 'left', square: 2, wobble: 0.06 },
+  // The other painted rooms grown into plazas the same way (Nov 8), each with its own four pieces:
+  // the lane under the nests (mossy ring, ferns along its front), the night market's street (a puddle
+  // ring under the lights, crates and cables), and the glass street (a ring of glass tiles, glass planters), and the grove's clearing (a ring of moss and stones, ferns).
+  ...plazaPieces('lane', 'ferns'),
+  ...plazaPieces('market', 'clutter'),
+  ...plazaPieces('glass', 'planters'),
+  ...plazaPieces('clearing', 'ferns'),
+  ...plazaPieces('party', 'mushrooms'),
   // Seen from the side, on every platform drawn from the kit: down its sides (repeats down; the right side is the left mirrored) and under it (repeats across).
   'edge-ledge-side': { w: 40, h: 240, kind: 'side' },
   'edge-ledge-under': { w: 240, h: 44, kind: 'under' },
@@ -442,6 +472,42 @@ function underOps(key: string, a: EdgeArt): KitOp[] {
 
 /** An edge piece's placeholder: plain shapes in the tree's palette, where its art will be. Null for a key that is not one. */
 export function edgePlaceholder(key: string): KitOp[] | null {
+  const ops = edgePlaceholderOps(key);
+  const recolour = key.startsWith('edge-arcade-') || key.startsWith('edge-market-') ? ARCADE_RECOLOUR : key.startsWith('edge-glass-') ? GLASS_RECOLOUR : null;
+  return ops && recolour ? ops.map((o) => ({ ...o, c: recolour[o.c] ?? o.c })) : ops;
+}
+
+/** The glass street's stand-ins: glass tiles and lead in its blues and violets, no moss on its cobbles. */
+export const GLASS_RECOLOUR: Readonly<Record<number, number>> = {
+  [P.moss]: 0x2b3a6b,
+  [P.mossLight]: 0x7fa6e6,
+  [P.leaf]: 0x8a6cc9,
+  [P.leafLight]: 0xc7b3f0,
+  [P.bark]: 0x2a2f45,
+  [P.barkDark]: 0x161a2b,
+  [P.wood]: 0x5d6a94,
+  [P.woodDark]: 0x39425e,
+  [P.navyDeep]: 0x0d1024,
+};
+
+/**
+ * The arcade's stand-ins are the tree's shapes in the arcade's colours: no moss on a night street, but
+ * puddles, neon spill and cable, so the plaza's join, ring and kerbs sit in the wet pavement.
+ */
+export const ARCADE_RECOLOUR: Readonly<Record<number, number>> = {
+  [P.moss]: 0x1d2440,
+  [P.mossLight]: 0x2fd3e0,
+  [P.leaf]: 0xd0379b,
+  [P.leafLight]: 0xff7ad9,
+  [P.bark]: 0x2a2d3e,
+  [P.barkDark]: 0x14151f,
+  [P.wood]: 0x58607e,
+  [P.woodDark]: 0x34394f,
+  [P.gold]: 0xffc24a,
+  [P.navyDeep]: 0x0b0a18,
+};
+
+function edgePlaceholderOps(key: string): KitOp[] | null {
   const a = EDGE_ART[key];
   if (!a) return null;
   switch (a.kind) {

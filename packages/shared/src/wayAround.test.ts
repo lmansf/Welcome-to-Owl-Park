@@ -57,29 +57,33 @@ function seeded(seed: number) {
 }
 
 describe('the way around a bend in the floor (OP-148)', () => {
-  it('takes the owl from the street’s west end round the mounds to its own nest door, each leg a straight walk', () => {
-    const from = { x: 470, y: 870 };
+  // Since the street opened onto its plaza (Nov 8), its mound is a solid perch in the open floor: the way goes round it.
+  const ground = footing(street, 0);
+
+  it('takes the owl from the plaza round the mound to its own nest door, each leg a straight walk', () => {
+    const from = { x: 1300, y: 1000 };
     const to = doorAt('nest-door-0');
-    expect(distance(resolveTarget(from, to, street.walkable), to)).toBeGreaterThan(WAY_SHORT_PX);
-    const shut = doorwaysOff(street, from, to);
-    const legs = wayAround(from, to, street.walkable, shut);
+    const shut = [...ground.shut, ...doorwaysOff(street, from, to)];
+    expect(distance(resolveTarget(from, to, ground.walkable, shut), to)).toBeGreaterThan(WAY_SHORT_PX);
+    const legs = wayAround(from, to, ground.walkable, shut);
     expect(legs?.length).toBeGreaterThan(0);
     expect(legs!.length).toBeLessThanOrEqual(3);
-    walksThrough(from, legs!, to, street.walkable, shut);
+    walksThrough(from, legs!, to, ground.walkable, shut);
   });
 
-  it('goes on from the mound where a straight walk stopped, where a second tap at the door did nothing', () => {
-    const from = { x: 1431, y: 805 };
-    const to = doorAt('nest-door-0');
-    // A straight walk from here goes nowhere: the line leaves the floor at once.
-    expect(distance(resolveTarget(from, to, street.walkable), from)).toBeLessThan(3);
-    const legs = wayAround(from, to, street.walkable, doorwaysOff(street, from, to));
+  it('goes on from the foot of the mound where a straight walk stopped, where a second tap at the door did nothing', () => {
+    const from = { x: 1610, y: 905 };
+    const to = doorAt('nest-door-3');
+    const shut = [...ground.shut, ...doorwaysOff(street, from, to)];
+    // A straight walk from here goes nowhere: the line runs into the mound at once.
+    expect(distance(resolveTarget(from, to, ground.walkable, shut), from)).toBeLessThan(3);
+    const legs = wayAround(from, to, ground.walkable, shut);
     expect(legs?.length).toBeGreaterThan(0);
-    walksThrough(from, legs!, to, street.walkable);
+    walksThrough(from, legs!, to, ground.walkable, shut);
   });
 
   it('keeps out of the doorways it is not aimed at: no leg ends by one, nor crosses one', () => {
-    const from = { x: 470, y: 870 };
+    const from = { x: 520, y: 900 };
     const to = doorAt('nest-door-0');
     const shut = doorwaysOff(street, from, to);
     expect(shut).toHaveLength(6); // nest doors 1 to 5 and the way to the lobby
