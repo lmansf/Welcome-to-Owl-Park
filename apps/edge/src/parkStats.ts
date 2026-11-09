@@ -27,7 +27,7 @@
  *
  * Nothing here is kept while the log is off. Written against `SqlStorage`, so Node tests it.
  */
-import { DEFAULT_SPECIES, SPECIES, isHexColour, isNestRoom, mapOf, type SpeciesId } from '@owl-park/shared';
+import { DEFAULT_SPECIES, SPECIES, isHexColour, isNestRoom, isNewMapRoom, mapOf, type SpeciesId } from '@owl-park/shared';
 import { TREE_REALMS, roomFor } from '@owl-park/shared/rooms';
 import { moduleLog } from './logs';
 import { cleanVisit, type CollectLog, type EntrySource, type StayEntry, type Visit } from './collectLog';
@@ -285,11 +285,7 @@ export class ParkStats {
  * `places` are the rooms' own ids in the order the owl went into them.
  */
 export function visitMaps(places: readonly string[]): (1 | 2)[] {
-  const own = places.map((place): 1 | 2 | null => {
-    if (isNestRoom(place) || TREE_REALMS.has(place)) return null;
-    const room = roomFor(place);
-    return room ? mapOf(room) : null;
-  });
+  const own = places.map(roomLogMap);
   const first = own.find((m) => m !== null) ?? 1;
   let carry: 1 | 2 = first;
   return own.map((m) => (carry = m ?? carry));
@@ -302,11 +298,15 @@ export function visitMaps(places: readonly string[]): (1 | 2)[] {
  * cannot wait to see the visit's later rooms, as `visitMaps` does.
  */
 export function stayMap(place: string, before: 1 | 2 | null): 1 | 2 {
-  if (!isNestRoom(place) && !TREE_REALMS.has(place)) {
-    const room = roomFor(place);
-    if (room) return mapOf(room);
-  }
-  return before ?? 1;
+  return roomLogMap(place) ?? before ?? 1;
+}
+
+/** Map 3 belongs to the tree's reporting bucket, as the client's room hello already says. */
+function roomLogMap(place: string): 1 | 2 | null {
+  if (isNestRoom(place) || TREE_REALMS.has(place)) return null;
+  if (isNewMapRoom(place)) return 2;
+  const room = roomFor(place);
+  return room ? mapOf(room) : null;
 }
 
 function rooms(text: string): string[] {

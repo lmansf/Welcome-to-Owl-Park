@@ -208,6 +208,10 @@ outward to the buyer, never the buyer into a `game` table.
    daily one (it stops if the daily table ever held a row). Database only: no function or Worker change.
    Then `sql/room_stays_retention.sql` as `game_room_stays_retention`: no rollup, stays deleted 90 days
    after they end (it stops if the hourly table ever held a row). Database only.
+   OP-113 adds `sql/realm_room_slugs.sql` so realm visits and mirrored keeper feedback can retain
+   neutral room ids such as `m3-hall` and `trail-1`. Apply the migration before deploying the log
+   function, then deploy the Worker so the Great Hollow counts with the tree (`map_id = 2`), as
+   the client already reports map 3. Previously skipped rows stay missing and old rows are untouched.
 2. `src/index.ts` and `src/handler.ts` deployed as the function `owl-park-log` with the platform's
    JWT check off (the function checks the park's key itself): through Supabase's API, or with the
    Supabase CLI from a folder `supabase/functions/owl-park-log/` holding the two files,
