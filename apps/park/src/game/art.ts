@@ -8,7 +8,7 @@
  * files fall back to generated placeholders and never stop the park.
  */
 import Phaser from 'phaser';
-import { EDGE_ART, FURNITURE, KIT_ART, edgePlaceholder, kitDrawPlan, kitFrames, isArcadeRoom, kitFilesOf, ROOM_H, ROOM_W, backgroundTiles, foregroundTiles, idolRealms, isNestRoom, kitArtKeys, kitPlaceholder, seenFromSide, type RoomDef, type SpeciesId } from '@owl-park/shared';
+import { EDGE_ART, FURNITURE, KIT_ART, edgePlaceholder, kitDrawPlan, kitFrames, isArcadeRoom, kitFilesOf, ROOM_H, ROOM_W, backgroundTiles, foregroundTiles, idolRealms, interactablesIn, isNestRoom, kitArtKeys, kitPlaceholder, seenFromSide, type RoomDef, type SpeciesId } from '@owl-park/shared';
 import { GAME_ART } from '../arcade/paint';
 import type { ParkConfig } from '../config';
 import { COURSES, ROOMS, TREE_GROUND, roomFor } from '../rooms';
@@ -988,6 +988,8 @@ export function roomArtKeys(roomId: string, room: RoomDef | undefined = roomFor(
   if (realms.includes('glass')) keys.push('kit-glass-idol-owl');
   // A realm start's set pieces (OP-276).
   for (const p of room?.pieces ?? []) keys.push(p.key);
+  // The art of the things to use out on a plaza's floor (plazaFloor.ts): a bird bath, mushrooms, a telescope.
+  for (const t of interactablesIn(roomId)) if (t.piece) keys.push(t.piece);
   // The pieces that shape its edges, seen from above (edges.ts).
   for (const e of room?.edges ?? []) keys.push(e.key);
   if (isArcadeRoom(roomId)) keys.push(...Object.keys(ART).filter((k) => ART[k]!.kind === 'arcade'));

@@ -130,6 +130,7 @@ test.describe('The feedback bug, until the full opening (OP-208)', () => {
   test.skip(Date.now() >= FULL_OPENING_MS, 'the bug goes away at the full opening');
 
   test('on the home screen and in the park: on screen, clear of the controls, and it opens the Feedback form', async ({ page, isMobile }) => {
+    test.slow(); // Two cold page loads plus the complete form flow exceed 45 s on loaded CI runners.
     test.skip(isEdge(), 'the room server suite sends from the home screen above');
     await page.goto('/?transport=local');
     await page.waitForFunction(() => window.owlPark?.home?.().shown === true, null, { timeout: 20_000 });

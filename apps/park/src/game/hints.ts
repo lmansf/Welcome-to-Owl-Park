@@ -162,6 +162,18 @@ export function signFocus(targets: HintTarget[], owl: { x: number; y: number }, 
   return near[0]?.id ?? null;
 }
 
+/**
+ * Where a sign's middle stands across (room px): over its own spot, or slid in just far enough that
+ * all its words are on screen (`view`, the room seen now; `margin` kept clear at each side), so a sign
+ * by a doorway at the screen's edge is never cut off (the Great Hollow's ends, Nov 8).
+ */
+export function signX(x: number, w: number, view: { x: number; w: number }, margin: number): number {
+  const lo = view.x + margin + w / 2;
+  const hi = view.x + view.w - margin - w / 2;
+  if (lo > hi) return view.x + view.w / 2;
+  return Math.min(hi, Math.max(lo, x));
+}
+
 /** How tall an owl stands over its feet (room px), and the gap kept under them, so a sign never sits behind it. */
 const OWL_TALL = 95;
 const UNDER_FEET = 10;

@@ -1,9 +1,9 @@
 # Testing: how the park is checked
 
 - Status: current
-- Verified against: branch claude/op-202-docs off main 01e9722 (2026-11-02)
+- Verified against: main d174f67 (2026-11-08), with the OP-218 discovery change
 - Code: package.json, apps/park/playwright.config.ts, apps/park/e2e/, .github/workflows/ci.yml, .github/workflows/chaos.yml, .github/workflows/load-test.yml, .github/workflows/security-nightly.yml, apps/edge/stryker.config.mjs, packages/shared/stryker.config.mjs, tools/mutation/, tools/load/, tools/chaos/, tools/security/, tools/art/test/, tools/art/test_art_tools.py, apps/edge/test/logEvents.test.ts, apps/edge/test/logged.ts, packages/shared/src/routes.ts, packages/shared/rooms/rooms.test.ts
-- Tickets: OP-068, OP-075, OP-084, OP-088, OP-123, OP-131, OP-132, OP-134, OP-140, OP-149, OP-150, OP-151
+- Tickets: OP-068, OP-075, OP-084, OP-088, OP-123, OP-131, OP-132, OP-134, OP-140, OP-149, OP-150, OP-151, OP-218
 - Related: docs/DEPLOY.md, docs/CAPACITY.md, docs/SECURITY.md, docs/PLAYBOOK.md, docs/ART-PIPELINE.md, CLAUDE.md
 
 How the park is tested, and which check to run when. Every command runs from the repository root.
@@ -93,10 +93,12 @@ settings. Those values exist only on this test server.
 - `e2e/durations.json` holds each test's measured seconds on a CI runner, for the shards. Refresh it
   from a full run's `durations` artifact when tests are added; a test with no time counts as the median.
 
-OPEN QUESTION: `e2e/treeL2.spec.ts`, `treeL3.spec.ts` and `treeL4.spec.ts` match no project's
-`testMatch` (the patterns take `tree.spec.ts` only), so `pnpm e2e` and CI never run them.
-`perches.spec.ts`, `tree.spec.ts` and the three `treeL*` files also import `test` from
-`@playwright/test`, not from `e2e/fixtures.ts`, so the policy watch does not cover them.
+The four level specs, `e2e/treeL2.spec.ts` through `treeL5.spec.ts`, run on both `desktop` and
+`phone` (OP-218): 32 cases included in the same discovery list the CI shards use. They use
+`e2e/fixtures.ts`, including its policy watch.
+
+OPEN QUESTION: `perches.spec.ts` and `tree.spec.ts` still import `test` from `@playwright/test`,
+so the policy watch does not cover those two files.
 
 ## CI [BUILT (OP-123)]
 

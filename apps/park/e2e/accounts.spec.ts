@@ -190,6 +190,7 @@ test.describe('accounts without passwords (OP-139)', () => {
 
 test.describe('bringing a friend (OP-056), a preview with ?friends=1', () => {
   test('the Menu’s card shows only with the flag; a new owl types a friend’s code and its free Day Ticket waits', async ({ browser }) => {
+    test.slow(); // Three browser contexts render the park before checking the offer.
     const plain = await screen(browser);
     await openMenu(plain, 'nest');
     await expect(plain.locator('[data-friend-code]')).toBeVisible();

@@ -150,7 +150,7 @@ import { openPosOverlay, type PosOverlay } from '../ui/posOverlay';
 import { keeperToken } from '../net/keeper';
 import type { Away } from '../ui/away';
 import { castVote } from '../net/vote';
-import { GATED_ROOMS, NEST_MIRROR, ROOMS, TREE_ARRIVAL, getRoom, groundOf, roomFor } from '../rooms';
+import { GATED_ROOMS, NEST_MIRROR, ROOMS, TREE_ARRIVAL, getRoom, groundOf, roomFor, roomOnMap } from '../rooms';
 import { drawKit, drawnRoom } from './kitView';
 import { TREE_RAISED_BAND, dressTreeRoom, type TreeDress, type TreeDressing } from './treeView';
 import type { DecorateView } from '../ui/decorate';
@@ -185,6 +185,7 @@ import { FitOverlay } from './fitOverlay';
 import type { LedgePainter, PaintDebug } from './ledgePainter';
 import { doorHintTarget, nearTargets, placeHints, signFocus, touchBottom } from './hints';
 import { itemScale } from './items';
+import { FLOOR_KINDS, FloorThing } from './FloorThing';
 import { LeafPile, featherFind } from './LeafPile';
 import { NestMirror } from './mirror';
 import { NestDecor, pieceThumb } from './nest';
@@ -199,6 +200,7 @@ import { SizeLabels } from './sizeLabels';
 import { DoorSigns } from './doorSigns';
 import { sideEdges } from './sideEdges';
 import { drawWalkFloor } from './walkFloor';
+import { BOWL_SHADOW, drawBowl } from './bowlView';
 import { drawEdges } from './edgeView';
 import { drawSkirts } from './plazaSkirt';
 import { setVignette } from './vignette';
@@ -281,6 +283,10 @@ const FLOP_LAND_MS = 330;
 const USE_LINES: Record<string, readonly string[]> = {
   stall: ['Neon trinkets, rain-polished gears and a jar of something glowing.', 'A tray of buttons that hum when you look at them.', 'Paper lanterns, folded owls and one very small umbrella.'],
   moonbeam: ['The moonbeam is warm. You feel a little shinier.', 'You bask. The moonlight hums softly.', 'Silver light settles on your feathers.'],
+  'bird-bath': ['Splash! You shake the water off every feather.', 'The water is cold and sparkly. Very refreshing.', 'You splash so hard the moon wobbles in the water.'],
+  mushroom: ['Boing! The caps are as springy as a cushion.', 'You bounce, and a puff of glowing spores floats up.', 'Squish, boing. The mushrooms do not seem to mind.'],
+  telescope: ['You spot a star shaped like an owl. It winks back.', 'The moon is so close you can see its craters.', 'Far off, a shooting star. Make a wish.'],
+  shiny: ['A shiny button! You tuck it under a wing.', 'A glinting pebble, smooth as glass. Yours now.', 'Something shiny. You will find a good place for it.'],
 };
 
 /**
@@ -441,8 +447,11 @@ export class RoomScene extends Phaser.Scene {
   private quests!: QuestState;
   private link: QuestLink | null = null;
   private readonly npcs = new Map<string, NpcOwl>();
-  private readonly piles = new Map<string, LeafPile>();
+  /** Things shared by the room: leaf piles, and the shiny things out on a plaza's floor (gone for everyone once used). */
+  private readonly piles = new Map<string, LeafPile | FloorThing>();
   private readonly glows = new Map<string, SpotGlow>();
+  /** Things to use out on a plaza's floor (plazaFloor.ts): bird baths, mushrooms, telescopes and shiny things. */
+  private readonly things = new Map<string, FloorThing>();
   private readonly items = new Map<string, QuestItemMarker>();
   /** Pickups in flight (by item key), and when a failed one may be retried. */
   private readonly gathering = new Map<string, number>();
@@ -585,7 +594,8 @@ export class RoomScene extends Phaser.Scene {
   }
 
   init(data: RoomStart): void {
-    this.room = getRoom(data.room);
+    // On the new map a realm whose idol now stands in the Great Hollow has none of its own (roomOnMap).
+    this.room = roomOnMap(getRoom(data.room), walkingMap());
     this.ownRoom = this.room;
     this.painter = null;
     enteredRoom(this.room);
@@ -657,6 +667,7 @@ export class RoomScene extends Phaser.Scene {
     this.npcs.clear();
     this.piles.clear();
     this.glows.clear();
+    this.things.clear();
     this.items.clear();
     this.gathering.clear();
     this.puzzleMarks.clear();
@@ -940,6 +951,8 @@ export class RoomScene extends Phaser.Scene {
     if (!room.drawn) drawSkirts(this, art);
     // Seen from above: roots, ferns, pillars and the rim that break up its rectangles (edges.ts), under the floor's edge line.
     this.edgesDrawn = drawEdges(this, room);
+    // An oval floor seen from almost straight above (the Great Hollow): its wall with height round it, the floor shaded so it recedes.
+    drawBowl(this, room);
     // A soft shade in the view's corners, so a room seems to run on past the screen instead of stopping in a box.
     setVignette(true);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => setVignette(false));
@@ -1035,7 +1048,10 @@ export class RoomScene extends Phaser.Scene {
       });
     }
 
-    this.me = new Owl(this, this.playerId, this.look, spawn, itemScale(this.cfg.pixelRatio)).setRoomScale(room.owlScale ?? 1).setRaisedBand(this.raisedBand());
+    this.me = new Owl(this, this.playerId, this.look, spawn, itemScale(this.cfg.pixelRatio))
+      .setRoomScale(room.owlScale ?? 1)
+      .setRaisedBand(this.raisedBand())
+      .setShadowDepth(room.bowl ? BOWL_SHADOW : 1);
     this.me.groundUnder = this.groundUnder;
     this.me.slopeUnder = this.slopeBelow;
     this.me.calm = () => this.calm();
@@ -1411,7 +1427,10 @@ export class RoomScene extends Phaser.Scene {
     const now = Date.now();
     let owl = this.peers.get(s.id);
     if (!owl) {
-      owl = new Owl(this, s.id, s.look, s.pos, itemScale(this.cfg.pixelRatio)).setRoomScale(this.room.owlScale ?? 1).setRaisedBand(this.raisedBand());
+      owl = new Owl(this, s.id, s.look, s.pos, itemScale(this.cfg.pixelRatio))
+        .setRoomScale(this.room.owlScale ?? 1)
+        .setRaisedBand(this.raisedBand())
+        .setShadowDepth(this.room.bowl ? BOWL_SHADOW : 1);
       owl.groundUnder = this.groundUnder;
       owl.slopeUnder = this.slopeBelow;
       owl.calm = () => this.calm();
@@ -1490,11 +1509,24 @@ export class RoomScene extends Phaser.Scene {
       this.pendingVote = false; // a new destination cancels a walk to the idol
       this.errand = null; // ...or to an NPC or a leaf pile
       const world = this.cameras.main.getWorldPoint(p.x, p.y);
+      // A tap on a thing to use out on a plaza's floor walks the owl over and uses it (a bird bath, mushrooms, a telescope, a shiny thing).
+      const thing = this.thingAt({ x: world.x, y: world.y });
+      if (thing) {
+        this.goDo({ kind: 'use', id: thing.id });
+        return;
+      }
       // A tap on a perch's top asks for the top, not the floor behind it (OP-084).
       const goal = tapGoal(this.room, { x: world.x, y: world.y });
       // A tap on the doorway the owl already stands in (a side view, OP-212) goes through, as one walked to would.
       if (!this.walkTo(goal)) this.tapIntoDoorway(goal);
     });
+  }
+
+  /** The thing to use out on a plaza's floor under a tap, if any: the nearest whose art or spot it is on. */
+  private thingAt(p: Vec2): FloorThing | null {
+    let best: FloorThing | null = null;
+    for (const t of this.things.values()) if (t.hit(p) && (!best || distance(p, t.pos) < distance(p, best.pos))) best = t;
+    return best;
   }
 
   /** Where the held keys or the thumbstick walk the owl: seen from the side (the tree), along the floor only, up going through doorways there (OP-212). */
@@ -1573,7 +1605,8 @@ export class RoomScene extends Phaser.Scene {
     // Where a tap walk is going (a walk on held keys or the stick goes nowhere in particular).
     const goal = this.me.walk && !this.keyWalk ? (this.walkGoal ?? this.me.walk.to) : null;
     const owlAt = `${Math.round(this.me.pos.x / 20)},${Math.round(this.me.pos.y / 20)},${goal ? `${Math.round(goal.x)},${Math.round(goal.y)}` : '-'}`;
-    const at = `${v.x},${v.y},${v.width},${v.height},${window.innerWidth},${window.innerHeight},${owlAt}`;
+    const signSeen = this.signFocused && this.doorSigns?.onScreen(this.signFocused) ? 1 : 0;
+    const at = `${v.x},${v.y},${v.width},${v.height},${window.innerWidth},${window.innerHeight},${owlAt},${signSeen}`;
     if (at === this.hintsFor.at && this.room.doors === this.hintsFor.doors) return;
     this.hintsFor = { at, doors: this.room.doors };
     // Seen from the side, each doorway is pointed at on its own landing, and only the near ones (hints.ts).
@@ -1588,7 +1621,8 @@ export class RoomScene extends Phaser.Scene {
       const focus = signFocus(all, this.me.pos, goal, this.signFocused);
       this.signFocused = focus;
       this.doorSigns?.focus(focus);
-      targets = all.filter((t) => t.id === focus || keep.has(t.id));
+      // Its sign on the floor names it once it is on screen: then no chip repeats it at the screen's edge.
+      targets = all.filter((t) => (t.id === focus && !this.doorSigns?.onScreen(t.id)) || keep.has(t.id));
     } else targets = nearTargets(all, view, SIDE_HINT_REACH);
     const places = placeHints(targets, view, { w: window.innerWidth, h: window.innerHeight, ...HINT_INSETS, ...(TOUCH_SCREEN ? { bottom: touchBottom(TOUCH_HINT_BOTTOM, window.innerHeight) } : {}) });
     const shown = places.map((p) => `${p.id}:${Math.round(p.x)},${Math.round(p.y)},${p.angle.toFixed(2)}`).join('|');
@@ -2220,7 +2254,11 @@ export class RoomScene extends Phaser.Scene {
     for (const def of npcsIn(this.room.id)) this.npcs.set(def.id, new NpcOwl(this, def, scale, (npc, pointer, event) => this.onNpcTap(npc, pointer, event)));
     for (const def of interactablesIn(this.room.id)) {
       if (def.kind === 'leaf-pile') this.piles.set(def.id, new LeafPile(this, def));
-      else this.glows.set(def.id, new SpotGlow(this, def));
+      else if (FLOOR_KINDS.has(def.kind)) {
+        const thing = new FloorThing(this, def);
+        this.things.set(def.id, thing);
+        if (KIND_RULES[def.kind].shared) this.piles.set(def.id, thing);
+      } else this.glows.set(def.id, new SpotGlow(this, def));
     }
   }
 
@@ -2308,6 +2346,7 @@ export class RoomScene extends Phaser.Scene {
       // A pile up on a perch is in reach only from that perch, one on the floor only from the floor (OP-084).
       const close = distance(pos, def.pos) <= rules.reach && this.atLevel(def);
       this.glows.get(def.id)?.setNear(close);
+      this.things.get(def.id)?.setNear(close);
       if (!close || this.piles.get(def.id)?.here === false) continue;
       out.push({ id: `use:${def.id}`, label: rules.label, run: () => void this.use(def.id) });
     }
@@ -2612,8 +2651,29 @@ export class RoomScene extends Phaser.Scene {
             this.hud.toast(n === 1 ? 'A feather was hiding in the leaves! +1 feather' : `Feathers were hiding in the leaves! +${n} feathers`, 3200, '#FFD36A');
           });
         }
+      } else if (def.kind === 'shiny') {
+        // Picked up: a free guest's turns up nothing; otherwise now and then it was worth a feather.
+        this.me.playEmote('peek');
+        if (res.feathers > 0) {
+          const n = res.feathers;
+          this.time.delayedCall(300, () => {
+            if (gen !== this.gen) return;
+            featherFind(this, def.pos, () => ({ x: this.me.pos.x, y: this.me.pos.y - this.flier.air.z }), () => this.collection.setFeathers(res.total));
+            this.hud.toast(n === 1 ? 'A feather was tucked under it! +1 feather' : `Feathers were tucked under it! +${n} feathers`, 3200, '#FFD36A');
+          });
+        } else {
+          const lines = USE_LINES[def.kind] ?? [];
+          const line = lines[Math.floor(Math.random() * lines.length)];
+          if (line) this.hud.toast(line, 2800);
+        }
       } else {
         this.glows.get(id)?.pulse();
+        const thing = this.things.get(id);
+        if (thing) {
+          thing.respond();
+          // The owl joins in: shakes the water off, bounces, tilts its head at the stars.
+          this.me.playEmote(def.kind === 'bird-bath' ? 'shiver' : def.kind === 'mushroom' ? 'hop' : 'tilt');
+        }
         const lines = USE_LINES[def.kind] ?? [];
         const line = lines[Math.floor(Math.random() * lines.length)];
         if (line) this.hud.toast(line, 2800);
@@ -2632,6 +2692,12 @@ export class RoomScene extends Phaser.Scene {
     const pile = this.piles.get(id);
     if (!pile) return;
     const owl = by === null ? this.me : this.peers.get(by);
+    // A shiny thing is picked up where it lies; a leaf pile is flopped into.
+    if (pile instanceof FloorThing) {
+      if (by !== null) owl?.playEmote('peek');
+      pile.poof(until);
+      return;
+    }
     owl?.flop();
     this.time.delayedCall(owl ? FLOP_LAND_MS : 0, () => pile.poof(until));
   }
@@ -3547,8 +3613,11 @@ export class RoomScene extends Phaser.Scene {
     this.hud.closeLock();
     for (const npc of this.npcs.values()) npc.destroy();
     this.npcs.clear();
-    for (const pile of this.piles.values()) pile.destroy();
+    // A shiny thing is in both lists: destroyed once, from the floor's.
+    for (const pile of this.piles.values()) if (!(pile instanceof FloorThing)) pile.destroy();
     this.piles.clear();
+    for (const thing of this.things.values()) thing.destroy();
+    this.things.clear();
     for (const glow of this.glows.values()) glow.destroy();
     this.glows.clear();
     this.play?.destroy();

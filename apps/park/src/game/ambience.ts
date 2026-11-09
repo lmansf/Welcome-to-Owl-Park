@@ -45,7 +45,8 @@ export function ensureFxTextures(scene: Phaser.Scene): void {
  * A set piece drawn at its logical size whatever the texture's resolution, standing on its anchor by
  * what it draws rather than by its frame's padded bottom edge (OP-127).
  */
-function piece(scene: Phaser.Scene, x: number, y: number, key: string): Phaser.GameObjects.Image {
+/** A kit piece standing with its art's foot at (x, y), at its logical size (things to use out on a plaza draw themselves with it too, FloorThing.ts). */
+export function piece(scene: Phaser.Scene, x: number, y: number, key: string): Phaser.GameObjects.Image {
   const spec = ART[key];
   const foot = footOf(key);
   const img = scene.add.image(x, y, key).setOrigin(foot.x, foot.y);
@@ -79,10 +80,17 @@ function hugging(img: Phaser.GameObjects.Image, key: string): Phaser.Types.Input
 }
 
 /** Scale so a set piece anchored at its feet keeps its head inside the frame. */
-function fitBelowTop(key: string, anchorY: number, margin = 24): number {
+function fitBelowTop(key: string, anchorY: number, tallest = Number.POSITIVE_INFINITY, margin = 24): number {
   const h = ART[key]?.h ?? 1;
-  return Math.min(1, Math.max(0.2, (anchorY - margin) / h));
+  return Math.min(1, tallest / h, Math.max(0.2, (anchorY - margin) / h));
 }
+
+/**
+ * How tall an idol stands at most in a room seen from almost straight above (RoomDef.bowl, the Great
+ * Hollow): the three stand the same height round the rim, and on a phone none hides the doorways
+ * beside it (the neon robot owl, Nov 8, covered the neon street's sign).
+ */
+export const BOWL_IDOL_TALL = 560;
 
 export interface Idol {
   /** The tappable mythical owl. */
@@ -121,6 +129,7 @@ export function addSetPieces(
   // The realms whose idols stand here: the room's own, the one its `idol` doorway votes for, or each of
   // several over its own spot (the Great Hollow's Commons, RoomDef.idols).
   const realms = idolRealms(room);
+  const tallest = room.bowl ? BOWL_IDOL_TALL : Number.POSITIVE_INFINITY;
   const pieces: SetPieces = {};
   const tappable = (img: Phaser.GameObjects.Image, realm: string) => {
     img.setInteractive(hugging(img, img.texture.key));
@@ -135,7 +144,7 @@ export function addSetPieces(
   if (realms.includes('grove') && anchors['guardian']) {
     const a = anchors['guardian'];
     const glow = scene.add.image(a.x, a.y - 300, 'fx-glow').setTint(0xffd27a).setAlpha(0.3).setScale(5, 4).setDepth(a.y - 1).setBlendMode(Phaser.BlendModes.ADD);
-    const k = fitBelowTop('guardian', a.y);
+    const k = fitBelowTop('guardian', a.y, tallest);
     const guardian = piece(scene, a.x, a.y, 'guardian').setDepth(a.y);
     const sx = guardian.scaleX * k;
     const sy = guardian.scaleY * k;
@@ -169,7 +178,7 @@ export function addSetPieces(
     const a = anchors['robot'];
     const glow = scene.add.image(a.x, a.y - 420, 'fx-glow').setTint(0xff2aa1).setAlpha(0.22).setScale(5, 5).setDepth(a.y - 1).setBlendMode(Phaser.BlendModes.ADD);
     const robot = piece(scene, a.x, a.y, 'robot-owl').setDepth(a.y);
-    const kr = fitBelowTop('robot-owl', a.y);
+    const kr = fitBelowTop('robot-owl', a.y, tallest);
     robot.setScale(robot.scaleX * kr, robot.scaleY * kr);
     tappable(robot, 'market');
     stood('market', {
@@ -201,7 +210,7 @@ export function addSetPieces(
     const a = anchors['idol'];
     const glow = scene.add.image(a.x, a.y - 230, 'fx-glow').setTint(0x9fd0ff).setAlpha(0.24).setScale(4, 3.2).setDepth(a.y - 1).setBlendMode(Phaser.BlendModes.ADD);
     const idol = piece(scene, a.x, a.y, GLASS_IDOL).setDepth(a.y);
-    const ki = fitBelowTop(GLASS_IDOL, a.y);
+    const ki = fitBelowTop(GLASS_IDOL, a.y, tallest);
     idol.setScale(idol.scaleX * ki, idol.scaleY * ki);
     tappable(idol, 'glass');
     stood('glass', {
@@ -229,7 +238,11 @@ export function addSetPieces(
     scene.tweens.add({ targets: glow, alpha: 0.4, duration: 3200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   }
   // A realm start's pieces (OP-276): its quest post, trading nest and decor, each standing at its foot among the owls.
-  for (const p of room.pieces ?? []) if (scene.textures.exists(p.key)) piece(scene, p.x, p.y, p.key).setDepth(p.y).setFlipX(!!p.flip);
+  for (const p of room.pieces ?? []) {
+    if (!scene.textures.exists(p.key)) continue;
+    const img = piece(scene, p.x, p.y, p.key).setDepth(p.y).setFlipX(!!p.flip);
+    if (p.scale) img.setDisplaySize(img.displayWidth * p.scale, img.displayHeight * p.scale);
+  }
   for (const door of room.doors) {
     const m = door.marker;
     if (!m) continue;
