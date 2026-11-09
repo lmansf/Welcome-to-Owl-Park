@@ -221,7 +221,6 @@ export class PartyHost {
         const taken = this.seated();
         const free = [...Array(PARTY_SEATS).keys()].find((i) => !taken.has(i));
         if (free === undefined) {
-          // TODO-DOCS (OP-314): docs/LOGGING.md: party_refused (room.play, info): reason full | closing | few; a fifth owl at the Old Stump, or a start that could not be.
           this.d.logOf(a).info('room.play', 'party_refused', 'An owl was turned away from the Old Stump: every seat is taken.', { reason: 'full' });
           return answer(false, 'full');
         }
@@ -272,7 +271,6 @@ export class PartyHost {
     this.games.set(id, s);
     this.marks.set(id, markOf(s));
     this.save(s, now, true);
-    // TODO-DOCS (OP-314): docs/LOGGING.md: party_started (room.play, info): owls, bots; a game began at the Old Stump, in its own room.
     this.d.logOf(a).info('room.play', 'party_started', 'A party game started at the Old Stump.', { owls: humans, bots: seats.length - humans });
     for (const [, st] of seated) {
       this.mark(st.ws, st.a, { seat: null, at: now });
@@ -346,7 +344,6 @@ export class PartyHost {
   /** The game ended before its end (the night's restart, or everyone left): told once, nobody paid. */
   private ended(s: PartyState): void {
     if (s.phase !== 'ended') return;
-    // TODO-DOCS (OP-314): docs/LOGGING.md: party_ended (room.play, info): why finished | restart | empty, round, owls; a game's end, once.
     this.d.log.info('room.play', 'party_ended', 'A party game ended before its last round.', { room: s.room, why: s.ended ?? 'empty', round: s.round, owls: s.owls.filter((o) => !o.bot).length });
   }
 
@@ -370,7 +367,6 @@ export class PartyHost {
         this.d
           .pay(cid, place)
           .then((res) => {
-            // TODO-DOCS (OP-314): docs/LOGGING.md: party_paid (room.play, info): place, feathers, games; a finished game's feathers to one visitor.
             this.d.log.info('room.play', 'party_paid', 'A visitor was paid for a party game.', { room: s.room, place, feathers: res.added, games: res.games });
             for (const ws of sockets) this.d.send(ws, { t: 'party', paid: { feathers: res.added, total: res.total, games: res.games } });
           })
