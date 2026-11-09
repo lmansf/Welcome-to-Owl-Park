@@ -22,6 +22,7 @@ names (C31, C35, ...), and the docs it touched.
 
 ## Week of 2026-11-09
 
+- OP-131 (2026-11-09): Stryker checks room, Worker and shared rules in pull requests and nightly CI, with score reports, documented thresholds and stronger tests for money and identity paths (main dd595ae and 81e0ce6).
 - OP-254 (2026-11-09): monthly quests now rotate on the park clock, with separate slots and rewards for each tier (PR 89, 4dd4770).
 - OP-255 (2026-11-09): puzzle quests add randomized lock-and-key runs for solo and group play, with progress saved per owl (PR 89, 4dd4770).
 

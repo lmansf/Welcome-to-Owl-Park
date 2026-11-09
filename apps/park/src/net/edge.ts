@@ -34,7 +34,7 @@ import { EmoteGate, MoveBudget } from './budget';
 import { keeperToken } from './keeper';
 import { pageLog } from './pageLog';
 import { goToGoogle } from './toGoogle';
-import { OPEN_ENTRY, type AccountConfirm, type AccountGoogle, type AccountLink, type Entry, type LineLink, type ParkTransport, type RoomConnection, type RoomHandlers, type ScanReply, type TicketWallet, type WalletEntry } from './transport';
+import { OPEN_ENTRY, type AccountConfirm, type AccountGoogle, type AccountLink, type Entry, type ReferralLink, type ReferralState, type LineLink, type ParkTransport, type RoomConnection, type RoomHandlers, type ScanReply, type TicketWallet, type WalletEntry } from './transport';
 
 /** Remote owls are drawn this far behind the server clock so network jitter never shows. */
 const RENDER_DELAY_MS = 100;
@@ -302,6 +302,39 @@ export class EdgeTransport implements ParkTransport {
       return null;
     }
   }
+
+  readonly referrals: ReferralLink = {
+    view: async () => {
+      try {
+        const res = await this.api('/api/referral');
+        if (!res.ok) return null;
+        const body = (await res.json()) as ReferralState;
+        return body.mode === 'on' || body.mode === 'preview' ? body : null;
+      } catch {
+        return null;
+      }
+    },
+    invite: async (code) => {
+      try {
+        const res = await this.api('/api/referral/invite', { method: 'POST', body: JSON.stringify({ code }) });
+        const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+        if (res.ok && body['ok'] === true) return { ok: true, state: body as unknown as ReferralState };
+        const reason = typeof body['reason'] === 'string' ? (body['reason'] as never) : 'offline';
+        return { ok: false, reason };
+      } catch {
+        return { ok: false, reason: 'offline' };
+      }
+    },
+    freeTicket: async () => {
+      try {
+        const res = await this.api('/api/tickets/checkout', { method: 'POST', body: JSON.stringify({ referral: true }) });
+        const body = res.ok ? ((await res.json()) as { url?: unknown }) : {};
+        return typeof body.url === 'string' && body.url.startsWith('https://') ? body.url : null;
+      } catch {
+        return null;
+      }
+    },
+  };
 
   readonly accounts: AccountLink = {
     account: async () => {

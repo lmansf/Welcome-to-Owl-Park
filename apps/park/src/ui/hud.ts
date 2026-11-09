@@ -2,7 +2,7 @@ import { NEST_WORDS, type ArcadeGame, type ClimbInput, type EquipSlot, type Feed
 import type { QuestState } from '../collect/quests';
 import type { TaskState } from '../collect/tasks';
 import type { CollectionState } from '../collect/state';
-import type { AccountLink, ConnectionStatus } from '../net';
+import type { AccountLink, ConnectionStatus, ReferralLink, ReferralState } from '../net';
 import type { FeedbackSent } from '../net/feedback';
 import type { WalletEntry } from '../net/transport';
 import type { SettingsStore } from '../settings';
@@ -32,7 +32,9 @@ import { createWhichOwlScreen, type WhichOwlRun } from './whichOwl';
 import { createShopPanel, type ShopPanel } from './shop';
 import { GATE_WORDS, createFreePassCard, createTicketCard, type FreePassCard, type FreePassOffer, type GateCard, type TicketCard } from './tickets';
 import { createGateSale, withBring, type GateSale, type GateSalePanel } from './gateSale';
-import { createStoreCard, type StoreGo } from './storeCard';
+import { createStoreCard, openWindow, type StoreGo } from './storeCard';
+import { startCheckout } from './checkout';
+import { REFERRAL_WORDS, referralCard } from './referral';
 import { createGatePrompt, type GateAsk } from './gatePrompt';
 import { SPECTATOR_WORDS, createSpectatorBadge } from './spectator';
 import { createTurnPhone } from './turnPhone';
@@ -99,6 +101,8 @@ export interface Hud {
   attachFeedback(send: (draft: FeedbackDraft) => Promise<FeedbackSent>, rewards?: FeedbackRewardLink): void;
   /** The owl's account (OP-139): its card in the Menu's Nest and Settings tabs, and the screens that protect and bring back an owl. */
   attachAccount(link: AccountLink, deps: Pick<AccountScreenDeps, 'restart' | 'startOver'>): AccountScreens;
+  /** Bring a friend (OP-056): its card in the Menu's Nest tab, shown with the park's REFERRALS on, or as a preview when `preview` (?friends=1). */
+  attachReferrals(link: ReferralLink, preview: boolean): void;
   /** The Menu's ways out: what "Leave the park" and travel from the map do. */
   attachWayOut(actions: WayOutActions): void;
   /** The tickets on this device, for the Menu's Settings tab (null: the page has no park server keeping them). */
@@ -672,7 +676,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
         id: 'nest',
         label: 'Nest',
         render: (panel) =>
-          renderNest(panel, { away: waysOut.home, account: accountCards() }, () => {
+          renderNest(panel, { away: waysOut.home, account: accountCards(), friends: friendCards() }, () => {
             // Travel home is on the map now (OP-130): its card is open there.
             picked = 'nest';
             menu.show('map');
@@ -756,6 +760,27 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     gatePrompt.close();
   };
   const isBlocking = () => storeCard.isOpen() || gatePrompt.isOpen() || menu.isOpen() || !!wheel?.isOpen() || sayWheel.isOpen() || !!builder?.isOpen() || settingsScreen.isOpen() || whichOwl.isOpen() || !!feedback?.isOpen() || !!accountScreens?.isOpen() || info.isOpen() || leaveCard.isOpen() || arcade.isOpen() || climb.isOpen();
+  /** Bring a friend (OP-056): the park's word on this owl's card, the line it last said, and its link. */
+  let referral: { link: ReferralLink; state: ReferralState; said: string } | null = null;
+  function friendCards(): HTMLElement[] | null {
+    if (!referral) return null;
+    const r = referral;
+    return referralCard(r.state, {
+      invite: async (code) => {
+        const answer = await r.link.invite(code);
+        if (answer.ok) {
+          referral = { ...r, state: answer.state, said: REFERRAL_WORDS.welcome };
+          menu.refresh();
+        }
+        return answer;
+      },
+      freeTicket: () =>
+        void startCheckout({ open: openWindow, link: () => r.link.freeTicket(), fallbackUrl: null }).then((s) => {
+          if (s.kind === 'blocked') toast(REFERRAL_WORDS.blocked, 6000);
+          if (s.kind === 'none') toast(REFERRAL_WORDS.none, 4500);
+        }),
+    }, r.said);
+  }
   /** The account's cards for the Menu (OP-139): none while accounts are off. */
   function accountCards(): HTMLElement[] | null {
     if (!account || !accountScreens) return null;
@@ -1066,6 +1091,13 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       accountScreens = createAccountScreens(root, link, { ...deps, toast, changed: refresh });
       refresh();
       return accountScreens;
+    },
+    attachReferrals(link, preview) {
+      void link.view().then((state) => {
+        if (!state || (state.mode === 'preview' && !preview)) return;
+        referral = { link, state, said: '' };
+        menu.refresh();
+      });
     },
     attachWayOut(actions) {
       wayOut = actions;

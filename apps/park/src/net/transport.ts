@@ -1,4 +1,4 @@
-import type { Air, ClosedView, FeedbackDraft, LineStatus, OwlAccount, OwlLook, OwlPicture, ParkMessage, PlayerState, PortraitLook, RealmsSettings, Vec2, Walk } from '@owl-park/shared';
+import type { Air, ClosedView, FeedbackDraft, LineStatus, OwlAccount, OwlLook, OwlPicture, ParkMessage, PlayerState, PortraitLook, RealmsSettings, ReferralRefusal, ReferralView, Vec2, Walk } from '@owl-park/shared';
 import type { ActivityLink, ActivityPushes, CourseLink, NestLink, NestPushes, QuestLink, QuestPushes } from '../collect/service';
 import type { TicketLink } from './ticketLinks';
 
@@ -123,6 +123,21 @@ export interface ParkTransport {
   parkCount?(): Promise<number | null>;
   /** The owl's account (OP-139): only the room server keeps them, and only with ACCOUNTS on. */
   readonly accounts?: AccountLink;
+  /** Bring a friend (OP-056): only the room server has it, and only with REFERRALS not off. */
+  readonly referrals?: ReferralLink;
+}
+
+/** Bring a friend, as the park says it now: off for the whole park, a preview (shown with ?friends=1) or on; and whether its free Day Ticket can be checked out. */
+export type ReferralState = ReferralView & { mode: 'preview' | 'on'; free: boolean };
+
+/** Bring a friend (OP-056), as the Menu uses it. */
+export interface ReferralLink {
+  /** This owl's card; null while it is off or the park is out of reach. */
+  view(): Promise<ReferralState | null>;
+  /** A friend's code typed in: the card as it is now, or why not. */
+  invite(code: string): Promise<{ ok: true; state: ReferralState } | { ok: false; reason: ReferralRefusal | 'offline' }>;
+  /** The store's cart link for one free Day Ticket waiting on this owl; null when none can be had. */
+  freeTicket(): Promise<string | null>;
 }
 
 /** What sending a link to the protecting email came to. */
