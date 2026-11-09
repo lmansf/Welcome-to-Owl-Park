@@ -25,6 +25,10 @@ export class FakeStore {
   attributes: Array<{ key: string; value: string }> = [];
   /** What the order came to, as the store writes it; none by default (OP-192). */
   total: string | null = null;
+  /** How many Day Tickets line 11 holds (OP-056: a free one is one). */
+  dayTickets = 2;
+  /** The discount codes the order used (OP-056). */
+  codes: string[] = [];
   /** The order's email and customer, as OwlParkOrderContact answers them (OP-192); `refused` answers as a store that will not say whose order it was. */
   contact: { email: string | null; customer: string | null } | 'refused' = { email: 'Buyer@Example.com', customer: 'gid://shopify/Customer/77' };
 
@@ -34,11 +38,12 @@ export class FakeStore {
       id: 'gid://shopify/Order/1001',
       cancelledAt: null,
       customAttributes: this.attributes,
+      ...(this.codes.length ? { discountCodes: this.codes } : {}),
       ...(this.total === null ? {} : { totalPriceSet: { shopMoney: { amount: this.total } } }),
       risk: { recommendation: risk === 'LOW' ? 'ACCEPT' : risk === 'PENDING' ? 'NONE' : 'INVESTIGATE', assessments: [{ riskLevel: risk }] },
       lineItems: {
         nodes: [
-          { id: 'gid://shopify/LineItem/11', quantity: 2, product: { productType: 'Ticket', kind: { value: 'day' }, hours: null, start: null, end: null } },
+          { id: 'gid://shopify/LineItem/11', quantity: this.dayTickets, product: { productType: 'Ticket', kind: { value: 'day' }, hours: null, start: null, end: null } },
           { id: 'gid://shopify/LineItem/12', quantity: 1, product: { productType: 'Mug', kind: null, hours: null, start: null, end: null } },
         ],
       },

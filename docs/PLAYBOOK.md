@@ -275,6 +275,8 @@ keeper can do depends on whether an email protects it. The Menu's Nest and Setti
 - No mail at all: the accounts need `ACCOUNT_SECRET` and the mail sender (`docs/DEPLOY.md`,
   Accounts). Without them no link goes out.
 
+A visit's guest pass lasts 12 hours (`GUEST_PASS_TTL_S`, `apps/edge/src/pass.ts`). The browser keeps a separate collector token with no time-based expiry (`readCollector`). `/api/pass` gives a returning browser a fresh visit pass for the same owl when that collector token is still valid and the owl has not moved to another device. Closing a tab does not clear browser storage. A new visit starts on the home screen, and Play opens the owl's own nest. A tab that reconnects while still open stays in its room (OP-087).
+
 ## 9. Two lines in the log [BUILT (OP-140, OP-141, OP-142)]
 
 **`csp_violation`** (`worker.guard`, warn; `noteViolation`, `apps/edge/src/guard.ts`): a browser
