@@ -6,6 +6,7 @@ import { ROOMS } from '../rooms';
 import type { WalletEntry } from '../net/transport';
 import type { SettingsStore } from '../settings';
 import { ACCOUNT_WORDS } from './account';
+import { REFERRAL_WORDS } from './referral';
 import { HOME_WORDS } from './home';
 import { settingsRows, syncSettings } from './settingsScreen';
 import { walletLine } from './tickets';
@@ -182,6 +183,8 @@ export interface NestTabState {
   away: boolean;
   /** The owl's account (OP-139): its friend code and whether an email protects it. Null while accounts are off. */
   account?: HTMLElement[] | null;
+  /** Bring a friend (OP-056): the card's parts. Null while it is off for this page. */
+  friends?: HTMLElement[] | null;
 }
 
 /** `toMap`: the Map tab with the owl's nest picked, where travel home is (OP-130; it was Go home here, OP-114). */
@@ -199,6 +202,11 @@ export function renderNest(panel: HTMLElement, nest: NestTabState, toMap: () => 
     const owl = card(ACCOUNT_WORDS.friendCode, ...nest.account);
     owl.dataset['account'] = '';
     panel.appendChild(owl);
+  }
+  if (nest.friends) {
+    const friends = card(REFERRAL_WORDS.title, ...nest.friends);
+    friends.dataset['referral'] = '';
+    panel.appendChild(friends);
   }
   panel.appendChild(card('Today’s furniture gift', note('A new piece for your nest every day: open Decorate in your nest to take it.')));
   panel.appendChild(card('Visiting', note('An open nest shows its owl’s flag on a door of the nests’ street: walk in to visit.')));

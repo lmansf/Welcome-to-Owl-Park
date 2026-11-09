@@ -40,6 +40,13 @@ export interface Env extends Cloudflare.Env {
    * through the gate, and counts passes bought with it but without that link. Unset: no pass link.
    */
   OPENING_PASS_CODE?: string;
+  /**
+   * Bring a friend (OP-056, with REFERRALS not off): the store's discount code that takes one whole Day
+   * Ticket off, once per customer. The park puts it in the cart link of a free Day Ticket it offered an
+   * owl, and an order with it that came through no such link waits for the owner's check. Unset: no free
+   * Day Ticket can be checked out (friends can still be brought and thanked with feathers).
+   */
+  REFERRAL_CODE?: string;
   /** Browser tests only: a stand-in store on this machine (http://localhost:<port>). Never set in production. */
   SHOPIFY_TEST_ORIGIN?: string;
   /**

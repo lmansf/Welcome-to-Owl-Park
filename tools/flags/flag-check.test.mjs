@@ -3,7 +3,11 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { checkChange, FLAGS_FILE, onByDefault, parseFlags } from './flag-check.mjs';
 
-const MAIN = readFileSync(new URL('../../apps/park/src/flags.ts', import.meta.url), 'utf8');
+// The park's flags.ts with its FLAGS table emptied, so these tests hold whichever flags main carries today.
+const MAIN = readFileSync(new URL('../../apps/park/src/flags.ts', import.meta.url), 'utf8').replace(
+  /export const FLAGS = \{[\s\S]*?\n?\} as const/,
+  'export const FLAGS = {} as const',
+);
 const withFlags = (entries) => MAIN.replace('export const FLAGS = {}', `export const FLAGS = {\n${entries}\n}`);
 const ROPES = "  ropeSwings: { param: 'ropes', note: 'Rope swings between the canopy nests' },";
 const reserved = new Set(['room', 'sizes', 'newmap']);
@@ -23,7 +27,7 @@ function change(over = {}) {
   };
 }
 
-test('main’s flags.ts reads as an empty table', () => {
+test('flags.ts with an empty FLAGS table reads as no flags', () => {
   assert.deepEqual([...parseFlags(MAIN)], []);
 });
 
