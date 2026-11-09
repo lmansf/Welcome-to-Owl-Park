@@ -197,3 +197,15 @@ export const TOUCH_BOTTOM_SHARE = 0.25;
 export function touchBottom(inset: number, screenH: number): number {
   return Math.min(inset, Math.round(screenH * TOUCH_BOTTOM_SHARE));
 }
+
+/** Just over the floor's edges (walkFloor, -0.6), under every piece and owl: a sign never covers the owl. */
+export const SIGN_DEPTH = -0.5;
+
+/**
+ * How deep a room's signs draw. Seen from above (a room with a bowl) a tall idol stands up over the floor
+ * in front of a doorway and hid its sign's first word ("neon street", Nov 9), so there signs draw over the
+ * pieces; the sign showing still slides out from under the owl (signY), so it never covers the owl.
+ */
+export function signDepth(room: Pick<RoomDef, 'bowl' | 'size'>): number {
+  return room.bowl ? room.size.h + 100 : SIGN_DEPTH;
+}
