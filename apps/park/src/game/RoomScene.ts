@@ -137,6 +137,9 @@ import {
   type PuzzleView,
   type WalkMap,
   voteRealmAt,
+  FROM_STUMP_SPAWN,
+  STUMP_ROOM,
+  isPartyRoom,
 } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { ActivityLink, ActivityPushes, CourseLink, NestLink, NestPushes, NestSeen, PuzzleArgs, PuzzleReply, QuestLink, QuestPushes, QuestReply } from '../collect/service';
@@ -164,6 +167,8 @@ import { SPECTATOR_WORDS, createOfferPacer, createOnceHint, turnstileWay, type O
 import type { Opener } from '../ui/checkout';
 import { earlyPreview } from '../ui/preview';
 import { ActivityLayer } from './activities';
+import { PartyLayer } from './partyLayer';
+import { flagOn } from '../flags';
 import { addAmbience, addSetPieces, ensureFxTextures, type SetPieces } from './ambience';
 import { arcadeFor, type Arcade } from './arcade';
 import { PORTAL_OFF, climbFor, type Climb } from './climb';
@@ -538,6 +543,8 @@ export class RoomScene extends Phaser.Scene {
   private tasks!: TaskState;
   /** The room's activities (lanterns, the stage quiz, fishing, the copy game) and the link to run them. */
   private play: ActivityLayer | null = null;
+  /** The party game (OP-314), behind the friends preview: the Old Stump here, or a game's own room. */
+  private party: PartyLayer | null = null;
   /** The arcade's cabinets, score wall and runs, in the arcade only. */
   private arcade: Arcade | null = null;
   /** The stained-glass climb from its portal, in the glass realm only. */
@@ -1072,6 +1079,17 @@ export class RoomScene extends Phaser.Scene {
       spectating: () => this.spectator,
       spectatorOffer: (line) => this.afterGameOffer(line),
     });
+    if (flagOn('friends') && (room.id === STUMP_ROOM || isPartyRoom(room.id))) {
+      this.party = new PartyLayer({
+        scene: this,
+        room: room.id,
+        hudRoot: () => document.getElementById('hud'),
+        toast: (m, ms) => this.hud.toast(m, ms),
+        walkTo: (p) => void this.walkTo(p),
+        goTo: (to) => void this.goTo(to, 'default', { room: this.room.id, spawn: FROM_STUMP_SPAWN }),
+        back: () => void this.goTo(STUMP_ROOM, FROM_STUMP_SPAWN, undefined),
+      });
+    }
 
     this.setupCamera();
     this.setupInput();
@@ -1250,6 +1268,9 @@ export class RoomScene extends Phaser.Scene {
         this.peerEmotes.set(id, e);
         this.peers.get(id)?.playEmote(e);
       },
+      onStump: (f) => live() && this.party?.onStump(f),
+      onParty: (f) => live() && this.party?.onParty(f),
+      onPartyClosed: () => live() && this.party?.onClosed(),
       onPeerSay: (id, n) => {
         if (!live()) return;
         const owl = this.peers.get(id);
@@ -1288,6 +1309,7 @@ export class RoomScene extends Phaser.Scene {
       void this.course.connected();
     }
     if (isStreetRoom(this.room.id)) void this.askStreet();
+    this.party?.attach(conn);
     // Arriving here counts for quests that ask for a visit (the room server counts it on its own).
     this.link?.note({ kind: 'visit', room: this.room.id });
     void this.refreshBoard();
@@ -2352,6 +2374,7 @@ export class RoomScene extends Phaser.Scene {
     }
     // Lanterns, fishing and the robot owl's game where the owl stands.
     if (this.play) out.push(...this.play.actions(pos));
+    if (this.party) out.push(...this.party.actions(pos));
     return out;
   }
 
@@ -3622,6 +3645,8 @@ export class RoomScene extends Phaser.Scene {
     this.glows.clear();
     this.play?.destroy();
     this.play = null;
+    this.party?.destroy();
+    this.party = null;
     this.arcade?.destroy();
     this.arcade = null;
     this.climb?.destroy();

@@ -1,3 +1,4 @@
+import type { PartyKey, PartyOp, ServerParty, ServerStump } from '@owl-park/shared';
 import type { Air, ClosedView, FeedbackDraft, LineStatus, OwlAccount, OwlLook, OwlPicture, ParkMessage, PlayerState, PortraitLook, RealmsSettings, ReferralRefusal, ReferralView, Vec2, Walk } from '@owl-park/shared';
 import type { ActivityLink, ActivityPushes, CourseLink, NestLink, NestPushes, QuestLink, QuestPushes } from '../collect/service';
 import type { TicketLink } from './ticketLinks';
@@ -58,6 +59,17 @@ export interface RoomHandlers extends QuestPushes, ActivityPushes, NestPushes {
   onTicketEnded?(): void;
   /** Whether this owl walks the park as a spectator (OP-191): said with every welcome, and false once a ticket admits it in place. */
   onSpectator?(spectator: boolean): void;
+  /** The Old Stump's seats (OP-314): the room's answer to a party frame there, or the seats as they changed. */
+  onStump?(frame: ServerStump): void;
+  /** A party game as it stands, an owl's input in its minigame, or what it paid (OP-314). */
+  onParty?(frame: ServerParty): void;
+  /** The party game's room turned this owl away, or its game is over (OP-314): back to the Party Grove. */
+  onPartyClosed?(): void;
+}
+
+/** The party game (OP-314) through the room server: what a page asks at the stump and in a game. */
+export interface PartyLink {
+  send(op: PartyOp, more?: { bots?: boolean; k?: PartyKey; v?: number }): void;
 }
 
 export interface RoomConnection {
@@ -82,6 +94,8 @@ export interface RoomConnection {
   admit?(): Promise<boolean>;
   /** Open the room's socket again at once, on the pass as it now stands (the room server only, OP-191). */
   renew?(): void;
+  /** The party game (OP-314): only the room server runs it. */
+  party?: PartyLink;
 }
 
 /**

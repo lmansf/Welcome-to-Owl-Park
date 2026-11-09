@@ -1,5 +1,5 @@
 /** The rooms: the park's health, the owls in each room, and the sockets that walk into them. */
-import { CLOSE, type Logger, hashForLog } from '@owl-park/shared';
+import { CLOSE, STUMP_ROOM, type Logger, hashForLog, isPartyRoom } from '@owl-park/shared';
 import type { OverflowState } from '../Overflow';
 import { copiesIn, pickCopy } from '../copies';
 import type { Env } from '../env';
@@ -180,5 +180,10 @@ export async function socket(c: RouteCtx): Promise<Response> {
   const until = ticketUntil(gate.mode, pass, roomId, spectator);
   if (until !== null) headers.set('X-Ticket-Until', String(until));
   headers.set('X-Visitor-Ip', clientIp(request, env));
+  // A party game's room (OP-314) lives in the object of the Party Grove it was started in: the page names that copy.
+  if (isPartyRoom(roomId)) return objectFor(env, STUMP_ROOM, Number.isInteger(askedCopy) && askedCopy > 1 && askedCopy <= MAX_PARTY_COPY ? askedCopy : 1).fetch(new Request(request, { headers }));
   return objectFor(env, roomId, copy).fetch(new Request(request, { headers }));
 }
+
+/** The highest copy of the Party Grove a page may name for its game's room (OP-314). */
+const MAX_PARTY_COPY = 16;

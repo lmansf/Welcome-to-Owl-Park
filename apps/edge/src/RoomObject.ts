@@ -49,6 +49,7 @@ import {
   isEmoteId,
   insidePark,
   isNestRoom,
+  isPartyRoom,
   isTimeZone,
   lanternFeathers,
   leafRespawnMs,
@@ -109,6 +110,7 @@ import { LIMITS, Room, type Leaver, type Peer, type PositionRejection, type Visi
 import { ROOMS, isRoomId, publicCounts, roomCap, roomDef, spectatorLimit } from './rooms';
 import { COURSES } from '@owl-park/shared/rooms';
 import { isCollectorId, signingSecret, verifyKeeper, verifyPass } from './pass';
+import { PartyHost, type StumpMark } from './partyHost';
 import type { Env } from './env';
 
 export interface Attachment {
@@ -152,6 +154,8 @@ export interface Attachment {
   keeper?: true;
   /** Its upgrade came to a host on this machine: only then may a missing signing key fall back to the development key (OP-209). */
   local?: true;
+  /** At the Old Stump in the Party Grove (OP-314): the seat its owl sits in, or null while it only watches the seats. */
+  stump?: StumpMark;
 }
 
 /**
@@ -390,12 +394,33 @@ export class RoomObject extends DurableObject<Env> {
   private readonly rejected = new Map<string, { n: number; toldAt: number; why: PositionRejection }>();
   /** Spectators' sockets whose first refused frame was told (OP-191's spectator_refused): once per socket. */
   private readonly refusedTold = new Set<string>();
+  /** The Old Stump's seats and the party games, each in its own room (OP-314). */
+  private readonly party: PartyHost;
+  /** When the alarm last looked after every socket: a party game's step between those wakes skips it (OP-314). */
+  private housekeptAt = 0;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.log = loggerFor(env);
     this.statsOn = logConfig(env) !== null;
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(HEARTBEAT_FRAME, HEARTBEAT_FRAME));
+    this.party = new PartyHost({
+      storage: ctx.storage,
+      sockets: (tag) => ctx.getWebSockets(tag),
+      owlsIn: (room) => this.rooms.get(room)?.count ?? 0,
+      send: (ws, frame) => this.send(ws, frame),
+      close: (ws, code, reason) => {
+        closeSocket(ws, code, reason);
+        this.drop(ws, { reason: 'kick', detail: 'party-over' });
+      },
+      log: this.log,
+      logOf: (att) => this.logOf(att as Attachment),
+      closingAt: () => this.closingAt,
+      random: () => crypto.getRandomValues(new Uint32Array(1))[0]! / 4294967296,
+      pay: (cid, place) => this.collections().partyGame(cid, place),
+      wake: (at) => void this.wakeBy(at),
+      waitUntil: (p) => ctx.waitUntil(p),
+    });
     // Wake-up: rebuild rooms from the hibernated sockets' attachments. A socket whose
     // attachment no longer makes sense (room removed, corrupt data) is closed, not fatal.
     for (const ws of ctx.getWebSockets()) {
@@ -431,6 +456,8 @@ export class RoomObject extends DurableObject<Env> {
       // A restart told but not yet closed (OP-181): the alarm still closes it.
       const closing = await ctx.storage.get<unknown>(RESTART_KEY);
       if (typeof closing === 'number') this.closingAt = closing;
+      // The party games going on (OP-314): each picks up where it was.
+      await this.party.load();
     });
   }
 
@@ -935,6 +962,8 @@ export class RoomObject extends DurableObject<Env> {
           this.send(ws, { t: 'closed', room: att.room, why: 'realm', sign: this.realmSign(att.room) });
           return closeSocket(ws, CLOSE.REALM_CLOSED, 'realm closed');
         }
+        // A party game's room (OP-314) lets in only the owls its game invited, while it goes on.
+        if (isPartyRoom(att.room)) return this.joinParty(ws, att, frame);
         if (!(frame.via === 'travel' && insidePark(att.room) && att.cid)) {
           await this.join(ws, att, frame);
           return;
@@ -989,9 +1018,11 @@ export class RoomObject extends DurableObject<Env> {
         // owl's live stay here a log off (OP-265). Said here, as the close that follows finds no state.
         const s = sightingOf(att);
         if (s) this.ctx.waitUntil(this.statsAlive([{ ...s, left: 'bye' }]));
-        if (room.sessionOf(att.id) === att.sid) this.logLeave(att, room, { reason: 'user' });
+        const owned = room.sessionOf(att.id) === att.sid;
+        if (owned) this.logLeave(att, room, { reason: 'user' });
         this.flushThrottled(att);
         room.leave(att.id, att.sid);
+        if (owned) this.party.left(att, room, Date.now());
         this.keepLeavers(att.room);
         this.acts.get(att.room)?.forget(att.id);
         ws.serializeAttachment({ ...att, state: null } satisfies Attachment);
@@ -1033,7 +1064,28 @@ export class RoomObject extends DurableObject<Env> {
       case 'course':
         if (!room.admit(att.id)) return;
         return this.serial(att, () => this.course(ws, att, room, frame));
+      case 'party':
+        if (!room.admit(att.id)) return;
+        return this.party.frame(ws, att, room, frame, Date.now());
     }
+  }
+
+  // ---------- the party game (OP-314): partyHost.ts keeps the stump's seats and the games ----------
+
+  /** Into a party game's room: only an owl its game invited, while the game goes on; turned back to the Party Grove otherwise. */
+  private async joinParty(ws: WebSocket, att: Attachment, hello: ClientHello): Promise<void> {
+    if (!this.party.admits(att)) {
+      this.logOf(att).info('room.join', 'room_join_refused', 'An owl was turned away from a party game it was not invited into, or one that is over.', { reason: 'party' });
+      this.send(ws, { t: 'closed', room: att.room, why: 'party' });
+      return closeSocket(ws, CLOSE.PARTY_CLOSED, 'not in this game');
+    }
+    if (await this.join(ws, att, hello)) this.party.arrived(att, Date.now());
+  }
+
+  /** Wake no later than `at`: a party game's next step (OP-314). */
+  private async wakeBy(at: number): Promise<void> {
+    const current = await this.ctx.storage.getAlarm();
+    if (current === null || current > at) await this.ctx.storage.setAlarm(at);
   }
 
   // ---------- the parkour courses (OP-224): the room checks where the owl is, the collections object keeps the rest ----------
@@ -1757,6 +1809,8 @@ export class RoomObject extends DurableObject<Env> {
     let next = now + ALARM_EVERY_MS;
     if (this.closingAt !== null) next = Math.min(next, this.closingAt);
     if (this.rooms.get(QUIZ_ROOM)?.count) next = Math.min(next, this.activities(QUIZ_ROOM).nextQuizClose());
+    const party = this.party.due(now);
+    if (party !== null) next = Math.min(next, Math.max(now, party));
     return next;
   }
 
@@ -1935,7 +1989,10 @@ export class RoomObject extends DurableObject<Env> {
       }
       // A connection lost (not a goodbye, not sent away): one back soon has reconnected.
       room?.leave(att.id, att.sid, !att.kicked && (why.reason === 'dropped' || why.reason === 'timeout'));
-      if (owns) this.keepLeavers(att.room);
+      if (owns) {
+        this.keepLeavers(att.room);
+        this.party.left(att, room, Date.now());
+      }
     }
     this.flushThrottled(att);
     this.forget(att.room);
@@ -1969,6 +2026,13 @@ export class RoomObject extends DurableObject<Env> {
   override async alarm(): Promise<void> {
     await this.closeForRestart(Date.now());
     await this.settleQuiz();
+    // The party games move on (OP-314); a wake for a game's step alone, between the minutes, does no more.
+    this.party.tick(Date.now());
+    if (this.party.due(Date.now()) !== null && Date.now() < this.housekeptAt + ALARM_EVERY_MS) {
+      if (this.ctx.getWebSockets().length > 0 || this.closingAt !== null) await this.ctx.storage.setAlarm(this.nextWake(Date.now()));
+      return;
+    }
+    this.housekeptAt = Date.now();
     await this.freshNotice();
     const now = Date.now();
     const sockets = this.ctx.getWebSockets();
