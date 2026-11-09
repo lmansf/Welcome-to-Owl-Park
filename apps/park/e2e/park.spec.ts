@@ -206,7 +206,8 @@ test.describe('single visitor', () => {
   test('the bottom bar is Menu, Emotes and Say; the Menu has five tabs, and its Settings lead to Feedback (Your owl is at the mirror: mirror.spec.ts)', async ({ page, isMobile }) => {
     test.slow(); // the emotes, Say, the Menu's five tabs and Feedback open and close in turn
     await openPark(page);
-    await expect(page.locator('#hud .bottom .left button')).toHaveCount(3);
+    await expect(page.locator('#hud .bottom .left').getByRole('button')).toHaveCount(isMobile ? 2 : 3);
+    await expect(page.locator('[data-say-reply]')).toBeHidden();
     // Emotes and Say are one tap away: on a computer each has its button; a phone has Say's alone, and
     // the emotes are a tap inside it (OP-242). Each wheel leads to the other.
     const wheel = page.getByRole('dialog', { name: 'Emotes' });
