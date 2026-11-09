@@ -414,10 +414,13 @@ export function createPartyScreen(opts: PartyScreenOpts): PartyScreen {
   raf = requestAnimationFrame(frame);
 
   // One thumb on a phone, or the arrow keys and Space on a computer: the owl in the park stands still meanwhile.
+  const MINI_NUMBER_KEYS = ['1', '2', '3', '4'];
   const onKey = (e: KeyboardEvent) => {
     if (!view || e.repeat && e.key === ' ') return;
     const keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ', 'Spacebar'];
-    if (!keys.includes(e.key)) return;
+    // 1 to 4 pick a branch in Branch Balance, so only while a minigame runs.
+    const miniKey = view.phase === 'mini' && !!mini && MINI_NUMBER_KEYS.includes(e.key);
+    if (!keys.includes(e.key) && !miniKey) return;
     e.preventDefault();
     e.stopImmediatePropagation();
     if (view.phase === 'mini' && mini) return mini.drawer.key(e.key, true);
@@ -431,7 +434,7 @@ export function createPartyScreen(opts: PartyScreenOpts): PartyScreen {
     else if (ask.kind === 'fact' && (left || right)) opts.send('fact', left ? 1 : 0);
   };
   const onKeyUp = (e: KeyboardEvent) => {
-    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' '].includes(e.key)) return;
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ', 'Spacebar'].includes(e.key) && !(view?.phase === 'mini' && mini && MINI_NUMBER_KEYS.includes(e.key))) return;
     e.preventDefault();
     e.stopImmediatePropagation();
     if (view?.phase === 'mini' && mini) mini.drawer.key(e.key, false);

@@ -6,6 +6,7 @@
  */
 import {
   AIR_MS,
+  BRANCHES,
   BREATH_MAX,
   ECHO_CALLS,
   FALL_FIELD,
@@ -671,11 +672,113 @@ function perchPairs(host: MiniHost, stage: HTMLElement): MiniDrawer {
   };
 }
 
+// ---------- Branch Balance: perch, or be the wind ----------
+
+interface BalanceView {
+  wind: number;
+  perchers: number[];
+  time: number;
+  times: number;
+  phase: 'pick' | 'reveal' | 'done';
+  at: number;
+  pickMs: number;
+  revealMs: number;
+  scores: Record<number, number>;
+  pick?: number;
+  blow?: number[];
+  picks?: Record<number, number>;
+}
+
+const BRANCH_KEYS: Record<string, number> = { '1': 0, '2': 1, '3': 2, '4': 3, ArrowLeft: 0, ArrowUp: 1, ArrowRight: 2, ArrowDown: 3 };
+
+function branchBalance(host: MiniHost, stage: HTMLElement): MiniDrawer {
+  const { ctx, fit, c } = canvasIn(stage);
+  let v: BalanceView | null = null;
+  const pads = document.createElement('div');
+  pads.className = 'pads';
+  const choose = (i: number) => {
+    if (!v || v.phase !== 'pick' || host.you() === null) return;
+    host.send('tap', i);
+  };
+  const buttons = Array.from({ length: BRANCHES }, (_, i) => {
+    const b = document.createElement('button');
+    b.className = 'pad';
+    b.innerHTML = `<span>Branch ${i + 1}</span><small>160×160</small>`;
+    b.addEventListener('click', () => choose(i));
+    pads.appendChild(b);
+    return b;
+  });
+  stage.appendChild(pads);
+  const W = 1000;
+  const H = 460;
+  const bx = (i: number) => 40 + i * 240;
+
+  return {
+    view(next) {
+      v = next as BalanceView;
+      const me = host.you();
+      const wind = me !== null && me === v.wind;
+      buttons.forEach((b, i) => {
+        const chosen = wind ? (v!.blow ?? []).includes(i) : v!.pick === i;
+        b.classList.toggle('lit', v!.phase === 'pick' && chosen);
+        b.disabled = v!.phase !== 'pick' || me === null;
+        b.querySelector('span')!.textContent = wind ? `Blow ${i + 1}` : `Branch ${i + 1}`;
+      });
+    },
+    event() {},
+    draw() {
+      fit(W, H);
+      if (!v) return;
+      const me = host.you();
+      drawScores(ctx, host, Object.fromEntries(Object.entries(v.scores).map(([s, n]) => [s, Math.round(n / 10)])), W, 'pts');
+      const wind = me === v.wind;
+      const left = Math.max(0, Math.ceil((v.at + v.pickMs - host.now()) / 1000));
+      const head =
+        v.phase === 'pick'
+          ? wind
+            ? `You are the wind: pick two branches to blow! ${left}s`
+            : `${host.name(v.wind)} is the wind. Pick a branch! ${left}s`
+          : v.phase === 'reveal'
+            ? 'Whoosh!'
+            : 'Done!';
+      line(ctx, `${v.time + 1} of ${v.times}: ${head}`, W / 2, 80, 22);
+      const blow = v.phase !== 'pick' ? (v.blow ?? []) : [];
+      for (let i = 0; i < BRANCHES; i++) {
+        const blown = blow.includes(i);
+        sizeBox(ctx, bx(i), 200, 200, 30, `Branch ${i + 1}`, { fill: blown ? 'rgba(110,160,255,.4)' : 'rgba(160,110,60,.45)', font: 11 });
+        if (blown) line(ctx, 'Blown!', bx(i) + 100, 260, 18, '#9FC2FF');
+      }
+      // Where the perchers sat: shown once all have picked; while picking, only the own owl's.
+      const where: Record<number, number> = v.phase === 'pick' ? (v.pick !== undefined && me !== null ? { [me]: v.pick } : {}) : (v.picks ?? {});
+      const per: number[] = [0, 0, 0, 0];
+      for (const [seat, b] of Object.entries(where)) {
+        const look = host.look(Number(seat));
+        const k = per[b]!++;
+        const off = blow.includes(b) && v.phase === 'reveal' ? 60 + Math.min(1, (host.now() - v.at) / 600) * 90 : 0;
+        if (look) drawOwl(ctx, bx(b) + 50 + k * 50, 180 + off, 18, look, Number(seat) === me);
+      }
+      const wl = host.look(v.wind);
+      if (wl) drawOwl(ctx, W / 2, 330, 22, wl, v.wind === me);
+      line(ctx, `${host.name(v.wind)}, the wind`, W / 2, 370, 14);
+      timeBar(ctx, host.now() - v.at, v.phase === 'pick' ? v.pickMs : v.revealMs, W, 420);
+    },
+    key(k, down) {
+      const i = BRANCH_KEYS[k];
+      if (down && i !== undefined) choose(i);
+    },
+    destroy() {
+      pads.remove();
+      c.remove();
+    },
+  };
+}
+
 /** Each minigame's drawer, by id: a minigame not here yet shows the board while it runs. */
 export const MINI_DRAWERS: Partial<Record<string, (host: MiniHost, stage: HTMLElement) => MiniDrawer>> = {
   'updraft-race': updraftRace,
   'head-turn': headTurn,
   'feather-fall': featherFall,
   'perch-pairs': perchPairs,
+  'branch-balance': branchBalance,
   'hoot-echo': hootEcho,
 };

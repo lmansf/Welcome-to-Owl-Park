@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { PUZZLE_SYMBOLS } from '../puzzles';
+import { BALANCE_MS, BALANCE_TIMES, BRANCH_BALANCE, PICK_MS, REVEAL_MS, windOf, type BranchBalanceState } from './branchBalance';
 import { BRANCH_LENGTH, CREEP_SPEED, GRACE_MS, HEAD_MS, HEAD_TURN, creepAt, watcherAt, type HeadTurnState } from './headTurn';
 import { miniBerries, type MiniPlayer, type MinigameDef } from './minigame';
+import { MINIGAMES } from './minigames';
 import { PAIRS_HOLES, PAIRS_MS, PAIR_SHOW_MS, PEEK_MS, PERCH_PAIRS, type PerchPairsState } from './perchPairs';
 import { AIR_MS, UPDRAFT_COLUMNS, UPDRAFT_GOAL, UPDRAFT_MS, UPDRAFT_RACE, airAt, flightAt, type UpdraftState } from './updraftRace';
+import { PARTY_MINIGAMES } from './game';
 
 const humans = (n: number): MiniPlayer[] => Array.from({ length: n }, (_, seat) => ({ seat, bot: false }));
 const bots = (n: number): MiniPlayer[] => Array.from({ length: n }, (_, seat) => ({ seat, bot: true }));
@@ -19,6 +22,46 @@ function playOut<S>(def: MinigameDef<S>, s: S): number {
   }
   throw new Error('never ended');
 }
+
+describe('the six minigames', () => {
+  it('are all built, each with its own name, rules for a phone and a keyboard, and a way to follow it', () => {
+    expect(Object.keys(MINIGAMES).sort()).toEqual([...PARTY_MINIGAMES].sort());
+    for (const id of PARTY_MINIGAMES) {
+      const def = MINIGAMES[id]!;
+      expect(def.id).toBe(id);
+      expect(def.how.phone.length).toBeGreaterThan(10);
+      expect(def.how.keys.length).toBeGreaterThan(10);
+      expect(['inputs', 'view']).toContain(def.stream);
+      expect(def.ms).toBeLessThanOrEqual(60_000);
+    }
+  });
+
+  it('play to an end with park owls alone, two to four of them, with a place for every seat', () => {
+    for (const id of PARTY_MINIGAMES) {
+      for (const n of [2, 3, 4]) {
+        const def = MINIGAMES[id]!;
+        const s = def.start(bots(n), 1234 + n, n);
+        const end = playOut(def, s);
+        expect(end, `${id} ${n}`).toBeLessThanOrEqual(def.ms);
+        const r = def.result(s);
+        expect(Object.keys(r.places).map(Number).sort(), `${id} ${n}`).toEqual(Array.from({ length: n }, (_, i) => i));
+        for (const p of Object.values(r.places)) expect(p).toBeGreaterThanOrEqual(1);
+        expect(Object.keys(miniBerries(def.kind, r))).toHaveLength(n);
+      }
+    }
+  });
+
+  it('turn away inputs from a seat not playing, a park owl, or of the wrong kind', () => {
+    const wrong = { 'updraft-race': { k: 'tap', v: 1 }, 'head-turn': { k: 'dir', v: 1 }, 'perch-pairs': { k: 'hold', v: 1 }, 'branch-balance': { k: 'x', v: 1 } } as const;
+    for (const [id, bad] of Object.entries(wrong)) {
+      const def = MINIGAMES[id as keyof typeof wrong]!;
+      const s = def.start([{ seat: 0, bot: false }, { seat: 1, bot: true }], 7, 1);
+      expect(def.input(s, 0, bad, 2_000), id).toBe(false);
+      expect(def.input(s, 3, { k: 'tap', v: 0 }, 2_000), id).toBe(false);
+      expect(def.input(s, 1, { k: 'tap', v: 0 }, 2_000), id).toBe(false);
+    }
+  });
+});
 
 describe('Updraft Race', () => {
   const still = (): number[][] => Array.from({ length: UPDRAFT_MS / AIR_MS }, () => Array.from({ length: UPDRAFT_COLUMNS }, () => 0));
@@ -188,5 +231,60 @@ describe('Perch Pairs', () => {
     expect(end).toBeLessThan(PAIRS_MS);
     expect(s.found.every((f) => f !== null)).toBe(true);
     expect(s.pairs[0]! + s.pairs[1]!).toBe(PAIRS_HOLES / 2);
+  });
+});
+
+describe('Branch Balance', () => {
+  it('makes a different owl the wind each round of the party', () => {
+    expect([1, 2, 3, 4, 5].map((r) => windOf([0, 1, 2], r))).toEqual([0, 1, 2, 0, 1]);
+    const s = BRANCH_BALANCE.start(humans(4), 1, 3);
+    expect(s.wind).toBe(2);
+    expect(s.perchers).toEqual([0, 1, 3]);
+    expect(BALANCE_MS).toBe(BALANCE_TIMES * (PICK_MS + REVEAL_MS));
+  });
+
+  it('blows off the perchers on the two blown branches; the rest hold on', () => {
+    const s = BRANCH_BALANCE.start(humans(4), 2, 1);
+    expect(s.wind).toBe(0);
+    expect(BRANCH_BALANCE.input(s, 1, { k: 'tap', v: 0 }, 100)).toBe(true);
+    expect(BRANCH_BALANCE.input(s, 2, { k: 'tap', v: 1 }, 100)).toBe(true);
+    expect(BRANCH_BALANCE.input(s, 3, { k: 'tap', v: 3 }, 100)).toBe(true);
+    // The wind picks three: the third takes the place of the first. A tap on a blown branch takes it back.
+    for (const b of [2, 0, 1]) expect(BRANCH_BALANCE.input(s, 0, { k: 'tap', v: b }, 200)).toBe(true);
+    expect(s.blow).toEqual([0, 1]);
+    // While owls pick, each sees only its own choice.
+    const percher = BRANCH_BALANCE.view(s, 1, 300) as Record<string, unknown>;
+    expect(percher['pick']).toBe(0);
+    expect(percher['picks']).toBeUndefined();
+    expect(percher['blow']).toBeUndefined();
+    expect((BRANCH_BALANCE.view(s, 0, 300) as Record<string, unknown>)['picks']).toBeUndefined();
+    BRANCH_BALANCE.tick(s, PICK_MS);
+    expect(s.phase).toBe('reveal');
+    expect(s.blown).toBe(2);
+    expect(s.held).toEqual({ 3: 1 });
+    expect((BRANCH_BALANCE.view(s, 1, PICK_MS) as Record<string, unknown>)['picks']).toEqual({ 1: 0, 2: 1, 3: 3 });
+    expect(BRANCH_BALANCE.input(s, 1, { k: 'tap', v: 2 }, PICK_MS + 10)).toBe(false);
+    BRANCH_BALANCE.tick(s, PICK_MS + REVEAL_MS);
+    expect(s.phase).toBe('pick');
+    expect(s.time).toBe(1);
+  });
+
+  it('scores the wind and the perchers on one scale, out of 1000, and blows somewhere when the wind does not pick', () => {
+    const s = BRANCH_BALANCE.start(humans(3), 4, 1);
+    playOut(BRANCH_BALANCE, s);
+    expect(s.past).toHaveLength(BALANCE_TIMES);
+    for (const time of s.past) expect(new Set(time.blow).size).toBe(2);
+    const r = BRANCH_BALANCE.result(s);
+    const blownAll = s.past.reduce((n, time) => n + s.perchers.filter((p) => time.blow.includes(time.picks[p]!)).length, 0);
+    expect(r.scores[s.wind]).toBe(Math.round((1000 * blownAll) / (2 * BALANCE_TIMES)));
+    for (const p of s.perchers) expect(r.scores[p]).toBe(100 * (s.held[p] ?? 0));
+  });
+
+  it('plays park owls by themselves, the wind included', () => {
+    const s: BranchBalanceState = BRANCH_BALANCE.start(bots(4), 8, 2);
+    expect(s.wind).toBe(1);
+    playOut(BRANCH_BALANCE, s);
+    expect(s.phase).toBe('done');
+    expect(s.past.every((time) => Object.keys(time.picks).length === 3)).toBe(true);
   });
 });
