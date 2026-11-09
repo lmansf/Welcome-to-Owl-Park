@@ -22,6 +22,7 @@ names (C31, C35, ...), and the docs it touched.
 
 ## Week of 2026-11-02
 
+- OP-218 (2026-11-08): CI now runs the desktop and phone browser tests for tree levels 2 through 5 (PR 187, 6d930e5).
 - OP-317 (2026-11-08): the Great Hollow is now an oval with eleven exits around its rim, a deeper view of its walls and floor, and doorway signs kept on screen (PR 185, 5104701).
 - OP-240 (2026-11-03): the art kit's top-up G2b: four slope sheets (branch, earth, stone, roots) cut to 24 pieces, gentle and steep slopes each way plus a crest and a dip per material, their keys in `art.ts`, `assets.json` and `kit.json`; 16 images on fal for $1.08, the kit's running total $11.28 of $87 (PR 77, 24deaa2).
 - OP-204 (2026-11-02): a lighter first load: the arcade's and the climb's scenes are fetched the first time an owl plays one (`game/lazyScenes.ts`), and the off-screen door hints are placed only when the camera, the screen or the doors change; the first load went from 1,423 KB to 1,403 KB (PR 49).
