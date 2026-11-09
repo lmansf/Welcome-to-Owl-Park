@@ -8,6 +8,7 @@ import type { Env } from '../env';
 import { type GateRead, type GateSet, gateNow } from '../gateSwitch';
 import { overflowNow } from '../overflowState';
 import { signingSecret } from '../pass';
+import { checkoutHash, referralCode } from '../referrals';
 import { type TicketMirror, storeConfig } from '../storeApi';
 import { type Desk, type HookDeps, claimLink, mirrorTickets } from '../storeHooks';
 
@@ -92,7 +93,11 @@ export function deskOf(env: Env): Desk {
 /** What the store webhooks need, once the store is set up; null until then. */
 export function storeDeps(env: Env, origin: string): HookDeps | null {
   const store = storeConfig(env);
-  return store ? { store, desk: deskOf(env), claimUrl: (secret) => claimLink(origin, secret), ...(env.OPENING_PASS_CODE ? { openingCode: env.OPENING_PASS_CODE } : {}) } : null;
+  if (!store) return null;
+  // Bring a friend (OP-056): the free Day Ticket's code, and the offers its checkouts spend.
+  const code = referralCode(env);
+  const referral = code ? { referralCode: code, referralSpend: async (token: string, order: string) => collections(env).referralSpend(await checkoutHash(token), order) } : {};
+  return { store, desk: deskOf(env), claimUrl: (secret) => claimLink(origin, secret), ...(env.OPENING_PASS_CODE ? { openingCode: env.OPENING_PASS_CODE } : {}), ...referral };
 }
 
 /** Brings the store's copy of a ticket (or of an order's tickets) up to date after answering. */
