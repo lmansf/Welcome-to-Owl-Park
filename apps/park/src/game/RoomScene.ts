@@ -201,6 +201,7 @@ import { DoorSigns } from './doorSigns';
 import { sideEdges } from './sideEdges';
 import { drawWalkFloor } from './walkFloor';
 import { BOWL_SHADOW, drawBowl } from './bowlView';
+import { drawArtTrial } from './artTrial';
 import { drawEdges } from './edgeView';
 import { drawSkirts } from './plazaSkirt';
 import { setVignette } from './vignette';
@@ -953,6 +954,8 @@ export class RoomScene extends Phaser.Scene {
     this.edgesDrawn = drawEdges(this, room);
     // An oval floor seen from almost straight above (the Great Hollow): its wall with height round it, the floor shaded so it recedes.
     drawBowl(this, room);
+    // An art trial's painting of the room (`?art=hollow`, artTrial.ts), over its floor and wall, under all that is drawn on them.
+    void drawArtTrial(this, room);
     // A soft shade in the view's corners, so a room seems to run on past the screen instead of stopping in a box.
     setVignette(true);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => setVignette(false));
