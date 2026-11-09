@@ -50,6 +50,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Audit high and critical dependency advisories
+        run: pnpm audit --audit-level high
       - run: pnpm typecheck
       - name: Cancel the rest of the run
         if: failure()
