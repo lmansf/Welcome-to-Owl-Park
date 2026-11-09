@@ -246,3 +246,56 @@ describe("the store's copy of tickets", () => {
     expect(store.calls).toHaveLength(3);
   });
 });
+
+describe('a free Day Ticket from bringing a friend (OP-056)', () => {
+  const CODE = 'OWLFRIEND';
+  function freePark() {
+    const store = new FakeStore();
+    store.total = '0.00';
+    store.dayTickets = 1;
+    store.ticketsLeft = 1;
+    store.codes = [CODE];
+    const p = park(store);
+    const spent: Array<[string, string]> = [];
+    let good = true;
+    const deps: HookDeps = { ...p.deps, referralCode: CODE, referralSpend: async (token, order) => (spent.push([token, order]), good) };
+    return { store, ...p, deps, spent, refuse: () => (good = false) };
+  }
+
+  it('goes out at once when it is one Day Ticket through a checkout the park opened for an offer', async () => {
+    const { store, book, deps, spent } = freePark();
+    const token = await book.newCheckout('c_bea', T0);
+    store.attributes = [{ key: 'owl_checkout', value: token }];
+    const r = await storeWebhook('orders/paid', PAID, deps);
+    expect(r).toMatchObject({ status: 200, body: { tickets: 1, sent: true }, referral: 'spent', placed: { device: 'c_bea', tickets: 1 }, recorded: { tickets: 1, held: false } });
+    expect(spent).toEqual([[token, '1001']]);
+    expect(book.wallet('c_bea', T0)).toEqual([expect.objectContaining({ kind: 'day', status: 'unused' })]);
+  });
+
+  it('waits for the owner’s check with the code but no checkout, a checkout whose offer is spent, or more than one ticket', async () => {
+    const noToken = freePark();
+    expect(await storeWebhook('orders/paid', PAID, noToken.deps)).toMatchObject({ body: { held: true }, referral: 'held', recorded: { held: true } });
+    expect(noToken.store.sent).toHaveLength(0);
+
+    const spentAlready = freePark();
+    spentAlready.store.attributes = [{ key: 'owl_checkout', value: await spentAlready.book.newCheckout('c_bea', T0) }];
+    spentAlready.refuse();
+    expect(await storeWebhook('orders/paid', PAID, spentAlready.deps)).toMatchObject({ body: { held: true }, referral: 'held' });
+
+    const two = freePark();
+    two.store.dayTickets = 2;
+    two.store.ticketsLeft = 2;
+    two.store.attributes = [{ key: 'owl_checkout', value: await two.book.newCheckout('c_bea', T0) }];
+    expect(await storeWebhook('orders/paid', PAID, two.deps)).toMatchObject({ body: { held: true }, referral: 'held' });
+    expect(two.spent).toEqual([]);
+  });
+
+  it('leaves orders without the code as they were', async () => {
+    const { store, deps, spent } = freePark();
+    store.codes = [];
+    const r = await storeWebhook('orders/paid', PAID, deps);
+    expect(r).toMatchObject({ body: { tickets: 1, sent: true } });
+    expect(r).not.toHaveProperty('referral');
+    expect(spent).toEqual([]);
+  });
+});

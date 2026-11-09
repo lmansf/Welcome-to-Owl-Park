@@ -66,6 +66,8 @@ import {
   type NestLook,
   type NestVisit,
   type OwlAccount,
+  type ReferralOffer,
+  type ReferralView,
   type TravelState,
   type OwlPicture,
   type QuestBoard,
@@ -81,6 +83,7 @@ import {
   type Wear,
 } from '@owl-park/shared';
 import { AccountBook, type CarriedEmail, type LinkKind, type Protected, type Restored } from './accountBook';
+import { ReferralBook, type Credited, type InviteResult } from './referralBook';
 import { TravelBook } from './travelBook';
 import { CollectLog, cleanVisit, collectibleType, furnitureId, logConfig, logRoom, type CollectibleType, type PlayEventData, type PurchaseData, type Visit } from './collectLog';
 import { FeedbackBox, thankForNote, type FeedbackAdd, type FeedbackRow, type FeedbackStatus } from './feedbackBox';
@@ -137,6 +140,8 @@ export class Collections extends DurableObject<Env> {
   private readonly courseStore: SqlCourseStore;
   private readonly feedbackBox: FeedbackBox;
   private readonly accounts: AccountBook;
+  /** Bring a friend (OP-056): who brought whom, and the free Day Tickets waiting. */
+  private readonly referrals: ReferralBook;
   private readonly travel: TravelBook;
   private readonly log: CollectLog;
   private readonly stats: ParkStats;
@@ -164,6 +169,7 @@ export class Collections extends DurableObject<Env> {
     this.course = new CourseBook(this.courseStore, this.book, COURSES, roomDef);
     this.feedbackBox = new FeedbackBox(sql);
     this.accounts = new AccountBook(sql, randomBytes);
+    this.referrals = new ReferralBook(sql, secureToken);
     this.travel = new TravelBook(sql);
   }
 
@@ -624,5 +630,45 @@ export class Collections extends DurableObject<Env> {
 
   async accountBind(nonce: string, code: string, here: { cid: string; dev: string | null } | null): Promise<Restored | 'gone' | 'no-owl'> {
     return this.accounts.restore(nonce, code, here, randomDeviceId, Date.now());
+  }
+
+  // ---------- bring a friend (OP-056; the Worker calls these only with REFERRALS not off; the rules are referralBook.ts) ----------
+
+  /** What the owl's Menu shows; `hadTicket` is the ticket book's word. */
+  async referralView(cid: string, hadTicket: boolean): Promise<ReferralView> {
+    const now = Date.now();
+    return this.referrals.view(cid, this.accounts.account(cid, now).friendCode, hadTicket, now);
+  }
+
+  /** A friend typed an owl's code (`code`, checked as a friend code by the Worker). */
+  async referralInvite(cid: string, code: string, hadTicket: boolean, ipHash: string): Promise<InviteResult> {
+    const now = Date.now();
+    const me = this.accounts.account(cid, now);
+    return this.referrals.invite({ cid, device: me.device, emailHash: this.accounts.emailHashOf(cid) }, this.accounts.byCode(code), hadTicket, ipHash, now);
+  }
+
+  /** A store checkout opened for one of the owl's free Day Tickets, by its token's hash: the offer, or null for none. */
+  async referralCheckout(cid: string, tokenHash: string): Promise<ReferralOffer | null> {
+    return this.referrals.checkout(cid, tokenHash, Date.now());
+  }
+
+  /** A paid order with the free Day Ticket's code: whether its checkout spends an offer still waiting. */
+  async referralSpend(tokenHash: string, order: string): Promise<boolean> {
+    return this.referrals.spend(tokenHash, order, Date.now());
+  }
+
+  /** The owl that brought this friend and waits to be thanked, or null. */
+  async referralPending(friend: string): Promise<string | null> {
+    return this.referrals.pending(friend);
+  }
+
+  /** The friend's first time through the gate: thank the owl that brought them (`member`: it holds an annual pass). */
+  async referralCredit(friend: string, member: boolean): Promise<Credited | null> {
+    const now = Date.now();
+    const referrer = this.referrals.pending(friend);
+    if (!referrer) return null;
+    const a = this.accounts.emailHashOf(referrer);
+    const sameEmail = a !== null && a === this.accounts.emailHashOf(friend);
+    return this.referrals.credit(friend, member, sameEmail, (cid, n) => this.book.addFeathers(cid, n, now), now);
   }
 }

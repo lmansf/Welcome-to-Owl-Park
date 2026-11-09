@@ -10,6 +10,7 @@ import { gatePage } from '../gatePage';
 import { CSP_REPORT_PATH } from '../guard';
 import { openingPage } from '../openingPage';
 import { account } from './account';
+import { referral } from './referral';
 import { adminCapacity, adminClimb, adminCollectLog, adminGate, adminGrant, adminKeeper, adminOpening, adminPing, adminRestart, adminStore, adminTickets } from './admin';
 import { collection, nest, nestGift } from './collection';
 import { adminFeedback, feedback } from './feedback';
@@ -51,6 +52,9 @@ export const ROUTES: readonly Route[] = [
 
   // ---- Accounts (OP-139) and feedback ----
   { prefix: '/api/account/', handle: account },
+  // Bring a friend (OP-056, with REFERRALS not off).
+  { path: '/api/referral', handle: referral },
+  { path: '/api/referral/invite', handle: referral },
   { path: '/api/feedback', handle: feedback },
   // The thanks ladder's state and the page card's close (OP-272).
   { path: '/api/feedback/reward', handle: feedback },
