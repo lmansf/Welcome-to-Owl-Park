@@ -173,6 +173,13 @@ export async function ticketDesk(book: TicketBook, request: Request, now: number
       if (!device) return bad();
       return json({ token: await book.newCheckout(device, now) });
     }
+    case '/referral-owl': {
+      // Bring a friend (OP-056): whether this owl has ever had a ticket (only a new owl may be brought), and whether
+      // it holds an annual pass now (its thank-you is feathers then). Any ticket counts, held, spent or switched off too.
+      if (!device) return bad();
+      const w = book.wallet(device, now);
+      return json({ hadTicket: w.length > 0, member: w.some((t) => t.kind === 'annual' && (t.status === 'active' || t.status === 'unused')) });
+    }
     case '/place': {
       // A paid order carried a checkout token: its never-scanned tickets go onto that owl (OP-175).
       const token = str(body['token'], 64);

@@ -173,6 +173,10 @@ carry `run_id` (the request's chaos run). **Socket fields** are `room`, `session
 | `pass_rejected` | `worker.pass` | info | A route refused a pass (`passFrom`) | `route`, `reason`: `missing`, `expired`, `invalid` (`passRefusal`, `pass.ts`) |
 | `claim_moved` | `worker.tickets` | info | Tickets moved onto an owl. Two places, below | below |
 | `claim_in_use` | `worker.tickets` | info | A claim or share link named tickets already in use on another owl; nothing moved (the ticket desk's 409, OP-174) | `via`: `claim` or `share`; `collector_hash`; `device_class`; `order_hash` (when the desk's answer names the order: a claim; a share's answer names none); `in_use` (the order's running tickets on another owl; 1 when the answer gives no number) |
+| `referral_invited` | `worker.accounts` | info | An owl new to the park typed a friend's code and was offered a free Day Ticket (`routes/referral.ts`, OP-056) | `collector_hash` (the friend) |
+| `referral_refused` | `worker.accounts` | info | A friend code typed in was not taken (OP-056) | `collector_hash`; `reason`: `unknown-code`, `self`, `same-device`, `same-email`, `has-ticket`, `already-invited` or `too-many` |
+| `referral_thanked` | `worker.tickets` | info | A brought friend's ticket started at the gate, and the owl that brought them was thanked (`thankReferrer`, `referrals.ts`, OP-056) | `collector_hash` (the owl thanked); `reason`: `ticket`, `feathers` or `capped` (past three in 30 days: nothing given) |
+| `referral_held` | `worker.store` | warn | An order used the free Day Ticket's code without a checkout the park opened for an offer, or for more than one Day Ticket: it waits for the owner's check (OP-056) | `topic`, `order_hash` |
 | `order_protect_mailed` | `worker.accounts` | info | A ticket landed on an owl (a claim, or the gate's checkout) and its buyer was mailed one protect link (`offerOrderProtect`, `accounts.ts`, OP-186) | `collector_hash`, `order_hash` |
 | `order_protect_unsent` | `worker.accounts` | warn | No protect link went to a ticket's buyer (OP-186) | `collector_hash`, `order_hash`, `reason`: `no-email` (the store gave none: an app not allowed customers' emails, the store out of reach, or none given) or `mail-failed` |
 | `room_join_ok` | `room.join` | info | An owl joined a room (`RoomObject.join`) | socket fields; `owls` (in the room now); `via` (`travel`, when the hello says so); `copy` (the room's copy, OP-075); `owner: true` (its own nest); `spectator: true` (OP-191) |
@@ -347,9 +351,10 @@ No call logs a reserved event yet, so none has a component or level; `worker.fra
 
 ## Every event, checked
 
-`LOG_EVENTS` holds 62 events, every one in the table above: `log_field_refused`,
+`LOG_EVENTS` holds 68 events, every one in the table above: `log_field_refused`,
 `signing_key_missing`, `signing_key_refused`, `pass_issued`, `pass_verified`, `pass_rejected`, `claim_moved`,
-`claim_in_use`, `order_protect_mailed`, `order_protect_unsent`, `room_join_ok`,
+`claim_in_use`, `referral_invited`, `referral_refused`, `referral_thanked`, `referral_held`,
+`order_protect_mailed`, `order_protect_unsent`, `room_join_ok`,
 `room_join_refused`, `room_leave`, `reconnect_ok`, `queue_enter`, `queue_admit`, `queue_depth`,
 `tick_latency_p95`, `emote_throttled`, `position_rejected`, `webhook_received`,
 `webhook_rejected`, `webhook_duplicate`, `webhook_failed`, `order_recorded`, `store_unreachable`,

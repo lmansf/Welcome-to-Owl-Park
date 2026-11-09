@@ -160,6 +160,17 @@ export class AccountBook {
     return dev !== null ? r['device'] === dev : r['bound_at'] === null;
   }
 
+  /** The owl with this friend code (OP-056: a friend typed it), with its device and its email's hash; null for none. */
+  byCode(code: string): { cid: string; device: string | null; emailHash: string | null } | null {
+    const r = this.sql.exec('SELECT cid, device, email_hash FROM owl_accounts WHERE friend_code = ?', code).toArray()[0] as Record<string, unknown> | undefined;
+    return r ? { cid: String(r['cid']), device: (r['device'] as string | null) ?? null, emailHash: (r['email_hash'] as string | null) ?? null } : null;
+  }
+
+  /** The hash of the email protecting the owl, or null (OP-056: two owls of one email bring no friend). */
+  emailHashOf(cid: string): string | null {
+    return (this.row(cid)?.['email_hash'] as string | null | undefined) ?? null;
+  }
+
   /** The owl's colours and kind as its screen shows them now, for its picture (written only when they changed). */
   setLook(cid: string, look: PortraitLook, now: number): void {
     this.account(cid, now);
