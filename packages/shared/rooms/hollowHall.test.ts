@@ -184,6 +184,9 @@ describe('the Great Hollow (Nov 7; an oval, Nov 8)', () => {
       const art = hall.pieces!.find((p) => Math.hypot(p.x - middle(d.id).x, p.y - middle(d.id).y) < 120);
       if (art && atFront(d.id as (typeof HALL_WAYS)[number]) && d.id !== 'down')
         expect(d.labelAt!.y, d.id).toBeLessThan(art.y - KIT_ART[art.key]!.h * (art.scale ?? 1));
+      // At an end the art stands beside the floor: half a long label fits between it and the sign's
+      // middle, so no word slips under the doorway (the neon street read "The neon stre", Nov 9).
+      if (art && d.rect.h > d.rect.w) expect(Math.abs(d.labelAt!.x - art.x), d.id).toBeGreaterThanOrEqual(KIT_ART[art.key]!.w / 2 + 220);
     }
   });
 
