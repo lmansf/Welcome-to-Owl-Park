@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import type { LockView } from '../../../packages/shared/src/puzzles';
 import { expect, test } from './fixtures';
 import { mapCard, openPark, state } from './helpers';
 
@@ -136,6 +137,26 @@ test.describe('the pad (OP-082, OP-114)', () => {
     expect(b.y).toBeGreaterThanOrEqual(bar.y + bar.height);
     expect(b.x + b.width).toBeLessThanOrEqual(page.viewportSize()!.width);
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-declutter-guest.png` });
+  });
+
+  test('a phone puzzle code sheet keeps its own layout and touch scrolling (OP-319)', async ({ page, isMobile }) => {
+    test.skip(!isMobile, 'the layout issue was specific to the touch controller');
+    await openPark(page);
+    await page.evaluate(() => {
+      const hud = window.owlPark.game.registry.get('hud') as { openLock(quest: string, lock: LockView): void };
+      hud.openLock('puzzle-moon-gate', {
+        id: 'moth-dial', name: 'The moth dial', kind: 'code', room: 'hub', place: 'The hub',
+        available: true, open: false, mine: false, post: { room: 'hub', x: 0, y: 0 },
+        length: 3, clues: [], key: null, hasKey: false, jammedUntil: 0, hint: '',
+      });
+    });
+
+    const sheet = page.getByRole('region', { name: 'Code lock' });
+    await expect(sheet).toBeVisible();
+    await expect(sheet).toHaveCSS('position', 'fixed');
+    await expect(sheet).not.toHaveCSS('touch-action', 'none');
+    for (let i = 0; i < 3; i++) await sheet.getByRole('button', { name: 'Moon', exact: true }).tap();
+    await expect(sheet.getByRole('button', { name: 'Try', exact: true })).toBeEnabled();
   });
 
   test('Interact does what the owl stands at, as E does, and rests where there is nothing', async ({ page, isMobile }) => {

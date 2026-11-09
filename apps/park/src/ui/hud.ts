@@ -310,7 +310,7 @@ const CSS = `
 #hud .say-btn kbd{position:absolute;top:-6px;right:-8px;margin:0;color:#F6F1E3;background:rgba(12,30,54,.92)}
 #hud .badge{position:absolute;top:-3px;right:-3px;width:13px;height:13px;border-radius:50%;background:#FF6B81;box-shadow:0 0 0 2px #0C1E36,0 0 8px rgba(255,107,129,.8)}
 #hud .badge[hidden]{display:none}
-#hud .pad{display:none}
+#hud .controller-pad{display:none}
 #hud.covered .bar,#hud.covered .welcome,#hud.covered .welcome.show,#hud.covered .nest-welcome,#hud.covered .bottom,#hud.covered .hints,#hud.covered .cards,#hud.covered .notices{visibility:hidden}
 #hud.no-stick .stick{display:none}
 #hud.just-in .fb-bug,#hud.just-in .fb-card{pointer-events:none}
@@ -342,9 +342,9 @@ const CSS = `
 @media (pointer:coarse){
   #hud .bar{min-height:44px;padding-right:100px}
   #hud .bottom .left{position:fixed;left:auto;bottom:auto;top:max(10px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));display:flex;flex-direction:row-reverse;gap:8px;width:auto;height:auto;max-width:none}
-  #hud .pad{display:block;position:absolute;right:0;bottom:0;width:158px;height:132px}
+  #hud .controller-pad{display:block;position:absolute;right:0;bottom:0;width:158px;height:132px}
   /* No browser gesture starts on the pad (touch-action none): two thumbs at once must never read as a pinch or a pan (OP-242). */
-  #hud .pad{touch-action:none}
+  #hud .controller-pad{touch-action:none}
   #hud .pad-btn{position:absolute;width:56px;height:56px;min-height:0;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#F6F1E3;background:rgba(12,30,54,.28);border:2px solid rgba(246,241,227,.32);box-shadow:inset 0 0 18px rgba(0,0,0,.25);touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
   #hud .pad-btn[hidden]{display:none}
   #hud .pad-btn svg{width:30px;height:30px}
@@ -367,7 +367,7 @@ const CSS = `
   #hud .bottom .actions,#hud.no-stick .bottom .actions{position:absolute;right:0;bottom:146px;flex-direction:column;align-items:flex-end}
   #hud .toasts{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 186px)}
   /* A game played on the pad (OP-137): its Interact over the arcade screen, lit, the rest of the pad away. */
-  #hud.arcade-pad .pad{visibility:visible;z-index:25}
+  #hud.arcade-pad .controller-pad{visibility:visible;z-index:25}
   #hud.arcade-pad .pad-btn.interact,#hud.arcade-pad .pad-btn.interact.idle{opacity:1;pointer-events:auto;border-color:rgba(255,211,106,.7);box-shadow:inset 0 0 18px rgba(0,0,0,.25),0 0 12px rgba(255,211,106,.35)}
   #hud.arcade-pad .pad-btn.jump,#hud.arcade-pad .pad-btn.dash{display:none}
   /* Hoot & Hop and Talon Toss on the pad (OP-137): the stick over the arcade screen, each flick a hop or a pull to aim (even with the stick off for walking). */
@@ -479,7 +479,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     <div class="notices" aria-live="polite" data-notices></div>
     <div class="toasts" aria-live="polite" data-toasts></div>
     <div class="bottom" data-park-keys>
-      <div class="pad">
+      <div class="controller-pad">
         <button class="pad-btn interact idle" data-pad-interact aria-label="Interact" aria-disabled="true">${INTERACT_ICON}<span class="lbl" data-pad-interact-label aria-hidden="true"></span></button>
         <button class="pad-btn jump" data-pad-jump aria-label="Jump" aria-keyshortcuts="Space">${JUMP_ICON}</button>
         <button class="pad-btn dash" data-pad-dash aria-label="Dash" aria-keyshortcuts="Shift" hidden>${DASH_ICON}</button>
