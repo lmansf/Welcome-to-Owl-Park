@@ -5,6 +5,8 @@
  * what the server will decide; the server's result is the one that counts.
  */
 import {
+  AIR_MS,
+  BREATH_MAX,
   ECHO_CALLS,
   FALL_FIELD,
   FALL_MS,
@@ -14,6 +16,10 @@ import {
   fallScore,
   itemAt,
   owlX,
+  UPDRAFT_COLUMNS,
+  UPDRAFT_GOAL,
+  UPDRAFT_MS,
+  flightAt,
   type FallItem,
   type MiniKey,
   type PartyLook,
@@ -49,6 +55,17 @@ const CSS = `
 #hud .party .pad small{font-weight:500;font-size:11px;opacity:.9}
 #hud .party .pad.lit{background:#FFD36A;color:#0C1E36}
 #hud .party .pad:disabled{opacity:.45}
+#hud .party .ctl{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);display:flex;gap:10px;width:min(560px,calc(100% - 24px))}
+#hud .party .ctl .pad{flex:1;aspect-ratio:auto;min-height:72px;touch-action:none;user-select:none;-webkit-user-select:none}
+#hud .party .ctl .pad.big{flex:2}
+#hud .party .holes{position:absolute;left:50%;top:54%;transform:translate(-50%,-50%);display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;width:min(520px,calc(100% - 24px))}
+#hud .party .hole{aspect-ratio:1;min-height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:14px;background:rgba(246,241,227,.06);border:2px dashed rgba(246,241,227,.55);color:#F6F1E3;font-size:13px}
+#hud .party .hole b{font-size:30px;line-height:1.1}
+#hud .party .hole.open{border-style:solid;border-color:#FFD36A;background:rgba(255,211,106,.16)}
+#hud .party .hole.found{border-style:solid;opacity:.7}
+#hud .party .hole.t0.found{border-color:#7FD1C7}
+#hud .party .hole.t1.found{border-color:#E7A0C8}
+#hud .party .hole.cursor{outline:3px solid #FFD36A;outline-offset:2px}
 @media (max-width:600px){#hud .party .pads{grid-template-columns:repeat(2,minmax(0,1fr));width:min(320px,calc(100% - 24px))}}
 `;
 let styled = false;
@@ -351,8 +368,158 @@ function hootEcho(host: MiniHost, stage: HTMLElement): MiniDrawer {
   };
 }
 
+// ---------- Shared bits for the four below ----------
+
+/** Sends a page's inputs no closer together than `gap` ms (the room refuses quicker ones): a later hold replaces one still waiting. */
+function spaced(host: MiniHost, gap: number, sent?: (k: MiniKey, v: number, t: number) => void): (k: MiniKey, v: number) => void {
+  const queue: { k: MiniKey; v: number }[] = [];
+  let last = -1e9;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const flush = () => {
+    timer = null;
+    const next = queue.shift();
+    if (!next) return;
+    const t = host.now();
+    host.send(next.k, next.v);
+    sent?.(next.k, next.v, t);
+    last = performance.now();
+    if (queue.length) timer = setTimeout(flush, gap);
+  };
+  return (k, v) => {
+    const waiting = k === 'hold' ? queue.find((q) => q.k === 'hold') : undefined;
+    if (waiting) waiting.v = v;
+    else queue.push({ k, v });
+    if (timer) return;
+    const wait = Math.max(0, gap - (performance.now() - last));
+    timer = setTimeout(flush, wait);
+  };
+}
+
+/** A big button that holds while pressed (pointer down to up), and calls `press` with true and false. */
+function holdPad(label: string, size: string, press: (down: boolean) => void, big = false): HTMLButtonElement {
+  const b = document.createElement('button');
+  b.className = big ? 'pad big' : 'pad';
+  b.innerHTML = `<span>${label}</span><small>${size}</small>`;
+  let down = false;
+  const set = (d: boolean) => {
+    if (d === down) return;
+    down = d;
+    b.classList.toggle('lit', d);
+    press(d);
+  };
+  b.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    b.setPointerCapture?.(e.pointerId);
+    set(true);
+  });
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) b.addEventListener(ev, () => set(false));
+  b.addEventListener('contextmenu', (e) => e.preventDefault());
+  return b;
+}
+
+function line(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, size = 24, color = '#F6F1E3'): void {
+  ctx.fillStyle = color;
+  ctx.font = `700 ${size}px system-ui,sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, x, y);
+}
+
+// ---------- Updraft Race: hold to flap, steer into the warm air ----------
+
+const AIR_FILL: Record<number, string> = { [-1]: 'rgba(110,160,255,.22)', 0: 'rgba(246,241,227,.03)', 1: 'rgba(255,211,106,.16)', 2: 'rgba(255,170,60,.34)' };
+const AIR_WORD: Record<number, string> = { [-1]: 'Cold ↓', 0: 'Still', 1: 'Warm ↑', 2: 'Updraft ↑↑' };
+
+function updraftRace(host: MiniHost, stage: HTMLElement): MiniDrawer {
+  const { ctx, fit, c } = canvasIn(stage);
+  let air: number[][] = [];
+  let inputs: StampedInput[] = [];
+  const mine: StampedInput[] = [];
+  const send = spaced(host, 130, (k, v, t) => {
+    const me = host.you();
+    if (me !== null) mine.push({ seat: me, k, v, t });
+  });
+  const held = new Set<string>();
+  const ctl = document.createElement('div');
+  ctl.className = 'ctl';
+  ctl.append(
+    holdPad('◀ Steer', '120×72', (d) => d && send('dir', -1)),
+    holdPad('Flap', '240×72', (d) => send('hold', d ? 1 : 0), true),
+    holdPad('Steer ▶', '120×72', (d) => d && send('dir', 1)),
+  );
+  stage.appendChild(ctl);
+  const all = () => [...inputs.filter((i) => i.seat !== host.you()), ...mine].sort((a, b) => a.t - b.t);
+  const W = 1000;
+  const H = 700;
+  const SKY = { y: 60, h: 600 };
+  const colW = W / UPDRAFT_COLUMNS;
+  const yOf = (alt: number) => SKY.y + SKY.h - (alt / UPDRAFT_GOAL) * (SKY.h - 40) - 20;
+
+  return {
+    view(v) {
+      const uv = v as { air: number[][]; inputs: StampedInput[] };
+      air = uv.air ?? [];
+      inputs = uv.inputs ?? [];
+    },
+    event(ev) {
+      if (ev.seat === host.you() || (ev.k !== 'hold' && ev.k !== 'dir')) return;
+      inputs.push({ seat: ev.seat, k: ev.k, v: ev.v, t: ev.t });
+      inputs.sort((a, b) => a.t - b.t);
+    },
+    draw() {
+      fit(W, H);
+      const t = Math.max(0, Math.min(UPDRAFT_MS, host.now()));
+      const row = air[Math.floor(t / AIR_MS)] ?? [];
+      const next = air[Math.floor(t / AIR_MS) + 1];
+      const timeline = { air, inputs: all() };
+      const flights = new Map(host.seats().map((seat) => [seat, flightAt(timeline, seat, t)]));
+      const scores: Record<number, number> = {};
+      for (const [seat, f] of flights) scores[seat] = Math.round((f.alt / UPDRAFT_GOAL) * 100);
+      drawScores(ctx, host, scores, W, '% up');
+      for (let col = 0; col < UPDRAFT_COLUMNS; col++) {
+        const a = row[col] ?? 0;
+        sizeBox(ctx, col * colW, SKY.y, colW, SKY.h, 'Sky column', { fill: AIR_FILL[a] ?? AIR_FILL[0]!, font: 11 });
+        line(ctx, AIR_WORD[a] ?? '', col * colW + colW / 2, SKY.y + SKY.h - 18, 16);
+        if (next) line(ctx, `next: ${AIR_WORD[next[col] ?? 0]}`, col * colW + colW / 2, SKY.y + 52, 12, 'rgba(246,241,227,.7)');
+      }
+      sizeBox(ctx, 0, SKY.y, W, 34, 'Treetop', { fill: 'rgba(127,209,199,.22)', font: 13 });
+      timeBar(ctx, t, UPDRAFT_MS, W, SKY.y + SKY.h + 4);
+      const me = host.you();
+      host.seats().forEach((seat, i) => {
+        const f = flights.get(seat)!;
+        const look = host.look(seat);
+        if (look) drawOwl(ctx, f.col * colW + colW / 2 + (i - 1.5) * 14, yOf(f.alt), 20, look, seat === me);
+      });
+      if (me !== null) {
+        const f = flights.get(me);
+        if (f) {
+          // Breath for the own owl: a bar under the sky.
+          ctx.fillStyle = 'rgba(246,241,227,.15)';
+          ctx.fillRect(W / 2 - 150, SKY.y + SKY.h + 16, 300, 12);
+          ctx.fillStyle = f.winded ? '#E07A5F' : '#7FD1C7';
+          ctx.fillRect(W / 2 - 150, SKY.y + SKY.h + 16, (300 * f.breath) / BREATH_MAX, 12);
+          line(ctx, f.doneAt !== null ? 'At the top!' : f.winded ? 'Out of breath: glide!' : 'Breath', W / 2, SKY.y + SKY.h + 40, 14);
+        }
+      }
+    },
+    key(k, down) {
+      const was = held.has(k);
+      if (down) held.add(k);
+      else held.delete(k);
+      if (k === ' ' || k === 'Spacebar' || k === 'ArrowUp') {
+        if (down !== was) send('hold', down ? 1 : 0);
+      } else if ((k === 'ArrowLeft' || k === 'ArrowRight') && down && !was) send('dir', k === 'ArrowLeft' ? -1 : 1);
+    },
+    destroy() {
+      ctl.remove();
+      c.remove();
+    },
+  };
+}
+
 /** Each minigame's drawer, by id: a minigame not here yet shows the board while it runs. */
 export const MINI_DRAWERS: Partial<Record<string, (host: MiniHost, stage: HTMLElement) => MiniDrawer>> = {
+  'updraft-race': updraftRace,
   'feather-fall': featherFall,
   'hoot-echo': hootEcho,
 };

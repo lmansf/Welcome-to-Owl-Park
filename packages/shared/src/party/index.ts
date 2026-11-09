@@ -4,6 +4,7 @@ export * from './minigame';
 export * from './minigames';
 export * from './featherFall';
 export * from './hootEcho';
+export * from './updraftRace';
 export * from './game';
 export * from './words';
 export * from './ids';
