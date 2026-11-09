@@ -1,10 +1,10 @@
 import type { Polygon } from '../src/geometry';
 import { isNestRoom } from '../src/homes';
-import { doorTarget } from '../src/doorways';
+import { doorTarget, type WalkMap } from '../src/doorways';
 import { isNewMapRoom } from '../src/newMap';
 import type { Perch } from '../src/perches';
 import type { Vec2 } from '../src/protocol';
-import { ROOM_H, ROOM_W, mapOf, type DoorDef, type RoomDef } from '../src/room';
+import { ROOM_H, ROOM_W, idolRealms, mapOf, type DoorDef, type RoomDef } from '../src/room';
 import type { OwlSpeciesId } from '../src/species';
 import { TRIAL_COURSE, TRIAL_ROOMS } from './trialCourse';
 import { CANOPY_COURSE, CANOPY_ROOMS } from './updraftCanopy';
@@ -12,6 +12,7 @@ import { BRUSH_COURSE, BRUSH_ROOMS } from './brushstrokeBridges';
 import { CIRCUIT_COURSE, CIRCUIT_ROOMS } from './neonCourse';
 import { HALL_ANCHORS, HALL_ID, HALL_ROOM, fromRealm } from './hollowHall';
 import { growToPlaza } from './plaza';
+import { floorPerches, floorPieces } from '../src/plazaFloor';
 import type { CourseDef } from '../src/course';
 import { realmStart, realmStartAnchors } from '../src/realmStart';
 
@@ -1697,13 +1698,42 @@ ROOMS['hub'] = growToPlaza(ROOMS['hub']!, {
   frontBumps: ['edge-party-mushrooms-a', 'edge-party-mushrooms-b', 'edge-party-mushrooms-a', 'edge-party-mushrooms-b', 'edge-party-mushrooms-a', 'edge-party-mushrooms-b', 'edge-party-mushrooms-a', 'edge-party-mushrooms-b'],
 });
 
+// Out on each plaza's floor (plazaFloor.ts, the owner's ask, Nov 8: things to interact with around the
+// room, not all on the wall): its little scenes' stumps and logs to land on and the art that sets each scene.
+for (const id of ['lobby', 'arcade', 'homes', 'market', 'glass', 'grove', 'hub']) {
+  const room = ROOMS[id]!;
+  const perches = floorPerches(id);
+  ROOMS[id] = { ...room, ...(perches.length ? { perches: [...(room.perches ?? []), ...perches] } : {}), pieces: [...(room.pieces ?? []), ...floorPieces(id)] };
+}
+
 // ---- The Great Hollow (hollowHall.ts) ----
 //
-// The inside of the tree, one room seen from above with the four Commons side by side in it (Nov 7,
-// the owner's "Build the big room"), in place of the tall hall seen from the side with a Commons behind
-// a door on each landing.
+// The inside of the tree, one huge oval room seen from almost straight above with the four Commons round
+// its rim (Nov 7, the owner's "Build the big room"; Nov 8, "make it a huge oval with realms kind of all the
+// way around"), in place of the tall hall seen from the side with a Commons behind a door on each landing.
 
 ROOMS[HALL_ROOM.id] = HALL_ROOM;
+
+/** The realms whose idols stand in the Great Hollow now, each over its Realm Vote spot there. */
+export const HALL_IDOL_REALMS: ReadonlySet<string> = new Set(idolRealms(HALL_ROOM));
+
+/**
+ * A room as an owl walking `map` finds it (Nov 8, the owner's word: "We can probably remove the idols
+ * from their original realms if they're still there now that they're in the main hall"): on the new map
+ * a realm whose idol stands in the Great Hollow has none of its own, neither the idol nor its Realm Vote
+ * spot; today's park keeps it, as its only vote is there.
+ */
+export function roomOnMap(room: RoomDef, map: WalkMap): RoomDef {
+  if (
+    map !== 3 ||
+    room.id === HALL_ID ||
+    room.idols ||
+    !HALL_IDOL_REALMS.has(room.votesFor ?? room.id) ||
+    !room.doors.some((d) => d.id === 'idol')
+  )
+    return room;
+  return { ...room, idols: [], doors: room.doors.filter((d) => d.id !== 'idol') };
+}
 
 /**
  * The new map's ways out of today's top-down rooms (DoorDef.toNew), by room and door: each realm's way out

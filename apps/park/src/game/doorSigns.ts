@@ -8,7 +8,7 @@
  */
 import Phaser from 'phaser';
 import type { RoomDef, WalkMap } from '@owl-park/shared';
-import { signY, signedDoors } from './hints';
+import { signX, signY, signedDoors } from './hints';
 
 /** Room pixels per screen pixel now: what keeps a sign the same size on any screen. */
 type Scale = () => number;
@@ -68,6 +68,18 @@ export class DoorSigns {
     return this.signs.find((s) => s.id === this.focused)?.label ?? null;
   }
 
+  /**
+   * Whether this doorway's sign stands whole on screen now: then its words are there to read, and no
+   * chip at the screen's edge repeats them (the Great Hollow on a phone held sideways, Nov 8).
+   */
+  onScreen(id: string): boolean {
+    const sign = this.signs.find((s) => s.id === id);
+    if (!sign) return false;
+    const v = this.scene.cameras.main.worldView;
+    const b = sign.text.getBounds();
+    return v.width > 0 && b.left >= v.left && b.right <= v.right && b.top >= v.top && b.bottom <= v.bottom;
+  }
+
   /** Show the sign of this doorway alone (none for null or a doorway with no sign), fading. */
   focus(id: string | null): void {
     if (id === this.focused) return;
@@ -86,7 +98,10 @@ export class DoorSigns {
       for (const { text } of this.signs) text.setScale(s / 2);
     }
     const shown = this.signs.find((x) => x.id === this.focused);
-    if (shown) shown.text.y = signY(shown.at, shown.text.displayWidth, shown.text.displayHeight, this.owl());
+    if (!shown) return;
+    const view = this.scene.cameras.main.worldView;
+    shown.text.x = view.width > 0 ? signX(shown.at.x, shown.text.displayWidth, { x: view.x, w: view.width }, 12 * s) : shown.at.x;
+    shown.text.y = signY({ x: shown.text.x, y: shown.at.y }, shown.text.displayWidth, shown.text.displayHeight, this.owl());
   }
 }
 

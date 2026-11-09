@@ -51,11 +51,16 @@ async function openLink(page: Page, mail: Mail, kind: 'protect' | 'restore', par
   await page.goto(`/?${new URLSearchParams({ transport: 'edge', room: 'hub', ...params }).toString()}#${kind}=${token}`);
 }
 
-/** A tap on an owl's picture: the page starts again holding that owl, and is in the park again. */
-async function pick(page: Page, code: string): Promise<void> {
+/** A tap on an owl's picture reloads the page holding that owl. */
+async function pickOwl(page: Page, code: string): Promise<void> {
   const owl = page.locator(`.modal.account [data-owl="${code}"]`);
   await expect(owl).toBeVisible({ timeout: 15_000 });
   await Promise.all([page.waitForEvent('load', { timeout: 30_000 }), owl.click()]);
+}
+
+/** The email test links open a room directly. */
+async function pick(page: Page, code: string): Promise<void> {
+  await pickOwl(page, code);
   await page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 30_000 });
 }
 
@@ -198,6 +203,15 @@ test.describe('sign in with Google beside the email box (OP-313), Google stood i
     await Promise.all([page.waitForEvent('load', { timeout: 30_000 }), google.click()]);
   };
 
+  /** A return to the home screen needs Play before the in-park Menu is available. */
+  const playHome = async (page: Page) => {
+    const play = page.locator('[data-home-btn="play"]');
+    await expect(play).toBeVisible({ timeout: 20_000 });
+    expect(await page.evaluate(() => window.owlPark.home())).toEqual({ shown: true, loggedIn: true });
+    await play.click();
+    await expect.poll(async () => (await state(page)).nest?.mine, { timeout: 30_000 }).toBe(true);
+  };
+
   test('protects an owl with Google instead of a mailed link, and another screen brings it over by Google and a tap', async ({ browser }) => {
     test.slow(); // two live parks and five page loads between them
     const phone = await screen(browser);
@@ -217,7 +231,8 @@ test.describe('sign in with Google beside the email box (OP-313), Google stood i
     await tablet.goto('/?transport=edge');
     await tablet.locator('[data-home-btn="restore"]').click();
     await viaGoogle(tablet);
-    await pick(tablet, code!);
+    await pickOwl(tablet, code!);
+    await playHome(tablet);
     expect(await friendCodeOf(tablet)).toBe(code);
     await expect(phone.locator('[data-moved]')).toBeVisible({ timeout: 15_000 });
     await phone.context().close();
@@ -240,6 +255,7 @@ test.describe('sign in with Google beside the email box (OP-313), Google stood i
     await viaGoogle(a);
     await a.locator('.modal.account [data-account-offer]').click();
     await expect(a.getByText('This owl is protected now.')).toBeVisible({ timeout: 15_000 });
+    await playHome(a);
     const menu = await openMenu(a, 'nest');
     await expect(menu.locator('[data-friend-code]')).toHaveAttribute('data-friend-code', before!);
     await expect(menu.locator('[data-protected]')).toHaveAttribute('data-protected', 'true');

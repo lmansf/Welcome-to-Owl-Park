@@ -4,18 +4,25 @@
  * when someone flops into it, then grows back), and plain ones that only count toward quests
  * (browsing a stall, basking in the moonbeam). The room server checks reach and state.
  */
+import { HALL_LEAVES, HALL_MOONBEAMS } from './hollowOval';
 import type { Raised } from './perches';
+import { FLOOR_INTERACTABLES } from './plazaFloor';
 import type { Vec2 } from './protocol';
 import { START_LEAVES, START_STALL } from './realmStart';
 
-export type InteractableKind = 'leaf-pile' | 'stall' | 'moonbeam';
+/** Leaf piles, stalls and moonbeams; and out on the plazas' floors (plazaFloor.ts), bird baths, mushrooms, telescopes and shiny things. */
+export type InteractableKind = 'leaf-pile' | 'stall' | 'moonbeam' | 'bird-bath' | 'mushroom' | 'telescope' | 'shiny';
 
 /** A thing to use; one with a `top` sits up on that perch (OP-084), and only an owl standing on it reaches it. */
 export interface InteractableDef extends Raised {
   id: string;
   kind: InteractableKind;
   room: string;
+  /** Where the owl stands to use it. */
   pos: Vec2;
+  /** Its art (a kit key), drawn with its foot just behind `pos` (plazaFloor.ts); none for a thing the game draws itself. */
+  piece?: string;
+  flip?: true;
 }
 
 export interface KindRules {
@@ -35,6 +42,11 @@ export const KIND_RULES: Readonly<Record<InteractableKind, KindRules>> = {
   'leaf-pile': { label: 'Flop into the leaves', noun: 'leaf pile', plural: 'leaf piles', verb: 'Flop into', reach: 90, shared: true },
   stall: { label: 'Browse the stall', noun: 'market stall', plural: 'market stalls', verb: 'Browse', reach: 110, shared: false },
   moonbeam: { label: 'Bask in the moonbeam', noun: 'moonbeam', plural: 'moonbeams', verb: 'Bask in', reach: 120, shared: false },
+  'bird-bath': { label: 'Splash in the bird bath', noun: 'bird bath', plural: 'bird baths', verb: 'Splash in', reach: 110, shared: false },
+  mushroom: { label: 'Bounce on the mushrooms', noun: 'mushroom patch', plural: 'mushroom patches', verb: 'Bounce on', reach: 100, shared: false },
+  telescope: { label: 'Look through the telescope', noun: 'telescope', plural: 'telescopes', verb: 'Look through', reach: 110, shared: false },
+  // Shared like a leaf pile: picked up, it is gone for everyone until another turns up, and it may be a feather's worth.
+  shiny: { label: 'Pick up the shiny thing', noun: 'shiny thing', plural: 'shiny things', verb: 'Pick up', reach: 90, shared: true },
 };
 
 export const INTERACTABLES: readonly InteractableDef[] = [
@@ -66,18 +78,11 @@ export const INTERACTABLES: readonly InteractableDef[] = [
   { id: 'm3-ground-leaves-fungus', kind: 'leaf-pile', room: 'm3-ground', pos: { x: 2175, y: 770 }, top: 282 },
   // ...and the boarded stall roofs by the market square gather the ones the fence lets through.
   { id: 'm3-ground-leaves-roof', kind: 'leaf-pile', room: 'm3-ground', pos: { x: 3900, y: 770 }, top: 350 },
-  // The Great Hollow: leaves blown in at the knothole drift to the front of each Commons, one pile a
-  // Commons, between its realm's doorway and its idol, and one more by the root stair's hatch.
-  ...(['glass', 'ink', 'grove', 'market'] as const).map((level, i): InteractableDef => ({ id: `m3-hall-leaves-${level}`, kind: 'leaf-pile', room: 'm3-hall', pos: { x: i * 1600 + 560, y: 820 } })),
-  { id: 'm3-hall-leaves-hatch', kind: 'leaf-pile', room: 'm3-hall', pos: { x: 3420, y: 830 } },
-  // Each Commons is a plaza (Nov 8): a moonbeam through the canopy in its middle, where a crowd gathers,
-  // and leaves blown against its front, so no stretch of it is an empty walk. The leaves lie in front of
-  // the roots along the front (OP-308, hollowHall.ts ROOT_RUNS), at their feet, never behind them.
-  ...(['glass', 'ink', 'grove', 'market'] as const).flatMap((level, i): InteractableDef[] => [
-    { id: `m3-hall-moonbeam-${level}`, kind: 'moonbeam', room: 'm3-hall', pos: { x: i * 1600 + 800, y: 1060 } },
-    { id: `m3-hall-leaves-${level}-front-west`, kind: 'leaf-pile', room: 'm3-hall', pos: { x: i * 1600 + 300, y: 1420 } },
-    { id: `m3-hall-leaves-${level}-front-east`, kind: 'leaf-pile', room: 'm3-hall', pos: { x: i * 1600 + 1400, y: 1420 } },
-  ]),
+  // The Great Hollow (hollowOval.ts): leaves blown in at the knothole drift round the oval's rim, two
+  // in each Commons either side of its plaza, and more by the ways at the back and front and round the
+  // heart; a moonbeam falls in each plaza and at the heart, so no stretch of the floor is an empty walk.
+  ...HALL_LEAVES.map((l): InteractableDef => ({ id: `m3-hall-${l.id}`, kind: 'leaf-pile', room: 'm3-hall', pos: { ...l.pos } })),
+  ...HALL_MOONBEAMS.map((m): InteractableDef => ({ id: `m3-hall-${m.id}`, kind: 'moonbeam', room: 'm3-hall', pos: { ...m.pos } })),
   // A realm's start (OP-276, realmStart.ts): the wind off its course blows leaves in at the way on, and
   // they pile against the trading nest, where an owl can browse what the realm has.
   { id: 'glass-leaves-start', kind: 'leaf-pile', room: 'glass', pos: { ...START_LEAVES } },
@@ -144,6 +149,8 @@ export const INTERACTABLES: readonly InteractableDef[] = [
   { id: 'arcade-leaves-street', kind: 'leaf-pile', room: 'arcade', pos: { x: 300, y: 1230 } },
   { id: 'arcade-leaves-floor', kind: 'leaf-pile', room: 'arcade', pos: { x: 2400, y: 1200 } },
   { id: 'arcade-leaves-end', kind: 'leaf-pile', room: 'arcade', pos: { x: 4500, y: 1230 } },
+  // Out on the plazas' floors (Nov 8): a few little scenes in each, things to splash in, bounce on, look through and pick up.
+  ...FLOOR_INTERACTABLES,
 ];
 
 const BY_ID: Readonly<Record<string, InteractableDef>> = Object.fromEntries(INTERACTABLES.map((i) => [i.id, i]));

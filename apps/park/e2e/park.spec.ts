@@ -516,6 +516,7 @@ test.describe('two visitors on one device', () => {
   for (const room of ['market', 'l0'] as const) {
     test(`held to either end of the ${room} floor, the whole owl stays on screen (OP-296)`, async ({ page, isMobile }) => {
       test.skip(isMobile, 'a phone walks by the thumbstick: the same floor, held by keys here');
+      test.slow(); // Two walks across the room each have a 30-second arrival budget.
       await openPark(page, { room });
       for (const key of ['KeyD', 'KeyA'] as const) {
         await page.keyboard.down(key);

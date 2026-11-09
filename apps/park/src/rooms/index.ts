@@ -1,1 +1,17 @@
-export { ANCHORS, CLOSED_SIGNS, COURSES, GATED_ROOMS, NEST_MIRROR, NEST_PARK_SIGN, NEST_ROOM, ROOMS, TREE_ARRIVAL, TREE_GROUND, TREE_REALMS, getRoom, groundOf, roomFor } from '@owl-park/shared/rooms';
+export {
+  ANCHORS,
+  CLOSED_SIGNS,
+  COURSES,
+  GATED_ROOMS,
+  NEST_MIRROR,
+  NEST_PARK_SIGN,
+  NEST_ROOM,
+  ROOMS,
+  TREE_ARRIVAL,
+  TREE_GROUND,
+  TREE_REALMS,
+  getRoom,
+  groundOf,
+  roomFor,
+  roomOnMap,
+} from '@owl-park/shared/rooms';
