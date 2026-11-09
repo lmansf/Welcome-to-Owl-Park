@@ -19,7 +19,9 @@ export interface FlagSpec {
 
 // One entry per flag-hidden feature, added by the pull request that brings the feature:
 //   ropeSwings: { param: 'ropes', note: 'Rope swings between the canopy nests' },
-export const FLAGS = {} as const satisfies Record<string, FlagSpec>;
+export const FLAGS = {
+  friends: { param: 'friends', note: 'Play with your friends preview: co-op escape room, party game, friend invites' },
+} as const satisfies Record<string, FlagSpec>;
 
 export type FlagName = keyof typeof FLAGS;
 
