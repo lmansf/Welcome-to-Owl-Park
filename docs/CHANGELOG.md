@@ -20,6 +20,11 @@ the conflict for the owner to settle.)
 Where to look for more: a ticket's row on the Board tab (its number plus one), the Bible item it
 names (C31, C35, ...), and the docs it touched.
 
+## Week of 2026-11-09
+
+- OP-254 (2026-11-09): monthly quests now rotate on the park clock, with separate slots and rewards for each tier (PR 89, 4dd4770).
+- OP-255 (2026-11-09): puzzle quests add randomized lock-and-key runs for solo and group play, with progress saved per owl (PR 89, 4dd4770).
+
 ## Week of 2026-11-02
 
 - OP-218 (2026-11-08): CI now runs the desktop and phone browser tests for tree levels 2 through 5 (PR 187, 6d930e5).
