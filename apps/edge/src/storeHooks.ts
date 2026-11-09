@@ -35,6 +35,9 @@ export interface HookDeps {
   openingCode?: string;
   /** Where a step that fails without failing the webhook says so (OP-134). */
   log?: Logger;
+  /** Bring a friend (OP-056): the store's code that takes a whole Day Ticket off, and whether an order's checkout token spends one of the park's offers. */
+  referralCode?: string;
+  referralSpend?: (token: string, order: string) => Promise<boolean>;
 }
 
 export interface HookResult {
@@ -54,6 +57,8 @@ export interface HookResult {
    * to the park's log (the same event lands once however often it comes).
    */
   sold?: { kinds: TicketKind[]; cents: number | null; upsell: boolean; held: boolean };
+  /** A free Day Ticket's order (OP-056): it spent an offer the park made, or it waits for the owner's check (the code without one, or more than one Day Ticket). */
+  referral?: 'spent' | 'held';
   /** Tickets a refund or a cancellation switched off just now (OP-192), what went back where the refund says, and the refund's id. */
   revoked?: { event: 'refunded' | 'cancelled'; tickets: number; cents: number | null; refund: string | null };
 }
@@ -147,6 +152,20 @@ async function place(deps: HookDeps, id: string, order: AdminOrder): Promise<Hoo
 /** Whether an order's tickets go out at once: the store rated it low risk, or it is free (C42: nothing to rate). */
 const clears = (order: AdminOrder) => lowRisk(order) || freeOrder(order);
 
+/**
+ * A free Day Ticket's order (OP-056): the order used the park's code for it. It goes out like any free
+ * order only when it is one Day Ticket and nothing else, and came through a checkout the park opened for
+ * an owl's offer still waiting (which it spends). Any other order with the code waits for the owner's
+ * check: the code may have been passed around. Null for an order without the code.
+ */
+async function referralCheck(deps: HookDeps, id: string, order: AdminOrder, lines: ReturnType<typeof ticketLines>): Promise<'spent' | 'held' | null> {
+  if (!usedCode(order, deps.referralCode)) return null;
+  const token = checkoutTokenOf(order);
+  const one = lines.length === 1 && lines[0]!.kind === 'day' && lines[0]!.quantity === 1;
+  if (!one || !token || !deps.referralSpend) return 'held';
+  return (await deps.referralSpend(token, id)) ? 'spent' : 'held';
+}
+
 async function paid(deps: HookDeps, id: string, onlyFree = false): Promise<HookResult> {
   let order = await loadOrder(deps, id);
   if (!order || order.cancelledAt || (onlyFree && !freeOrder(order))) return { status: 200, body: { tickets: 0 } };
@@ -157,7 +176,8 @@ async function paid(deps: HookDeps, id: string, onlyFree = false): Promise<HookR
     await (deps.wait ?? ((ms) => new Promise((r) => setTimeout(r, ms))))(2000);
     order = (await loadOrder(deps, id)) ?? order;
   }
-  const issued = await deskOk(deps, '/tickets/issue', { order: id, lines, held: !clears(order) });
+  const referral = await referralCheck(deps, id, order, lines);
+  const issued = await deskOk(deps, '/tickets/issue', { order: id, lines, held: !clears(order) || referral === 'held' });
   const tickets = issued['tickets'] as string[];
   // Made just now, or by an earlier delivery of this webhook: then a held order, or one whose link went out, has nothing left to do.
   const existed = issued['existed'] === true;
@@ -171,7 +191,7 @@ async function paid(deps: HookDeps, id: string, onlyFree = false): Promise<HookR
   const sold = { sold: { kinds: lines.flatMap((l) => Array<TicketKind>(l.quantity).fill(l.kind)), cents: totalCents(order), upsell, held: issued['held'] === true } };
   // Before the email goes out, so the owl that paid holds the tickets first; a held order's tickets wait on it, held (OP-175).
   const placed = await place(deps, id, order);
-  const onOwl = placed ? { placed } : {};
+  const onOwl = { ...(placed ? { placed } : {}), ...(referral ? { referral } : {}) };
   if (issued['held'] === true) return { status: 200, body: { tickets: tickets.length, held: true }, mirror: id, ...made, ...again, ...onOwl, ...sold };
   if (issued['sent'] !== true) await sendLink(deps, id, lines.map((l) => l.line), tickets, (issued['claim'] as string | null) ?? null);
   return { status: 200, body: { tickets: tickets.length, sent: true }, mirror: id, ...made, ...again, ...onOwl, ...sold };

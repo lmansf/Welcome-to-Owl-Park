@@ -298,7 +298,8 @@ export function passCartLink(shop: string, variant: string, code: string, ticket
  * token as a cart attribute, so the paid order's tickets land on that owl. The legacy /cart/ link
  * keeps cart attributes (the newer /buy/ links drop them). The owl itself is never in the link.
  */
-export function ticketCartLink(shop: string, variant: string, token: string): string {
-  const q = new URLSearchParams({ [`attributes[${CHECKOUT_ATTRIBUTE}]`]: token });
+export function ticketCartLink(shop: string, variant: string, token: string, discount?: string): string {
+  // A free Day Ticket (OP-056) carries the store's code that takes it off.
+  const q = new URLSearchParams({ ...(discount ? { discount } : {}), [`attributes[${CHECKOUT_ATTRIBUTE}]`]: token });
   return `https://${shop}/cart/${variant}:1?${q.toString()}`;
 }
