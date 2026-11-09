@@ -18,7 +18,7 @@ holds the realm's quick, repeatable fun (leaf piles and fishing in the grove, th
 game in the market, the climb's portal in the glass realm), and quest givers and payoffs sit at
 least a full screen from arrival. A realm is under 25 s of walking end to end, so the old 45 s
 target is restated as "payoff on the farthest screen". Hazel stands at the grove's west end
-(800, 800), Juniper at its east end (4150, 800), and Flicker east in the market (2800, 820); Nova
+(800, 800), Juniper at its east end (4150, 845), and Flicker east in the market (2800, 820); Nova
 and the feather shop stay by the market's arrival, and the idols stay at each entrance.
 
 The rules are data and functions in `packages/shared/src`, so the room server and the

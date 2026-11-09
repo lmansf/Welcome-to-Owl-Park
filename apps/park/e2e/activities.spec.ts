@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { doAction as act, openPark, state, walkAndStop as walk, walkToJetty } from './helpers';
+import { doAction as act, openPark, state, walkAndStop as walk, walkToDoor, walkToJetty } from './helpers';
 
 const feathers = (page: Page) => page.evaluate(() => window.owlPark.collection()?.feathers ?? 0);
 
@@ -28,6 +28,15 @@ const reelWhen = (page: Page, line: 'out' | 'bite') =>
   );
 
 test.describe('activities (this device)', () => {
+  test('OP-320 the direct talk route from the clearing entrance reaches Juniper', async ({ page }) => {
+    test.slow();
+    await openPark(page, { collector: 'e2e-juniper-approach' });
+    await walkToDoor(page, 'to-grove');
+    await expect.poll(async () => (await state(page)).room, { timeout: 25_000 }).toBe('grove');
+    expect(await page.evaluate(() => window.owlPark.talk('juniper'))).toBe(true);
+    await expect(page.locator('.dialogue[data-npc="juniper"]')).toBeVisible({ timeout: 20_000 });
+  });
+
   test('one owl lights the whole lantern beam, and it glows and pays', async ({ page }) => {
     test.slow(); // seven lanterns, each a few seconds after the last
     await openPark(page, { collector: 'e2e-lanterns', tz: 'UTC' });
