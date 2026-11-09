@@ -16,7 +16,7 @@ test('client reports forward an empty count, reject payloads and stop a burst fr
     worker.fetch(new Request('https://park.example/api/client-error', {
       method: 'POST',
       headers: { 'X-Park-Error': kind, 'CF-Connecting-IP': '198.51.100.8' },
-      body,
+      body: body ?? null,
     }), env, ctx);
 
   expect((await send('other')).status).toBe(400);
