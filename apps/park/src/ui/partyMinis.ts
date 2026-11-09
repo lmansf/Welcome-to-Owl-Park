@@ -517,9 +517,85 @@ function updraftRace(host: MiniHost, stage: HTMLElement): MiniDrawer {
   };
 }
 
+// ---------- Head-Turn Freeze: hold to creep, let go at the rustle ----------
+
+interface HeadView {
+  look: 'watch' | 'away' | 'rustle';
+  since: number;
+  owls: Record<number, { pos: number; holding: boolean; caught: number; frozen: boolean; done: boolean }>;
+  length: number;
+  speed: number;
+  grace: number;
+  t: number;
+}
+
+function headTurn(host: MiniHost, stage: HTMLElement): MiniDrawer {
+  const { ctx, fit, c } = canvasIn(stage);
+  let v: HeadView | null = null;
+  const send = spaced(host, 100);
+  let holding = false;
+  const press = (d: boolean) => {
+    if (d === holding) return;
+    holding = d;
+    send('hold', d ? 1 : 0);
+  };
+  const ctl = document.createElement('div');
+  ctl.className = 'ctl';
+  ctl.append(holdPad('Creep', '320×72', press, true));
+  stage.appendChild(ctl);
+  const W = 1000;
+  const H = 560;
+  const X0 = 60;
+  const LEN = 760;
+
+  return {
+    view(next) {
+      v = next as HeadView;
+    },
+    event() {},
+    draw() {
+      fit(W, H);
+      if (!v) return;
+      const t = host.now();
+      const scores: Record<number, number> = {};
+      for (const [seat, o] of Object.entries(v.owls)) scores[Number(seat)] = Math.round((o.pos / v.length) * 100);
+      drawScores(ctx, host, scores, W, '% there');
+      const watching = v.look === 'watch' && v.since > 0;
+      sizeBox(ctx, 0, 60, W, 440, 'Branch scene', { fill: watching ? 'rgba(224,122,95,.12)' : 'rgba(127,209,199,.06)', font: 12 });
+      sizeBox(ctx, X0 + LEN + 30, 150, 120, 120, 'Watcher', { font: 12, fill: watching ? 'rgba(224,122,95,.45)' : 'rgba(246,241,227,.08)' });
+      line(ctx, v.look === 'away' ? 'Looking away…' : v.look === 'rustle' ? 'Rustle!' : v.since > 0 ? 'WATCHING!' : 'Get ready…', X0 + LEN + 90, 300, 22, watching ? '#E07A5F' : '#FFD36A');
+      const seats = host.seats();
+      seats.forEach((seat, i) => {
+        const o = v!.owls[seat];
+        if (!o) return;
+        const y = 150 + i * 86;
+        sizeBox(ctx, X0, y + 22, LEN, 24, 'Branch', { fill: 'rgba(160,110,60,.35)', font: 9 });
+        // Between views the owl creeps on as the room would have it.
+        const moving = o.holding && !o.frozen && !o.done && v!.since > 0 && (v!.look !== 'watch' || t - v!.since < v!.grace);
+        const pos = Math.min(v!.length, o.pos + (moving ? (v!.speed * Math.max(0, t - v!.t)) / 1000 : 0));
+        const look = host.look(seat);
+        if (look) drawOwl(ctx, X0 + (pos / v!.length) * LEN, y + 10, 20, look, seat === host.you());
+        if (o.caught) line(ctx, `caught ${o.caught}×`, X0 - 10, y - 8, 12, '#E07A5F');
+      });
+      const me = host.you();
+      const mine = me === null ? undefined : v.owls[me];
+      line(ctx, mine?.done ? 'You made it!' : mine?.frozen ? 'Caught! Back to the start' : 'Creep while the watcher looks away', W / 2, 520, 18);
+    },
+    key(k, down) {
+      if (k === ' ' || k === 'Spacebar' || k === 'ArrowUp') press(down);
+    },
+    destroy() {
+      if (holding) send('hold', 0);
+      ctl.remove();
+      c.remove();
+    },
+  };
+}
+
 /** Each minigame's drawer, by id: a minigame not here yet shows the board while it runs. */
 export const MINI_DRAWERS: Partial<Record<string, (host: MiniHost, stage: HTMLElement) => MiniDrawer>> = {
   'updraft-race': updraftRace,
+  'head-turn': headTurn,
   'feather-fall': featherFall,
   'hoot-echo': hootEcho,
 };

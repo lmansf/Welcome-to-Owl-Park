@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { BRANCH_LENGTH, CREEP_SPEED, GRACE_MS, HEAD_MS, HEAD_TURN, creepAt, watcherAt, type HeadTurnState } from './headTurn';
 import { miniBerries, type MiniPlayer, type MinigameDef } from './minigame';
 import { AIR_MS, UPDRAFT_COLUMNS, UPDRAFT_GOAL, UPDRAFT_MS, UPDRAFT_RACE, airAt, flightAt, type UpdraftState } from './updraftRace';
 
@@ -69,5 +70,57 @@ describe('Updraft Race', () => {
     // Park owls reach the top, and the race does not wait out its whole time once they all have.
     for (const seat of [0, 1, 2]) expect(flightAt(b, seat, end).doneAt).not.toBeNull();
     expect(end).toBeLessThan(UPDRAFT_MS);
+  });
+});
+
+describe('Head-Turn Freeze', () => {
+  const turns = [{ away: 1_000, rustle: 4_000, watch: 4_500, until: 6_000 }];
+
+  it('creeps an owl while the watcher looks away, and sends one that keeps creeping back to the start', () => {
+    const s: HeadTurnState = { players: humans(3), turns, inputs: [] };
+    // Seat 0 creeps through the rustle and stops just in time; seat 1 keeps going and is caught; seat 2 holds from the start.
+    expect(HEAD_TURN.input(s, 0, { k: 'hold', v: 1 }, 1_000)).toBe(true);
+    expect(HEAD_TURN.input(s, 0, { k: 'hold', v: 0 }, 4_500 + GRACE_MS - 50)).toBe(true);
+    expect(HEAD_TURN.input(s, 1, { k: 'hold', v: 1 }, 1_000)).toBe(true);
+    expect(HEAD_TURN.input(s, 2, { k: 'hold', v: 1 }, 0)).toBe(true);
+    expect(watcherAt(turns, 500).look).toBe('watch');
+    expect(watcherAt(turns, 2_000).look).toBe('away');
+    expect(watcherAt(turns, 4_200).look).toBe('rustle');
+    expect(watcherAt(turns, 5_000)).toEqual({ look: 'watch', since: 4_500 });
+    const kept = creepAt(s, 0, 5_500);
+    expect(kept.pos).toBeGreaterThan(CREEP_SPEED * 3.5);
+    expect(kept.caught).toBe(0);
+    const caught = creepAt(s, 1, 5_500);
+    expect(caught.pos).toBe(0);
+    expect(caught.caught).toBe(1);
+    expect(caught.frozen).toBe(true);
+    // Before the watcher first looks away, nobody creeps.
+    expect(creepAt(s, 2, 900).pos).toBe(0);
+  });
+
+  it('never sends the watcher’s next turn to a page, only how it looks now', () => {
+    const s = HEAD_TURN.start(humans(2), 3, 1);
+    const v = HEAD_TURN.view(s, 0, 2_000) as Record<string, unknown>;
+    expect(Object.keys(v).sort()).toEqual(['grace', 'length', 'look', 'owls', 'since', 'speed', 't']);
+    expect(JSON.stringify(v)).not.toContain('rustle":');
+    expect(JSON.stringify(v)).not.toContain('until');
+  });
+
+  it('wins for the first owl to the watcher; park owls get there, now and then caught on the way', () => {
+    const s = HEAD_TURN.start(bots(4), 21, 1);
+    const end = playOut(HEAD_TURN, s);
+    const r = HEAD_TURN.result(s);
+    const first = Object.entries(r.places).find(([, p]) => p === 1)!;
+    expect(creepAt(s, Number(first[0]), end).pos).toBe(BRANCH_LENGTH);
+    // Over a few games park owls get caught now and then, never all the time.
+    let caught = 0;
+    for (let seed = 1; seed <= 10; seed++) {
+      const g = HEAD_TURN.start(bots(4), seed * 7_919, 1);
+      const at = playOut(HEAD_TURN, g);
+      for (const seat of [0, 1, 2, 3]) caught += creepAt(g, seat, at).caught;
+    }
+    expect(caught).toBeGreaterThan(0);
+    expect(caught).toBeLessThan(20);
+    expect(HEAD_TURN.input(s, 0, { k: 'hold', v: 1 }, 1_000)).toBe(false);
   });
 });
