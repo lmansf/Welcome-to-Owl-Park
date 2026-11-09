@@ -25,7 +25,7 @@ export default {
   name: 'The collection log’s database unreachable',
   hypothesis: 'With the collection log down, new owls still get their starter pack at once, and its rows wait in the outbox and reach the log once it is back, each once (OP-107).',
   blastRadius: "The throwaway park's collection log only (sent to the stand-in store in place of the log function), and five new scripted visitors.",
-  rollback: 'The log answers again; the outbox empties on its next try.',
+  rollbackPlan: 'The log answers again; the outbox empties on its next try.',
   parkVars: ({ storeOrigin }) => ({ PARK_LOG_URL: `${storeOrigin}/log`, FRAUD_SCORE_KEY: LOG.key, FRAUD_HASH_SALT: LOG.salt }),
   pauseChecks: { names: ['journey'], why: "the journey's page is a new owl each time, whose starter pack would add rows to the count" },
   expectLogs: [

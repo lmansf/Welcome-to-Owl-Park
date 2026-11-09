@@ -46,7 +46,7 @@ export default {
   name: "A visitor's page worked from the console, to put its owl somewhere it cannot walk",
   hypothesis: 'Whatever a page sends from its console, the other visitors never see its owl off the floor or standing in mid-air, the room logs what it would not take (position_rejected), and a page that keeps asking for walks out of the room is closed (OP-149).',
   blastRadius: "Three extra scripted visitors in the throwaway park's hub, one at a time, for half a minute.",
-  rollback: 'The scripted visitors leave; the harness closes any socket the room has not.',
+  rollbackPlan: 'The scripted visitors leave; the harness closes any socket the room has not.',
   expectLogs: [
     {
       component: 'room server',

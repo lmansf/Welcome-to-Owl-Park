@@ -53,7 +53,7 @@ export function openRun(experiment, environment, root = RESULTS) {
     hypothesis: experiment.hypothesis,
     blast_radius: experiment.blastRadius,
     abort_rule: ABORT_RULE,
-    rollback: experiment.rollback,
+    rollback: experiment.rollbackPlan,
     start: new Date().toISOString(),
     end: null,
     verdict: null,

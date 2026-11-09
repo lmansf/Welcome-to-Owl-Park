@@ -23,7 +23,7 @@ export const EXPERIMENTS = [
     name: 'The fraud scoring endpoint stalled, then gone',
     hypothesis: 'With the scoring endpoint 5 s slow, then down, a checkout fails open inside 2 s and the keepers’ page shows it (OP-090).',
     blastRadius: "The throwaway park's call to a stand-in scoring endpoint only.",
-    rollback: 'The stand-in endpoint answers at once again.',
+    rollbackPlan: 'The stand-in endpoint answers at once again.',
     ...later('needs the fraud link (OP-053), which is in Backlog: the park does not call a scoring endpoint yet'),
   },
   webhookDropped,

@@ -72,7 +72,7 @@ export default {
   name: "A visitor's clock 10 minutes fast",
   hypothesis: 'A page whose clock runs 10 minutes fast comes into the hub with its pass, and draws the other owls walking as a page on the right time does, never jumping to where they are going.',
   blastRadius: 'Two scripted pages in the throwaway park, one after the other: one on the right time, one with its own clock set ahead.',
-  rollback: 'The pages close.',
+  rollbackPlan: 'The pages close.',
   needsBrowser: true,
   async run(ctx) {
     ctx.state.contexts = [];
