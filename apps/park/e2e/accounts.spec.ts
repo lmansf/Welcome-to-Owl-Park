@@ -71,12 +71,16 @@ const friendCodeOf = async (page: Page) => (await openMenu(page, 'nest')).locato
 
 test.describe('accounts without passwords (OP-139)', () => {
   test('a free owl has a friend code and lives on its screen until its player protects it by an emailed link', async ({ browser }) => {
+    test.slow(); // The protection link and persistence checks reload the park several times.
     const a = await screen(browser);
     const menu = await openMenu(a, 'nest');
     const code = await menu.locator('[data-friend-code]').getAttribute('data-friend-code');
     expect(code).toMatch(/^[A-HJ-NP-Z]{4}$/);
     await expect(menu.locator('[data-account]')).toContainText('This owl lives only on this screen.');
-    await menu.locator('[data-protect]').click();
+    await a.reload();
+    const reloaded = await openMenu(a, 'nest');
+    await expect(reloaded.locator('[data-friend-code]')).toHaveAttribute('data-friend-code', code!);
+    await reloaded.locator('[data-protect]').click();
     const email = freshEmail('grown.up');
     await sendLink(a, email);
     await expect(a.locator('.modal.account')).toContainText('Check your email');
@@ -88,6 +92,8 @@ test.describe('accounts without passwords (OP-139)', () => {
     const after = await openMenu(a, 'nest');
     await expect(after.locator('[data-protected]')).toHaveAttribute('data-protected', 'true');
     await expect(after.locator('[data-friend-code]')).toHaveAttribute('data-friend-code', code!);
+    await a.reload();
+    await expect((await openMenu(a, 'nest')).locator('[data-protected]')).toHaveAttribute('data-protected', 'true');
     // The link worked once.
     await openLink(a, mail, 'protect');
     await expect(a.getByText('That link has run out or was used already.')).toBeVisible({ timeout: 15_000 });
@@ -154,6 +160,39 @@ test.describe('accounts without passwords (OP-139)', () => {
     await expect(menu.locator('[data-friend-code]')).toHaveAttribute('data-friend-code', before!);
     await expect(menu.locator('[data-protected]')).toHaveAttribute('data-protected', 'true');
     await a.context().close();
+  });
+
+  test('one inbox offers two protected owls and moves only the one picked (OP-184)', async ({ browser }) => {
+    test.slow();
+    const email = freshEmail('siblings');
+    const first = await screen(browser);
+    const second = await screen(browser);
+    const firstCode = await friendCodeOf(first);
+    const secondCode = await friendCodeOf(second);
+    expect(firstCode).toBeTruthy();
+    expect(secondCode).toBeTruthy();
+    expect(firstCode).not.toBe(secondCode);
+
+    for (const owl of [first, second]) {
+      await owl.locator('[data-protect]').click();
+      await sendLink(owl, email);
+      await openLink(owl, await mailTo(owl, email), 'protect');
+      await expect(owl.getByText('This owl is protected now.')).toBeVisible({ timeout: 15_000 });
+    }
+
+    const restore = await (await browser.newContext()).newPage();
+    await restore.goto('/?transport=edge');
+    await restore.locator('[data-home-btn="restore"]').click();
+    await sendLink(restore, email);
+    await openLink(restore, await mailTo(restore, email), 'restore');
+    const choices = restore.locator('.modal.account [data-owl]');
+    await expect(choices).toHaveCount(2);
+    for (const code of [firstCode, secondCode]) await expect(restore.locator(`.modal.account [data-owl="${code}"]`)).toBeVisible();
+    await pick(restore, secondCode!);
+    expect(await friendCodeOf(restore)).toBe(secondCode);
+    await expect(second.locator('[data-moved]')).toBeVisible({ timeout: 15_000 });
+    await expect(first.locator('[data-moved]')).toBeHidden();
+    for (const page of [first, second, restore]) await page.context().close();
   });
 
   test('a ticket’s order email is mailed one link that protects the owl that claimed the ticket, and nothing is kept until it is opened (OP-186)', async ({ browser, request }) => {

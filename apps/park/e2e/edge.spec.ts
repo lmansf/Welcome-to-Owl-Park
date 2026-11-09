@@ -958,9 +958,15 @@ test.describe('room server', () => {
     await a.context().close();
   });
 
-  test("a hostile note reaches the keepers' page as plain words: no markup, no script (OP-143)", async ({ browser }) => {
+  test("a hostile note stays with the keepers as plain text (OP-093, OP-143)", async ({ browser }) => {
     const a = await visitor(browser);
-    const words = `<img src=x onerror=alert(1)> ' OR '1'='1 ../../../etc/passwd %00 (${Date.now().toString(36)})`;
+    const marker = `owl-note-${Date.now().toString(36)}`;
+    const words = `<img src=x onerror=alert(1)> 🦉 ' OR '1'='1 ../../../etc/passwd %00 (${marker})`;
+    const guest = await (await browser.newContext({ ...devices['Pixel 7'] })).newPage();
+    const frames: string[] = [];
+    guest.on('websocket', (ws) => ws.on('framereceived', ({ payload }) => frames.push(payload.toString())));
+    await openPark(guest, { transport: 'edge' });
+    await expect.poll(async () => (await state(guest)).peers.length).toBe(1);
     await a.locator('[data-menu-btn]').click();
     await a.getByRole('dialog', { name: 'Menu' }).locator('[data-tab="settings"]').click();
     await a.locator('[data-screen="feedback"]').click();
@@ -984,7 +990,14 @@ test.describe('room server', () => {
     await expect(note.locator('.text')).toHaveText(words);
     await expect(keeper.locator('#list img')).toHaveCount(0);
     expect(alerts).toEqual([]);
+    // A normal room message still reaches the guest after the note was received and read.
+    expect(await a.evaluate(() => window.owlPark.say(13))).toBe(true);
+    await expect.poll(async () => (await state(guest)).bubbles.map((bubble) => bubble.n)).toContain(13);
+    expect(frames.some((frame) => frame.includes(marker))).toBe(false);
+    await expect(guest.getByText(marker, { exact: false })).toHaveCount(0);
+    expect((await guest.request.get('/api/admin/feedback')).status()).toBe(403);
     await keeper.close();
+    await guest.context().close();
     await a.context().close();
   });
 
