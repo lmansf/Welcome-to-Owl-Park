@@ -26,9 +26,13 @@ test('a fresh visitor makes an owl, goes through the gate and says Hi (OP-267)',
     await page.keyboard.press('Escape');
     await expect(builder).toBeHidden();
 
+    const playStart = Date.now();
     await page.locator('[data-home-btn="play"]').click();
-    await expect.poll(() => room(page), { timeout: 25_000 }).toMatch(/^nest-/);
+    await expect.poll(() => room(page), { timeout: LOAD_BUDGET_MS }).toMatch(/^nest-/);
     await expect(page.locator('[data-dot=""]')).toHaveAttribute('data-status', 'online');
+    const playMs = Date.now() - playStart;
+    console.log(`${info.project.name}: Play to connected nest in ${playMs} ms`);
+    expect(playMs, 'connected nest within the load budget after Play').toBeLessThanOrEqual(LOAD_BUDGET_MS);
     await walkToDoor(page, 'to-street');
     await expect.poll(() => room(page), { timeout: 20_000 }).toBe('homes');
     await walkToDoor(page, 'to-lobby');
