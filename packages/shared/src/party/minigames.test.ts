@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { PUZZLE_SYMBOLS } from '../puzzles';
 import { BRANCH_LENGTH, CREEP_SPEED, GRACE_MS, HEAD_MS, HEAD_TURN, creepAt, watcherAt, type HeadTurnState } from './headTurn';
 import { miniBerries, type MiniPlayer, type MinigameDef } from './minigame';
+import { PAIRS_HOLES, PAIRS_MS, PAIR_SHOW_MS, PEEK_MS, PERCH_PAIRS, type PerchPairsState } from './perchPairs';
 import { AIR_MS, UPDRAFT_COLUMNS, UPDRAFT_GOAL, UPDRAFT_MS, UPDRAFT_RACE, airAt, flightAt, type UpdraftState } from './updraftRace';
 
 const humans = (n: number): MiniPlayer[] => Array.from({ length: n }, (_, seat) => ({ seat, bot: false }));
@@ -122,5 +124,69 @@ describe('Head-Turn Freeze', () => {
     expect(caught).toBeGreaterThan(0);
     expect(caught).toBeLessThan(20);
     expect(HEAD_TURN.input(s, 0, { k: 'hold', v: 1 }, 1_000)).toBe(false);
+  });
+});
+
+describe('Perch Pairs', () => {
+  /** A board laid out in pairs side by side: holes 0 and 1 a pair, 2 and 3, and so on. */
+  function laidOut(players: MiniPlayer[]): PerchPairsState {
+    const s = PERCH_PAIRS.start(players, 1, 1);
+    s.holes = PUZZLE_SYMBOLS.flatMap((sym) => [sym, sym]);
+    return s;
+  }
+
+  it('hides what each hole holds until it is peeked into, and plays two teams', () => {
+    const s = PERCH_PAIRS.start(humans(4), 9, 1);
+    expect(s.holes).toHaveLength(PAIRS_HOLES);
+    for (const sym of PUZZLE_SYMBOLS) expect(s.holes.filter((h) => h === sym)).toHaveLength(2);
+    expect(s.teams).toEqual([
+      [0, 2],
+      [1, 3],
+    ]);
+    const v = PERCH_PAIRS.view(s, 0, 0) as { holes: (string | null)[] };
+    expect(v.holes.every((h) => h === null)).toBe(true);
+  });
+
+  it('keeps a pair found for its team and that owl goes again; a miss closes and the other team goes', () => {
+    const s = laidOut(humans(2));
+    const first = s.seat;
+    const other = 1 - first;
+    // Only the owl whose turn it is may peek.
+    expect(PERCH_PAIRS.input(s, other, { k: 'tap', v: 0 }, 100)).toBe(false);
+    expect(PERCH_PAIRS.input(s, first, { k: 'tap', v: 0 }, 100)).toBe(true);
+    expect((PERCH_PAIRS.view(s, other, 100) as { holes: (string | null)[] }).holes[0]).toBe(s.holes[0]);
+    expect(PERCH_PAIRS.input(s, first, { k: 'tap', v: 0 }, 200)).toBe(false);
+    expect(PERCH_PAIRS.input(s, first, { k: 'tap', v: 1 }, 300)).toBe(true);
+    expect(s.pairs[s.team]).toBe(1);
+    expect(s.seat).toBe(first);
+    // Now a miss: both stay open a moment, then close, and the turn passes.
+    expect(PERCH_PAIRS.input(s, first, { k: 'tap', v: 2 }, 400)).toBe(true);
+    expect(PERCH_PAIRS.input(s, first, { k: 'tap', v: 4 }, 500)).toBe(true);
+    expect(s.closing).toBe(true);
+    expect(PERCH_PAIRS.input(s, first, { k: 'tap', v: 6 }, 600)).toBe(false);
+    PERCH_PAIRS.tick(s, 500 + PAIR_SHOW_MS);
+    expect(s.seat).toBe(other);
+    expect(s.open).toEqual([]);
+    expect((PERCH_PAIRS.view(s, first, 2_000) as { holes: (string | null)[] }).holes.filter((h) => h !== null)).toHaveLength(2);
+  });
+
+  it('passes the turn when an owl does not peek in time, and a team with more pairs wins; level is a draw', () => {
+    const s = laidOut(humans(2));
+    const first = s.seat;
+    PERCH_PAIRS.tick(s, PEEK_MS);
+    expect(s.seat).toBe(1 - first);
+    expect(PERCH_PAIRS.result(s).winningTeam).toBeNull();
+    s.pairs[s.team === 0 ? 1 : 0] = 2;
+    const r = PERCH_PAIRS.result(s);
+    expect(r.winningTeam).toBe(s.team === 0 ? 1 : 0);
+    expect(miniBerries('team', r)).toEqual(s.team === 0 ? { 0: 2, 1: 8 } : { 0: 8, 1: 2 });
+  });
+
+  it('lets park owls play by themselves: they remember most of what they see and find every pair', () => {
+    const s = PERCH_PAIRS.start(bots(4), 33, 1);
+    const end = playOut(PERCH_PAIRS, s);
+    expect(end).toBeLessThan(PAIRS_MS);
+    expect(s.found.every((f) => f !== null)).toBe(true);
+    expect(s.pairs[0]! + s.pairs[1]!).toBe(PAIRS_HOLES / 2);
   });
 });

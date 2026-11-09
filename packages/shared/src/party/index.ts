@@ -6,6 +6,7 @@ export * from './featherFall';
 export * from './hootEcho';
 export * from './updraftRace';
 export * from './headTurn';
+export * from './perchPairs';
 export * from './game';
 export * from './words';
 export * from './ids';

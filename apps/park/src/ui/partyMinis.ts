@@ -16,16 +16,19 @@ import {
   fallScore,
   itemAt,
   owlX,
+  PAIRS_HOLES,
   UPDRAFT_COLUMNS,
   UPDRAFT_GOAL,
   UPDRAFT_MS,
   flightAt,
   type FallItem,
+  type PuzzleSymbol,
   type MiniKey,
   type PartyLook,
   type StampedInput,
 } from '@owl-park/shared';
 import { drawOwl, sizeBox } from './partyDraw';
+import { SYMBOL_FACE, SYMBOL_WORD } from './puzzle';
 
 /** What a minigame's drawer needs of the screen. */
 export interface MiniHost {
@@ -592,10 +595,87 @@ function headTurn(host: MiniHost, stage: HTMLElement): MiniDrawer {
   };
 }
 
+// ---------- Perch Pairs: peek in two knot holes ----------
+
+interface PairsView {
+  holes: (PuzzleSymbol | null)[];
+  found: (number | null)[];
+  open: number[];
+  teams: number[][];
+  pairs: number[];
+  team: number;
+  seat: number;
+  ends: number;
+  closing: boolean;
+}
+
+function perchPairs(host: MiniHost, stage: HTMLElement): MiniDrawer {
+  const { ctx, fit, c } = canvasIn(stage);
+  let v: PairsView | null = null;
+  let cursor = 0;
+  const grid = document.createElement('div');
+  grid.className = 'holes';
+  const myTurn = () => !!v && v.seat === host.you() && !v.closing;
+  const peek = (i: number) => {
+    if (!v || !myTurn() || v.found[i] !== null || v.open.includes(i)) return;
+    host.send('tap', i);
+  };
+  const buttons = Array.from({ length: PAIRS_HOLES }, (_, i) => {
+    const b = document.createElement('button');
+    b.className = 'hole';
+    b.addEventListener('click', () => peek(i));
+    grid.appendChild(b);
+    return b;
+  });
+  stage.appendChild(grid);
+  const W = 1000;
+  const H = 640;
+  const teamName = (i: number) => (v?.teams[i] ?? []).map((seat) => host.name(seat)).join(' & ');
+
+  return {
+    view(next) {
+      v = next as PairsView;
+      buttons.forEach((b, i) => {
+        const sym = v!.holes[i];
+        const found = v!.found[i];
+        b.className = `hole${sym ? (found !== null ? ` found t${found}` : ' open') : ''}${i === cursor ? ' cursor' : ''}`;
+        b.innerHTML = sym ? `<b>${SYMBOL_FACE[sym]}</b><span>${SYMBOL_WORD[sym]}</span>` : `<span>Knot hole</span><small>90×90</small>`;
+        b.setAttribute('aria-label', sym ? `Hole ${i + 1}: ${SYMBOL_WORD[sym]}` : `Hole ${i + 1}, closed`);
+        b.disabled = !myTurn() || found !== null || v!.open.includes(i);
+      });
+    },
+    event() {},
+    draw() {
+      fit(W, H);
+      if (!v) return;
+      sizeBox(ctx, 120, 100, 760, 520, 'Old tree trunk', { fill: 'rgba(160,110,60,.12)', font: 12 });
+      line(ctx, `${teamName(0)}: ${v.pairs[0] ?? 0} pairs`, W / 4, 30, 20, '#7FD1C7');
+      line(ctx, `${teamName(1)}: ${v.pairs[1] ?? 0} pairs`, (3 * W) / 4, 30, 20, '#E7A0C8');
+      const left = Math.max(0, Math.ceil((v.ends - host.now()) / 1000));
+      const who = v.seat === host.you() ? 'Your turn: peek in two holes!' : `${host.name(v.seat)} is peeking…`;
+      line(ctx, v.closing ? 'No pair! They close…' : `${who} ${left}s`, W / 2, 70, 22);
+    },
+    key(k, down) {
+      if (!down) return;
+      if (k === 'ArrowLeft') cursor = (cursor + PAIRS_HOLES - 1) % PAIRS_HOLES;
+      else if (k === 'ArrowRight') cursor = (cursor + 1) % PAIRS_HOLES;
+      else if (k === 'ArrowUp') cursor = (cursor + PAIRS_HOLES - 4) % PAIRS_HOLES;
+      else if (k === 'ArrowDown') cursor = (cursor + 4) % PAIRS_HOLES;
+      else if (k === ' ' || k === 'Spacebar') peek(cursor);
+      buttons.forEach((b, i) => b.classList.toggle('cursor', i === cursor));
+    },
+    destroy() {
+      grid.remove();
+      c.remove();
+    },
+  };
+}
+
 /** Each minigame's drawer, by id: a minigame not here yet shows the board while it runs. */
 export const MINI_DRAWERS: Partial<Record<string, (host: MiniHost, stage: HTMLElement) => MiniDrawer>> = {
   'updraft-race': updraftRace,
   'head-turn': headTurn,
   'feather-fall': featherFall,
+  'perch-pairs': perchPairs,
   'hoot-echo': hootEcho,
 };
