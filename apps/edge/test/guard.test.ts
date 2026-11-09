@@ -316,3 +316,16 @@ describe('rate limits (OP-142)', () => {
     expect(c.size).toBe(1);
   });
 });
+
+describe('an art trial’s page (?art=hollow)', () => {
+  it('may fetch the trial’s files from where they are kept, and no other page may', () => {
+    const trial = parkPolicy(new URL('https://park.example/?room=m3-hall&art=hollow'), 'n');
+    expect(trial).toContain("img-src 'self' data: blob: https://d2ol7oe51mr4n9.cloudfront.net;");
+    expect(trial).toContain('connect-src \'self\' wss://park.example https://in.heycatch.ai https://d2ol7oe51mr4n9.cloudfront.net');
+    for (const q of ['', '?art=old', '?art=partygrove', '?art=hollowx', '?art=HOLLOW', '?room=m3-hall']) {
+      const csp = parkPolicy(new URL(`https://park.example/${q}`), 'n');
+      expect(csp, q).toContain("img-src 'self' data: blob:;");
+      expect(csp, q).not.toContain('cloudfront');
+    }
+  });
+});

@@ -17,7 +17,7 @@
  *   to /api/csp-report, logged as csp_violation (a few lines a while, however many pages report).
  */
 import type { Logger } from '@owl-park/shared';
-import { PERMISSIONS_POLICY } from '@owl-park/shared/headers';
+import { ART_TRIAL_HOSTS, PERMISSIONS_POLICY, namesArtTrial } from '@owl-park/shared/headers';
 
 /** A host on this machine: local development and the browser tests. */
 export function isLocalHost(hostname: string): boolean {
@@ -56,12 +56,14 @@ export const ANALYTICS_HOST = 'https://in.heycatch.ai';
 
 export function parkPolicy(url: URL, nonce: string): string {
   const sockets = `${url.protocol === 'https:' ? 'wss' : 'ws'}://${url.host}`;
+  // An art trial's page (`?art=hollow`) may also fetch the trial's files from where they are kept; no other page may.
+  const trial = namesArtTrial(url) ? ` ${ART_TRIAL_HOSTS.join(' ')}` : '';
   return [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' ${ANALYTICS_HOST}`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
-    `connect-src 'self' ${sockets} ${ANALYTICS_HOST}`,
+    `img-src 'self' data: blob:${trial}`,
+    `connect-src 'self' ${sockets} ${ANALYTICS_HOST}${trial}`,
     "object-src 'none'",
     "base-uri 'none'",
     "form-action 'self'",
