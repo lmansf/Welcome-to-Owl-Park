@@ -11,6 +11,7 @@ import { CSP_REPORT_PATH } from '../guard';
 import { openingPage } from '../openingPage';
 import { account } from './account';
 import { adminCapacity, adminClimb, adminCollectLog, adminGate, adminGrant, adminKeeper, adminOpening, adminPing, adminRestart, adminStore, adminTickets } from './admin';
+import { clientError } from './clientErrors';
 import { collection, nest, nestGift } from './collection';
 import { adminFeedback, feedback } from './feedback';
 import { closed, line, notice } from './line';
@@ -25,6 +26,7 @@ import { vote } from './vote';
 export const ROUTES: readonly Route[] = [
   // ---- A visit: what the page's policy blocked (OP-140), its pass, the front gate, the map's places ----
   { path: CSP_REPORT_PATH, handle: cspReport },
+  { path: '/api/client-error', handle: clientError },
   { path: '/api/pass', handle: guestPass },
   { path: '/api/entry', handle: entry },
   { path: '/api/travel', handle: travel },
