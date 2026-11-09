@@ -322,8 +322,6 @@ const HASH = /^[0-9a-f]{64}$/;
 const COLLECTIBLE = /^(furniture:)?[a-z0-9][a-z0-9-]{0,47}(~[0-9]{1,2})?$/;
 /** A room's neutral id, a collectible's kind or a rarity: a short lower-case word. */
 const WORD = /^[a-z]{1,20}$/;
-/** A room the park's log names: a word, or a level of the tree (`l0` to `l5`, OP-128), so a letter then letters or digits. */
-const ROOM_WORD = /^[a-z][a-z0-9]{0,19}$/;
 /** A room slug with hyphens, as used by the tree's rooms (`m3-hall`, `trail-1`). */
 const STAY_ROOM = /^[a-z][a-z0-9-]{0,19}$/;
 
@@ -350,7 +348,7 @@ function wordOrNull(v: unknown): string | null | undefined {
 /** A room's name or none, as `wordOrNull`; undefined when it is neither. */
 function roomOrNull(v: unknown): string | null | undefined {
   if (v === null || v === undefined) return null;
-  return typeof v === 'string' && ROOM_WORD.test(v) ? v : undefined;
+  return isNeutralRoom(v) ? v : undefined;
 }
 
 /** Whether two keys are the same, compared by their digests so the time taken says nothing of either. */
@@ -774,8 +772,8 @@ export function checkFeedback(v: unknown): FeedbackRow | string {
   const body = r['body'];
   // The park sends its words cleaned (newlines kept, every other control character out); anything else is not the park's.
   if (typeof body !== 'string' || body.length < FEEDBACK_MIN_CHARS || body.length > FEEDBACK_MAX_CHARS || /[\u0000-\u0009\u000B-\u001F\u007F]/.test(body)) return 'body';
-  const realm = r['realm'] ?? null;
-  if (realm !== null && !isNeutralRoom(realm)) return 'realm';
+  const realm = roomOrNull(r['realm']);
+  if (realm === undefined) return 'realm';
   const realmKind = r['realm_kind'] ?? null;
   if (realmKind !== null && !REALM_KINDS.includes(realmKind as (typeof REALM_KINDS)[number])) return 'realm_kind';
   const device = r['device_class'] ?? null;

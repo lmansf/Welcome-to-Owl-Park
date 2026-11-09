@@ -255,6 +255,8 @@ describe('the park log (OP-107)', () => {
 
   it('checks every field of a row', () => {
     expect(checkRow(row(1))).toMatchObject({ event_id: uuid(1), backfill: false });
+    expect(checkRow(row(1, { realm: 'm3-hall' }))).toMatchObject({ realm: 'm3-hall' });
+    expect(checkRow(row(1, { realm: 'nest-abcdefgh' }))).toBe('realm');
     expect(checkRow(row(1, { realm: null, session_id: null, device_class: null, first_entry_at: null, backfill: true }))).toMatchObject({ realm: null, session_id: null, backfill: true });
     expect(checkRow(row(1, { collectible_id: 'furniture:rug' }))).toMatchObject({ collectible_id: 'furniture:rug' });
     expect(checkRow(row(1, { collectible_id: 'Not An Id' }))).toBe('collectible_id');
