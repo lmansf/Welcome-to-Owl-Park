@@ -5,7 +5,7 @@ import {
   courseOfRoom,
   courseParts,
   distance,
-  inPit,
+  fellInPit,
   inThorns,
   openerAt,
   sameLevel,
@@ -142,8 +142,9 @@ export class Course {
     const me = this.host.me();
     const c = this.room.course;
     if (!c) return;
-    // Down on the floor over a pit: a fall. Up on a ledge over a drop (a course seen from the side) is not one.
-    if ((me.grounded && me.ground === 0 && inPit(this.room, me.pos)) || inThorns(this.room, me.pos.x, me.z)) {
+    // Down on the floor over a pit: a fall. Up on a ledge over a drop (a course seen from the side) is not
+    // one, nor is the step off a ledge's end: the owl is still at the ledge's height then, and drops.
+    if (fellInPit(this.room, me.pos, me.grounded, me.z) || inThorns(this.room, me.pos.x, me.z)) {
       this.ask('fall', now, () => link.fall(), (res) => {
         if (res.at) this.host.place(res.at, res.top ?? 0);
         this.falls += 1;

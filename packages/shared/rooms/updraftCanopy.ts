@@ -54,6 +54,8 @@ const BRANCH = { cap: 'kit-clearing-bough-perch' };
 const TWIG = { cap: 'kit-clearing-bough-end-perch' };
 const FROND = { cap: 'kit-clearing-leaf-platform' };
 const SHELF = { cap: 'kit-clearing-fungus-shelf' };
+/** A root across the trunk's foot: the long low shelf an owl drops onto under hanging thorns. */
+const ROOT = { cap: 'kit-clearing-root-shelf' };
 /** A mossy boulder on the fern floor, an owl's hop up. */
 const BOULDER = { cap: 'kit-ground-mossy-boulder' };
 
@@ -78,6 +80,17 @@ function thorns(id: string, x0: number, x1: number, z0: number, z1 = 940): Cours
 function updraft(id: string, x: number, top: number, cycle?: { on: number; off: number; phase: number }): Updraft {
   return { id, x, w: 120, top, ...(cycle ? { onMs: cycle.on * 1000, offMs: cycle.off * 1000, phase: cycle.phase } : {}) };
 }
+
+/**
+ * A gust's clock: on for four seconds, off for two, everywhere in the course, so an owl learns one
+ * rhythm. Four seconds carries an owl from a column's foot to its top (about two) with two to spare.
+ * GUST_LATE is the same clock half a cycle on: two columns in a row take turns.
+ */
+const GUST = { on: 4, off: 2, phase: 0 };
+const GUST_LATE = { ...GUST, phase: 0.5 };
+
+/** Where the fern floor's bramble ends and the moss among the trunk's roots begins: bell 2's column rises from the moss. */
+const ROOTS_MOSS = 4050;
 
 /** The vent each column rises from, at its foot. */
 const vents = (cols: readonly Updraft[]): KitDecal[] => cols.map((u) => ({ piece: 'kit-clearing-updraft-vent', x: u.x + u.w / 2, y: G - 40, scale: 0.6 }));
@@ -139,11 +152,11 @@ function canopyRoom(
 // ---------- Act 1: the fern floor ----------
 
 const U_ACT1 = [
-  updraft('U1', 1260, 580),
-  updraft('U2', 2240, 560, { on: 3, off: 2, phase: 0 }),
-  updraft('U3', 2800, 600, { on: 3, off: 2, phase: 0.5 }),
-  updraft('U4', 3460, 580, { on: 2.5, off: 2.5, phase: 0 }),
-  updraft('U5', 4060, 600, { on: 2.5, off: 2.5, phase: 0.5 }),
+  updraft('U1', 1260, 540),
+  updraft('U2', 2240, 540, GUST),
+  updraft('U3', 2800, 600, GUST_LATE),
+  updraft('U4', 3460, 580, GUST),
+  updraft('U5', 4060, 600, GUST_LATE),
 ];
 
 const CANOPY_1: RoomKit = {
@@ -159,11 +172,12 @@ const CANOPY_1: RoomKit = {
     ledge('b1', 1480, 160, 480, BRANCH),
     ledge('fern-bench', 1840, 100, 540, FROND),
     ledge('s4', 2040, 140, 120, BOULDER),
-    ledge('l5', 2420, 200, 500, BRANCH),
+    ledge('l5', 2360, 200, 500, BRANCH),
+    ledge('l5b', 2540, 240, 120, TWIG),
     ledge('l6', 3000, 200, 540, BRANCH),
-    ledge('l7', 3250, 140, 120, TWIG),
+    ledge('l7', 3180, 210, 120, TWIG),
     ledge('l8', 3640, 140, 540, BRANCH),
-    ledge('l9', 3880, 120, 160, TWIG),
+    ledge('l9', 3760, 240, 140, TWIG),
     ledge('b2', 4240, 200, 540, BRANCH),
   ],
   doors: [
@@ -179,7 +193,7 @@ const CANOPY_1: RoomKit = {
     { id: 'gate', story: 'A tall fern leans over the curtain of vines where the course begins, the way back to the clearing.', props: ['gate-fern'], about: ['to-commons'] },
     { id: 'tiny-door', story: 'Half hidden by a fern among the roots, a tiny door with a warm light behind its crack.', props: ['roots-fern'], about: ['roots'] },
   ],
-  decals: [...bramble(700, 1500), ...bramble(2000, 4200), ...vents(U_ACT1)],
+  decals: [...bramble(700, 1500), ...bramble(2000, ROOTS_MOSS), ...vents(U_ACT1)],
 };
 
 const ROOT_DEN: RoomKit = {
@@ -198,12 +212,12 @@ const ROOT_DEN: RoomKit = {
 
 // ---------- Act 2: inside the hollow trunk ----------
 
-const U_2A = [updraft('U6', 920, 560, { on: 3, off: 2, phase: 0 })];
+const U_2A = [updraft('U6', 920, 560, GUST)];
 const TRUNK_A: RoomKit = {
   ground: G,
   ...trunkInside(ROOM_W),
   paths: [{ id: 'trunk-floor', x0: 0, x1: ROOM_W, top: 0, row: 'kit-cut-earth-path', mid: 'kit-tex-inner-wood' }],
-  ledges: [ledge('t1', 300, 220, 130, SHELF), ledge('t2', 600, 180, 200, SHELF), ledge('b3', 120, 120, 540, TWIG), ledge('t3', 1100, 200, 500, SHELF), ledge('t4', 1360, 200, 540, SHELF)],
+  ledges: [ledge('t1', 300, 220, 130, SHELF), ledge('t2', 600, 180, 200, SHELF), ledge('b3', 120, 120, 520, TWIG), ledge('t3', 1100, 200, 500, SHELF), ledge('t4', 1360, 200, 540, SHELF)],
   doors: [
     { door: 'down', piece: 'kit-doorway-knothole', scale: 0.8 },
     { door: 'hatch-up', piece: 'kit-doorway-knothole', scale: 0.6 },
@@ -211,17 +225,17 @@ const TRUNK_A: RoomKit = {
   decals: vents(U_2A),
 };
 
-const U_2B = [updraft('U7', 640, 550, { on: 3, off: 2, phase: 0 }), updraft('U8', 1080, 600, { on: 3, off: 2, phase: 0.5 })];
+const U_2B = [updraft('U7', 640, 530, GUST), updraft('U8', 1190, 590, GUST_LATE)];
 const TRUNK_B: RoomKit = {
   ground: G,
   ...trunkInside(ROOM_W),
   paths: [{ id: 'trunk-floor', x0: 0, x1: ROOM_W, top: 0, row: 'kit-cut-earth-path', mid: 'kit-tex-inner-wood' }],
   ledges: [
-    ledge('u1', 420, 160, 120, SHELF),
+    ledge('u1', 420, 160, 100, SHELF),
     ledge('knot-shelf', 300, 100, 520, SHELF),
     ledge('u2', 820, 140, 490, SHELF),
-    ledge('u2b', 880, 160, 120, SHELF),
-    ledge('u3', 1260, 240, 540, SHELF),
+    ledge('u2b', 880, 270, 100, ROOT),
+    ledge('u3', 1350, 200, 540, SHELF),
   ],
   doors: [
     { door: 'down', piece: 'kit-hatch-down' },
@@ -230,12 +244,12 @@ const TRUNK_B: RoomKit = {
   decals: [...bramble(400, ROOM_W, 'kit-clearing-thorn-roots', 360), ...vents(U_2B)],
 };
 
-const U_2C = [updraft('U9', 520, 540, { on: 2, off: 2, phase: 0 }), updraft('U10', 890, 600, { on: 2, off: 2, phase: 0.5 })];
+const U_2C = [updraft('U9', 520, 520, GUST), updraft('U10', 1060, 560, GUST_LATE)];
 const TRUNK_C: RoomKit = {
   ground: G,
   ...trunkInside(ROOM_W),
   paths: [{ id: 'trunk-floor', x0: 0, x1: ROOM_W, top: 0, row: 'kit-cut-earth-path', mid: 'kit-tex-inner-wood' }],
-  ledges: [ledge('v1', 320, 140, 110, SHELF), ledge('v2', 700, 120, 480, SHELF), ledge('v3', 1160, 180, 520, SHELF), ledge('v4', 1380, 200, 540, SHELF)],
+  ledges: [ledge('v1', 320, 140, 100, SHELF), ledge('v2', 700, 120, 480, SHELF), ledge('v2b', 780, 240, 100, ROOT), ledge('v3', 1220, 160, 520, SHELF), ledge('v4', 1420, 160, 540, SHELF)],
   doors: [
     { door: 'down', piece: 'kit-hatch-down' },
     { door: 'hatch-up', piece: 'kit-doorway-knothole', scale: 0.6 },
@@ -247,9 +261,9 @@ const TRUNK_C: RoomKit = {
 
 const U_ACT3 = [
   updraft('U11', 1160, 600),
-  updraft('U12', 2200, 600, { on: 3, off: 2, phase: 0.5 }),
-  updraft('U13', 2920, 600, { on: 3, off: 2, phase: 0 }),
-  updraft('U14', 4040, 600, { on: 3, off: 2, phase: 0.25 }),
+  updraft('U12', 2200, 590, GUST_LATE),
+  updraft('U13', 2920, 580, GUST),
+  updraft('U14', 4040, 600, { ...GUST, phase: 0.25 }),
 ];
 const CROWN: RoomKit = {
   ground: G,
@@ -269,6 +283,7 @@ const CROWN: RoomKit = {
     ledge('c8', 3300, 300, 540, BRANCH),
     ledge('c9', 3780, 160, 140, TWIG),
     ledge('c10', 4240, 200, 540, BRANCH),
+    ledge('c11', 4420, 280, 120, TWIG),
     ledge('c12', 4900, 200, 180, BRANCH),
     ledge('c13', 5460, 240, 520, BRANCH),
     ledge('c14', 5760, 180, 520, BRANCH),
@@ -294,7 +309,10 @@ const HUT: RoomKit = {
 
 export const CANOPY_ROOMS: Record<string, RoomDef> = inRealmKit('clearing', withCourseAir('clearing', {
   'canopy-1': canopyRoom('canopy-1', 3, CANOPY_1, {
-    spawns: { default: { x: 120, y: G }, 'from-gate': { x: 120, y: G }, 'from-roots': { x: 4480, y: G }, 'from-trunk': { x: 4660, y: G } },
+    spawns: { default: { x: 120, y: G }, 'from-gate': { x: 120, y: G }, 'from-roots': { x: 4480, y: G }, 'from-trunk': { x: 4660, y: G }, 'on-l5': { x: 2500, y: G } },
+    // On the high bough l5, before the first hanging thorns an owl goes under (H2): where the browser test
+    // of the drop onto the twig below starts (e2e/air.spec.ts).
+    spawnTops: { 'on-l5': 500 },
     doors: [
       door('to-commons', 40, { room: HALL_ID, spawn: fromCourse('grove') }, { way: 'down' }),
       door('roots', 4560, { room: 'canopy-roots', spawn: 'from-roots' }, { w: 60 }),
@@ -303,9 +321,9 @@ export const CANOPY_ROOMS: Record<string, RoomDef> = inRealmKit('clearing', with
     updrafts: U_ACT1,
     course: {
       act: 1,
-      pits: [pit(700, 1500), pit(2000, 4200)],
-      thorns: [thorns('H1', 1960, 2020, 260), thorns('H2', 2700, 2760, 300), thorns('H3', 3400, 3450, 300), thorns('H4', 4000, 4050, 300)],
-      benches: [piece('bench-1', 1800)],
+      pits: [pit(700, 1500), pit(2000, ROOTS_MOSS)],
+      thorns: [thorns('H1', 1960, 2020, 260), thorns('H2', 2700, 2750, 300), thorns('H3', 3400, 3450, 300), thorns('H4', 4000, 4050, 300)],
+      benches: [piece('bench-1', 1800), piece('bench-1b', 3285, 120)],
       parts: [piece('bell-1', 1560, 480), piece('bell-2', 4340, 540)],
       feathers: [piece('feather-1', 100, 330), piece('feather-2', 1890, 540)],
     },
@@ -323,7 +341,7 @@ export const CANOPY_ROOMS: Record<string, RoomDef> = inRealmKit('clearing', with
       act: 2,
       thorns: [thorns('vine', 820, 900, 200)],
       benches: [piece('bench-2', 200)],
-      parts: [piece('bell-3', 180, 540)],
+      parts: [piece('bell-3', 180, 520)],
     },
   }),
   'canopy-2b': canopyRoom('canopy-2b', 1, TRUNK_B, {
@@ -333,18 +351,20 @@ export const CANOPY_ROOMS: Record<string, RoomDef> = inRealmKit('clearing', with
     course: {
       act: 2,
       pits: [pit(400, ROOM_W)],
-      thorns: [thorns('stalk', 780, 810, 0, 500), thorns('curtain', 1000, 1060, 260)],
+      thorns: [thorns('stalk', 780, 810, 0, 470), thorns('curtain', 1100, 1140, 260)],
       feathers: [piece('feather-4', 350, 520)],
     },
   }),
   'canopy-2c': canopyRoom('canopy-2c', 1, TRUNK_C, {
-    spawns: { default: { x: 150, y: G }, 'from-below': { x: 150, y: G }, 'from-above': { x: 200, y: G } },
+    spawns: { default: { x: 150, y: G }, 'from-below': { x: 150, y: G }, 'from-above': { x: 200, y: G }, 'on-v2': { x: 760, y: G } },
+    // On the high shelf v2, before the hanging thorns: where the browser test of the top storey starts.
+    spawnTops: { 'on-v2': 480 },
     doors: [door('down', 60, { room: 'canopy-2b', spawn: 'from-above' }, { w: 60, way: 'down' }), door('hatch-up', 1520, { room: 'canopy-3', spawn: 'from-below' }, { top: 540, w: 60, way: 'up' })],
     updrafts: U_2C,
     course: {
       act: 2,
       pits: [pit(300, ROOM_W)],
-      thorns: [thorns('stalk-west', 650, 680, 0, 500), thorns('hanging', 850, 880, 280), thorns('stalk-east', 1040, 1110, 0, 400)],
+      thorns: [thorns('stalk-west', 650, 680, 0, 450), thorns('hanging', 960, 990, 280)],
     },
   }),
   'canopy-3': canopyRoom('canopy-3', 4, CROWN, {
@@ -357,8 +377,8 @@ export const CANOPY_ROOMS: Record<string, RoomDef> = inRealmKit('clearing', with
     course: {
       act: 3,
       pits: [pit(600, 4 * ROOM_W)],
-      thorns: [thorns('K1', 2140, 2180, 280), thorns('K2', 2880, 2910, 280), thorns('K3', 3970, 4020, 300), thorns('K4', 4800, 4860, 260)],
-      benches: [piece('bench-3', 300), piece('bench-4', 3450, 540)],
+      thorns: [thorns('K1', 2140, 2180, 280), thorns('K2', 2880, 2910, 280), thorns('K3', 3970, 4020, 300), thorns('K4', 4800, 4860, 300)],
+      benches: [piece('bench-3', 300), piece('bench-3b', 1930, 120), piece('bench-4', 3450, 540), piece('bench-4b', 4950, 180)],
       parts: [piece('bell-4', 1440, 540), piece('bell-5', 5930, 520)],
       feathers: [piece('feather-5', 1690, 40)],
     },

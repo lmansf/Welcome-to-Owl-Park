@@ -4,9 +4,9 @@
  */
 import { describe, expect, it } from 'vitest';
 import { GROUNDED, JUMP_RISE } from '@owl-park/shared';
-import { ROOMS } from '@owl-park/shared/rooms';
+import { COURSES, ROOMS } from '@owl-park/shared/rooms';
 import { botRoom, owlAt, stepOwl, STEPS_PER_S } from './owl';
-import { KID_BAR } from './playtest';
+import { KID_BAR, onward } from './playtest';
 import { progress, solve, type Goal } from './route';
 import { surfaceAt, surfacesOf } from './surfaces';
 import type { Action } from './kid';
@@ -40,6 +40,24 @@ describe('the bot owl', () => {
     expect(o.x).toBeGreaterThanOrEqual(brush.room.walkable[0]![0]!.x - 1);
   });
 
+  it('steps off a ledge’s end over a pit without falling there: it is in the air, as the game’s owl is, and falls from that height', () => {
+    // The Updraft Canopy's low bough c12, over the crown's drop.
+    const crown = botRoom(ROOMS['canopy-3']!);
+    const c12 = surfacesOf(crown).find((s) => s.id === 'c12')!;
+    const o = owlAt(c12.x1 - 2, c12.low, 100_000);
+    let event: ReturnType<typeof stepOwl> = null;
+    let steps = 0;
+    // East off its end, nothing pressed: no fall while it is still up, then the drop's.
+    for (; steps < 3 * STEPS_PER_S && event === null; steps++) {
+      event = stepOwl(crown, o, { way: 1, pressed: false, held: false });
+      if (event === null && o.x > c12.x1 + 2) expect(o.fl.air.s === GROUNDED && o.fl.air.z > 0, `at x ${Math.round(o.x)}`).toBe(false);
+    }
+    expect(event).toBe('fall');
+    expect(o.fl.air.z).toBe(0);
+    // It fell the bough's height first: longer than a step or two.
+    expect(steps).toBeGreaterThan(STEPS_PER_S / 4);
+  });
+
   it('falls into a course’s pit, as the game sends the owl back to its bench', () => {
     const pit = brush.room.course!.pits![0]!;
     const x = (pit[0]!.x + pit[1]!.x) / 2;
@@ -56,6 +74,25 @@ describe('the surfaces a kid stands on', () => {
     expect(ss.filter((s) => s.id.startsWith('floor')).length).toBeGreaterThanOrEqual(2);
     for (const p of brush.room.perches ?? []) expect(ss.some((s) => s.id === p.id), p.id).toBe(true);
     expect(surfaceAt(ss, 300, 0)?.id).toBe('floor0');
+  });
+});
+
+describe('what a course needs', () => {
+  const canopy = COURSES['canopy']!;
+  const through = (room: string, door: string) => ROOMS[room]!.doors.find((d) => d.id === door)!.to!.room;
+
+  it('counts a storey that only leads on as part of the course: every hatch up the canopy’s trunk is needed', () => {
+    // The trunk is a storey a room, and only the first holds a bell: the two above lead on to the crown.
+    for (const storey of ['canopy-2a', 'canopy-2b', 'canopy-2c']) expect(onward(canopy, ROOMS[storey]!, through(storey, 'hatch-up')), storey).toBe(true);
+    expect(onward(canopy, ROOMS['canopy-1']!, through('canopy-1', 'to-trunk'))).toBe(true);
+    expect(onward(canopy, ROOMS['canopy-3']!, through('canopy-3', 'hut'))).toBe(true);
+  });
+
+  it('leaves out a room that leads nowhere on, and the way back to an earlier act', () => {
+    // The den under the roots holds a lost feather and one doorway.
+    expect(onward(canopy, ROOMS['canopy-1']!, through('canopy-1', 'roots'))).toBe(false);
+    expect(onward(canopy, ROOMS['canopy-2a']!, through('canopy-2a', 'down'))).toBe(false);
+    expect(onward(canopy, ROOMS['canopy-3']!, through('canopy-3', 'down'))).toBe(false);
   });
 });
 

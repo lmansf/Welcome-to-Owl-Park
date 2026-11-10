@@ -20,7 +20,7 @@ import {
   inkLeft,
   signLit,
   groundAt,
-  inPit,
+  fellInPit,
   inThorns,
   isWalkable,
   liftAt,
@@ -166,6 +166,6 @@ export function stepOwl(br: BotRoom, o: Owl, p: Press): StepEvent {
     o.onStone = stone;
   }
   if (inThorns(r, o.x, o.fl.air.z)) return 'fall';
-  if (o.fl.air.s === GROUNDED && o.fl.air.z === 0 && inPit(r, { x: o.x, y: br.y })) return 'fall';
+  if (fellInPit(r, { x: o.x, y: br.y }, o.fl.air.s === GROUNDED, o.fl.air.z)) return 'fall';
   return null;
 }
