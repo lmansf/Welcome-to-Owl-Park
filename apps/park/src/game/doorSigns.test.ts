@@ -1,8 +1,17 @@
 import { ROOMS } from '@owl-park/shared/rooms';
 import { describe, expect, it } from 'vitest';
-import { signY, signedDoors } from './hints';
+import { SIGN_DEPTH, signDepth, signY, signedDoors } from './hints';
 
 describe('door signs', () => {
+  it('draw over the pieces seen from above, where a tall idol stands in front of a doorway, and under them elsewhere', () => {
+    const hall = ROOMS['m3-hall']!;
+    // Over every piece and owl in the Great Hollow (each draws at its foot's y, at most the room's height).
+    expect(signDepth(hall)).toBeGreaterThan(hall.size.h);
+    for (const p of hall.pieces ?? []) expect(signDepth(hall), p.key).toBeGreaterThan(p.y);
+    // A room seen from the side keeps its signs on the floor, under its pieces.
+    expect(signDepth(ROOMS['m3-ground']!)).toBe(SIGN_DEPTH);
+  });
+
   it('sign the Great Hollow’s open ways, the Party Grove’s among them', () => {
     const ids = signedDoors(ROOMS['m3-hall']!).map((d) => d.id);
     expect(ids).toContain('to-party');

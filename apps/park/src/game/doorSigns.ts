@@ -8,7 +8,7 @@
  */
 import Phaser from 'phaser';
 import type { RoomDef, WalkMap } from '@owl-park/shared';
-import { signX, signY, signedDoors } from './hints';
+import { signDepth, signX, signY, signedDoors } from './hints';
 
 /** Room pixels per screen pixel now: what keeps a sign the same size on any screen. */
 type Scale = () => number;
@@ -19,8 +19,6 @@ const FONT_PX = 15;
 /** How long a sign takes to fade in or out (ms). */
 const FADE_MS = 220;
 
-/** Just over the floor's edges (walkFloor, -0.6), under every piece and owl: a sign never covers the owl. */
-const SIGN_DEPTH = -0.5;
 
 export class DoorSigns {
   private readonly signs: Array<{ text: Phaser.GameObjects.Text; label: string; id: string; at: { x: number; y: number } }> = [];
@@ -49,8 +47,8 @@ export class DoorSigns {
           resolution: 2,
         })
         .setOrigin(0.5, 0)
-        // On the floor: an owl walking up to the doorway stands over it, from either side.
-        .setDepth(SIGN_DEPTH)
+        // On the floor: an owl walking up to the doorway stands over it, from either side (over the pieces seen from above).
+        .setDepth(signDepth(room))
         .setAlpha(0);
       this.signs.push({ text, label: d.label!, id: d.id, at });
     }

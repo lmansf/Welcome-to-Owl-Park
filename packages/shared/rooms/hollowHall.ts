@@ -186,6 +186,15 @@ function wayArt(id: HallWay): string | null {
  */
 export const FRONT_ART = 0.6;
 
+/** How wide a way's doorway art is drawn (room px). */
+function artWide(id: HallWay): number {
+  const art = wayArt(id);
+  return (art ? (KIT_ART[art]?.w ?? 240) : 240) * (atFront(id) ? FRONT_ART : 1);
+}
+
+/** How far past an end doorway's inner edge its sign's middle stands (room px). */
+export const END_SIGN_CLEAR = 240;
+
 /** How tall a way's doorway art is drawn (room px). */
 function artTall(id: HallWay): number {
   const art = wayArt(id);
@@ -198,8 +207,10 @@ function artTall(id: HallWay): number {
  */
 export function signInset(id: HallWay): number {
   if (id === 'down') return 200;
-  // At an end the doorway's art stands beside the floor: its sign stands out from under it.
-  if (atEnd(id)) return 260;
+  // At an end the doorway's art stands beside the floor: its sign stands clear of it, half a long
+  // label (a phone held sideways draws one up to about 440 room px wide) past the art's inner edge.
+  // The rim leans there, so the step in is lengthened until it is that far across.
+  if (atEnd(id)) return Math.round((artWide(id) / 2 + END_SIGN_CLEAR) / Math.abs(rimNormal(angleAt(wayS(id))).x));
   if (!atFront(id)) return 150;
   return Math.min(300, artTall(id) + 20);
 }
