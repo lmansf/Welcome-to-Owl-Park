@@ -1,9 +1,9 @@
 # Updraft Canopy: the Treehouse Clearing's course
 
 - Status: PLANNED (OP-226). A level plan: nothing here is built.
-- Verified against: main 503b9bf (2026-11-02); every hop re-measured with both flaps (the triple jump, OP-239) on 2026-11-04
+- Verified against: main 503b9bf (2026-11-02); every hop re-measured with both flaps (the triple jump, OP-239) on 2026-11-04; eased for younger players and played again by the kid bots on 2026-11-10 (section 10), against main 048655a
 - Code: none yet. Built on `packages/shared/src/jump.ts`, `flight.ts`, `routes.ts` (`hopTier`), `perches.ts` (`MAX_PERCH_TOP`), `packages/shared/src/room.ts` (`ROOM_W`, `ROOM_MAX_W`, a door's `top`) and `packages/shared/rooms/index.ts` (`treeLedge`, `TREE_GROUND`)
-- Tickets: OP-226, OP-239 (the triple jump: re-measured, section 9)
+- Tickets: OP-226, OP-239 (the triple jump: re-measured, section 9); eased for younger players (section 10; no ticket yet)
 - Related: `docs/levels/README.md` (the shared rules, the physics and how to read the tables), `docs/MAP.md` (the tree's rooms, ledges and doors)
 
 The Treehouse Clearing's course, after its Commons: up through the fern floor, inside the hollow
@@ -633,9 +633,9 @@ Doors, benches and the rest:
 | Rule | Where |
 | --- | --- |
 | Three acts of three or four screens, about ten in all, joined by doors | Act 1: 3 screens (`canopy-1`); act 2: 3 (`canopy-2a` to `2c`); act 3: 4 (`canopy-3`). Doors `to-trunk` and the crown hatch join them |
-| Four benches | Bench 1 (`canopy-1`, x 1800), bench 2 (`canopy-2a`, x 200), bench 3 (`canopy-3`, x 300), bench 4 (`canopy-3`, on `c8`) |
+| Four benches (seven since Nov 10, section 10) | Bench 1 (`canopy-1`, x 1800), bench 2 (`canopy-2a`, x 200), bench 3 (`canopy-3`, x 300), bench 4 (`canopy-3`, on `c8`); since Nov 10 also 1b (on `l7`), 3b (on `c4`) and 4b (on `c12`) |
 | One shortcut per act, opened from its far side | The log (kicked open from `log-east`), the vine (dropped from `canopy-2c`'s top), the bough (pushed from `c8`) |
-| One dash-only gap | `c12` to `c13` in screen 3.4. Bell 3's branch in 2.1 also needs the dash (the owner's ask); it is a side reach, not on the line |
+| One dash-only gap | `c12` to `c13` in screen 3.4 (as built, a column and a wind current also carry an owl across, `rooms/courseAir.ts`). Bell 3's branch in 2.1 was dash-only (the owner's ask); since Nov 10 a careful jump makes it and the dash makes it easy (section 10) |
 | Five lost feathers | 1: `fern-hi` (1.1); 2: `fern-bench` (1.2); 3: the hidden room's shelf; 4: `knot-shelf` (2.2, a flap kept for the top of U7, or a jump and a glide back west from `u2`: an easy one); 5: `pocket` (3.2) |
 | One hidden room | `canopy-roots`, through the tiny door at x 4560 in `canopy-1` |
 | One secret character | The sleeping owlet, `canopy-2b` |
@@ -762,3 +762,109 @@ second flap too, and it stays so: a feather may be easy. The time estimates (sec
 screen widths and the beats, which these moves do not change by more than a second, so they stand.
 The room sketches are not redrawn for moves this small (under a character each); the tables are the
 plan.
+
+## 10. Easier for younger players (Nov 10)
+
+The owner's bar for every course is something a 10 year old can do in a few tries (Nov 7), which the
+playtest bots read as every needed hop landing at least half of a kid's tries (`bots/README.md`).
+This course was the one that failed it: three hops under the bar (17%, 33% and 48%), 8.7 falls
+expected on a clear against 0.2 and 0.1 for the other two courses, and every run of it in the play
+log given up in the first act. The owl's movement is unchanged; the course gives more room. The
+tables in sections 3 to 5 are the first plan: where this section moves a piece, this section is the
+plan.
+
+**A step off a ledge is no fall.** Walking off the end of a ledge over a pit used to count as a fall
+on the spot, the owl still at the ledge's height: the page looked for "nothing but the pit under the
+owl" a frame before the flight noticed the edge. Every drop from a high ledge to a low one, this
+course's main move, was a trip back to the bench unless the owl jumped off. A fall into a pit is now
+what the bots always took it for (`fellInPit`, `course.ts`): down on the floor over one. The kid sim
+never had the bug, so it rated those drops as easy while the game refused them.
+
+**The rules the layout now keeps** (held by `packages/shared/rooms/updraftCanopy.test.ts`, with the
+game's own flight):
+
+1. **Every drop under hanging thorns lands on a ledge.** Walking off the end of the high ledge,
+   steering on or letting go, lands on a low ledge under it, clear of the thorns, on a slow device too.
+   Before, two of the drops were a timed free fall over a pit into a gust (17% and 33%).
+2. **A full jump off each low ledge stays under the thorns over it**, so the way into the next gust is
+   a plain jump held.
+3. **One clock for every gust**: on four seconds, off two (they were 3 and 2, 2.5 and 2.5, and 2 and
+   2). Four seconds carries an owl from a gust's foot to its top with a second or more to spare.
+4. **A held glide off the top of every gust lands on the ledge it leads to.** An owl that learned
+   "hold Jump to ride" and keeps holding no longer flies past the ledge (it did at seven of the
+   fourteen gusts).
+5. **A bench on every screen past each act's first** (seven benches, were four). Act 2 is a room a
+   screen, where a fall is back at that room's way in.
+
+What moved (x its west end, w its width, top its height; thorns as x0 to x1 and their foot):
+
+| room | piece | before | after | why |
+| --- | --- | --- | --- | --- |
+| `canopy-1` | `U1` | top 580 | top 540 | rule 4: a held glide lands on bell 1's branch |
+| `canopy-1` | `U2` | top 560, 3 s on / 2 off | top 540, 4 on / 2 off | rules 3 and 4 |
+| `canopy-1` | `U3` | 3 on / 2 off | 4 on / 2 off | rule 3 |
+| `canopy-1` | `U4`, `U5` | 2.5 on / 2.5 off | 4 on / 2 off | rule 3 |
+| `canopy-1` | `l5` | x 2420 | x 2360 | its end stands further from the thorns `H2` |
+| `canopy-1` | `l5b` (new twig) | - | x 2540, w 240, top 120 | rule 1: the drop from `l5` under `H2` lands here |
+| `canopy-1` | `H2` | 2700 to 2760 | 2700 to 2750 | leaves the twig's east end clear for the jump into `U3` |
+| `canopy-1` | `l7` | x 3250, w 140 | x 3180, w 210 | rule 1: reaches under the end of `l6`; bench 1b stands on it |
+| `canopy-1` | `l9` | x 3880, w 120, top 160 | x 3760, w 240, top 140 | rules 1 and 2: reaches under the end of `l8`; a full jump stays under `H4` |
+| `canopy-1` | bramble | 2000 to 4200 | 2000 to 4050 | bell 2's gust `U5` rises from safe moss: the low way still rings it, and a miss is no fall |
+| `canopy-2a` | `b3`, bell 3 | top 540 | top 520 | the dash hop was 48%: now a careful jump makes it, and the dash makes it easy |
+| `canopy-2a` | `U6` | 3 on / 2 off | 4 on / 2 off | rule 3 |
+| `canopy-2b` | `u1` | top 120 | top 100 | keeps `U7` needed with the lower stalk |
+| `canopy-2b` | `U7` | top 550, 3 on / 2 off | top 530, 4 on / 2 off | rules 3 and 4 |
+| `canopy-2b` | thorn stalk | top 500 | top 470 | more room over it out of `U7` |
+| `canopy-2b` | `u2b` | x 880, w 160, top 120 | x 880, w 270, top 100, a root shelf | rules 1 and 2 |
+| `canopy-2b` | thorn curtain | 1000 to 1060 | 1100 to 1140 | rule 1: a steered drop from `u2` passes under it |
+| `canopy-2b` | `U8` | x 1080, top 600, 3 on / 2 off | x 1190, top 590, 4 on / 2 off | follows the shelf; rules 3 and 4 |
+| `canopy-2b` | `u3` | x 1260, w 240 | x 1350, w 200 | follows `U8` |
+| `canopy-2c` | `v1` | top 110 | top 70 | keeps `U9` needed with the lower stalk |
+| `canopy-2c` | `U9` | top 540, 2 on / 2 off | top 520, 4 on / 2 off | rules 3 and 4 |
+| `canopy-2c` | thorn stalk (west) | top 500 | top 450 | more room over it out of `U9` |
+| `canopy-2c` | `v2b` (new root shelf) | - | x 780, w 240, top 100 | rule 1: the drop from `v2` under the hanging thorns lands here (it was the 17% hop) |
+| `canopy-2c` | hanging thorns | 850 to 880 | 960 to 990 | rule 1 |
+| `canopy-2c` | `U10` | x 890, top 600, 2 on / 2 off | x 1060, top 560, 4 on / 2 off | follows the shelf; rules 3 and 4 |
+| `canopy-2c` | thorn stalk (east) | 1040 to 1110, top 400 | gone | the gust stands there now; it stopped nothing the pit does not |
+| `canopy-2c` | `v3`, `v4` | x 1160, w 180; x 1380, w 200 | x 1220, w 160; x 1420, w 160 | follow `U10` |
+| `canopy-3` | `U12`, `U13` | top 600, 3 on / 2 off | top 590 and 580, 4 on / 2 off | rules 3 and 4 |
+| `canopy-3` | `U14` | 3 on / 2 off | 4 on / 2 off | rule 3 |
+| `canopy-3` | `c11` (new twig) | - | x 4420, w 280, top 120 | rule 1: the drop from `c10` before `K4` lands here |
+| `canopy-3` | `K4` | foot 260 | foot 290 | rule 2: a full jump off `c11` passes under it |
+| all three acts | benches | 1, 2, 3, 4 | and 1b (`l7`), 3b (`c4`), 4b (`c12`) | rule 5 |
+
+**Played by the kid bots** (`pnpm --filter @owl-park/bots playtest`), the whole course:
+
+| | before | after |
+| --- | --- | --- |
+| hops under the bar | 3: `l5` under `H2` 33%, `t2` to `b3` 48%, `v2` to `v3` 17% | none |
+| weakest needed hop | 17% | 83% |
+| falls expected on a clear | 8.7 | 0.7 |
+| a clean run | 2% | 53% |
+
+The after column counts three gusts the before column left out: the bots took only doorways to a
+later act as part of a course, and the trunk's two upper storeys hold no bell of their own, so their
+hops were never in the course's numbers (`onward`, `bots/sim/playtest.ts`). The hops still at 83%
+are timed gusts, where the sim's kid goes up to 0.9 s before the gust comes on.
+
+**Kept shut.** Each gust is still needed for the ledge it leads to. By height (a test holds it):
+every such ledge stands more than a jump and both flaps (371) over the low ledge before it, and more
+than both flaps (222) over the foot of the thorns an owl comes under on the way. By search, as
+section 9's was, in the two storeys whose thorn stalks came down: from the first shelf (`u1`, `v1`),
+over every take-off spot, both flaps at every 25 ms and a dash at any of ten moments, with the gusts
+switched off, no flight of some 300,000 gets past the stalk, so `U7` and `U9` cannot be jumped
+round. The low road (twig to twig under the thorns, which the first build already had along most of
+acts 1 and 3) now runs the whole of act 1: an owl may pass a gust there by gliding low, but every
+bell and every storey of the trunk still takes one.
+
+**Bell 3 and the dash.** The README's "one dash-only gap" was this course's bell 3 in practice (the
+crown's gap has its column and wind). A hop only the dash makes needs both flaps timed at the top of
+each rise as well, which the kid bots land under half the time however it is laid out. Bell 3's
+branch now stands 20 px lower (rise 320, gap 360): a jump with a flap at the top of each rise reaches
+it, and with the dash a kid's loose timing does too (71% of tries). The ink course made the same
+trade on Nov 7.
+
+**The art check.** All seven rooms stay inside the kit's value bands and palette (`pnpm kit:check`).
+The two long low shelves in the trunk are drawn as root shelves (a woven nest to drop into), since
+the fungus shelf stretched to their width drew twice its size.
+

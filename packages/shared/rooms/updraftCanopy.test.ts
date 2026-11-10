@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CollectionBook, MemoryCollectionStore } from '../src/book';
 import { courseParts, coursePieces, courseProblems, fellInPit, holdsDash, inPit, inThorns, LOST_FEATHERS } from '../src/course';
 import { CourseBook, MemoryCourseStore } from '../src/coursebook';
-import { ALL_FLIGHT, FLIGHT_STEP_MS, GROUNDED, JUMP_RISE, LIFTED, newFlier, stepFlier, type Flier } from '../src/flight';
+import { ALL_FLIGHT, FLAP_RISE, FLIGHT_STEP_MS, GROUNDED, JUMP_RISE, LIFTED, newFlier, stepFlier, type Flier } from '../src/flight';
 import { groundAt, type Perch } from '../src/perches';
 import { ROOM_W, mapOf, type RoomDef } from '../src/room';
 import { perchTiers } from '../src/routes';
@@ -241,6 +241,41 @@ describe('the Updraft Canopy, laid out for a 10 year old', () => {
         expect(got, `${id} ${gust} from x ${x}`).toMatchObject({ end: 'landed', z: to.top });
         // With room to spare before the ledge's far end: a slow device's page sees the column's edge a frame late.
         expect(way > 0 ? x1 - got.x : got.x - x0, `${id} ${gust} from x ${x}`).toBeGreaterThanOrEqual(30);
+      }
+    }
+  });
+
+  // Each high ledge a gust leads to, the low ledge (or the floor, null) an owl sets off from for it, and
+  // the hanging thorns it comes under on the way from the high ledge before, where there are any.
+  const NEEDS: ReadonlyArray<readonly [room: string, high: string, low: string | null, thorns: string | null]> = [
+    ['canopy-1', 'b1', 'f2', null],
+    ['canopy-1', 'l5', 's4', 'H1'],
+    ['canopy-1', 'l6', 'l5b', 'H2'],
+    ['canopy-1', 'l8', 'l7', 'H3'],
+    ['canopy-1', 'b2', 'l9', 'H4'],
+    ['canopy-1', 'b2', null, null],
+    ['canopy-2a', 't3', null, 'vine'],
+    ['canopy-2b', 'u2', 'u1', null],
+    ['canopy-2b', 'u3', 'u2b', 'curtain'],
+    ['canopy-2c', 'v2', 'v1', null],
+    ['canopy-2c', 'v3', 'v2b', 'hanging'],
+    ['canopy-3', 'c3', 'c2', null],
+    ['canopy-3', 'c5', 'c4', 'K1'],
+    ['canopy-3', 'c7', 'c6', 'K2'],
+    ['canopy-3', 'c10', 'c9', 'K3'],
+    ['canopy-3', 'c13', 'c11', 'K4'],
+  ];
+
+  it('still needs every gust: no jump with both flaps reaches a high ledge from the low one before it, nor from under the thorns', () => {
+    // A jump and both flaps, each at the top of the last, and both flaps alone (an owl in the air under thorns has no jump).
+    const jumpAndFlaps = JUMP_RISE + 2 * FLAP_RISE;
+    for (const [id, high, low, thorns] of NEEDS) {
+      const r = ROOMS[id]!;
+      const top = perch(r, high).top;
+      expect(top - (low ? perch(r, low).top : 0), `${id} ${high} from ${low ?? 'the floor'}`).toBeGreaterThan(jumpAndFlaps);
+      if (thorns) {
+        const t = r.course!.thorns!.find((h) => h.id === thorns)!;
+        expect(top - t.z0, `${id} ${high} from under ${thorns}`).toBeGreaterThan(2 * FLAP_RISE);
       }
     }
   });

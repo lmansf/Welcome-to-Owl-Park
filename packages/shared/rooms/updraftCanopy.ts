@@ -249,7 +249,7 @@ const TRUNK_C: RoomKit = {
   ground: G,
   ...trunkInside(ROOM_W),
   paths: [{ id: 'trunk-floor', x0: 0, x1: ROOM_W, top: 0, row: 'kit-cut-earth-path', mid: 'kit-tex-inner-wood' }],
-  ledges: [ledge('v1', 320, 140, 100, SHELF), ledge('v2', 700, 120, 480, SHELF), ledge('v2b', 780, 240, 100, ROOT), ledge('v3', 1220, 160, 520, SHELF), ledge('v4', 1420, 160, 540, SHELF)],
+  ledges: [ledge('v1', 320, 140, 70, SHELF), ledge('v2', 700, 120, 480, SHELF), ledge('v2b', 780, 240, 100, ROOT), ledge('v3', 1220, 160, 520, SHELF), ledge('v4', 1420, 160, 540, SHELF)],
   doors: [
     { door: 'down', piece: 'kit-hatch-down' },
     { door: 'hatch-up', piece: 'kit-doorway-knothole', scale: 0.6 },
@@ -377,7 +377,7 @@ export const CANOPY_ROOMS: Record<string, RoomDef> = inRealmKit('clearing', with
     course: {
       act: 3,
       pits: [pit(600, 4 * ROOM_W)],
-      thorns: [thorns('K1', 2140, 2180, 280), thorns('K2', 2880, 2910, 280), thorns('K3', 3970, 4020, 300), thorns('K4', 4800, 4860, 300)],
+      thorns: [thorns('K1', 2140, 2180, 280), thorns('K2', 2880, 2910, 280), thorns('K3', 3970, 4020, 300), thorns('K4', 4800, 4860, 290)],
       benches: [piece('bench-3', 300), piece('bench-3b', 1930, 120), piece('bench-4', 3450, 540), piece('bench-4b', 4950, 180)],
       parts: [piece('bell-4', 1440, 540), piece('bell-5', 5930, 520)],
       feathers: [piece('feather-5', 1690, 40)],

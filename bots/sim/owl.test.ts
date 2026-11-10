@@ -88,11 +88,15 @@ describe('what a course needs', () => {
     expect(onward(canopy, ROOMS['canopy-3']!, through('canopy-3', 'hut'))).toBe(true);
   });
 
-  it('leaves out a room that leads nowhere on, and the way back to an earlier act', () => {
+  it('leaves out a room that leads nowhere on, and every way back', () => {
     // The den under the roots holds a lost feather and one doorway.
     expect(onward(canopy, ROOMS['canopy-1']!, through('canopy-1', 'roots'))).toBe(false);
-    expect(onward(canopy, ROOMS['canopy-2a']!, through('canopy-2a', 'down'))).toBe(false);
-    expect(onward(canopy, ROOMS['canopy-3']!, through('canopy-3', 'down'))).toBe(false);
+    for (const room of ['canopy-2a', 'canopy-2b', 'canopy-2c', 'canopy-3']) expect(onward(canopy, ROOMS[room]!, through(room, 'down')), room).toBe(false);
+    // A room off an act that holds a part is needed, and its way back out is not.
+    const brush = COURSES['brush']!;
+    const side = ROOMS['brush-2']!.doors.find((d) => d.to?.room === 'brush-falls')!;
+    expect(onward(brush, ROOMS['brush-2']!, side.to!.room)).toBe(true);
+    for (const d of ROOMS['brush-falls']!.doors) if (d.to) expect(onward(brush, ROOMS['brush-falls']!, d.to.room), d.id).toBe(false);
   });
 });
 
