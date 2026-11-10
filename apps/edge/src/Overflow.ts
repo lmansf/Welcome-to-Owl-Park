@@ -178,6 +178,7 @@ export class Overflow extends DurableObject<Env> {
     this.log = loggerFor(env);
     this.settings = new Settings(ctx.storage.sql);
     this.line = new Line(ctx.storage.sql);
+    ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS client_error_minutes (minute INTEGER PRIMARY KEY, count INTEGER NOT NULL)');
   }
 
   private holdMs(): number {
@@ -325,6 +326,22 @@ export class Overflow extends DurableObject<Env> {
   override async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const now = Date.now();
+    if (url.pathname === '/client-error') {
+      // One row per minute. Remove expired bins on the next write.
+      const minute = Math.floor(now / 60_000);
+      const oldest = minute - 1439;
+      const sql = this.ctx.storage.sql;
+      if (request.method === 'POST') {
+        sql.exec('DELETE FROM client_error_minutes WHERE minute < ?', oldest);
+        sql.exec('INSERT INTO client_error_minutes (minute, count) VALUES (?, 1) ON CONFLICT(minute) DO UPDATE SET count = count + 1', minute);
+        return new Response(null, { status: 204 });
+      }
+      if (request.method === 'GET') {
+        const row = sql.exec<{ count: number }>('SELECT COALESCE(SUM(count), 0) AS count FROM client_error_minutes WHERE minute >= ?', oldest).toArray()[0];
+        return Response.json({ count: row?.count ?? 0 });
+      }
+      return new Response(null, { status: 405 });
+    }
     if (url.pathname === '/state') return Response.json(await this.state(now));
     if (url.pathname === '/notice') return Response.json({ words: ribbonNow(this.settings.ribbon(), await this.isActive(now, false)), realms: this.settings.realms(), setup: this.settings.setup() });
     if (url.pathname.startsWith('/masks/')) return this.masks(request, url.pathname.slice('/masks/'.length), now);

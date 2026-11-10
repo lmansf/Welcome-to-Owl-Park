@@ -245,5 +245,15 @@ export async function adminCapacity(c: RouteCtx): Promise<Response> {
     st = await readOverflow(env);
   } else return json({ error: 'not found' }, 404);
   // The realms switch's choices (the stained-glass climb): the gated rooms and the nights the keepers may name.
-  return json({ ...st, sharding: env.ROOM_SHARDING === 'room' ? 'room' : 'single', rooms: await roomsNow(env, st.copies), gated: GATED_ROOMS, nights: Object.keys(NIGHTS) });
+  const [rooms, clientErrors] = await Promise.all([
+    roomsNow(env, st.copies),
+    overflow(env).fetch('https://park/client-error').then(async (r) => {
+      if (!r.ok) throw new Error(`counter returned ${r.status}`);
+      return ((await r.json()) as { count: number }).count;
+    }).catch((e: unknown) => {
+      log.warn('worker.admin', 'read_failed', 'The browser error counter did not answer.', { error: e });
+      return null;
+    }),
+  ]);
+  return json({ ...st, sharding: env.ROOM_SHARDING === 'room' ? 'room' : 'single', rooms, gated: GATED_ROOMS, nights: Object.keys(NIGHTS), clientErrors24h: clientErrors });
 }

@@ -78,6 +78,7 @@ function localInput(ms) {
 function show(s) {
   now = s;
   $('#line-state').textContent = lineText(s);
+  $('#client-errors').textContent = Number.isFinite(s.clientErrors24h) ? String(s.clientErrors24h) : 'Unavailable';
   for (const b of document.querySelectorAll('[data-line]')) b.setAttribute('aria-pressed', String(b.dataset.line === s.line.mode));
   if (document.activeElement !== $('#threshold')) $('#threshold').value = s.line.threshold;
   if (document.activeElement !== $('#hold')) $('#hold').value = s.line.holdMin;
@@ -229,6 +230,7 @@ function html(nonce: string, ribbonWords: string): string {
 <body>
 <main>
 <h1>Owl Park capacity</h1>
+<p>Browser error reports in the last 24 hours: <strong id="client-errors">—</strong></p>
 <p class="lede">Busy nights: the line, the busy ribbon and copies of rooms; the realms switch; and closing the park for setup. No deploy needed. When to use which: docs/CAPACITY.md.</p>
 <form id="key">
 <input type="password" name="key" autocomplete="current-password" placeholder="Admin key" aria-label="Admin key" required>

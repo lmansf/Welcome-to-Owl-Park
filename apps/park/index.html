@@ -3,6 +3,25 @@
   <head>
     <meta charset="utf-8" />
     <script>
+      // OP-267: count errors without sending their text, the page URL, or the owl's identity.
+      (function () {
+        var sent = 0;
+        function report(kind) {
+          if (sent >= 5 || typeof fetch !== 'function') return;
+          sent++;
+          fetch('/api/client-error', {
+            method: 'POST',
+            headers: { 'X-Park-Error': kind },
+            credentials: 'omit',
+            referrerPolicy: 'no-referrer',
+            keepalive: true
+          }).catch(function () {});
+        }
+        addEventListener('error', function (e) {
+          if (e instanceof ErrorEvent || (e.target && e.target.tagName === 'SCRIPT')) report('error');
+        }, true);
+        addEventListener('unhandledrejection', function () { report('rejection'); });
+      })();
       // A page kept from an earlier deploy points at a script bundle that is gone: fetch the page
       // afresh, at most once a minute, instead of staying blank.
       addEventListener('error', function (e) {
