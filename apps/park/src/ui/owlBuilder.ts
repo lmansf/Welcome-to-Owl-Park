@@ -2,7 +2,6 @@ import {
   ACCENT_COLOURS,
   BELLY_COLOURS,
   BODY_COLOURS,
-  CATALOGUE,
   RARITY_COLOURS,
   RARITY_NAMES,
   itemColourways,
@@ -18,6 +17,7 @@ import {
   type Wear,
 } from '@owl-park/shared';
 import type { CollectionState } from '../collect/state';
+import { builderItems } from './builderItems';
 import { dotColour, variantIcon } from './itemIcon';
 import { createModal, modalHeader } from './modal';
 
@@ -286,7 +286,7 @@ export function createOwlBuilder(root: HTMLElement, state: CollectionState, acti
 
   const renderItems = (kind: 'wear' | 'pet' | 'fx') => {
     const worn = new Set(Object.values(actions.wear() ?? {}));
-    const items = CATALOGUE.filter((i) => i.kind === kind);
+    const items = builderItems(kind);
     if (kind === 'wear') {
       for (const slot of ['head', 'face', 'neck'] as const) {
         const grid = el('div', 'grid');
@@ -322,7 +322,7 @@ export function createOwlBuilder(root: HTMLElement, state: CollectionState, acti
     detail.appendChild(what);
     const sel = selected;
     const slot = equipSlotOf(v);
-    if (!state.owns(sel)) detail.appendChild(el('div', 'what', v.item.reward ? 'Not yet yours: clear every course to earn it.' : 'Not yet yours: earn it on a quest, or look for it in the feather shop.'));
+    if (!state.owns(sel)) detail.appendChild(el('div', 'what', v.item.reward ? (v.item.id === 'hollow-moth' ? 'Not yet yours: escape the sealed hollow with friends to earn it.' : 'Not yet yours: clear every course to earn it.') : 'Not yet yours: earn it on a quest, or look for it in the feather shop.'));
     else if (slot) {
       const on = actions.wear()?.[slot] === sel;
       detail.appendChild(

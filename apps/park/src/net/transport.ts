@@ -1,5 +1,5 @@
 import type { PartyKey, PartyOp, ServerParty, ServerStump } from '@owl-park/shared';
-import type { Air, ClosedView, FeedbackDraft, LineStatus, OwlAccount, OwlLook, OwlPicture, ParkMessage, PlayerState, PortraitLook, RealmsSettings, ReferralRefusal, ReferralView, Vec2, Walk } from '@owl-park/shared';
+import type { Air, ClosedView, EscapeAct, FeedbackDraft, LineStatus, OwlAccount, OwlLook, OwlPicture, ParkMessage, PlayerState, PortraitLook, PuzzleSymbol, RealmsSettings, ReferralRefusal, ReferralView, ServerEscape, Vec2, Walk } from '@owl-park/shared';
 import type { ActivityLink, ActivityPushes, CourseLink, NestLink, NestPushes, QuestLink, QuestPushes } from '../collect/service';
 import type { TicketLink } from './ticketLinks';
 
@@ -59,6 +59,8 @@ export interface RoomHandlers extends QuestPushes, ActivityPushes, NestPushes {
   onTicketEnded?(): void;
   /** Whether this owl walks the park as a spectator (OP-191): said with every welcome, and false once a ticket admits it in place. */
   onSpectator?(spectator: boolean): void;
+  /** The sealed hollow (OP-310): its run as it now stands, pushed when another owl moved it, or what this owl's escape earned. Times on this page's clock. */
+  onEscape?(f: ServerEscape): void;
   /** The Old Stump's seats (OP-314): the room's answer to a party frame there, or the seats as they changed. */
   onStump?(frame: ServerStump): void;
   /** A party game as it stands, an owl's input in its minigame, or what it paid (OP-314). */
@@ -70,6 +72,11 @@ export interface RoomHandlers extends QuestPushes, ActivityPushes, NestPushes {
 /** The party game (OP-314) through the room server: what a page asks at the stump and in a game. */
 export interface PartyLink {
   send(op: PartyOp, more?: { bots?: boolean; k?: PartyKey; v?: number }): void;
+}
+
+/** The sealed hollow's steps (OP-310), checked by the room server; the answer's times on this page's clock. */
+export interface EscapeLink {
+  ask(a: EscapeAct, args?: { lock?: string; n?: number; code?: PuzzleSymbol[]; vine?: string }): Promise<ServerEscape>;
 }
 
 export interface RoomConnection {
@@ -86,6 +93,8 @@ export interface RoomConnection {
   course?: CourseLink;
   /** The nests on the street and in a nest, kept by the same server. */
   nests?: NestLink;
+  /** The sealed hollow's doorway and its run, kept by the same server (OP-310). */
+  escape?: EscapeLink;
   /** The room server's clock now (ms), as this socket has reckoned it: what the room's gusts keep time by (updraft.ts). */
   serverNow?(): number;
   /** Drop the socket as a bad network would (the room server only); it reconnects on its own. For the browser tests. */

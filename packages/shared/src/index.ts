@@ -65,4 +65,5 @@ export * from './kitSlots';
 export * from './kitCatalog';
 export * from './raster';
 export * from './puzzleQuests';
+export * from './escape';
 export * from './party';

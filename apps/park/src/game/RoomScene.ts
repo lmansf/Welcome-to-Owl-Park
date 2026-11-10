@@ -151,6 +151,7 @@ import { OPEN_ENTRY, type ConnectionStatus, type Entry, type ParkTransport, type
 import type { Ribbon } from '../ui/ribbon';
 import { openPosOverlay, type PosOverlay } from '../ui/posOverlay';
 import { keeperToken } from '../net/keeper';
+import type { EscapeLink } from '../net/transport';
 import type { Away } from '../ui/away';
 import { castVote } from '../net/vote';
 import { GATED_ROOMS, NEST_MIRROR, ROOMS, TREE_ARRIVAL, getRoom, groundOf, roomFor, roomOnMap } from '../rooms';
@@ -177,6 +178,7 @@ import { WindStreaks } from './windStreaks';
 import { BrushInk } from './brushInk';
 import { NeonSigns } from './neonSigns';
 import { courseFor, drawPlaceholderRoom, type Course } from './course';
+import { ESCAPE_WORDS, escapeFor, type EscapeDoorway, type EscapeHollow } from './escapeRoom';
 import { TRIAL_BACKDROP_VEIL, trialBackdropVeiled } from './skinTrial';
 import { PUZZLE_ART_KEYS, artScale, drawnAsSizeBox, drawsSkinTrial, loadArt, opensSoft, prefetchRoomArt, releaseArt, roomArtCap, roomArtKeys, roomOpeningArt, sharpCopy, sharpenArt } from './art';
 import { SpeechBubbles } from './bubbles';
@@ -552,6 +554,10 @@ export class RoomScene extends Phaser.Scene {
   private climb: Climb | null = null;
   /** The parkour course, in a room that is one of its acts (OP-224); the owl holds the dash there. */
   private course: Course | null = null;
+  /** The sealed hollow (OP-310, `?friends=1`): its run in an escape room, its doorway in the grove; the link to both. */
+  private hollow: EscapeHollow | null = null;
+  private doorway: EscapeDoorway | null = null;
+  private escapeLink: EscapeLink | null = null;
   private courseLink: CourseLink | null = null;
   /** Dashes this page made in this room, for the tests. */
   private dashes = 0;
@@ -1008,6 +1014,16 @@ export class RoomScene extends Phaser.Scene {
       awarded: () => void this.collection.refresh(),
       hudRoot: () => document.getElementById('hud'),
     });
+    ({ hollow: this.hollow, doorway: this.doorway } = escapeFor(room, {
+      scene: this,
+      hud: this.hud,
+      link: () => this.escapeLink,
+      me: () => ({ pos: { ...this.me.pos }, ground: this.groundNow(), walking: this.me.walking }),
+      goTo: (to, spawn) => void this.goTo(to, spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined }),
+      feathers: (total) => this.collection.setFeathers(total),
+      awarded: () => void this.collection.refresh(),
+      hudRoot: () => document.getElementById('hud'),
+    }));
     this.hud.setDash(this.flier.dash !== undefined);
     // Calm motion (a setting) stills the drifting particles, at once and in every room after.
     const ambience = addAmbience(this, room);
@@ -1168,6 +1184,7 @@ export class RoomScene extends Phaser.Scene {
       this.checkItems(now);
       this.checkPuzzles(now);
       this.course?.tick(now);
+      this.hollow?.tick(now);
       this.updrafts?.update(now + this.clockSkew());
       this.updateHints();
       this.rest(now);
@@ -1256,6 +1273,7 @@ export class RoomScene extends Phaser.Scene {
         this.hud.setParkCount(Object.values(rooms).reduce((a, b) => a + b, 0));
       },
       onFull: (roomId, spectators) => live() && void this.roomFull(roomId, spectators === true),
+      onEscape: (f) => live() && this.hollow?.onEscape(f),
       onSpectator: (on) => live() && this.setSpectator(on),
       onQueued: () => live() && this.queued(),
       onNotice: (words) => live() && (this.registry.get('ribbon') as Ribbon | undefined)?.set(words),
@@ -1314,6 +1332,8 @@ export class RoomScene extends Phaser.Scene {
       this.courseLink = this.collection.service.courseLink(this.room.id, conn, () => ({ ...this.me.pos }), () => this.groundNow());
       void this.course.connected();
     }
+    this.escapeLink = conn.escape ?? null;
+    if (this.hollow) void this.hollow.connected();
     if (isStreetRoom(this.room.id)) void this.askStreet();
     this.party?.attach(conn);
     // Arriving here counts for quests that ask for a visit (the room server counts it on its own).
@@ -2085,6 +2105,8 @@ export class RoomScene extends Phaser.Scene {
     // The glass realm's portal: the climb, while the keepers' switch has the portal live.
     portal: { label: 'Climb', run: () => (this.realms.portal ? void this.climb?.play() : this.hud.toast(PORTAL_OFF)) },
     mirror: { label: NEST_WORDS.mirror, run: () => this.lookInMirror() },
+    // The sealed hollow's doorway in the grove (OP-310), there only with `?friends=1`.
+    'escape-door': { label: ESCAPE_WORDS.door, run: () => void this.doorway?.open() },
   };
 
   /**
@@ -3270,10 +3292,12 @@ export class RoomScene extends Phaser.Scene {
     }
     // Standing in a doorway seen from the side: an up arrow over it, and Go in first among the actions
     // (the pad's Interact and E on a phone or a computer), which presses up (OP-212).
+    if (this.doorway?.at(pos)) spots.push('escape-door');
+    else this.doorway?.close();
     const here = side ? this.doorwayHere() : null;
     if (side) this.showUpHint(here);
     const goIn: Action[] = here ? [{ id: `door:${here.id}`, label: GO_IN, run: () => void this.upKey() }] : [];
-    this.actions = [...goIn, ...this.actionsHere(spots)];
+    this.actions = [...goIn, ...this.actionsHere(spots), ...(this.hollow?.actions() ?? [])];
     this.hud.setActions(this.actions.map(({ id, label }) => ({ id, label })));
     this.atIdol = spots.includes('idol');
     this.idolRealm = idolRealm;
@@ -3660,6 +3684,11 @@ export class RoomScene extends Phaser.Scene {
     this.climb = null;
     this.course?.destroy();
     this.course = null;
+    this.hollow?.destroy();
+    this.hollow = null;
+    this.doorway?.destroy();
+    this.doorway = null;
+    this.escapeLink = null;
     this.updrafts?.destroy();
     this.updrafts = null;
     this.winds?.destroy();

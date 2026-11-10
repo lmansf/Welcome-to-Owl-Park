@@ -24,6 +24,7 @@ import {
   type PuzzleView,
   type QuestBoard,
   type ServerAct,
+  type ServerEscape,
   type ServerFrame,
   type TaskView,
   type Vec2,
@@ -36,7 +37,7 @@ import { EmoteGate, MoveBudget } from './budget';
 import { keeperToken } from './keeper';
 import { pageLog } from './pageLog';
 import { goToGoogle } from './toGoogle';
-import { OPEN_ENTRY, type AccountConfirm, type AccountGoogle, type AccountLink, type Entry, type ReferralLink, type ReferralState, type LineLink, type ParkTransport, type RoomConnection, type RoomHandlers, type ScanReply, type TicketWallet, type WalletEntry } from './transport';
+import { OPEN_ENTRY, type AccountConfirm, type AccountGoogle, type AccountLink, type Entry, type EscapeLink, type ReferralLink, type ReferralState, type LineLink, type ParkTransport, type RoomConnection, type RoomHandlers, type ScanReply, type TicketWallet, type WalletEntry } from './transport';
 
 /** Remote owls are drawn this far behind the server clock so network jitter never shows. */
 const RENDER_DELAY_MS = 100;
@@ -55,7 +56,7 @@ const REPLY_TIMEOUT_MS = 6_000;
 
 /** A client frame that expects an answer, before its request number is added. */
 type Request = ClientFrame extends infer F ? (F extends { r: number } ? Omit<F, 'r'> : never) : never;
-type Answer = Extract<ServerFrame, { t: 'quests' | 'handin' | 'useResult' | 'refused' | 'act' | 'nest' | 'street' | 'admitted' | 'course' | 'puzzle' }>;
+type Answer = Extract<ServerFrame, { t: 'quests' | 'handin' | 'useResult' | 'refused' | 'act' | 'nest' | 'street' | 'admitted' | 'course' | 'puzzle' | 'escape' }>;
 
 const OFFLINE: QuestReply = { ok: false, reason: 'offline', board: null, updates: [] };
 
@@ -529,6 +530,23 @@ export class EdgeTransport implements ParkTransport {
       active: b.active.map((q) => (q.endsAt ? { ...q, endsAt: q.endsAt - offset } : q)),
     });
     /** A jammed lock's time is on the server clock too (OP-255). */
+    /** A sealed hollow's frame with its times on this page's clock (OP-310). */
+    const escapeHere = (f: ServerEscape): ServerEscape => {
+      if (!f.view) return f;
+      const v = f.view;
+      const at = (t: number | null) => (t ? t - offset : t);
+      return {
+        ...f,
+        view: {
+          ...v,
+          startedAt: at(v.startedAt),
+          endedAt: at(v.endedAt),
+          hintAt: v.hintAt ? v.hintAt - offset : 0,
+          vines: v.vines.map((x) => (x.tuggedAt ? { ...x, tuggedAt: x.tuggedAt - offset } : x)),
+          locks: v.locks.map((l) => (l.jammedUntil ? { ...l, jammedUntil: l.jammedUntil - offset } : l)),
+        },
+      };
+    };
     const puzzleHere = (v: PuzzleView): PuzzleView => ({ ...v, locks: v.locks.map((l) => (l.jammedUntil ? { ...l, jammedUntil: l.jammedUntil - offset } : l)) });
     const toLocalTasks = (t: TaskView): TaskView => ({ ...t, endsAt: t.endsAt - offset });
     const answer = (f: Answer) => {
@@ -713,6 +731,10 @@ export class EdgeTransport implements ParkTransport {
         case 'puzzle':
           // An answer, or a push after someone else in this owl's run moved it along (OP-255).
           if (!answer(f) && f.view) handlers.onPuzzle?.(f.quest, puzzleHere(f.view), f.board ? toLocalBoard(f.board) : undefined, f.updates);
+          break;
+        case 'escape':
+          // An answer, or a push after another owl of the group moved the run along (OP-310).
+          if (!answer(f)) handlers.onEscape?.(escapeHere(f));
           break;
         case 'handin':
         case 'useResult':
@@ -964,6 +986,12 @@ export class EdgeTransport implements ParkTransport {
       if (!f.ok) return { ok: false, reason: f.reason };
       return { ok: true, view: f.view, ...(f.first !== undefined ? { first: f.first } : {}), ...(f.at ? { at: f.at } : {}), ...(typeof f.top === 'number' && f.top > 0 ? { top: f.top } : {}), ...(f.paid ? { paid: f.paid } : {}) };
     };
+    const escape: EscapeLink = {
+      ask: async (a, args = {}) => {
+        const f = await request({ t: 'escape', a, ...args });
+        return f?.t === 'escape' ? escapeHere(f) : { t: 'escape', a, ok: false, reason: 'offline' };
+      },
+    };
     const course: CourseLink = {
       state: () => courseAsk('state'),
       start: () => courseAsk('start'),
@@ -1173,6 +1201,7 @@ export class EdgeTransport implements ParkTransport {
       acts,
       nests,
       course,
+      escape,
       track(state: PlayerState) {
         current = state;
         spawn = undefined;

@@ -25,6 +25,8 @@ import {
   PuzzleBook,
   QuestBook,
   acceptPuzzleAware,
+  payEscape,
+  type EscapePaid,
   puzzleRunsOf,
   puzzleStep,
   type PuzzleRequest,
@@ -377,6 +379,15 @@ export class Collections extends DurableObject<Env> {
    */
   async play(cid: string, feathers: number, ev: PlayEvent | null): Promise<PlayResult> {
     return this.book.play(cid, feathers, ev, Date.now());
+  }
+
+  /**
+   * The sealed hollow (OP-310): a ticket holder's escape, settled once per escape by the room object (which
+   * never asks this for a spectator): its feathers once a park day, the Hollow Moth the first time ever.
+   */
+  async escapePaid(cid: string, visit?: Visit): Promise<EscapePaid> {
+    // The Hollow Moth goes to the collection log with the visit it came in, as every collectible granted does.
+    return this.during(visit, () => payEscape(this.book, cid, Date.now()));
   }
 
   /**
