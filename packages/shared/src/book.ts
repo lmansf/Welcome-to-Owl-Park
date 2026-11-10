@@ -12,6 +12,7 @@ import type { QuestItemSpot } from './interactables';
 import { nextParkDayAt, parkDay } from './parktime';
 import { offerFor, shopRotation, type BuyResult, type GiftResult, type ShopView } from './shop';
 import { ROOM_LAYOUT, relayout } from '../rooms';
+import { PARTY_FEATHERS, PARTY_PAID_GAMES } from './party/game';
 
 /** What an activity paid, and what it did for today's tasks. */
 export interface PlayResult {
@@ -27,10 +28,11 @@ export const SOURCES: readonly Source[] = ['found', 'crafted', 'granted', 'bough
 
 /**
  * Things counted per collector and park day: feathers from leaf piles and from the activities (each
- * capped), today's gift, progress on each of the day's three tasks, and whether their bonus is paid.
+ * capped), today's gift, progress on each of the day's three tasks, and whether their bonus is paid;
+ * and the party games that paid feathers today (OP-314).
  */
-export type EarnSource = 'leaves' | 'gift' | 'play' | 'task-0' | 'task-1' | 'task-2' | 'tasks-bonus';
-export const EARN_SOURCES: readonly EarnSource[] = ['leaves', 'gift', 'play', 'task-0', 'task-1', 'task-2', 'tasks-bonus'];
+export type EarnSource = 'leaves' | 'gift' | 'play' | 'task-0' | 'task-1' | 'task-2' | 'tasks-bonus' | 'party-games';
+export const EARN_SOURCES: readonly EarnSource[] = ['leaves', 'gift', 'play', 'task-0', 'task-1', 'task-2', 'tasks-bonus', 'party-games'];
 const TASK_SOURCES = ['task-0', 'task-1', 'task-2'] as const;
 
 export interface CollectorRow {
@@ -181,6 +183,20 @@ export class CollectionBook {
   /** Feathers from an activity (lanterns, the quiz, fishing, the copy game), under their shared daily cap. */
   earnPlay(cid: string, n: number, now: number): { added: number; feathers: number } {
     return this.earnCapped(cid, 'play', n, PLAY_FEATHERS_PER_DAY, now);
+  }
+
+  /**
+   * A party game finished (OP-314): its feathers by the owl's place, for the first PARTY_PAID_GAMES of
+   * the park day; after that a game pays nothing, and says so. Apart from the activities' cap.
+   */
+  partyGame(cid: string, place: number, now: number): { added: number; total: number; games: number } {
+    const day = parkDay(now);
+    const games = this.store.earned(cid, day, 'party-games');
+    if (games >= PARTY_PAID_GAMES) return { added: 0, total: this.feathers(cid, now), games };
+    this.ensure(cid, undefined, now);
+    this.store.addEarned(cid, day, 'party-games', 1);
+    const added = PARTY_FEATHERS[Math.max(0, Math.min(PARTY_FEATHERS.length - 1, place - 1))]!;
+    return { added, total: this.addFeathers(cid, added, now), games: games + 1 };
   }
 
   /**

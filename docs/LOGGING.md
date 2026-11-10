@@ -228,6 +228,10 @@ carry `run_id` (the request's chaos run). **Socket fields** are `room`, `session
 | `climb_band_refused` | `collections.climb` | info | A band of the climb was refused | socket fields; `climb_ref`; `band`; `reason`: `idle`, `too-fast`, `forgotten` (`AscentResult`, `climbbook.ts`); `practice: true` (a spectator's run, OP-191) |
 | `spectator_refused` | `room.play` | info | A spectator asked for something locked to ticket holders (a quest, an NPC owl, a quest item, today's tasks; leaf piles, stalls and the moonbeam are open to it since OP-243), told once per socket; or a spectator's pass did not make it a full visitor, told each time (OP-191) | socket fields; `frame` (the first refused frame, or `admit`); for `admit`, `reason`: `pass`, `not-admitted`, `not-this-owl`, `before-socket` |
 | `spectator_admitted` | `room.join` | info | A spectator's ticket made it a full visitor in place (OP-191) | socket fields |
+| `party_started` | `room.play` | info | A party game began at the Old Stump, in its own room (OP-314) | socket fields; `owls` (visitors), `bots` (park owls in the other seats) |
+| `party_refused` | `room.play` | info | An owl was turned away at the Old Stump, or a start could not be (OP-314) | socket fields; `reason`: `full`, `closing`, `few` |
+| `party_ended` | `room.play` | info | A party game ended before its last round, once (OP-314) | `room`; `why`: `finished`, `restart`, `empty`; `round`; `owls` (visitors) |
+| `party_paid` | `room.play` | info | A finished party game's feathers reached one visitor (OP-314) | `room`; `place`; `feathers`; `games` (party games paid today) |
 | `read_failed` | many | error, warn | Something could not be read; what stands instead is in `msg`. Many places, below | below |
 | `write_failed` | many | error, warn | Something was not kept or not told; what follows is in `msg`. Many places, below | below |
 | `send_failed` | many | error, warn | A message or a close did not go. Several places, below | below |

@@ -3,6 +3,8 @@ import {
   EDGE_PROTOCOL_VERSION,
   HEARTBEAT_FRAME,
   HEARTBEAT_INTERVAL_MS,
+  STUMP_ROOM,
+  isPartyRoom,
   parseServerFrame,
   positionAlongWalk,
   readClosedView,
@@ -136,6 +138,8 @@ export class EdgeTransport implements ParkTransport {
   private opening = false;
   /** The latest entry (OP-075): every room's welcome renews it, and the line gives one to an owl it calls. */
   private entryToken: string | null = readEntry();
+  /** Which copy of the Party Grove this owl was last in (OP-314): a party game's room is in that copy's room server. */
+  private stumpCopy = 1;
 
   /** This screen's owl is on another screen now (OP-139): no pass, no socket, until it is brought back. */
   private moved = false;
@@ -495,7 +499,7 @@ export class EdgeTransport implements ParkTransport {
     /** When the socket dropped (it reconnects): the page's log tells the gap once the room has the owl again (OP-134). */
     let droppedAt: number | null = null;
     /** Which copy of the room the server put this owl in (OP-075): a dropped socket asks for the same one. */
-    let copy = 1;
+    let copy = isPartyRoom(roomId) ? this.stumpCopy : 1;
     /** Our id as the server knows it (from the pass), which differs from the scene's local id. */
     let selfId: string | null = null;
     const knownPeers = new Set<string>();
@@ -637,6 +641,7 @@ export class EdgeTransport implements ParkTransport {
           }
           handlers.onCounts?.(f.counts);
           copy = f.copy ?? 1;
+          if (roomId === STUMP_ROOM) this.stumpCopy = copy;
           this.keepEntry(f.entry);
           if (f.notice !== undefined) handlers.onNotice?.(f.notice);
           if (f.realms) handlers.onRealms?.(f.realms);
@@ -732,10 +737,18 @@ export class EdgeTransport implements ParkTransport {
           if (f.why === 'setup') setupSign = f.sign ?? '';
           else if (f.why === 'realm') handlers.onRealmClosed?.(f.sign ?? '');
           else if (f.why === 'gate') handlers.onNotThroughGate?.();
+          else if (f.why === 'party') handlers.onPartyClosed?.();
           else handlers.onNestClosed?.(f.why);
           break;
         case 'realms':
           handlers.onRealms?.(f.realms);
+          break;
+        case 'stump':
+          // The Old Stump's seats (OP-314): an answer and a push alike; times are none.
+          handlers.onStump?.(f);
+          break;
+        case 'party':
+          handlers.onParty?.(f);
           break;
         case 'restart':
           if (typeof f.words === 'string' && f.words) handlers.onRestartNotice?.(f.words);
@@ -1071,7 +1084,7 @@ export class EdgeTransport implements ParkTransport {
           handlers.onStatus('offline');
           return; // it waits in the line on the home screen
         }
-        if (ev.code === CLOSE.ROOM_FULL || ev.code === CLOSE.REPLACED || ev.code === CLOSE.NOT_ADMITTED || ev.code === CLOSE.NEST_CLOSED || ev.code === CLOSE.REALM_CLOSED || ev.code === CLOSE.NOT_THROUGH_GATE) {
+        if (ev.code === CLOSE.ROOM_FULL || ev.code === CLOSE.REPLACED || ev.code === CLOSE.NOT_ADMITTED || ev.code === CLOSE.NEST_CLOSED || ev.code === CLOSE.REALM_CLOSED || ev.code === CLOSE.NOT_THROUGH_GATE || ev.code === CLOSE.PARTY_CLOSED) {
           handlers.onStatus('offline');
           return; // the scene decides what to do; no reconnect loop
         }
@@ -1108,6 +1121,10 @@ export class EdgeTransport implements ParkTransport {
 
     return {
       serverNow: () => Date.now() + offset,
+      // The party game (OP-314): the room answers with `stump` and `party` frames, heard by the handlers.
+      party: {
+        send: (op, more = {}) => sendFrame({ t: 'party', op, r: ++lastR, ...more } as ClientFrame),
+      },
       send(msg: ParkMessage) {
         switch (msg.t) {
           case 'move':
