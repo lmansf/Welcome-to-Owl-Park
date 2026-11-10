@@ -1253,7 +1253,10 @@ export class RoomScene extends Phaser.Scene {
       onPeerSay: (id, n) => {
         if (!live()) return;
         const owl = this.peers.get(id);
-        if (owl) this.bubbles?.say(owl, n, Date.now());
+        if (!owl) return;
+        const now = Date.now();
+        this.bubbles?.say(owl, n, now);
+        if (now - this.saidAt >= 10_000) this.hud.offerReply(n);
       },
     };
     // The park the owl walks goes with the hello, so a nest's or a shared realm's stay is logged in the right one (OP-265).
@@ -3074,6 +3077,7 @@ export class RoomScene extends Phaser.Scene {
     const now = Date.now();
     if (now - this.saidAt < SAY_EVERY_MS) return false;
     this.saidAt = now;
+    this.hud.clearReply();
     this.bubbles?.say(this.me, n, now);
     this.conn?.send({ t: 'say', id: this.playerId, n });
     return true;
@@ -3639,6 +3643,7 @@ export class RoomScene extends Phaser.Scene {
     this.standKey = '';
     this.courseLink = null;
     this.hud.setDash(false);
+    this.hud.clearReply();
     this.bubbles?.clear();
     this.bubbles = null;
     this.trail?.destroy();
