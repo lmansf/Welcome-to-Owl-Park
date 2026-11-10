@@ -43,6 +43,41 @@ function watchProgress(page: Page): Promise<number[]> {
 }
 
 test.describe('the load screen (OP-129)', () => {
+  const entryModule = (url: URL) => url.pathname === '/src/main.ts' || /^\/assets\/index-[^/]+\.js$/.test(url.pathname);
+
+  test('a startup exception offers a fresh retry that opens the park (OP-267)', async ({ page }) => {
+    test.slow();
+    await page.route(entryModule, route => route.fulfill({ contentType: 'application/javascript', body: "throw new Error('forced startup failure');" }), { times: 1 });
+    await page.goto('/?transport=local');
+    const recovery = page.locator('[data-load-recovery]');
+    await expect(recovery.getByRole('alert')).toHaveText("The park didn't load this time.");
+    await expect(recovery).toBeVisible();
+    await recovery.getByRole('button', { name: 'Try again' }).click();
+    await expect(page).toHaveURL(/\bfresh=\d+/);
+    await expect(page.locator('[data-home-btn="login"]')).toBeVisible({ timeout: 30_000 });
+    await expect(recovery).toBeHidden();
+  });
+
+  test('a startup that never answers gets a recovery card after twenty seconds (OP-267)', async ({ page }) => {
+    await page.clock.install();
+    let release!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    await page.route(entryModule, async route => {
+      await held;
+      await route.continue().catch(() => undefined);
+    });
+    try {
+      await page.goto('/?transport=local', { waitUntil: 'commit' });
+      await expect(page.locator('.lo-words')).toBeVisible();
+      const recovery = page.locator('[data-load-recovery]');
+      await expect(recovery).toBeHidden();
+      await page.clock.fastForward(20_000);
+      await expect(recovery.getByRole('button', { name: 'Try again' })).toBeVisible();
+    } finally {
+      release();
+    }
+  });
+
   test('up from the first paint: the branch grows with the art, a fact after two seconds, a hoot at a tap, gone with the home screen', async ({ page }) => {
     // The owl's seven pictures come from 2.5 s on, so the screen is up well past its first fact.
     await slowArt(page, 2_500, 250);

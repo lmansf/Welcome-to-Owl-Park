@@ -4,6 +4,8 @@
  * put in it, keeps the claim link each fulfillment would have emailed, and lists the ticket
  * products on sale: an annual pass, and an Opening Night Ticket whose night is on. It stands in for
  * the park's mail sender too (MAIL_TEST_ORIGIN, OP-139): it keeps each mail instead of sending it.
+ * And for Google's sign-in page and token endpoint (GOOGLE_TEST_ORIGIN, OP-313): the sign-in page
+ * sends the browser straight back with a code for the email a test set, or with the player's no.
  *
  * Tests use:
  *   POST /test/orders  {id, order}  an order, as the Admin API would answer for it
@@ -17,7 +19,12 @@
  *                      {clear: true} ends them.
  *   POST /log                       the collection log (PARK_LOG_URL, OP-107) as the log function takes it
  *   GET  /test/log                  what it took: rows by kind, each event once, sends refused
+ *   POST /test/google  {email?, deny?}  who the next Google sign-ins are (deny: the player says no)
+ *   GET  /o/oauth2/v2/auth             Google's sign-in page: back to redirect_uri with a code and the state
+ *   POST /token                        Google's token endpoint: the code, this client and the PKCE verifier
+ *                                      checked, an ID token for that email (unsigned: the park relies on TLS)
  */
+import { createHash, randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
 
 const port = Number(process.argv[2] ?? 8790);
@@ -34,6 +41,10 @@ let faults = [];
 /** What the collection log took: batches, sends refused, rows by kind (each event once), events sent twice. */
 const logged = { batches: 0, refused: 0, rows: {}, ids: new Set(), twice: 0 };
 let night = false;
+/** Google's sign-in (OP-313): who the next sign-ins are, and the codes given, each good once. */
+let googleNext = { email: null, deny: false };
+const googleCodes = new Map();
+const b64url = (buf) => Buffer.from(buf).toString('base64url');
 
 const PRODUCTS = [
   { kind: { value: 'day' }, start: null, end: null, variants: { nodes: [{ id: 'gid://shopify/ProductVariant/41001' }] } },
@@ -79,9 +90,14 @@ function answer(op, variables) {
   }
 }
 
-async function body(req) {
+async function text(req) {
   let raw = '';
   for await (const chunk of req) raw += chunk;
+  return raw;
+}
+
+async function body(req) {
+  const raw = await text(req);
   return raw ? JSON.parse(raw) : {};
 }
 
@@ -148,6 +164,33 @@ createServer(async (req, res) => {
       return send(res, 200, { ok: true, rows: rows.length });
     }
     if (req.method === 'GET' && url.pathname === '/test/log') return send(res, 200, { batches: logged.batches, refused: logged.refused, rows: logged.rows, ids: logged.ids.size, twice: logged.twice });
+    if (req.method === 'POST' && url.pathname === '/test/google') {
+      googleNext = { email: null, deny: false, ...(await body(req)) };
+      return send(res, 200, { ok: true });
+    }
+    if (req.method === 'GET' && url.pathname === '/o/oauth2/v2/auth') {
+      const p = url.searchParams;
+      const to = new URL(p.get('redirect_uri') ?? '');
+      to.searchParams.set('state', p.get('state') ?? '');
+      if (googleNext.deny || !googleNext.email || p.get('code_challenge_method') !== 'S256' || p.get('scope') !== 'openid email') to.searchParams.set('error', 'access_denied');
+      else {
+        const code = `4/${randomBytes(12).toString('hex')}`;
+        googleCodes.set(code, { email: googleNext.email, client: p.get('client_id'), redirect: p.get('redirect_uri'), challenge: p.get('code_challenge'), nonce: p.get('nonce') });
+        to.searchParams.set('code', code);
+      }
+      res.writeHead(302, { Location: to.toString() });
+      return res.end();
+    }
+    if (req.method === 'POST' && url.pathname === '/token') {
+      const form = new URLSearchParams(await text(req));
+      const given = googleCodes.get(form.get('code') ?? '');
+      googleCodes.delete(form.get('code') ?? '');
+      const challenge = b64url(createHash('sha256').update(form.get('code_verifier') ?? '').digest());
+      if (!given || given.client !== form.get('client_id') || given.redirect !== form.get('redirect_uri') || given.challenge !== challenge || !form.get('client_secret')) return send(res, 400, { error: 'invalid_grant' });
+      const now = Math.floor(Date.now() / 1000);
+      const claims = { iss: 'https://accounts.google.com', aud: given.client, azp: given.client, sub: '1', email: given.email, email_verified: true, iat: now, exp: now + 3600, nonce: given.nonce };
+      return send(res, 200, { access_token: 'stand-in', token_type: 'Bearer', id_token: `${b64url(JSON.stringify({ alg: 'none' }))}.${b64url(JSON.stringify(claims))}.c2ln` });
+    }
     if (url.pathname === '/health') return send(res, 200, { ok: true });
     send(res, 404, { error: 'not found' });
   } catch (e) {

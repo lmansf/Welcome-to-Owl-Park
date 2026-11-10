@@ -150,6 +150,9 @@ export const E2E_ADMIN_KEY = 'e2e-only-admin-key-not-a-secret';
 export const E2E_ACCOUNTS = {
   secret: 'e2e-only-account-secret-not-a-secret',
   from: 'owls@e2e.test',
+  /** Sign in with Google's OAuth client in these tests (OP-313): Google is the stand-in store's machine. */
+  googleClientId: 'owl-park-e2e.apps.googleusercontent.com',
+  googleClientSecret: 'e2e-only-google-secret-not-a-secret',
 };
 
 export const E2E_STORE = {

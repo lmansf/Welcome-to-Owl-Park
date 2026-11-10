@@ -2,10 +2,12 @@
  * The owl's account on the page (OP-139), with the park's accounts on: its friend code and whether
  * an email protects it (the Menu's Nest tab), the box the player types an email in (to protect this
  * owl, or to bring one to this screen), the owls a restore link shows as pictures to tap, and the
- * card a screen gets when its owl has moved to another one.
+ * card a screen gets when its owl has moved to another one. Beside the email box, while the park offers
+ * it, Sign in with Google (OP-313): never needed, and an email link always works instead.
  */
 import { speciesOf, type OwlAccount, type OwlPicture, type PortraitLook } from '@owl-park/shared';
-import type { AccountLink, AccountSend } from '../net';
+import type { AccountGoogle, AccountLink, AccountSend } from '../net';
+import type { GoogleNote } from '../net/accountLinks';
 import { createModal, modalHeader } from './modal';
 
 /** Every word the account screens show (for the owner's approval before ACCOUNTS goes on). */
@@ -48,6 +50,24 @@ export const ACCOUNT_WORDS = {
   movedBack: 'Bring it back here',
   movedNew: 'Make a new owl here',
   movedNewSure: 'Make a new owl on this screen? Your other owl stays safe on its own screen.',
+  // Sign in with Google (OP-313), beside the email box.
+  or: 'or',
+  google: 'Sign in with Google',
+  googleNote: 'Google tells the park your email and nothing else. An email link works just as well.',
+  googleGoing: 'Going to Google…',
+  googleEnded: {
+    stopped: 'Google sign-in was stopped, and nothing changed. You can try again, or get an email link instead.',
+    failed: 'Google didn’t sign you in this time. Some Google accounts can’t be used here, and that’s OK: an email link works just as well.',
+  },
+  googleRefused: {
+    'not-ready': 'Google sign-in isn’t working just now. An email link works just as well.',
+    'try-later': 'That’s plenty of tries for now. Please try again in an hour, or get an email link.',
+    offline: 'The park can’t be reached just now. Try again in a moment.',
+  },
+  offerTitle: 'Protect this owl?',
+  offerLead: 'No owl is protected by that Google account yet. You can protect the owl on this screen with it, so it can come back on another screen.',
+  offerYes: 'Protect this owl',
+  offerNo: 'Not now',
 } as const;
 
 const SVG = 'http://www.w3.org/2000/svg';
@@ -84,6 +104,11 @@ const CSS = `
 #hud .account input{font:inherit;font-size:16px;padding:10px 12px;border-radius:12px;border:1px solid rgba(246,241,227,.25);background:rgba(246,241,227,.06);color:#F6F1E3}
 #hud .account input:focus{outline:2px solid #C9A227;outline-offset:1px}
 #hud .account .a-foot{display:flex;justify-content:flex-end;gap:10px}
+#hud .account .a-google{display:flex;flex-direction:column;gap:8px}
+#hud .account .a-google[hidden]{display:none}
+#hud .account .a-or{display:flex;align-items:center;gap:10px;margin:0;font-size:13px;opacity:.78}
+#hud .account .a-or::before,#hud .account .a-or::after{content:"";flex:1;border-top:1px solid rgba(246,241,227,.25)}
+#hud .account .a-google button{width:100%}
 #hud .account .a-owls{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:10px}
 #hud .account .a-owl{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 6px;min-height:150px;border-radius:16px;background:rgba(246,241,227,.06);border:1px solid rgba(246,241,227,.18);color:#F6F1E3;box-shadow:none}
 #hud .account .a-owl svg{width:64px;height:80px}
@@ -138,8 +163,12 @@ export function accountCard(account: OwlAccount, protect: (button: HTMLElement) 
 }
 
 export interface AccountScreens {
-  /** The box for the player's email: a link that protects this owl, or one that brings an owl here. */
-  openEmail(kind: 'protect' | 'restore', opener?: HTMLElement | null): void;
+  /** The box for the player's email: a link that protects this owl, or one that brings an owl here (with Sign in with Google beside it, OP-313). */
+  openEmail(kind: 'protect' | 'restore', opener?: HTMLElement | null, note?: string): void;
+  /** A Google sign-in came back with an email that protects no owl (OP-313): offer to protect this screen's owl with it. */
+  openOffer(token: string): void;
+  /** A Google sign-in went no further (OP-313): say so kindly, and the email box is there again. */
+  googleEnded(note: GoogleNote): void;
   /** A restore link opened: its email's owls, as pictures to tap. */
   openPictures(token: string): void;
   /** A protect link opened: protect its owl, and say so. */
@@ -165,7 +194,7 @@ export function createAccountScreens(root: HTMLElement, link: AccountLink, deps:
   const modal = createModal(root, { name: 'account', label: ACCOUNT_WORDS.protectTitle, layout: 'card', sheet: false });
   const box = modal.box;
 
-  const openEmail = (kind: 'protect' | 'restore', opener?: HTMLElement | null) => {
+  const openEmail = (kind: 'protect' | 'restore', opener?: HTMLElement | null, note?: string) => {
     box.innerHTML = '';
     box.dataset['account'] = kind;
     box.setAttribute('aria-label', kind === 'protect' ? ACCOUNT_WORDS.protectTitle : ACCOUNT_WORDS.restoreTitle);
@@ -187,7 +216,29 @@ export function createAccountScreens(root: HTMLElement, link: AccountLink, deps:
     send.dataset['accountSend'] = '';
     const foot = el('div', 'a-foot');
     foot.appendChild(send);
-    box.append(lead, label, el('p', 'a-note', ACCOUNT_WORDS.privacy), status, foot);
+    // Sign in with Google (OP-313): shown only once the park says it is ready, under the email's button.
+    const googleBox = el('div', 'a-google');
+    googleBox.hidden = true;
+    const google = el('button', 'ghost', ACCOUNT_WORDS.google);
+    google.dataset['accountGoogle'] = '';
+    googleBox.append(el('p', 'a-or', ACCOUNT_WORDS.or), google, el('p', 'a-note', ACCOUNT_WORDS.googleNote));
+    box.append(lead, label, el('p', 'a-note', ACCOUNT_WORDS.privacy), status, foot, googleBox);
+    if (note) status.textContent = note;
+    void link.googleReady().then((ready) => {
+      if (ready && googleBox.isConnected) googleBox.hidden = false;
+    });
+    google.onclick = () => {
+      if (google.disabled) return;
+      google.disabled = true;
+      send.disabled = true;
+      status.textContent = ACCOUNT_WORDS.googleGoing;
+      // The page goes to Google; this comes back only when it could not.
+      void link.google(kind).then((r: AccountGoogle) => {
+        google.disabled = false;
+        send.disabled = false;
+        status.textContent = ACCOUNT_WORDS.googleRefused[r];
+      });
+    };
     const go = async () => {
       if (send.disabled) return;
       send.disabled = true;
@@ -200,6 +251,7 @@ export function createAccountScreens(root: HTMLElement, link: AccountLink, deps:
       }
       // Sent: the box gives way to what happens next.
       lead.textContent = ACCOUNT_WORDS.sent[kind];
+      googleBox.remove();
       label.remove();
       status.textContent = '';
       send.textContent = ACCOUNT_WORDS.done;
@@ -265,6 +317,32 @@ export function createAccountScreens(root: HTMLElement, link: AccountLink, deps:
     if (r.mine) deps.changed();
   };
 
+  const openOffer = (token: string) => {
+    box.innerHTML = '';
+    box.dataset['account'] = 'offer';
+    box.setAttribute('aria-label', ACCOUNT_WORDS.offerTitle);
+    box.appendChild(modalHeader(ACCOUNT_WORDS.offerTitle, { onClose: () => modal.close(), closeLabel: 'Close' }));
+    const yes = el('button', undefined, ACCOUNT_WORDS.offerYes);
+    yes.dataset['accountOffer'] = '';
+    const no = el('button', 'ghost', ACCOUNT_WORDS.offerNo);
+    const foot = el('div', 'a-foot');
+    foot.append(no, yes);
+    box.append(el('p', 'a-lead', ACCOUNT_WORDS.offerLead), foot);
+    no.onclick = () => modal.close();
+    yes.onclick = () => {
+      modal.close();
+      void confirm(token);
+    };
+    modal.open();
+  };
+
+  const googleEnded = (note: GoogleNote) => {
+    const words = ACCOUNT_WORDS.googleEnded[note.ended];
+    // The email box again, for what the sign-in was for, with the line in it; a toast when the park could not say.
+    if (note.for) openEmail(note.for, null, words);
+    else deps.toast(words, 8000);
+  };
+
   // The moved card: over everything, and nothing behind it answers until it goes.
   const moved = el('div', 'moved-card');
   moved.hidden = true;
@@ -298,6 +376,8 @@ export function createAccountScreens(root: HTMLElement, link: AccountLink, deps:
   return {
     openEmail,
     openPictures,
+    openOffer,
+    googleEnded,
     confirm,
     showMoved() {
       if (isMoved) return;

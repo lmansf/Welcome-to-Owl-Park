@@ -1,0 +1,36 @@
+name: Fresh visitor
+
+# Explicit opt-in: each enabled run creates two guest owls through the ordinary park entry.
+on:
+  schedule:
+    - cron: '45 9 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fresh-visitor
+  cancel-in-progress: false
+
+jobs:
+  visit:
+    if: vars.PARK_FRESH_VISITOR_URL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PARK_FRESH_VISITOR_URL: ${{ vars.PARK_FRESH_VISITOR_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @owl-park/park exec playwright install --with-deps chromium
+      - run: pnpm --filter @owl-park/park exec playwright test --config=playwright.fresh-visitor.config.ts
