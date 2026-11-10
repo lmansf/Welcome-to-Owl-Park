@@ -167,6 +167,8 @@ export interface Attachment {
   spec?: true;
   /** When the ticket that let this owl in runs out, in ms (OP-237): the socket closes then, on a frame or the alarm. */
   until?: number;
+  /** One of our own test visits (the Worker's X-Test-Visit): its visit goes to the log marked, for the reports to leave out. */
+  test?: true;
   /**
    * When its owl last did something (OP-245): any frame but a hello, a goodbye or falling asleep, marked
    * at most once a minute. A socket that only heartbeats has none, and the alarm closes it.
@@ -210,15 +212,15 @@ interface LeaveWhy {
 }
 
 /** The visit a socket's owl is on, as the collection log takes it: its pass's id, its device and its room. */
-function visitOf(att: Pick<Attachment, 'id' | 'device' | 'room'>): Visit {
-  return { pass: att.id, device: att.device ?? null, room: att.room };
+function visitOf(att: Pick<Attachment, 'id' | 'device' | 'room' | 'test'>): Visit {
+  return { pass: att.id, device: att.device ?? null, room: att.room, ...(att.test ? { test: true } : {}) };
 }
 
 /**
  * A socket's owl as the player stats see it (OP-111): its collector and its visit, and inside the park
  * whether it is a spectator (OP-192), so the log counts free owls beside paid ones. Null without a collector.
  */
-export function sightingOf(att: Pick<Attachment, 'cid' | 'id' | 'device' | 'room' | 'spec'> | null): Sighting | null {
+export function sightingOf(att: Pick<Attachment, 'cid' | 'id' | 'device' | 'room' | 'spec' | 'test'> | null): Sighting | null {
   if (!att?.cid) return null;
   return { cid: att.cid, ...visitOf(att), ...(insidePark(att.room) ? { spec: att.spec === true } : {}) };
 }
@@ -913,6 +915,8 @@ export class RoomObject extends DurableObject<Env> {
     if (entry && entry.length <= 512) att.entry = entry;
     const device = deviceClass(request.headers.get('User-Agent'), request.headers.get('Sec-CH-UA-Mobile'));
     if (device) att.device = device;
+    // One of our own test visits: the Worker's word only.
+    if (request.headers.get('X-Test-Visit') === '1') att.test = true;
     server.serializeAttachment(att);
     await this.freshNotice();
     await this.ensureAlarm();

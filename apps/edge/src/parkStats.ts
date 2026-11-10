@@ -83,7 +83,7 @@ export interface StatsLook {
 
 const SPECIES_IDS = new Set<string>(SPECIES.map((s) => s.id));
 
-type VisitRow = { pass: string; cid: string; started: number; seen: number; device: string | null; rooms: string; gained: number; kind: string | null };
+type VisitRow = { pass: string; cid: string; started: number; seen: number; device: string | null; rooms: string; gained: number; kind: string | null; test: number | null };
 /** A time in one room: `place` is the room's own id (which nest it was), kept here only; `room` is the log's name for it. */
 type RoomTime = { pass: string; seq: number; cid: string; place: string; room: string; entered: number; exited: number | null; source: EntrySource; gained: number };
 /**
@@ -105,6 +105,8 @@ export class ParkStats {
     // Visits kept before OP-192 have no kind: they go to the log without one, as visits before spectators did.
     const visitColumns = sql.exec<{ name: string }>(`PRAGMA table_info(stats_visits)`).toArray();
     if (!visitColumns.some((c) => c.name === 'kind')) sql.exec(`ALTER TABLE stats_visits ADD COLUMN kind TEXT`);
+    // Visits kept before test visits were marked count as players', as they did.
+    if (!visitColumns.some((c) => c.name === 'test')) sql.exec(`ALTER TABLE stats_visits ADD COLUMN test INTEGER`);
     sql.exec(
       `CREATE TABLE IF NOT EXISTS stats_rooms (pass TEXT NOT NULL, seq INTEGER NOT NULL, cid TEXT NOT NULL, place TEXT NOT NULL, room TEXT NOT NULL, entered INTEGER NOT NULL, exited INTEGER, source TEXT NOT NULL, gained INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (pass, seq))`,
     );
@@ -168,6 +170,7 @@ export class ParkStats {
         rooms: rooms(v.rooms),
         gained: v.gained,
         kind: v.kind === 'visitor' || v.kind === 'spectator' ? v.kind : null,
+        test: v.test === 1,
       });
       // The room the owl was last in ends when the visit was last seen.
       const times = this.sql.exec<RoomTime>(`SELECT * FROM stats_rooms WHERE pass = ? ORDER BY seq`, v.pass).toArray();
@@ -246,15 +249,17 @@ export class ParkStats {
     if (!v.pass) return;
     // Past the turnstiles (OP-192): a full visitor's socket makes the visit a visitor's for good; a spectator's, a spectator's until then.
     const seenAs: VisitorKind | null = s.spec === true ? 'spectator' : s.spec === false ? 'visitor' : null;
+    // One of our own test visits: a socket of it that says so marks the visit for good.
+    const test = s.test === true ? 1 : 0;
     const was = this.sql.exec<VisitRow>(`SELECT * FROM stats_visits WHERE pass = ?`, v.pass).toArray()[0];
     if (!was) {
-      this.sql.exec(`INSERT INTO stats_visits (pass, cid, started, seen, device, rooms, kind) VALUES (?, ?, ?, ?, ?, ?, ?)`, v.pass, s.cid, now, now, v.device, JSON.stringify(v.room ? [v.room] : []), seenAs);
+      this.sql.exec(`INSERT INTO stats_visits (pass, cid, started, seen, device, rooms, kind, test) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, v.pass, s.cid, now, now, v.device, JSON.stringify(v.room ? [v.room] : []), seenAs, test);
       return;
     }
     const list = rooms(was.rooms);
     if (v.room && !list.includes(v.room)) list.push(v.room);
     const kind = was.kind === 'visitor' || seenAs === 'visitor' ? 'visitor' : (seenAs ?? was.kind);
-    this.sql.exec(`UPDATE stats_visits SET seen = MAX(seen, ?), device = COALESCE(device, ?), rooms = ?, kind = ? WHERE pass = ?`, now, v.device, JSON.stringify(list), kind, v.pass);
+    this.sql.exec(`UPDATE stats_visits SET seen = MAX(seen, ?), device = COALESCE(device, ?), rooms = ?, kind = ?, test = MAX(COALESCE(test, 0), ?) WHERE pass = ?`, now, v.device, JSON.stringify(list), kind, test, v.pass);
   }
 
   /**

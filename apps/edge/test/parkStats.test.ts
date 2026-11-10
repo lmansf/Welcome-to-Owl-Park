@@ -93,6 +93,7 @@ describe('the player stats (OP-111)', () => {
         collectibles_gained: 2,
         // The room server said nothing of spectators: a visit from before OP-192 goes without a kind.
         visitor_kind: null,
+        is_test: false,
       },
     ]);
     // Nothing that names the owl or its pass leaves.
@@ -132,6 +133,38 @@ describe('the player stats (OP-111)', () => {
       [new Date(MON + 1_000).toISOString()]: 'visitor',
       [new Date(MON + 2_000).toISOString()]: null,
     });
+  });
+
+  it('marks a visit one of our own tests once any of its sockets said so, and only that visit', async () => {
+    const t = rig();
+    const marks = async () => Object.fromEntries((await t.sent<SessionRow>('session')).map((s) => [s.started_at, s.is_test]));
+    // A scripted check: its first socket already says so.
+    t.stats.seen({ ...ME, pass: 'v_scripted01', room: 'm3-hall', test: true }, BARN, MON);
+    // A test that says so only from its second room on is still one, for the whole visit.
+    t.stats.seen({ ...ME, pass: 'v_scripted02', room: 'lobby' }, BARN, MON + 1_000);
+    t.stats.alive([{ ...ME, pass: 'v_scripted02', room: 'hub', test: true }], MON + 61_000);
+    t.stats.alive([{ ...ME, pass: 'v_scripted02', room: 'grove' }], MON + 62_000);
+    // A player's visit.
+    t.stats.seen({ ...ME, pass: 'v_player0001', room: 'lobby' }, BARN, MON + 2_000);
+    t.stats.close(MON + 3600_000);
+    expect(await marks()).toEqual({
+      [new Date(MON).toISOString()]: true,
+      [new Date(MON + 1_000).toISOString()]: true,
+      [new Date(MON + 2_000).toISOString()]: false,
+    });
+  });
+
+  it('adds the test mark to an object that kept visits before it, and sends those as players\' visits', async () => {
+    const sql = sqlStorage();
+    new SqlCollectionStore(sql);
+    sql.exec(`CREATE TABLE stats_visits (pass TEXT PRIMARY KEY, cid TEXT NOT NULL, started INTEGER NOT NULL, seen INTEGER NOT NULL, device TEXT, rooms TEXT NOT NULL, gained INTEGER NOT NULL DEFAULT 0, kind TEXT)`);
+    sql.exec(`INSERT INTO stats_visits (pass, cid, started, seen, device, rooms) VALUES (?, ?, ?, ?, ?, ?)`, PASS, CID, MON, MON, 'phone', '["hub"]');
+    const bodies: Array<{ kind: string; rows?: SessionRow[] }> = [];
+    const log = new CollectLog(sql, CONFIG, { fetch: async (_u, init) => (bodies.push(JSON.parse(String(init.body))), new Response('{"ok":true}')), now: () => MON, wake: () => undefined });
+    const stats = new ParkStats(sql, log);
+    stats.close(MON + 3600_000);
+    await log.flush();
+    expect(bodies.filter((b) => b.kind === 'session').flatMap((b) => b.rows!).map((r) => r.is_test)).toEqual([false]);
   });
 
   it('adds the visit kind to an object that kept visits before OP-192, and sends those without one', async () => {

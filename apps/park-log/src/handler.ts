@@ -124,6 +124,8 @@ export interface SessionRow {
   collectibles_gained: number;
   /** A full visitor's or a spectator's past the turnstiles, or null (never past them, or a Worker from before OP-192). */
   visitor_kind: (typeof VISITOR_KINDS)[number] | null;
+  /** One of our own test visits (scripted checks, bots, QA walks): kept, and left out of the reports. */
+  is_test: boolean;
 }
 
 /** A ticket event, for `game.fact_purchase` (OP-192). */
@@ -437,6 +439,9 @@ export function checkSession(v: unknown): SessionRow | string {
   // A Worker from before OP-192 sends none: the visit is kept without one.
   const kind = r['visitor_kind'] ?? null;
   if (kind !== null && !VISITOR_KINDS.includes(kind as SessionRow['visitor_kind'] & string)) return 'visitor_kind';
+  // A Worker from before test visits were marked sends none: the visit counts as a player's, as before.
+  const test = r['is_test'] ?? false;
+  if (typeof test !== 'boolean') return 'is_test';
   return {
     session_id: r['session_id'],
     collector_id: r['collector_id'],
@@ -446,6 +451,7 @@ export function checkSession(v: unknown): SessionRow | string {
     realms_entered: realms,
     collectibles_gained: gained,
     visitor_kind: kind as SessionRow['visitor_kind'],
+    is_test: test,
   };
 }
 
@@ -926,7 +932,7 @@ export interface Db {
 
 const LOG_COLUMNS = 'event_id, collector_id, collectible_id, collectible_type, realm, acquired_at, session_id, device_class, first_entry_at, backfill';
 const CATALOGUE_COLUMNS = 'collectible_id, kind, rarity, realm';
-const SESSION_COLUMNS = 'session_id, collector_id, started_at, ended_at, device_class, realms_entered, collectibles_gained, visitor_kind';
+const SESSION_COLUMNS = 'session_id, collector_id, started_at, ended_at, device_class, realms_entered, collectibles_gained, visitor_kind, is_test';
 const PURCHASE_COLUMNS = 'event_id, event, order_key, collector_id, occurred_at, ticket_kinds, tickets, amount_cents, upsell, held, via, valid_until';
 /** The owner's buyers (OP-192): a schema of their own, apart from the park's anonymous `game` tables. */
 export const CONTACTS_SCHEMA = 'contacts';
