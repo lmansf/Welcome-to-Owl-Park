@@ -1105,6 +1105,9 @@ describe('the player stats from the room object (OP-111)', () => {
     expect(sightingOf({ ...owl, room: 'hub' })).toMatchObject({ spec: false });
     for (const room of ['lobby', 'homes', 'nest-abcdefgh']) expect(sightingOf({ ...owl, room })).not.toHaveProperty('spec');
     expect(sightingOf({ id: PASS, room: 'hub' })).toBeNull();
+    // One of our own test visits (the Worker's X-Test-Visit) says so; a player's says nothing.
+    expect(sightingOf({ ...owl, room: 'm3-hall', test: true })).toMatchObject({ test: true });
+    expect(sightingOf({ ...owl, room: 'm3-hall' })).not.toHaveProperty('test');
   });
 
   it('tells the collections object of each owl that comes in, changes its look, is still here, and leaves', async () => {

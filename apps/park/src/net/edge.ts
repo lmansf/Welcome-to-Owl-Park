@@ -36,6 +36,7 @@ import { COLLECTOR_KEY } from '../identity';
 import { EmoteGate, MoveBudget } from './budget';
 import { keeperToken } from './keeper';
 import { pageLog } from './pageLog';
+import { testVisit } from './testVisit';
 import { goToGoogle } from './toGoogle';
 import { OPEN_ENTRY, type AccountConfirm, type AccountGoogle, type AccountLink, type Entry, type EscapeLink, type ReferralLink, type ReferralState, type LineLink, type ParkTransport, type RoomConnection, type RoomHandlers, type ScanReply, type TicketWallet, type WalletEntry } from './transport';
 
@@ -1037,7 +1038,8 @@ export class EdgeTransport implements ParkTransport {
       welcomed = false;
       opened = false;
       // The entry lets an owl that was inside back in while the park has a line; a dropped socket asks for its own copy.
-      const extra = `${this.entryToken ? `&entry=${encodeURIComponent(this.entryToken)}` : ''}${copy > 1 ? `&copy=${copy}` : ''}`;
+      // One of our own test visits says so (testVisit.ts), so the log keeps it out of the visitor counts.
+      const extra = `${this.entryToken ? `&entry=${encodeURIComponent(this.entryToken)}` : ''}${copy > 1 ? `&copy=${copy}` : ''}${testVisit ? '&test=1' : ''}`;
       const socket = new WebSocket(`${wsBase}/ws/${encodeURIComponent(roomId)}?pass=${encodeURIComponent(pass.pass)}${extra}`);
       ws = socket;
       socket.onopen = () => {

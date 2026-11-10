@@ -7,6 +7,7 @@ import {
   collectibleType,
   deviceClass,
   furnitureId,
+  isTestVisit,
   logConfig,
   logRoom,
   orderKey,
@@ -84,6 +85,14 @@ describe('the collection log (OP-107)', () => {
     expect(logConfig({ ...env, PARK_LOG_URL: 'http://log.example/x' })).toBeNull();
     expect(logConfig({ ...env, PARK_LOG_URL: 'not a url' })).toBeNull();
     expect(logConfig({ ...env, PARK_LOG_URL: 'http://localhost:8790/log' })?.url).toBe('http://localhost:8790/log');
+  });
+
+  it('tells our own test visits by the page\'s word or a headless browser, and a player\'s visit as none', () => {
+    expect(isTestVisit('1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0 Safari/537.36')).toBe(true);
+    expect(isTestVisit(null, 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 HeadlessChrome/141.0.0.0 Safari/537.36')).toBe(true);
+    expect(isTestVisit(null, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0 Safari/537.36')).toBe(false);
+    expect(isTestVisit('0', null)).toBe(false);
+    expect(isTestVisit(null, null)).toBe(false);
   });
 
   it('tells a phone from a desktop and nothing finer, and names rooms by their neutral ids', () => {

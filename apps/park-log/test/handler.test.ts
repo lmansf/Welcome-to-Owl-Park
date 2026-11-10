@@ -323,7 +323,7 @@ describe('the player stats (OP-111)', () => {
     expect(await (await post({ kind: 'player', rows: [version(1), version(2, { owl_type: 'snowy', change_reason: 'chosen' })] }, { tables })).json()).toEqual({ ok: true, kept: 2, duplicates: 0, skipped: 0 });
     expect(await (await post({ kind: 'player', rows: [version(1)] }, { tables })).json()).toEqual({ ok: true, kept: 0, duplicates: 1, skipped: 0 });
     expect(await (await post({ kind: 'session', rows: [visit(10), visit(10)] }, { tables })).json()).toEqual({ ok: true, kept: 1, duplicates: 1, skipped: 0 });
-    expect(tables.sessions[0]).toEqual({ ...visit(10), visitor_kind: null });
+    expect(tables.sessions[0]).toEqual({ ...visit(10), visitor_kind: null, is_test: false });
   });
 
   it('takes an owl kind only from the fixed list and a colour only as a hex value, and a visit only forwards in time', () => {
@@ -334,8 +334,11 @@ describe('the player stats (OP-111)', () => {
     expect(checkPlayer(version(1, { change_reason: 'because' }))).toBe('change_reason');
     expect(checkPlayer(version(1, { collector_id: 'c_abcdefghij' }))).toBe('collector_id');
     // A visit from a Worker before OP-192 has no kind: kept without one.
-    expect(checkSession(visit(1))).toEqual({ ...visit(1), visitor_kind: null });
-    expect(checkSession(visit(1, { visitor_kind: 'spectator' }))).toEqual(visit(1, { visitor_kind: 'spectator' }));
+    expect(checkSession(visit(1))).toEqual({ ...visit(1), visitor_kind: null, is_test: false });
+    expect(checkSession(visit(1, { visitor_kind: 'spectator' }))).toEqual(visit(1, { visitor_kind: 'spectator', is_test: false }));
+    // One of our own test visits is kept, marked; a Worker from before the mark sends none (a player's visit).
+    expect(checkSession(visit(1, { is_test: true }))).toEqual({ ...visit(1), visitor_kind: null, is_test: true });
+    expect(checkSession(visit(1, { is_test: 'yes' }))).toBe('is_test');
     expect(checkSession(visit(1, { visitor_kind: 'free' }))).toBe('visitor_kind');
     expect(checkSession(visit(1, { ended_at: '2026-10-19T15:59:00.000Z' }))).toBe('ended_at');
     expect(checkSession(visit(1, { realms_entered: -1 }))).toBe('realms_entered');

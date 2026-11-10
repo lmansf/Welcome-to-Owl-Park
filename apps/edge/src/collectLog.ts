@@ -104,6 +104,15 @@ export function deviceClass(userAgent: string | null, mobileHint: string | null)
   return /Mobi|Android|iPhone|iPad|iPod/i.test(userAgent) ? 'phone' : 'desktop';
 }
 
+/**
+ * One of our own test visits (the scripted checks, playtest bots, QA walks): the page says so on its
+ * socket (`test=1`, apps/park/src/net/testVisit.ts: an automated browser or `?test=1`), or a headless
+ * browser's own user agent gives it away. The visit is kept, marked, and left out of the visitor counts.
+ */
+export function isTestVisit(testParam: string | null, userAgent: string | null): boolean {
+  return testParam === '1' || (userAgent !== null && /HeadlessChrome/.test(userAgent));
+}
+
 /** What the caller knows of the visit a collectible came in. */
 export interface Visit {
   /** The pass's visitor id: one per page load, so one per visit. It leaves only as a salted hash. */
@@ -111,6 +120,8 @@ export interface Visit {
   device?: DeviceClass | null;
   /** The room it happened in, when it happened in one (a socket's room; a nest of any owl is `nest`). */
   room?: string | null;
+  /** One of our own test visits (`isTestVisit`), by the Worker's word. */
+  test?: boolean;
 }
 
 const PASS_ID = /^v_[A-Za-z0-9]{6,24}$/;
@@ -325,6 +336,8 @@ export interface SessionData {
   gained: number;
   /** What the visit was past the turnstiles (OP-192): a full visitor's, a spectator's, or null for one that never went past them. */
   kind?: 'visitor' | 'spectator' | null;
+  /** One of our own test visits (a socket of it said so): kept in the log, left out of the counts. */
+  test?: boolean;
 }
 
 /** A visit as the log takes it: the same session id as its collection rows. */
@@ -337,6 +350,8 @@ export interface SessionRow {
   realms_entered: number;
   collectibles_gained: number;
   visitor_kind: 'visitor' | 'spectator' | null;
+  /** One of our own test visits: the reports leave it out. */
+  is_test: boolean;
 }
 
 async function sessionRow(salt: string, d: SessionData): Promise<SessionRow> {
@@ -349,6 +364,7 @@ async function sessionRow(salt: string, d: SessionData): Promise<SessionRow> {
     realms_entered: d.rooms.length,
     collectibles_gained: d.gained,
     visitor_kind: d.kind === 'visitor' || d.kind === 'spectator' ? d.kind : null,
+    is_test: d.test === true,
   };
 }
 

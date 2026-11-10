@@ -260,6 +260,14 @@ catalogue is sent again each round until it is taken, so it is never lost).
 migration, then the function deployed again, then the Worker: a function from before it refuses
 `play_event` as a kind it does not know, and the Worker drops a refused batch for good.
 
+### Test visits (Nov 10)
+
+`sql/test_visits.sql` as `game_test_visits`: `is_test` on each visit (our own scripted checks, bots and
+QA walks, marked by the page or a headless browser's user agent) and the view `game.v_player_session`
+(visits without them), which the morning report and the visitor dashboard count. Order: the migration,
+then the function deployed again, then the Worker. A function before it drops the Worker's `is_test` and
+keeps the visit as a player's; a function deployed before the migration fails every visit.
+
 ## Tests
 
 `pnpm --filter @owl-park/park-log test` runs the handler under Node against tables in memory, and
