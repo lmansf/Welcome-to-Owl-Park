@@ -251,6 +251,17 @@ describe('time per room (OP-113)', () => {
     expect(visitMaps(['market', 'l1', 'hub', 'nest-abcdefgh'])).toEqual([2, 2, 1, 1]);
   });
 
+  it('reports the Great Hollow and its shared rooms in the tree bucket', async () => {
+    const t = rig();
+    t.stats.seen(into('m3-hall', { map: 2 }), BARN, MON);
+    t.stats.seen(into('market', { map: 2 }), BARN, MON + MIN);
+    t.stats.close(MON + MIN + VISIT_GRACE_MS);
+    const expected = [['m3-hall', 2], ['market', 2]];
+    expect((await t.sent<RealmVisitRow>('realm_visit')).map((r) => [r.realm, r.map_id])).toEqual(expected);
+    const stays = await t.sent<RoomStayRow>('room_stay');
+    expect(stays.flatMap((r) => r.event === 'enter' ? [[r.realm, r.map_id]] : [])).toEqual(expected);
+  });
+
   it("walks from one nest into another, though the log names both the same: Go home from another owl's nest", async () => {
     const t = rig();
     t.stats.seen(into('nest-otherowl1'), BARN, MON);

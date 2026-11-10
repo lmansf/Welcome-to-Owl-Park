@@ -1,4 +1,4 @@
-import { NEST_WORDS, type ArcadeGame, type ClimbInput, type EquipSlot, type FeedbackDraft, type FeedbackRewardView, type LockView, type NestSpotId, type NpcDef, type OwlAccount, type OwlLook, type TravelRefusal, type TravelState, type Vec2, type Wear } from '@owl-park/shared';
+import { getPhrase, NEST_WORDS, type ArcadeGame, type ClimbInput, type EquipSlot, type FeedbackDraft, type FeedbackRewardView, type LockView, type NestSpotId, type NpcDef, type OwlAccount, type OwlLook, type TravelRefusal, type TravelState, type Vec2, type Wear } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { TaskState } from '../collect/tasks';
 import type { CollectionState } from '../collect/state';
@@ -133,6 +133,8 @@ export interface Hud {
   toggleSay(): void;
   /** The Say wheel says a phrase through this (false: it was not said). */
   onSay(cb: (n: number) => boolean): void;
+  offerReply(n: number): void;
+  clearReply(): void;
   /**
    * 1 to 8: play that emote of the wheel (its page, while it is open), unless another screen is open;
    * while the Say wheel is open, 1 to 4 say a phrase of its group.
@@ -312,9 +314,11 @@ const CSS = `
 #hud .say-btn svg{width:30px;height:30px}
 #hud .say-btn[aria-expanded=true]{background:#C9A227}
 #hud .say-btn kbd{position:absolute;top:-6px;right:-8px;margin:0;color:#F6F1E3;background:rgba(12,30,54,.92)}
+#hud .say-reply{min-height:44px;padding:6px 12px;border-radius:18px;background:rgba(12,30,54,.94);color:#F6F1E3;border:1px solid rgba(255,211,106,.65);white-space:nowrap}
+#hud .say-reply[hidden]{display:none}
 #hud .badge{position:absolute;top:-3px;right:-3px;width:13px;height:13px;border-radius:50%;background:#FF6B81;box-shadow:0 0 0 2px #0C1E36,0 0 8px rgba(255,107,129,.8)}
 #hud .badge[hidden]{display:none}
-#hud .pad{display:none}
+#hud .controller-pad{display:none}
 #hud.covered .bar,#hud.covered .welcome,#hud.covered .welcome.show,#hud.covered .nest-welcome,#hud.covered .bottom,#hud.covered .hints,#hud.covered .cards,#hud.covered .notices{visibility:hidden}
 #hud.no-stick .stick{display:none}
 #hud.just-in .fb-bug,#hud.just-in .fb-card{pointer-events:none}
@@ -346,9 +350,9 @@ const CSS = `
 @media (pointer:coarse){
   #hud .bar{min-height:44px;padding-right:100px}
   #hud .bottom .left{position:fixed;left:auto;bottom:auto;top:max(10px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));display:flex;flex-direction:row-reverse;gap:8px;width:auto;height:auto;max-width:none}
-  #hud .pad{display:block;position:absolute;right:0;bottom:0;width:158px;height:132px}
+  #hud .controller-pad{display:block;position:absolute;right:0;bottom:0;width:158px;height:132px}
   /* No browser gesture starts on the pad (touch-action none): two thumbs at once must never read as a pinch or a pan (OP-242). */
-  #hud .pad{touch-action:none}
+  #hud .controller-pad{touch-action:none}
   #hud .pad-btn{position:absolute;width:56px;height:56px;min-height:0;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#F6F1E3;background:rgba(12,30,54,.28);border:2px solid rgba(246,241,227,.32);box-shadow:inset 0 0 18px rgba(0,0,0,.25);touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
   #hud .pad-btn[hidden]{display:none}
   #hud .pad-btn svg{width:30px;height:30px}
@@ -367,11 +371,12 @@ const CSS = `
   #hud .emote-btn svg{width:28px;height:28px}
   #hud .say-btn{position:relative;width:44px;height:44px;min-height:44px;background:rgba(4,10,20,.5);border:2px solid rgba(246,241,227,.26);box-shadow:inset 0 0 14px rgba(0,0,0,.3)}
   #hud .say-btn svg{width:24px;height:24px}
+  #hud .say-reply{position:absolute;top:calc(100% + 6px);right:0}
   /* The row of further actions keeps above the face buttons, stick or no stick. */
   #hud .bottom .actions,#hud.no-stick .bottom .actions{position:absolute;right:0;bottom:146px;flex-direction:column;align-items:flex-end}
   #hud .toasts{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 186px)}
   /* A game played on the pad (OP-137): its Interact over the arcade screen, lit, the rest of the pad away. */
-  #hud.arcade-pad .pad{visibility:visible;z-index:25}
+  #hud.arcade-pad .controller-pad{visibility:visible;z-index:25}
   #hud.arcade-pad .pad-btn.interact,#hud.arcade-pad .pad-btn.interact.idle{opacity:1;pointer-events:auto;border-color:rgba(255,211,106,.7);box-shadow:inset 0 0 18px rgba(0,0,0,.25),0 0 12px rgba(255,211,106,.35)}
   #hud.arcade-pad .pad-btn.jump,#hud.arcade-pad .pad-btn.dash{display:none}
   /* Hoot & Hop and Talon Toss on the pad (OP-137): the stick over the arcade screen, each flick a hop or a pull to aim (even with the stick off for walking). */
@@ -483,7 +488,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     <div class="notices" aria-live="polite" data-notices></div>
     <div class="toasts" aria-live="polite" data-toasts></div>
     <div class="bottom" data-park-keys>
-      <div class="pad">
+      <div class="controller-pad">
         <button class="pad-btn interact idle" data-pad-interact aria-label="Interact" aria-disabled="true">${INTERACT_ICON}<span class="lbl" data-pad-interact-label aria-hidden="true"></span></button>
         <button class="pad-btn jump" data-pad-jump aria-label="Jump" aria-keyshortcuts="Space">${JUMP_ICON}</button>
         <button class="pad-btn dash" data-pad-dash aria-label="Dash" aria-keyshortcuts="Shift" hidden>${DASH_ICON}</button>
@@ -492,6 +497,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
         <button class="menu-btn" data-menu-btn aria-haspopup="dialog" aria-expanded="false" aria-keyshortcuts="M"><i aria-hidden="true"></i>Menu<kbd aria-hidden="true">M</kbd><span class="badge" data-quest-dot hidden></span></button>
         <button class="emote-btn" data-emotes-btn aria-label="Emotes" aria-haspopup="dialog" aria-expanded="false">${EMOTES_ICON}</button>
         <button class="say-btn" data-say-btn aria-label="Say" aria-haspopup="dialog" aria-expanded="false" aria-keyshortcuts="T">${SAY_ICON}<kbd aria-hidden="true">T</kbd></button>
+        <button class="say-reply" data-say-reply hidden></button>
       </div>
       <div class="actions" data-actions></div>
     </div>`;
@@ -504,6 +510,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   const menuBtn = $<HTMLButtonElement>('[data-menu-btn]');
   const emotesBtn = $<HTMLButtonElement>('[data-emotes-btn]');
   const sayBtn = $<HTMLButtonElement>('[data-say-btn]');
+  const sayReply = $<HTMLButtonElement>('[data-say-reply]');
   const interactBtn = $<HTMLButtonElement>('[data-pad-interact]');
   const interactLabel = $<HTMLElement>('[data-pad-interact-label]');
   const jumpBtn = $<HTMLButtonElement>('[data-pad-jump]');
@@ -632,9 +639,18 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     menu.subtitle(count.textContent);
   };
 
+  let reply: { phrase: number; until: number } | null = null;
+  let replyTimer: ReturnType<typeof setTimeout> | undefined;
+  const clearReply = () => {
+    clearTimeout(replyTimer);
+    reply = null;
+    sayReply.hidden = true;
+  };
+
   // Settings: what the screen shows.
   const applySettings = () => {
     root.classList.toggle('no-stick', !settings.get().thumbstick);
+    if (!settings.get().bubbles) clearReply();
   };
   settings.onChange(applySettings);
   applySettings();
@@ -874,6 +890,10 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   menuBtn.addEventListener('click', () => toggle('menu', () => menu.isOpen()));
   emotesBtn.addEventListener('click', () => toggle('emotes', () => !!wheel?.isOpen()));
   sayBtn.addEventListener('click', () => toggle('say', () => sayWheel.isOpen()));
+  sayReply.addEventListener('click', () => {
+    if (!reply || !settings.get().bubbles || Date.now() >= reply.until || isBlocking()) return;
+    if (sayCb?.(reply.phrase)) sayBtn.focus({ preventScroll: true });
+  });
   sayWheel.onClose(() => sayBtn.setAttribute('aria-expanded', 'false'));
   interactBtn.addEventListener('click', () => {
     if (!arcadeTap) interactCb?.();
@@ -991,7 +1011,21 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       dot.dataset['status'] = s;
       // A phone's bar keeps only a small mark for it (OP-242).
       root.classList.toggle('net-off', s === 'offline');
+      if (s !== 'online') clearReply();
     },
+    offerReply(n) {
+      const phrase = getPhrase(n);
+      // The first three Hello phrases are greetings; Good night is not an invitation to reply.
+      if (!phrase || phrase.group !== 'hello' || n === 4 || !settings.get().bubbles || isBlocking()) return;
+      clearReply();
+      const duration = 4_000;
+      reply = { phrase: n, until: Date.now() + duration };
+      sayReply.textContent = phrase.text;
+      sayReply.setAttribute('aria-label', `Say back: ${phrase.text}`);
+      sayReply.hidden = false;
+      replyTimer = setTimeout(clearReply, duration);
+    },
+    clearReply,
     toast,
     attachCollection(state, actions) {
       collectionState = state;
@@ -1162,6 +1196,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       previewCb = cb;
     },
     setHome(on) {
+      if (on) clearReply();
       // Fresh into the park, the presses still landing where Play was (a slow nest, a rage-click) must not
       // open Feedback from the bug or its card, which now sit where Play stood: they take presses a moment later.
       if (!on && root.classList.contains('at-home')) {

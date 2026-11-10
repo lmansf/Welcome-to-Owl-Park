@@ -1,0 +1,17 @@
+/** The minigames built so far (OP-314), by id: the game plays only these, in the owner's order of picks. */
+import { BRANCH_BALANCE } from './branchBalance';
+import { FEATHER_FALL } from './featherFall';
+import { HEAD_TURN } from './headTurn';
+import { HOOT_ECHO } from './hootEcho';
+import type { MinigameDef, MinigameId } from './minigame';
+import { PERCH_PAIRS } from './perchPairs';
+import { UPDRAFT_RACE } from './updraftRace';
+
+export const MINIGAMES: Partial<Record<MinigameId, MinigameDef<any>>> = {
+  [UPDRAFT_RACE.id]: UPDRAFT_RACE,
+  [HEAD_TURN.id]: HEAD_TURN,
+  [FEATHER_FALL.id]: FEATHER_FALL,
+  [PERCH_PAIRS.id]: PERCH_PAIRS,
+  [BRANCH_BALANCE.id]: BRANCH_BALANCE,
+  [HOOT_ECHO.id]: HOOT_ECHO,
+};

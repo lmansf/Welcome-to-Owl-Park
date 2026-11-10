@@ -46,7 +46,7 @@ export type LimitName = keyof typeof API_LIMITS;
  */
 export function isPublicCall(pathname: string): boolean {
   return (
-    ['/api/pass', '/api/notice', '/api/closed', '/api/counts', '/api/health', '/api/csp-report', '/api/vote/tally'].includes(pathname) ||
+    ['/api/pass', '/api/notice', '/api/closed', '/api/counts', '/api/health', '/api/csp-report', '/api/client-error', '/api/vote/tally'].includes(pathname) ||
     pathname.startsWith('/api/admin/') ||
     pathname.startsWith('/api/masks/') ||
     pathname.startsWith('/api/account/')

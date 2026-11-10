@@ -1,6 +1,8 @@
 import type { Polygon } from '../src/geometry';
 import { isNestRoom } from '../src/homes';
 import { ESCAPE_BACK_SPAWN, ESCAPE_DOOR, ESCAPE_ROOM, isEscapeRoom } from '../src/escape';
+import { FROM_STUMP_AT, FROM_STUMP_SPAWN, isPartyRoom } from '../src/party/ids';
+import { PARTY_ROOM } from './party';
 import { doorTarget, type WalkMap } from '../src/doorways';
 import { isNewMapRoom } from '../src/newMap';
 import type { Perch } from '../src/perches';
@@ -18,6 +20,7 @@ import type { CourseDef } from '../src/course';
 import { realmStart, realmStartAnchors } from '../src/realmStart';
 
 export { STREET_DOORS, STREET_ROOM } from '../src/homes';
+export { PARTY_ROOM } from './party';
 export { NEW_MAP } from '../src/newMap';
 export { HALL_MIDDLE, HALL_ROOM, ROOT_RUNS, RUN_Y, rootId, type HallLevel } from './hollowHall';
 
@@ -215,7 +218,7 @@ export const ROOMS: Record<string, RoomDef> = {
         top: 264,
       },
     ],
-    spawns: { 'default': { x: 2400, y: 730 }, 'from-grove': { x: 1800, y: 740 }, 'from-market': { x: 2990, y: 750 }, 'from-glass': { x: 2665, y: 740 } },
+    spawns: { 'default': { x: 2400, y: 730 }, 'from-grove': { x: 1800, y: 740 }, 'from-market': { x: 2990, y: 750 }, 'from-glass': { x: 2665, y: 740 }, [FROM_STUMP_SPAWN]: { ...FROM_STUMP_AT } },
     doors: [
       // On the new map this is the Party Grove (out of the Great Hollow's trunk door): its doorways carry signs there (labelNew).
       { id: 'to-grove', rect: { x: 1700, y: 610, w: 130, h: 90 }, to: { room: 'grove', spawn: 'default' }, marker: { x: 1765, y: 560 }, labelNew: 'To the treehouse clearing' },
@@ -1923,10 +1926,11 @@ export function relayout(room: string, p: Vec2, from: number): Vec2 {
   return { x, y: p.y };
 }
 
-/** The room with this id: one of ROOMS, a nest made from NEST_ROOM, or a group's sealed hollow made from ESCAPE_ROOM (OP-310); undefined for anything else. */
+/** The room with this id: one of ROOMS, a nest made from NEST_ROOM, a group's sealed hollow made from ESCAPE_ROOM (OP-310) or a party game's room from PARTY_ROOM (OP-314); undefined for anything else. */
 export function roomFor(id: string): RoomDef | undefined {
   if (Object.hasOwn(ROOMS, id)) return ROOMS[id];
   if (isEscapeRoom(id)) return { ...ESCAPE_ROOM, id };
+  if (isPartyRoom(id)) return { ...PARTY_ROOM, id };
   return isNestRoom(id) ? { ...NEST_ROOM, id } : undefined;
 }
 

@@ -29,6 +29,11 @@
  *
  * v18 adds the triple jump (OP-239, flight.ts): in the tree an air state's flaps left (`f`) count 2,
  * 1, 0, and an owl may be a jump and both flaps above the room's highest perch.
+ *
+ * The party game (OP-314, party/) adds `party` frames, sent only by a page with the friends preview on:
+ * at the Old Stump in the Party Grove `stump` (watch the seats), `sit`, `stand` and `start`, answered
+ * and pushed with `stump`; in a game's own room (`party-<id>`) `in`, an owl's input, and `view`, the
+ * game as it stands, pushed as `party`. A room nobody invited the owl into closes with 4019.
  */
 import type { QuizZone, TaskView } from './activities';
 import { isArcadeGame, type ArcadeGame, type GameWall, type OwnBests, type RunPaid } from './arcade';
@@ -44,6 +49,7 @@ import type { QuestBoard, QuestUpdate } from './quests';
 import type { Air } from './flight';
 import type { CoursePaid, CourseRefusal, CourseView } from './coursebook';
 import { PUZZLE_SYMBOLS, type PuzzleSymbol, type PuzzleView } from './puzzles';
+import { PARTY_KEYS, type PartyKey, type PartyLook, type PartyView } from './party/game';
 import { isEmoteId, isLook, isObj, isVec2 } from './validate';
 
 /** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests, 8: prewritten chat, 9: the arcade, 10: the stained-glass climb and the realms switch, 11: owls asleep, 12: flight, 13: travel from the map, 14: owls standing on perches, 15: spectators, 16: closed for setup, 17: the courses and the dash, 18: the triple jump), so a stale page reloads. */
@@ -86,6 +92,8 @@ export const CLOSE = {
   SETUP: 4017,
   /** The ticket that let this owl in has run out of time (OP-237): the page goes home, and Play brings it back in through the gate. */
   TICKET_ENDED: 4018,
+  /** A party game's room (OP-314) the owl was not invited into, or whose game is over: the page goes back to the Party Grove. */
+  PARTY_CLOSED: 4019,
   TOO_LARGE: 1009,
 } as const;
 
@@ -304,7 +312,21 @@ export interface ClientEscape {
   r: number;
 }
 
-export type ClientFrame = ClientDash | ClientCourse | ClientHello | ClientMove | ClientLook | ClientBye | ClientRest | ClientAir | ClientEmote | ClientSay | ClientQuests | ClientTalk | ClientQuestAction | ClientUse | ClientGather | ClientAct | ClientStreet | ClientNest | ClientAdmit | ClientPuzzle | ClientEscape;
+/** The party game (OP-314): at the Old Stump, or in a game's room. */
+export type PartyOp = 'stump' | 'sit' | 'stand' | 'start' | 'in' | 'view';
+export const PARTY_OPS: readonly PartyOp[] = ['stump', 'sit', 'stand', 'start', 'in', 'view'];
+export interface ClientParty {
+  t: 'party';
+  op: PartyOp;
+  r: number;
+  /** `start`: fill the empty seats with park owls. */
+  bots?: boolean;
+  /** `in`: what the owl did, and a small whole number with it. */
+  k?: PartyKey;
+  v?: number;
+}
+
+export type ClientFrame = ClientParty | ClientDash | ClientCourse | ClientHello | ClientMove | ClientLook | ClientBye | ClientRest | ClientAir | ClientEmote | ClientSay | ClientQuests | ClientTalk | ClientQuestAction | ClientUse | ClientGather | ClientAct | ClientStreet | ClientNest | ClientAdmit | ClientPuzzle | ClientEscape;
 
 // ---- server -> client ----
 export interface ServerWelcome {
@@ -549,8 +571,9 @@ export interface ServerClosed {
    * `realm`: a gated realm is closed; the socket closes with 4013 next, and `sign` is its approved phrase.
    * `gate`: travel into the park before the owl walked through the front gate (OP-130); 4015 next.
    * `setup`: the park is closed for setup (OP-205); 4017 next, and `sign` is the closed card's words.
+   * `party`: a party game's room the owl was not invited into, or whose game is over (OP-314); 4019 next.
    */
-  why: 'closed' | 'gone' | 'realm' | 'gate' | 'setup';
+  why: 'closed' | 'gone' | 'realm' | 'gate' | 'setup' | 'party';
   sign?: string;
 }
 /** The park restarts for the night (OP-181): the words to show, then the socket closes with 4016 in `ms`. */
@@ -619,8 +642,42 @@ export interface ServerEscape {
   doors?: { groups: Array<{ room: string; owls: number }>; fresh: string };
 }
 
+/** The Old Stump's four seats as they stand (OP-314): who sits in each, who starts, and whether a game may start now. */
+export interface StumpSeat {
+  owl: string;
+  look: PartyLook;
+}
+export interface StumpView {
+  seats: Array<StumpSeat | null>;
+  /** The seat of the owl that starts the game: the first to sit. */
+  starter: number | null;
+  /** No new games now: the park closes for the night before one could finish. */
+  closing: boolean;
+}
+export type StumpRefusal = 'far' | 'full' | 'closing' | 'seated' | 'not-seated' | 'not-starter' | 'few' | 'unknown';
+/** The answer to a `party` frame at the stump (with its `r`), or the seats pushed to the owls watching them; `go`: the game's room to go to. */
+export interface ServerStump {
+  t: 'stump';
+  r?: number;
+  ok: boolean;
+  reason?: StumpRefusal;
+  stump: StumpView;
+  /** The seat this owl sits in, if it sits. */
+  you?: number;
+  go?: string;
+}
+/** A party game as it stands (`view`), one owl's input in a minigame as it was taken (`ev`), or the feathers the game paid this owl (`paid`). */
+export interface ServerParty {
+  t: 'party';
+  view?: PartyView;
+  ev?: { seat: number; k: PartyKey; v: number; t: number };
+  paid?: { feathers: number; total?: number; games?: number; practice?: true };
+}
+
 export type ServerFrame =
   | ServerEscape
+  | ServerStump
+  | ServerParty
   | ServerPuzzle
   | ServerWelcome
   | ServerEnter
@@ -818,6 +875,20 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
     case 'admit':
       // Whether the pass is good, and this owl's, is the room's to decide.
       return isRequest(v['r']) && typeof v['pass'] === 'string' && PASS_TOKEN.test(v['pass']) ? { t: 'admit', pass: v['pass'], r: v['r'] } : null;
+    case 'party': {
+      const op = v['op'];
+      if (!isRequest(v['r']) || typeof op !== 'string' || !(PARTY_OPS as readonly string[]).includes(op)) return null;
+      const out: ClientParty = { t: 'party', op: op as PartyOp, r: v['r'] };
+      if (op === 'start') out.bots = v['bots'] === true;
+      if (op === 'in') {
+        const k = v['k'];
+        const n = v['v'];
+        if (typeof k !== 'string' || !(PARTY_KEYS as readonly string[]).includes(k) || typeof n !== 'number' || !Number.isFinite(n) || n < -1 || n > 1000) return null;
+        out.k = k as PartyKey;
+        out.v = Math.round(n);
+      }
+      return out;
+    }
     case 'nest': {
       const r = v['r'];
       const edit = parseNestEdit(v);
@@ -828,7 +899,7 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
   }
 }
 
-const SERVER_FRAME_TYPES = new Set(['escape', 'puzzle', 'welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'say', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'wall', 'closed', 'notice', 'restart', 'realms', 'rest', 'air', 'admitted', 'course']);
+const SERVER_FRAME_TYPES = new Set(['escape', 'stump', 'party', 'puzzle', 'welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'say', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'wall', 'closed', 'notice', 'restart', 'realms', 'rest', 'air', 'admitted', 'course']);
 
 /** Loose check for server frames on the client (a trusted source, but never crash on garbage). */
 export function parseServerFrame(text: string): ServerFrame | null {

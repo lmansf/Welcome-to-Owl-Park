@@ -1,4 +1,4 @@
-import { ESCAPE_COUNT, ESCAPE_MAX_OWLS, isEscapeRoom, isNestRoom, isPaintable, type RoomDef } from '@owl-park/shared';
+import { ESCAPE_COUNT, ESCAPE_MAX_OWLS, PARTY_SEATS, isEscapeRoom, isNestRoom, isPaintable, isPartyRoom, type RoomDef } from '@owl-park/shared';
 import { ROOMS as PARK_ROOMS, roomFor } from '@owl-park/shared/rooms';
 import type { Env } from './env';
 import { moduleLog } from './logs';
@@ -13,7 +13,7 @@ export function roomDef(id: string): RoomDef | undefined {
   return roomFor(id);
 }
 
-/** Whether a socket may ask for this room: one of the park's, any well-formed nest, or any well-formed sealed hollow (OP-310). */
+/** Whether a socket may ask for this room: one of the park's, any well-formed nest, any well-formed sealed hollow (OP-310) or any well-formed party game's room (OP-314). */
 export function isRoomId(id: string): boolean {
   return roomDef(id) !== undefined;
 }
@@ -29,8 +29,9 @@ export const NEST_CAP = 12;
 
 const DEFAULT_CAPS: Record<string, number> = { lobby: 80, hub: 80, grove: 40, market: 40, arcade: 40, homes: 40, nest: NEST_CAP, l1: 80, [ESCAPE_COUNT]: ESCAPE_MAX_OWLS };
 
-/** A room's cap from ROOM_CAPS or the defaults. Every nest shares the `nest` entry, every sealed hollow the `escapes` one (a group: ESCAPE_MAX_OWLS). */
+/** A room's cap from ROOM_CAPS or the defaults. Every nest shares the `nest` entry, every sealed hollow the `escapes` one (a group: ESCAPE_MAX_OWLS); a party game's room (OP-314) holds its four seats, whatever ROOM_CAPS says. */
 export function roomCap(env: Env, roomId: string): number {
+  if (isPartyRoom(roomId)) return PARTY_SEATS;
   const key = isNestRoom(roomId) ? 'nest' : isEscapeRoom(roomId) ? ESCAPE_COUNT : roomId;
   try {
     const caps = env.ROOM_CAPS ? (JSON.parse(env.ROOM_CAPS) as Record<string, number>) : {};
@@ -73,6 +74,8 @@ export function spectatorLimit(env: Env, roomId: string): number {
 
 /** The key all the nests are counted under. */
 export const NESTS_COUNT = 'nests';
+/** The key all the party games' rooms are counted under (OP-314), so no count names a game. */
+export const PARTIES_COUNT = 'parties';
 
 /**
  * Population counts as every visitor may see them: the park's rooms by id, all the nests summed under
@@ -82,7 +85,7 @@ export const NESTS_COUNT = 'nests';
 export function publicCounts(rooms: Iterable<readonly [string, { readonly count: number }]>): Record<string, number> {
   const out: Record<string, number> = {};
   for (const [id, r] of rooms) {
-    const key = isNestRoom(id) ? NESTS_COUNT : isEscapeRoom(id) ? ESCAPE_COUNT : id;
+    const key = isNestRoom(id) ? NESTS_COUNT : isEscapeRoom(id) ? ESCAPE_COUNT : isPartyRoom(id) ? PARTIES_COUNT : id;
     out[key] = (out[key] ?? 0) + r.count;
   }
   return out;

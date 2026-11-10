@@ -322,10 +322,13 @@ const HASH = /^[0-9a-f]{64}$/;
 const COLLECTIBLE = /^(furniture:)?[a-z0-9][a-z0-9-]{0,47}(~[0-9]{1,2})?$/;
 /** A room's neutral id, a collectible's kind or a rarity: a short lower-case word. */
 const WORD = /^[a-z]{1,20}$/;
-/** A room the park's log names: a word, or a level of the tree (`l0` to `l5`, OP-128), so a letter then letters or digits. */
-const ROOM_WORD = /^[a-z][a-z0-9]{0,19}$/;
-/** A room a live stay names (OP-265): as ROOM_WORD, with the hyphen the park's room ids use (`l5-street`, `trail-1`). */
+/** A room slug with hyphens, as used by the tree's rooms (`m3-hall`, `trail-1`). */
 const STAY_ROOM = /^[a-z][a-z0-9-]{0,19}$/;
+
+/** Room visits and notes use neutral room slugs. The Worker collapses every private nest to `nest`. */
+function isNeutralRoom(v: unknown): v is string {
+  return typeof v === 'string' && STAY_ROOM.test(v) && !v.startsWith('nest-');
+}
 
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e));
@@ -345,7 +348,7 @@ function wordOrNull(v: unknown): string | null | undefined {
 /** A room's name or none, as `wordOrNull`; undefined when it is neither. */
 function roomOrNull(v: unknown): string | null | undefined {
   if (v === null || v === undefined) return null;
-  return typeof v === 'string' && ROOM_WORD.test(v) ? v : undefined;
+  return isNeutralRoom(v) ? v : undefined;
 }
 
 /** Whether two keys are the same, compared by their digests so the time taken says nothing of either. */
@@ -516,7 +519,7 @@ export function checkRealmVisit(v: unknown): RealmVisitRow | string {
   if (typeof r['visit_id'] !== 'string' || !UUID.test(r['visit_id'])) return 'visit_id';
   if (typeof r['session_id'] !== 'string' || !UUID.test(r['session_id'])) return 'session_id';
   if (typeof r['collector_id'] !== 'string' || !HASH.test(r['collector_id'])) return 'collector_id';
-  if (typeof r['realm'] !== 'string' || !ROOM_WORD.test(r['realm'])) return 'realm';
+  if (!isNeutralRoom(r['realm'])) return 'realm';
   if (!REALM_KINDS.includes(r['realm_kind'] as RealmVisitRow['realm_kind'])) return 'realm_kind';
   const map = r['map_id'] ?? 1;
   if (map !== 1 && map !== 2) return 'map_id';

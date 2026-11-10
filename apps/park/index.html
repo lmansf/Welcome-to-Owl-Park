@@ -3,6 +3,25 @@
   <head>
     <meta charset="utf-8" />
     <script>
+      // OP-267: count errors without sending their text, the page URL, or the owl's identity.
+      (function () {
+        var sent = 0;
+        function report(kind) {
+          if (sent >= 5 || typeof fetch !== 'function') return;
+          sent++;
+          fetch('/api/client-error', {
+            method: 'POST',
+            headers: { 'X-Park-Error': kind },
+            credentials: 'omit',
+            referrerPolicy: 'no-referrer',
+            keepalive: true
+          }).catch(function () {});
+        }
+        addEventListener('error', function (e) {
+          if (e instanceof ErrorEvent || (e.target && e.target.tagName === 'SCRIPT')) report('error');
+        }, true);
+        addEventListener('unhandledrejection', function () { report('rejection'); });
+      })();
       // A page kept from an earlier deploy points at a script bundle that is gone: fetch the page
       // afresh, at most once a minute, instead of staying blank.
       addEventListener('error', function (e) {
@@ -22,7 +41,7 @@
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#0C1E36" />
-    <meta name="description" content="Owl Park: a cozy park you visit in your browser, no download. Wander as an owl, alongside everyone else who is here right now." />
+    <meta name="description" content="A cozy virtual owl park for all ages. Wander as an owl, play arcade games and climbs, and meet everyone who's here right now." />
     <title>Owl Park - a cozy virtual park you visit in your browser</title>
     <link rel="canonical" href="https://exploreowlpark.com/" />
     <script type="application/ld+json">
@@ -57,7 +76,7 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Owl Park" />
     <meta property="og:title" content="Owl Park" />
-    <meta property="og:description" content="A virtual owl park in the making. Wander the park as an owl, find hats, pets and sparkles, and meet everyone else who is here right now." />
+    <meta property="og:description" content="A cozy virtual owl park for all ages. Wander as an owl, play arcade games and climbs, and meet everyone who's here right now." />
     <meta property="og:image" content="__SITE_URL__%BASE_URL%og-image.jpg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -103,6 +122,10 @@
       .lo-words { margin: 0; font-size: 18px; color: #F6F1E3; }
       .lo-fact { margin: 0; max-width: min(420px, 90vw); min-height: 2.8em; font-size: 15px; line-height: 1.4; text-align: center; color: rgba(246, 241, 227, .78); transition: opacity .4s ease; }
       .lo-fact.fade { opacity: 0; }
+      .lo.stuck .lo-scene, .lo.stuck .lo-words, .lo.stuck .lo-fact { display: none; }
+      .lo-recovery { text-align: center; }
+      .lo-recovery h2 { font-size: clamp(20px, 5vw, 26px); margin: 0 0 16px; }
+      .lo-recovery button { min-height: 44px; padding: 8px 18px; border: 0; border-radius: 12px; background: #FFD36A; color: #0C1E36; font: inherit; font-weight: 700; cursor: pointer; }
       .lo.calm *, .lo.calm { animation: none !important; transition: none !important; }
       .lo.calm .lo-head, .lo.calm .lo-eyes { transform: none; }
       @media (prefers-reduced-motion: reduce) {
@@ -175,6 +198,10 @@
       </div>
       <p class="lo-words" role="status">Opening the park…</p>
       <p class="lo-fact"></p>
+      <section class="lo-recovery" data-load-recovery hidden aria-labelledby="load-recovery-title">
+        <h2 id="load-recovery-title" role="alert">The park didn't load this time.</h2>
+        <button type="button" data-load-retry>Try again</button>
+      </section>
     </div>
     <script>
       // The visitor's own owl on the load screen from its first paint: the colours kept on this device.
@@ -185,6 +212,39 @@
           if (kept && /^#[0-9a-fA-F]{6}$/.test(kept[k])) lo.setProperty('--lo-' + k, kept[k]);
         });
       } catch (_) {}
+    </script>
+    <script>
+      // First-visit fallback (OP-267). This runs even if the park's module cannot load.
+      (function () {
+        var loader = document.getElementById('loader');
+        var card = loader.querySelector('[data-load-recovery]');
+        var watch = new MutationObserver(function () {
+          if (!loader.hidden && !loader.classList.contains('out')) return;
+          clearTimeout(timer);
+          watch.disconnect();
+          removeEventListener('error', failed, true);
+          removeEventListener('unhandledrejection', show);
+          loader.classList.remove('stuck');
+          card.hidden = true;
+        });
+        function show() {
+          if (loader.hidden || loader.classList.contains('out')) return;
+          loader.classList.add('stuck');
+          card.hidden = false;
+        }
+        function failed(e) {
+          if (e.target === window || e.target && e.target.tagName === 'SCRIPT') show();
+        }
+        var timer = setTimeout(show, Math.max(0, 20000 - performance.now()));
+        watch.observe(loader, { attributes: true, attributeFilter: ['class', 'hidden'] });
+        addEventListener('error', failed, true);
+        addEventListener('unhandledrejection', show);
+        card.querySelector('[data-load-retry]').addEventListener('click', function () {
+          var url = new URL(location.href);
+          url.searchParams.set('fresh', String(Date.now()));
+          location.replace(url.toString());
+        });
+      })();
     </script>
     <div id="game"></div>
     <script type="module" src="/src/main.ts"></script>

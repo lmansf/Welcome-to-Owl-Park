@@ -255,6 +255,8 @@ describe('the park log (OP-107)', () => {
 
   it('checks every field of a row', () => {
     expect(checkRow(row(1))).toMatchObject({ event_id: uuid(1), backfill: false });
+    expect(checkRow(row(1, { realm: 'm3-hall' }))).toMatchObject({ realm: 'm3-hall' });
+    expect(checkRow(row(1, { realm: 'nest-abcdefgh' }))).toBe('realm');
     expect(checkRow(row(1, { realm: null, session_id: null, device_class: null, first_entry_at: null, backfill: true }))).toMatchObject({ realm: null, session_id: null, backfill: true });
     expect(checkRow(row(1, { collectible_id: 'furniture:rug' }))).toMatchObject({ collectible_id: 'furniture:rug' });
     expect(checkRow(row(1, { collectible_id: 'Not An Id' }))).toBe('collectible_id');
@@ -366,8 +368,10 @@ describe('time per room (OP-113)', () => {
     expect(tables.realmVisits).toEqual([stay(1)]);
   });
 
-  it('takes a room only as a neutral word, its kind and how the owl came in only from their lists, and a time only forwards', () => {
+  it('takes only a neutral room slug, known kinds and entry sources, and time that goes forwards', () => {
     expect(checkRealmVisit(stay(1))).toEqual(stay(1));
+    const hollow = stay(1, { realm: 'm3-hall', realm_kind: 'hub', map_id: 2 });
+    expect(checkRealmVisit(hollow)).toEqual(hollow);
     expect(checkRealmVisit(stay(1, { realm: 'nest-abcdefgh' }))).toBe('realm');
     expect(checkRealmVisit(stay(1, { realm: null }))).toBe('realm');
     expect(checkRealmVisit(stay(1, { realm_kind: 'castle' }))).toBe('realm_kind');
@@ -417,6 +421,8 @@ describe("visitors' feedback (OP-166)", () => {
 
   it('takes the words only in the park\'s limits, the kind only from its list, and nothing that could name anyone', () => {
     expect(checkFeedback(note(1))).toEqual(note(1));
+    const hollow = note(1, { realm: 'm3-hall', realm_kind: 'hub' });
+    expect(checkFeedback(hollow)).toEqual(hollow);
     expect(checkFeedback(note(1, { kind: 'complaint' }))).toBe('kind');
     expect(checkFeedback(note(1, { body: 'hi' }))).toBe('body');
     expect(checkFeedback(note(1, { body: 'x'.repeat(1001) }))).toBe('body');

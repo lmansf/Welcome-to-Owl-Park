@@ -390,6 +390,14 @@ export class Collections extends DurableObject<Env> {
     return this.during(visit, () => payEscape(this.book, cid, Date.now()));
   }
 
+  /**
+   * A party game this collector finished (OP-314): its feathers by place, for the first few games of
+   * the park day. The room server asks once per game and owl, and never for a spectator or a park owl.
+   */
+  async partyGame(cid: string, place: number): Promise<{ added: number; total: number; games: number }> {
+    return this.book.partyGame(cid, place, Date.now());
+  }
+
   /** The collector's feather balance, and nothing more: a spectator's practice answers carry it (OP-191). */
   async feathers(cid: string): Promise<number> {
     return this.book.feathers(cid, Date.now());

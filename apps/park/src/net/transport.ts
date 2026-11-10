@@ -1,3 +1,4 @@
+import type { PartyKey, PartyOp, ServerParty, ServerStump } from '@owl-park/shared';
 import type { Air, ClosedView, EscapeAct, FeedbackDraft, LineStatus, OwlAccount, OwlLook, OwlPicture, ParkMessage, PlayerState, PortraitLook, PuzzleSymbol, RealmsSettings, ReferralRefusal, ReferralView, ServerEscape, Vec2, Walk } from '@owl-park/shared';
 import type { ActivityLink, ActivityPushes, CourseLink, NestLink, NestPushes, QuestLink, QuestPushes } from '../collect/service';
 import type { TicketLink } from './ticketLinks';
@@ -60,6 +61,17 @@ export interface RoomHandlers extends QuestPushes, ActivityPushes, NestPushes {
   onSpectator?(spectator: boolean): void;
   /** The sealed hollow (OP-310): its run as it now stands, pushed when another owl moved it, or what this owl's escape earned. Times on this page's clock. */
   onEscape?(f: ServerEscape): void;
+  /** The Old Stump's seats (OP-314): the room's answer to a party frame there, or the seats as they changed. */
+  onStump?(frame: ServerStump): void;
+  /** A party game as it stands, an owl's input in its minigame, or what it paid (OP-314). */
+  onParty?(frame: ServerParty): void;
+  /** The party game's room turned this owl away, or its game is over (OP-314): back to the Party Grove. */
+  onPartyClosed?(): void;
+}
+
+/** The party game (OP-314) through the room server: what a page asks at the stump and in a game. */
+export interface PartyLink {
+  send(op: PartyOp, more?: { bots?: boolean; k?: PartyKey; v?: number }): void;
 }
 
 /** The sealed hollow's steps (OP-310), checked by the room server; the answer's times on this page's clock. */
@@ -91,6 +103,8 @@ export interface RoomConnection {
   admit?(): Promise<boolean>;
   /** Open the room's socket again at once, on the pass as it now stands (the room server only, OP-191). */
   renew?(): void;
+  /** The party game (OP-314): only the room server runs it. */
+  party?: PartyLink;
 }
 
 /**

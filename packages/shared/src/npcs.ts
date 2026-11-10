@@ -92,8 +92,8 @@ export const NPCS: readonly NpcDef[] = [
     name: 'Juniper',
     role: 'Treehouse builder',
     room: 'grove',
-    // The grove's east end (OP-152).
-    pos: { x: 4150, y: 800 },
+    // The grove's east end, on the front side of the fallen log (OP-152, OP-320).
+    pos: { x: 4150, y: 845 },
     facing: -1,
     look: { body: '#A67B5B', belly: '#E8D8B8', accent: '#C9A227', wear: { head: 'bucket-hat~0', face: 'round-glasses~0', pet: 'snail~0' } },
     greetings: ['Measure twice, hoot once.', 'That rope bridge? Mine. The wobble is a feature.', 'Every treehouse needs a good view and a better railing.'],

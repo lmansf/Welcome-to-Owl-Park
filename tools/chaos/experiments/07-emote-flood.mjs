@@ -22,7 +22,7 @@ export default {
   name: 'One visitor floods the room with emotes',
   hypothesis: 'A visitor sending 50 emotes a second is throttled (its extra emotes dropped, then its socket closed), and nobody else in the room lags or loses a move (OP-089).',
   blastRadius: "One extra scripted visitor in the throwaway park's hub, flooding for 10 s at most.",
-  rollback: 'The flooding visitor leaves; the harness closes its socket if the room has not.',
+  rollbackPlan: 'The flooding visitor leaves; the harness closes its socket if the room has not.',
   expectLogs: [
     {
       component: 'room server',

@@ -23,7 +23,8 @@ const experiment = {
   name: 'A test experiment',
   hypothesis: 'Nothing breaks.',
   blastRadius: 'None.',
-  rollback: 'Nothing to undo.',
+  rollbackPlan: 'Nothing to undo.',
+  rollback() {},
   expectLogs: [
     { component: 'room server', event: 'room_join_ok', withRun: true, atLeast: 2, question: 'Were the owls let in?', add: 'room_join_ok with run_id' },
     { component: 'overflow', event: 'queue_enter', question: 'Did the line take anyone?', add: 'queue_enter' },
@@ -36,7 +37,9 @@ test('every experiment of the ticket is listed once, in order, with what a run n
     [1, 2, 3, 4, 5, 6, 7, 8, 9],
   );
   for (const e of EXPERIMENTS) {
-    for (const field of ['id', 'name', 'hypothesis', 'blastRadius', 'rollback']) assert.ok(e[field], `${e.n} names its ${field}`);
+    for (const field of ['id', 'name', 'hypothesis', 'blastRadius', 'rollbackPlan']) {
+      assert.ok(typeof e[field] === 'string' && e[field].trim(), `${e.n} names its ${field}`);
+    }
     assert.equal(typeof e.run, 'function');
     assert.equal(typeof e.rollback, 'function');
   }
@@ -165,10 +168,12 @@ test("a run's folder: run.json, the timeline, the page, the graph, the proposals
     closeRun(log, { park: { lines: [{ at: 1, source: 'park', line: 'hello' }], logs: [] }, visitorEvents: [{ at: 1, kind: 'welcome' }], proposed, startedAt: 0 });
     const run = JSON.parse(readFileSync(`${log.dir}run.json`, 'utf8'));
     assert.equal(run.verdict, 'failed');
+    assert.equal(run.rollback, 'Nothing to undo.');
     assert.equal(run.proposed, 3);
     assert.ok(run.end);
     assert.equal(readFileSync(`${log.dir}timeline.jsonl`, 'utf8').trim().split('\n').length, 3);
     assert.match(readFileSync(`${log.dir}result.md`, 'utf8'), /\*\*Verdict: failed\.\*\*/);
+    assert.match(readFileSync(`${log.dir}result.md`, 'utf8'), /\*\*Rollback\.\*\* Nothing to undo\./);
     assert.match(readFileSync(`${log.dir}graph.svg`, 'utf8'), /<polyline/);
     assert.equal(JSON.parse(readFileSync(`${log.dir}proposed-tickets.json`, 'utf8')).length, 3);
     // A second run that day gets a folder of its own, and INDEX.md a line each.
