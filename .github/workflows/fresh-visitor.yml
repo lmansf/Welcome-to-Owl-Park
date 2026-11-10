@@ -16,7 +16,8 @@ concurrency:
 jobs:
   visit:
     if: vars.PARK_FRESH_VISITOR_URL != ''
-    runs-on: ubuntu-latest
+    # Pinned: Playwright 1.56 has no browser build for ubuntu-latest (26.04) yet, so the install step fails there.
+    runs-on: ubuntu-24.04
     timeout-minutes: 12
     env:
       PARK_FRESH_VISITOR_URL: ${{ vars.PARK_FRESH_VISITOR_URL }}
