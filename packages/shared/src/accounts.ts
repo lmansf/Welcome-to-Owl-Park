@@ -15,6 +15,11 @@
  * - magic links: the player types the protecting email on another screen, opens the link sent to it
  *   there and taps the owl's picture, and that screen holds the owl from then on.
  *
+ * - Sign in with Google (OP-313, with GOOGLE_SIGNIN on): beside the email box, a button that has
+ *   Google say which email is the player's instead of a mailed link. A verified email from Google is
+ *   then used exactly as an opened link: it protects this owl, or shows that email's owls to tap.
+ *   Nothing of the Google account is kept but that email's keyed hash and sealed copy.
+ *
  * The park keeps an email only as a keyed hash (to find its owls) and a sealed copy (to write to);
  * neither is ever logged. No sign-up is ever needed to play.
  */
@@ -54,6 +59,11 @@ export const ORDER_LINK_MS = 7 * 24 * 3600_000;
 /** Links sent to one email in an hour, and asked for from one address in an hour, at most. */
 export const LINKS_PER_EMAIL_PER_HOUR = 3;
 export const LINKS_PER_IP_PER_HOUR = 10;
+
+/** A Google sign-in started (OP-313) must come back within this, once. */
+export const GOOGLE_STATE_MS = 10 * 60_000;
+/** Google sign-ins started from one address in an hour, at most (a classroom shares one address). */
+export const GOOGLE_STARTS_PER_IP_PER_HOUR = 30;
 
 const EMAIL_RE = /^[^\s@<>"(),;:\\[\]]{1,64}@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
 

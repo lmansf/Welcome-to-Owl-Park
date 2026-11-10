@@ -89,6 +89,7 @@ describe('no way to the store skips the card (OP-153)', () => {
   });
 
   it('the page itself never goes to the store: it only tidies its own address', () => {
-    expect(where(/\blocation\s*\.\s*(?:assign|replace)\s*\(|(?<![\w.])location\s*\.\s*href\s*=(?!=)|\b(?:window|document|globalThis)\s*\.\s*location\s*(?:\.\s*href\s*)?=(?!=)/)).toEqual([]);
+    // But for Sign in with Google (OP-313), which goes only to Google's own sign-in page, and back.
+    expect(where(/\blocation\s*\.\s*(?:assign|replace)\s*\(|(?<![\w.])location\s*\.\s*href\s*=(?!=)|\b(?:window|document|globalThis)\s*\.\s*location\s*(?:\.\s*href\s*)?=(?!=)/)).toEqual(['net/toGoogle.ts']);
   });
 });

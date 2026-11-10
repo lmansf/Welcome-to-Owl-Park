@@ -60,6 +60,8 @@ export const LOG_EVENTS = [
   'referral_held',
   'order_protect_mailed',
   'order_protect_unsent',
+  'google_signed_in',
+  'google_refused',
   'room_join_ok',
   'room_join_refused',
   'room_leave',
