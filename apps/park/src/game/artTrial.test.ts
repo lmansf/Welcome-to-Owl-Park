@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { ROOMS } from '../rooms';
-import { ART_TRIALS, TRIAL_DEPTH, artTrialFor } from './artTrial';
+import { ART_TRIALS, DEFAULT_ART_TRIALS, TRIAL_DEPTH, artTrialFor } from './artTrial';
 import { BOWL_DEPTH } from './bowlView';
 import { EDGE_DEPTH } from './edgeView';
 
@@ -12,13 +12,18 @@ vi.mock('phaser', () => ({ default: {} }));
 const ART = join(__dirname, '../../public/art');
 
 describe('art trials (?art=hollow)', () => {
-  it('paints the Great Hollow only on a page that names the trial', () => {
-    expect(artTrialFor('?room=m3-hall&art=hollow', 'm3-hall')?.room).toBe('m3-hall');
-    for (const q of ['', '?room=m3-hall', '?art=old', '?art=partygrove', '?art=HOLLOW', '?art=__proto__', '?art=hollow2']) {
-      expect(artTrialFor(q, 'm3-hall'), q).toBeNull();
+  it('paints the Great Hollow on every page but ?art=old', () => {
+    for (const q of ['', '?room=m3-hall', '?room=m3-hall&art=hollow', '?art=partygrove', '?art=HOLLOW', '?art=__proto__', '?art=hollow2']) {
+      expect(artTrialFor(q, 'm3-hall')?.key, q).toBe('hollow-painted');
     }
+    expect(artTrialFor('?art=old', 'm3-hall')).toBeNull();
+    expect(artTrialFor('?room=m3-hall&art=old', 'm3-hall')).toBeNull();
     // Another room is drawn as it is, the trial named or not.
-    expect(artTrialFor('?art=hollow', 'hub')).toBeNull();
+    for (const q of ['', '?art=hollow', '?art=old']) expect(artTrialFor(q, 'hub'), q).toBeNull();
+  });
+
+  it('keeps only trials that exist', () => {
+    for (const t of DEFAULT_ART_TRIALS) expect(Object.hasOwn(ART_TRIALS, t), t).toBe(true);
   });
 
   it('paints rooms that exist, from a picture the build ships', () => {
