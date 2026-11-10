@@ -82,7 +82,7 @@ import {
   type Vec2,
   type Wear,
 } from '@owl-park/shared';
-import { AccountBook, type CarriedEmail, type LinkKind, type Protected, type Restored } from './accountBook';
+import { AccountBook, type CarriedEmail, type GoogleFor, type GoogleLink, type LinkKind, type Protected, type Restored } from './accountBook';
 import { ReferralBook, type Credited, type InviteResult } from './referralBook';
 import { TravelBook } from './travelBook';
 import { CollectLog, cleanVisit, collectibleType, furnitureId, logConfig, logRoom, type CollectibleType, type PlayEventData, type PurchaseData, type Visit } from './collectLog';
@@ -630,6 +630,20 @@ export class Collections extends DurableObject<Env> {
 
   async accountBind(nonce: string, code: string, here: { cid: string; dev: string | null } | null): Promise<Restored | 'gone' | 'no-owl'> {
     return this.accounts.restore(nonce, code, here, randomDeviceId, Date.now());
+  }
+
+  // Sign in with Google (OP-313; the Worker calls these only with GOOGLE_SIGNIN on and Google's client set).
+
+  async accountGoogleStart(nonce: string, kind: GoogleFor, cid: string | null, ipHash: string): Promise<number | null> {
+    return this.accounts.googleStart(nonce, kind, cid, ipHash, Date.now());
+  }
+
+  async accountGoogleBack(nonce: string): Promise<{ kind: GoogleFor; cid: string | null } | null> {
+    return this.accounts.googleBack(nonce, Date.now());
+  }
+
+  async accountGoogleLink(kind: GoogleFor, cid: string | null, emailHash: string, emailSeal: string, nonce: string): Promise<GoogleLink> {
+    return this.accounts.googleLink(kind, cid, emailHash, emailSeal, nonce, Date.now());
   }
 
   // ---------- bring a friend (OP-056; the Worker calls these only with REFERRALS not off; the rules are referralBook.ts) ----------

@@ -259,7 +259,8 @@ export async function verifyEntry(secret: string, token: unknown, who: string, n
  */
 export interface LinkPayload {
   k: 'acl';
-  kind: 'protect' | 'restore';
+  /** A mailed link's kind, or `google`: the state a Google sign-in (OP-313) carries out to Google and back. */
+  kind: 'protect' | 'restore' | 'google';
   n: string;
   /** Expiry, Unix seconds. */
   exp: number;
