@@ -63,3 +63,28 @@ export interface ReferralView {
 
 /** What a thanked friend's first scan gave the owl that brought them. */
 export type ReferralReward = 'ticket' | 'feathers';
+
+/** Mail hosts that ignore dots in the name part (an address with or without them reaches one inbox). */
+const DOTLESS_HOSTS: Readonly<Record<string, string>> = { 'gmail.com': 'gmail.com', 'googlemail.com': 'gmail.com' };
+
+/**
+ * An email as the one-free-ticket-per-friend check counts it, so one inbox is one friend: lowercased,
+ * with any +tag dropped (name+anything@host reaches name@host on most mail hosts), and for Gmail the
+ * dots dropped and googlemail.com read as gmail.com. Only for that check: the accounts keep the email
+ * as typed. Null for anything that is not one email.
+ */
+export function referralEmailKey(email: string | null | undefined): string | null {
+  const e = (email ?? '').trim().toLowerCase();
+  const at = e.lastIndexOf('@');
+  if (at <= 0 || at === e.length - 1 || /\s/.test(e)) return null;
+  let name = e.slice(0, at);
+  let host = e.slice(at + 1);
+  const plus = name.indexOf('+');
+  if (plus >= 0) name = name.slice(0, plus);
+  const dotless = DOTLESS_HOSTS[host];
+  if (dotless) {
+    host = dotless;
+    name = name.replace(/\./g, '');
+  }
+  return name ? `${name}@${host}` : null;
+}
