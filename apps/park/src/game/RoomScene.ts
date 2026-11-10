@@ -967,7 +967,7 @@ export class RoomScene extends Phaser.Scene {
     this.edgesDrawn = drawEdges(this, room);
     // An oval floor seen from almost straight above (the Great Hollow): its wall with height round it, the floor shaded so it recedes.
     drawBowl(this, room);
-    // An art trial's painting of the room (`?art=hollow`, artTrial.ts), over its floor and wall, under all that is drawn on them.
+    // A painting of the whole room (the Great Hollow's; `?art=old` leaves it off, artTrial.ts), over its floor and wall, under all that is drawn on them.
     void drawArtTrial(this, room);
     // A soft shade in the view's corners, so a room seems to run on past the screen instead of stopping in a box.
     setVignette(true);

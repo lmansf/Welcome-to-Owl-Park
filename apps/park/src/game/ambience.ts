@@ -3,6 +3,7 @@ import { KIT_ART, ROOM_W, WAY_OUT_DOOR, idolRealms, kitFilesOf, seenFromSide, ty
 import { ANCHORS } from '../rooms';
 import { ART, blockadeKey } from './art';
 import { footOrigin, hitArea } from './fit';
+import { IDOL_FLARE } from './idolFlare';
 
 /** Generated helper textures shared by every room. */
 export function ensureFxTextures(scene: Phaser.Scene): void {
@@ -110,6 +111,33 @@ export interface SetPieces {
   arches?: Record<string, { blockade: Phaser.GameObjects.Image | null; glow: Phaser.GameObjects.Image }>;
 }
 
+/** Each idol glow's size before any swell, and the swell under way, so pledges close together never stack. */
+const FLARES = new WeakMap<Phaser.GameObjects.Image, { scaleX: number; scaleY: number; alpha: number; tween?: Phaser.Tweens.TweenChain | undefined }>();
+
+/**
+ * An idol's glow swells once, slowly, when a visitor pledges (IDOL_FLARE), and settles back. A pledge
+ * during a swell restarts it from where the glow is, so a burst of pledges holds the glow up rather
+ * than pulsing it, and the glow always settles back to its own size.
+ */
+function flareGlow(scene: Phaser.Scene, glow: Phaser.GameObjects.Image): void {
+  let flare = FLARES.get(glow);
+  if (!flare) FLARES.set(glow, (flare = { scaleX: glow.scaleX, scaleY: glow.scaleY, alpha: glow.alpha }));
+  const settled = flare.tween ? flare.alpha : glow.alpha;
+  flare.tween?.stop();
+  flare.alpha = settled;
+  const { scaleX, scaleY } = flare;
+  flare.tween = scene.tweens.chain({
+    targets: glow,
+    tweens: [
+      { alpha: IDOL_FLARE.glowPeak, scaleX: scaleX * IDOL_FLARE.glowSwell, scaleY: scaleY * IDOL_FLARE.glowSwell, duration: IDOL_FLARE.riseMs, ease: 'Sine.easeInOut' },
+      { alpha: settled, scaleX, scaleY, duration: IDOL_FLARE.riseMs, ease: 'Sine.easeInOut' },
+    ],
+    onComplete: () => {
+      if (flare) flare.tween = undefined;
+    },
+  });
+}
+
 const DOOR_GLOW: Record<string, number> = { market: 0xff2aa1, arcade: 0x00e5ff, grove: 0xffb347, glass: 0x9fd0ff };
 
 /** The soft glow that marks an open doorway, tinted for the realm beyond it. */
@@ -156,7 +184,7 @@ export function addSetPieces(
       image: guardian,
       react: () => {
         // The guardian stirs: its glow swells and a drift of fireflies rises from the bough.
-        scene.tweens.add({ targets: glow, alpha: 0.9, scaleX: 6.4, scaleY: 5, duration: 500, yoyo: true, ease: 'Sine.easeOut' });
+        flareGlow(scene, glow);
         scene.tweens.add({ targets: guardian, scaleY: sy * 1.04, scaleX: sx * 0.985, duration: 450, yoyo: true, ease: 'Sine.easeOut' });
         scene.add
           .particles(a.x, a.y - 40, 'fx-dot', {
@@ -164,13 +192,13 @@ export function addSetPieces(
             speed: { min: 40, max: 120 },
             angle: { min: 200, max: 340 },
             scale: { start: 0.5, end: 0 },
-            alpha: { start: 1, end: 0 },
+            alpha: { start: IDOL_FLARE.sparkAlpha, end: 0 },
             tint: [0xffe08a, 0xfff2b3, 0xc9a227],
             blendMode: Phaser.BlendModes.ADD,
             emitting: false,
           })
           .setDepth(a.y + 1)
-          .explode(36);
+          .explode(IDOL_FLARE.sparks);
       },
     });
   }
@@ -184,22 +212,20 @@ export function addSetPieces(
     stood('market', {
       image: robot,
       react: () => {
-        // The robot owl flares: a cyan flash and a swell of its glow.
-        robot.setTint(0x9ffcff);
-        scene.time.delayedCall(180, () => robot.clearTint());
-        scene.tweens.add({ targets: glow, alpha: 0.7, scaleX: 6.5, scaleY: 6.5, duration: 450, yoyo: true, ease: 'Sine.easeOut' });
+        // The robot owl hums: a slow swell of its glow (OP-324: no flash on the owl itself).
+        flareGlow(scene, glow);
         scene.add
           .particles(a.x, a.y - 320, 'fx-dot', {
             lifespan: { min: 600, max: 1200 },
             speed: { min: 120, max: 260 },
             scale: { start: 0.45, end: 0 },
-            alpha: { start: 1, end: 0 },
+            alpha: { start: IDOL_FLARE.sparkAlpha, end: 0 },
             tint: [0x00e5ff, 0xff2aa1, 0xc7ceda],
             blendMode: Phaser.BlendModes.ADD,
             emitting: false,
           })
           .setDepth(a.y + 1)
-          .explode(40);
+          .explode(IDOL_FLARE.sparks);
       },
     });
     scene.tweens.add({ targets: robot, y: a.y - 6, duration: 5200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
@@ -216,23 +242,21 @@ export function addSetPieces(
     stood('glass', {
       image: idol,
       react: () => {
-        // The panes flare white-gold and a scatter of glass light rises from the owl.
-        idol.setTint(0xfff2c2);
-        scene.time.delayedCall(220, () => idol.clearTint());
-        scene.tweens.add({ targets: glow, alpha: 0.7, scaleX: 5, scaleY: 4, duration: 450, yoyo: true, ease: 'Sine.easeOut' });
+        // The panes glow brighter and a scatter of glass light rises from the owl.
+        flareGlow(scene, glow);
         scene.add
           .particles(a.x, a.y - 200, 'fx-dot', {
             lifespan: { min: 900, max: 1800 },
             speed: { min: 60, max: 180 },
             angle: { min: 200, max: 340 },
             scale: { start: 0.5, end: 0 },
-            alpha: { start: 1, end: 0 },
+            alpha: { start: IDOL_FLARE.sparkAlpha, end: 0 },
             tint: [0x9fd0ff, 0xffd36a, 0xff8ad0, 0x7be0c8, 0xcdb0ff],
             blendMode: Phaser.BlendModes.ADD,
             emitting: false,
           })
           .setDepth(a.y + 1)
-          .explode(36);
+          .explode(IDOL_FLARE.sparks);
       },
     });
     scene.tweens.add({ targets: glow, alpha: 0.4, duration: 3200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
@@ -282,13 +306,13 @@ export function addSetPieces(
             lifespan: { min: 600, max: 1200 },
             speed: { min: 100, max: 240 },
             scale: { start: 0.5, end: 0 },
-            alpha: { start: 1, end: 0 },
+            alpha: { start: IDOL_FLARE.sparkAlpha, end: 0 },
             tint: [0xffd36a, 0xf6f1e3, 0xc9a227],
             blendMode: Phaser.BlendModes.ADD,
             emitting: false,
           })
           .setDepth(m.y + 1)
-          .explode(36);
+          .explode(IDOL_FLARE.sparks);
       },
     };
   }

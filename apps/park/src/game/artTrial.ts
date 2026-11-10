@@ -6,11 +6,13 @@
  * `hollow` (Nov 9): the Great Hollow (`m3-hall`) painted whole by Higgsfield from a picture of the room's
  * own oval, floor edge, doorways and idol spots, laid over the room's drawn floor and wall: under its
  * doorways, idols, roots, floor edge and owls, so where an owl can walk and every way out read as before.
- * The owner asked for it to be copied into the game on Nov 9.
+ * The owner asked for it to be copied into the game on Nov 9, and on Nov 10 made it the room's look for
+ * everyone: every page draws it in the Great Hollow, and `?art=old` draws the room as it was.
  */
 import type Phaser from 'phaser';
 import type { RoomDef } from '@owl-park/shared';
 import { publishedArtUrl } from './art';
+import { OLD_ART } from './artLooks';
 import { BOWL_DEPTH } from './bowlView';
 import { EDGE_DEPTH } from './edgeView';
 
@@ -28,11 +30,17 @@ export const ART_TRIALS: Record<string, ArtTrial> = {
 /** Drawn over the room's own floor and wall, under everything drawn on them. */
 export const TRIAL_DEPTH = (BOWL_DEPTH.lines + EDGE_DEPTH.litter) / 2;
 
-/** The trial this page asks for in `room`, if any: `?art=<trial>` naming a trial of that room. */
+/** The trials the owner kept: drawn in their room on every page unless it asks for `?art=old`. */
+export const DEFAULT_ART_TRIALS: readonly string[] = ['hollow'];
+
+/** The painting this page draws in `room`, if any: the trial `?art=<trial>` names, else a kept one, none on `?art=old`. */
 export function artTrialFor(search: string, room: string): ArtTrial | null {
   const asked = new URLSearchParams(search).get('art') ?? '';
-  const trial = Object.hasOwn(ART_TRIALS, asked) ? ART_TRIALS[asked] : undefined;
-  return trial && trial.room === room ? trial : null;
+  if (asked === OLD_ART) return null;
+  const named = Object.hasOwn(ART_TRIALS, asked) ? ART_TRIALS[asked] : undefined;
+  if (named?.room === room) return named;
+  const kept = DEFAULT_ART_TRIALS.map((t) => ART_TRIALS[t]).find((t) => t?.room === room);
+  return kept ?? null;
 }
 
 function loadPicture(url: string): Promise<HTMLImageElement | null> {
