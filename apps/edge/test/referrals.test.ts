@@ -100,7 +100,8 @@ describe('bringing a friend through the Worker (OP-056)', () => {
   it('takes a friend’s code, checks out the free Day Ticket at $0, and thanks the owl that brought them when the friend comes through the gate', async () => {
     const store = new FakeStore();
     vi.stubGlobal('fetch', store.fetch);
-    const { env, book } = park({ REFERRAL_CODE: CODE });
+    // ACCOUNT_SECRET keys the order's email: a friend's free Day Ticket is tied to it.
+    const { env, book } = park({ REFERRAL_CODE: CODE, ACCOUNT_SECRET: 'account-secret-0123456789abcdefghij' });
     const alice = await view(env, 'c_alice00001');
     expect(alice).toMatchObject({ mode: 'preview', free: true, invited: false, canEnterCode: true, offers: [] });
 

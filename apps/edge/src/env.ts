@@ -47,6 +47,12 @@ export interface Env extends Cloudflare.Env {
    * Day Ticket can be checked out (friends can still be brought and thanked with feathers).
    */
   REFERRAL_CODE?: string;
+  /**
+   * Bring a friend: the store's code for the thank-you Day Ticket an owl gets for each friend it brings,
+   * the same 100% off one Day Ticket but with no once-per-customer limit (thank-yous have no cap). The park
+   * puts it only in the cart link of a thank-you it offered. Unset: a thank-you uses REFERRAL_CODE.
+   */
+  REFERRAL_REWARD_CODE?: string;
   /** Browser tests only: a stand-in store on this machine (http://localhost:<port>). Never set in production. */
   SHOPIFY_TEST_ORIGIN?: string;
   /**
