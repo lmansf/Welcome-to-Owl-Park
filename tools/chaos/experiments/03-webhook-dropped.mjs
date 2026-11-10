@@ -21,7 +21,7 @@ export default {
   name: "The store's webhook answered 500, then too late",
   hypothesis: 'A paid-order webhook the Worker fails (a 500, or no answer in the 5 s the store waits) is sent again by the store, and the order gets its one ticket and one claim-link email, never two.',
   blastRadius: "Two orders in the stand-in store, and the throwaway park's answers about them; nothing else the store answers is touched.",
-  rollback: "The stand-in store's faults are taken away.",
+  rollbackPlan: "The stand-in store's faults are taken away.",
   expectLogs: [
     {
       component: 'worker',

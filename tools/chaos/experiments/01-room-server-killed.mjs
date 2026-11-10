@@ -13,7 +13,7 @@ export default {
   name: 'The room server killed mid-session',
   hypothesis: 'Every visitor in a room is back in within 10 s of the room server returning, its owl where it stood (OP-087).',
   blastRadius: "This machine's throwaway park only: its Worker and room server process, killed and kept down for 3 s; the stand-in store and the scripted visitors carry on.",
-  rollback: 'Start the room server again on the same storage if it is still down, then wait for the steady state.',
+  rollbackPlan: 'Start the room server again on the same storage if it is still down, then wait for the steady state.',
   needs: 'local',
   expectLogs: [
     {
