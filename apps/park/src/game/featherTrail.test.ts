@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { DOORS_TRIED_KEY, DOORS_TRIED_MAX, TRAIL, TriedDoors, doorKey, doorSpot, nearestDoor, parseTried, trailPoints } from './featherTrail';
+import { doorTarget, type DoorDef } from '@owl-park/shared';
+import { ROOMS } from '@owl-park/shared/rooms';
+import { DOORS_TRIED_KEY, DOORS_TRIED_MAX, TRAIL, TriedDoors, doorKey, doorSpot, leadsToPlay, nearestDoor, parseTried, trailDoor, trailPoints } from './featherTrail';
 
 function memory(): Pick<Storage, 'getItem' | 'setItem'> & { data: Map<string, string> } {
   const data = new Map<string, string>();
@@ -59,5 +61,48 @@ describe('where the feather trail goes (OP-307)', () => {
     // A doorway right by the owl gets no feathers; a long way gets at most the cap.
     expect(trailPoints([{ x: 0, y: 0 }, { x: 100, y: 0 }])).toEqual([]);
     expect(trailPoints([{ x: 0, y: 0 }, { x: 10000, y: 0 }])).toHaveLength(TRAIL.most);
+  });
+});
+
+describe('the trail leads to play first (OP-337)', () => {
+  // Of the first visits that reached the Great Hollow, the ones that stayed found a course or the arcade.
+  const HALL = ROOMS['m3-hall']!;
+  const landing = HALL.spawns['from-lobby']!;
+  const ways = HALL.doors.filter((d) => doorTarget(d, 3) !== undefined);
+  const toPlay = (d: DoorDef) => leadsToPlay(ROOMS[doorTarget(d, 3)?.room ?? '']);
+  /** The ways not tried yet, with the way the owl came in by and `tried` taken out. */
+  const untried = (...tried: string[]) => ways.filter((d) => d.id !== 'up' && !tried.includes(d.id));
+
+  it('counts a course’s rooms and the arcade as play; a realm’s room, the Commons and no room at all are not', () => {
+    for (const id of ['canopy-1', 'circuit-1', 'brush-1', 'arcade']) expect(leadsToPlay(ROOMS[id]), id).toBe(true);
+    for (const id of ['grove', 'market', 'glass', 'hub', 'lobby', 'm3-hall', 'homes']) expect(leadsToPlay(ROOMS[id]), id).toBe(false);
+    expect(leadsToPlay(undefined)).toBe(false);
+  });
+
+  it('from where the turnstiles land an owl, leads to the arcade’s hatch, though a realm’s doorway is nearer', () => {
+    const nearest = nearestDoor(landing, untried())!;
+    expect(toPlay(nearest)).toBe(false);
+    expect(['to-glass', 'to-grove']).toContain(nearest.id);
+    expect(trailDoor(landing, untried(), toPlay)!.id).toBe('down');
+  });
+
+  it('then to each course’s gate, nearest first, and only then to the doorways that are left', () => {
+    const order: string[] = [];
+    for (let door = trailDoor(landing, untried(...order), toPlay); door && toPlay(door); door = trailDoor(landing, untried(...order), toPlay)) order.push(door.id);
+    expect(order[0]).toBe('down');
+    expect([...order].sort()).toEqual(['course-grove', 'course-ink', 'course-market', 'down']);
+    // Nothing to play left untried: the nearest doorway, as ever.
+    expect(trailDoor(landing, untried(...order), toPlay)).toBe(nearestDoor(landing, untried(...order)));
+    // Every doorway tried: none.
+    expect(trailDoor(landing, [], toPlay)).toBeNull();
+  });
+
+  it('in a room with no way to play, leads to the nearest doorway as ever', () => {
+    const lobby = ROOMS['lobby']!;
+    const doors = lobby.doors.filter((d) => doorTarget(d, 3) !== undefined);
+    const from = lobby.spawns['default']!;
+    const play = (d: DoorDef) => leadsToPlay(ROOMS[doorTarget(d, 3)?.room ?? '']);
+    expect(doors.some(play)).toBe(false);
+    expect(trailDoor(from, doors, play)).toBe(nearestDoor(from, doors));
   });
 });

@@ -149,17 +149,36 @@ export const SIGN_HOLD = 60;
  * within SIGN_REACH of the owl, else none. The sign shown now (`shown`) holds while the owl stays in
  * reach and no other doorway is SIGN_HOLD nearer. Every other doorway keeps only its marker, and the
  * Menu's map keeps the whole list.
+ *
+ * The doorway that `waits` (the one the owl has just come in by, signWaits) shows its sign only for a
+ * walk to it: an owl standing where it arrived is not told the way back before anything else (OP-337).
  */
-export function signFocus(targets: HintTarget[], owl: { x: number; y: number }, goal: { x: number; y: number } | null, shown: string | null = null): string | null {
+export function signFocus(
+  targets: HintTarget[],
+  owl: { x: number; y: number },
+  goal: { x: number; y: number } | null,
+  shown: string | null = null,
+  waits: string | null = null,
+): string | null {
   const dist = (t: HintTarget, p: { x: number; y: number }) => Math.hypot(t.x - p.x, t.y - p.y);
   if (goal) {
     const to = targets.filter((t) => dist(t, goal) <= SIGN_GOAL_REACH).sort((a, b) => dist(a, goal) - dist(b, goal))[0];
     if (to) return to.id;
   }
-  const near = targets.filter((t) => dist(t, owl) <= SIGN_REACH).sort((a, b) => dist(a, owl) - dist(b, owl));
+  const near = targets.filter((t) => t.id !== waits && dist(t, owl) <= SIGN_REACH).sort((a, b) => dist(a, owl) - dist(b, owl));
   const held = near.find((t) => t.id === shown);
   if (held && near[0] && dist(held, owl) - dist(near[0], owl) < SIGN_HOLD) return held.id;
   return near[0]?.id ?? null;
+}
+
+/**
+ * Whether the doorway an owl came in by still keeps its sign back (OP-337): until the owl has been out
+ * of its sign's reach once. The first words an arriving owl reads were the way back out ("Up to the
+ * Treetop Commons", the moment it landed in the Great Hollow); now the sign is there the first time it
+ * comes back to that doorway, or walks to it.
+ */
+export function signWaits(waiting: boolean, door: { x: number; y: number } | undefined, owl: { x: number; y: number }): boolean {
+  return waiting && door !== undefined && Math.hypot(door.x - owl.x, door.y - owl.y) <= SIGN_REACH;
 }
 
 /**

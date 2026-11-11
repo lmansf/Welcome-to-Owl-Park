@@ -7,10 +7,14 @@
  * Every way out stands on the rim, a step apart (src/hollowOval.ts, HALL_WAYS): clockwise from the
  * knothole up to the Treetop Commons at the back, the treehouse clearing's doorway and its course's
  * gate, the neon street's, the trunk's door out to the Party Grove and the hatch down to the arcade at
- * the front, the ink-wash realm's course gate and its doorway (shut till the realm is built), and the
- * glass realm's. Each Commons' idol stands on its base between its two ways, over its Realm Vote spot,
+ * the front, the ink-wash realm's course gate, and the glass realm's doorway. A way with nothing behind
+ * it yet (the ink-wash realm's doorway, the glass realm's course gate) is no doorway at all: the tree has
+ * grown over it (OP-337, HALL_GROWN). Each Commons' idol stands on its base between its two ways, over its Realm Vote spot,
  * and its plaza, where its moonbeam falls, lies out toward the middle. Every open way has a sign on the
  * floor in front of it naming where it leads, so a ten year old finds the Party Grove without a map.
+ *
+ * TODO-DOCS (OP-337): docs/MAP.md's notes on `m3-hall` gain its ways round the rim as they are now: nine
+ * doorways, and two ways with nothing behind them yet that the tree has grown over (no doorway, no sign).
  *
  * The root runs (OP-308) cross the middle, where the oval is widest. The floor is built from the art
  * kit's textures until the hollow is painted (a file swap: the size list has each piece's size); the
@@ -22,6 +26,9 @@ import {
   rimNormal,
   angleAt,
   floorInset,
+  GROWN_DROP,
+  GROWN_OUT,
+  GROWN_WAYS,
   HALL_CX,
   HALL_CY,
   HALL_H,
@@ -77,9 +84,9 @@ export const HALL_ID = 'm3-hall';
 /** What a Commons opens on: its realm (closed while the realm has no room) and its parkour course. */
 export interface CommonsOf {
   level: HallLevel;
-  /** Its realm's room and spawn, or none yet (a "Hatching Soon" blockade). */
+  /** Its realm's room and spawn, or none yet (its way is grown over, HALL_GROWN). */
   realm?: { room: string; spawn: string };
-  /** Its course's first room and spawn, or none yet (a "Not Yet Fledged" blockade). */
+  /** Its course's first room and spawn, or none yet (its way is grown over, HALL_GROWN). */
   course?: { room: string; spawn: string };
   /** The realm its idol takes the Realm Vote for, where it has one. */
   votesFor?: 'glass' | 'grove' | 'market';
@@ -142,6 +149,21 @@ export const fromCourse = (level: HallLevel) => `from-${level}-course`;
 /** The Commons with an idol: the floor is cut in round each one's base. */
 const IDOL_LEVELS: readonly HallLevel[] = HALL_COMMONS.filter((c) => c.votesFor).map((c) => c.level);
 
+/**
+ * The ways with nothing behind them yet (src/hollowOval.ts, GROWN_WAYS: each Commons' way that it has no
+ * room for). No doorway, no blockade and no closed sign stand there. The knothole painted at each is
+ * grown over with roots (GROWN_ART), a glow behind them for what is still to come, and the floor is cut
+ * in round the roots.
+ */
+export const HALL_GROWN: readonly HallWay[] = GROWN_WAYS;
+/** The roots grown over such a way: a piece the kit already has. */
+export const GROWN_ART = 'kit-under-barrier-roots';
+/** Where the roots' foot stands, so their middle falls on the knothole painted at the way (src/hollowOval.ts, GROWN_DROP). */
+export function grownFoot(id: HallWay): Vec2 {
+  const at = wayAt(id);
+  return { x: Math.round(at.x + rimNormal(angleAt(wayS(id))).x * GROWN_OUT), y: at.y + GROWN_DROP };
+}
+
 /** Whether a way stands on the front half of the rim, where an owl sees the near wall's top and not its face. */
 export const atFront = (id: HallWay) => rimNormal(angleAt(wayS(id))).y > 0.7;
 /** Whether a way stands at one of the oval's two ends, the rim running up and down beside it. */
@@ -159,7 +181,7 @@ function hollowFloor(): Polygon {
   const n = Math.round(RIM_LENGTH / 40);
   for (let i = 0; i < n; i++) {
     const s = (i / n) * RIM_LENGTH;
-    out.push(rimAt(s, floorInset(s, IDOL_LEVELS)));
+    out.push(rimAt(s, floorInset(s, IDOL_LEVELS, HALL_GROWN)));
   }
   return out;
 }
@@ -176,7 +198,7 @@ function wayArt(id: HallWay): string | null {
   const level = id.replace(/^(to|course)-/, '') as HallLevel;
   const c = HALL_COMMONS.find((x) => x.level === level)!;
   const open = id.startsWith('to-') ? c.realm : c.course;
-  // A shut way has the scene's blockade instead.
+  // A way with nothing behind it has no doorway: the roots grown over it instead (GROWN_ART).
   return open ? c.door : null;
 }
 
@@ -222,7 +244,7 @@ export function signInset(id: HallWay): number {
 const arriveAt = (id: HallWay) => (atFront(id) ? Math.min(280, signInset(id) + 30) : ARRIVE);
 
 /** A way's doorway on the rim: its strip straddles the rim, across it at the back and front, down it at the two ends. */
-function rimDoor(id: HallWay, to: DoorDef['to'], closedSign?: DoorDef['closedSign'], label?: string): DoorDef {
+function rimDoor(id: HallWay, to: NonNullable<DoorDef['to']>, label?: string): DoorDef {
   const s = wayS(id);
   const p = rimAt(s);
   const n = rimNormal(angleAt(s));
@@ -231,10 +253,9 @@ function rimDoor(id: HallWay, to: DoorDef['to'], closedSign?: DoorDef['closedSig
   return {
     id,
     rect: { x: p.x - w / 2, y: p.y - h / 2, w, h },
-    ...(to ? { to } : {}),
-    ...(closedSign ? { closedSign } : {}),
+    to,
     marker: rimAt(s, MARK),
-    ...(to && label ? { label, labelAt: rimAt(s, signInset(id)) } : {}),
+    ...(label ? { label, labelAt: rimAt(s, signInset(id)) } : {}),
   };
 }
 
@@ -243,16 +264,17 @@ const HATCH_IN = 70;
 
 const DOORS: DoorDef[] = [
   // Up through the knothole at the very back: the Treetop Commons, before the turnstiles.
-  rimDoor('up', { room: 'lobby', spawn: 'from-hub' }, undefined, 'Up to the Treetop Commons'),
+  rimDoor('up', { room: 'lobby', spawn: 'from-hub' }, 'Up to the Treetop Commons'),
   ...HALL_COMMONS.flatMap((c): DoorDef[] => [
-    rimDoor(realmDoor(c.level), c.realm, c.realm ? undefined : 'Hatching Soon', c.realmName),
-    rimDoor(courseDoor(c.level), c.course, c.course ? undefined : 'Not Yet Fledged', c.courseName),
+    // Only the ways that lead somewhere are doorways (HALL_GROWN has the rest).
+    ...(c.realm ? [rimDoor(realmDoor(c.level), c.realm, c.realmName)] : []),
+    ...(c.course ? [rimDoor(courseDoor(c.level), c.course, c.courseName)] : []),
     ...(c.votesFor
       ? [{ id: voteDoor(c.level), rect: { x: voteAt(c.level).x - 110, y: voteAt(c.level).y - 35, w: 220, h: 70 }, marker: voteAt(c.level) }]
       : []),
   ]),
   // Out through the trunk's door at the front: the Party Grove at the tree's foot.
-  rimDoor('to-party', { room: 'hub', spawn: 'default' }, undefined, 'Out to the Party Grove'),
+  rimDoor('to-party', { room: 'hub', spawn: 'default' }, 'Out to the Party Grove'),
   // Down the hatch in the floor at the front: straight into the arcade (OP-306, the root stair folded into it).
   (() => {
     const at = wayAt('down', HATCH_IN);
@@ -274,7 +296,8 @@ const DOORS: DoorDef[] = [
  */
 const PIECES: RoomPiece[] = HALL_WAYS.flatMap((id): RoomPiece[] => {
   const key = wayArt(id);
-  if (!key) return [];
+  // Grown over: the roots stand over the knothole painted there, their foot a little below its point on the rim.
+  if (!key) return HALL_GROWN.includes(id) ? [{ id: `${id}-grown`, key: GROWN_ART, ...grownFoot(id) }] : [];
   if (id === 'down') {
     const at = wayAt('down', HATCH_IN);
     return [{ id: 'root-hatch', key, x: at.x, y: at.y + 50 }];
@@ -429,7 +452,7 @@ export const HALL_BOWL: RoomBowl = {
     ...HALL_COMMONS.map((c) => ({ ...ringAt(commonsS(c.level), 0.84), r: 900, color: c.colour })),
     { ...HALL_HEART, r: 1100, color: 0xffe2a8 },
   ],
-  gaps: HALL_WAYS.filter((id) => atFront(id) && id !== 'down').map((id) => ({ ...wayAt(id), w: 220 })),
+  gaps: HALL_WAYS.filter((id) => atFront(id) && id !== 'down' && !HALL_GROWN.includes(id)).map((id) => ({ ...wayAt(id), w: 220 })),
 };
 
 /** Whether a point is clear of every root's art (and a little round it), where a visitor can see it. */
@@ -468,10 +491,11 @@ export const HALL_ROOM: RoomDef = {
     'from-lobby': wayAt('up', ARRIVE),
     'from-party': wayAt('to-party', arriveAt('to-party')),
     'from-under': wayAt('down', 330),
+    // An arrival spot in front of each way that leads somewhere (a grown-over way has none).
     ...Object.fromEntries(
       HALL_COMMONS.flatMap((c) => [
-        [fromRealm(c.level), wayAt(realmDoor(c.level), arriveAt(realmDoor(c.level)))],
-        [fromCourse(c.level), wayAt(courseDoor(c.level), arriveAt(courseDoor(c.level)))],
+        ...(c.realm ? [[fromRealm(c.level), wayAt(realmDoor(c.level), arriveAt(realmDoor(c.level)))]] : []),
+        ...(c.course ? [[fromCourse(c.level), wayAt(courseDoor(c.level), arriveAt(courseDoor(c.level)))]] : []),
       ]),
     ),
   },

@@ -184,14 +184,14 @@ import { TRIAL_BACKDROP_VEIL, trialBackdropVeiled } from './skinTrial';
 import { PUZZLE_ART_KEYS, artScale, drawnAsSizeBox, drawsSkinTrial, loadArt, opensSoft, prefetchRoomArt, releaseArt, roomArtCap, roomArtKeys, roomOpeningArt, sharpCopy, sharpenArt } from './art';
 import { SpeechBubbles } from './bubbles';
 import { backWaits, doorwayUnder, doorwaysOff, roomsAhead, takesDoorway, upCounts } from './doors';
-import { TriedDoors, doorSpot, nearestDoor } from './featherTrail';
+import { TriedDoors, doorSpot, leadsToPlay, trailDoor } from './featherTrail';
 import { FeatherTrail } from './featherTrailView';
 import { admitTarget } from './gateAdmit';
 import { enteredRoom, walkingMap } from './walkingMap';
 import { storedKeeper } from '../net/keeper';
 import { FitOverlay } from './fitOverlay';
 import type { LedgePainter, PaintDebug } from './ledgePainter';
-import { doorHintTarget, nearTargets, placeHints, signFocus, touchBottom } from './hints';
+import { doorHintTarget, nearTargets, placeHints, signFocus, signWaits, touchBottom } from './hints';
 import { itemScale } from './items';
 import { FLOOR_KINDS, FloorThing } from './FloorThing';
 import { LeafPile, featherFind } from './LeafPile';
@@ -430,6 +430,8 @@ export class RoomScene extends Phaser.Scene {
   private hintsShown = '';
   /** The doorway whose sign shows, seen from above (OP-309). */
   private signFocused: string | null = null;
+  /** The doorway the owl came in by, while its sign is kept back (OP-337, hints.ts signWaits): until the owl has stepped out of its reach once. */
+  private signKept: string | null = null;
   /** The view, screen and doors the hints were last placed for: unchanged, nothing is placed again (OP-204). */
   private hintsFor: { at: string; doors: unknown } = { at: '', doors: null };
   /** When to look again for doorways to fetch the next room's art through. */
@@ -658,6 +660,7 @@ export class RoomScene extends Phaser.Scene {
     this.keyTurns = 0;
     this.hintsShown = '';
     this.signFocused = null;
+    this.signKept = null;
     this.hintsFor = { at: '', doors: null };
     this.voting = false;
     this.pendingVote = false;
@@ -1167,6 +1170,8 @@ export class RoomScene extends Phaser.Scene {
     this.cameras.main.fadeIn(350, 12, 30, 54);
     this.built = true;
     this.startOpening(this.registry.get('spawnName') as string | undefined);
+    // The sign of the doorway the owl came in by waits until it has stepped away once (OP-337, updateHints).
+    this.signKept = room.doors.find((d) => this.leadsBack(d))?.id ?? null;
     // The feather trail (OP-307): the doorway the owl came in by counts as tried, and the feathers come out once the room is in.
     if (!room.course) {
       this.trail = new FeatherTrail(this, () => this.calm());
@@ -1689,7 +1694,9 @@ export class RoomScene extends Phaser.Scene {
     let targets: typeof all;
     if (ground === null) {
       const keep = new Set([own, toPark].filter((id): id is string => !!id));
-      const focus = signFocus(all, this.me.pos, goal, this.signFocused);
+      // The doorway the owl came in by keeps its sign back until the owl has stepped away from it once (OP-337).
+      if (this.signKept && !signWaits(true, all.find((t) => t.id === this.signKept), this.me.pos)) this.signKept = null;
+      const focus = signFocus(all, this.me.pos, goal, this.signFocused, this.signKept);
       this.signFocused = focus;
       this.doorSigns?.focus(focus);
       // Its sign on the floor names it once it is on screen: then no chip repeats it at the screen's edge.
@@ -1813,8 +1820,8 @@ export class RoomScene extends Phaser.Scene {
 
   /**
    * The feather trail (OP-307): a glint on each doorway not tried yet, and feathers from the owl toward
-   * the nearest, along the way it would walk there (straight in a room seen from the side, where the owl
-   * flies). With the trail switched off, or every doorway tried, neither.
+   * one of them (featherTrail.ts, trailDoor), along the way it would walk there (straight in a room seen
+   * from the side, where the owl flies). With the trail switched off, or every doorway tried, neither.
    */
   private layTrail(): void {
     const trail = this.trail;
@@ -1822,7 +1829,8 @@ export class RoomScene extends Phaser.Scene {
     this.trailIdleAt = Date.now();
     const doors = this.trailOn ? this.untriedDoors() : [];
     trail.glint(doors);
-    const to = nearestDoor(this.me.pos, doors);
+    // To play first (OP-337): a course's gate or the arcade's hatch while one is untried, then the nearest of the rest.
+    const to = trailDoor(this.me.pos, doors, (d) => leadsToPlay(roomFor(this.doorTo(d)?.room ?? '')));
     if (!to) return trail.clear();
     const from = { ...this.me.pos };
     const spot = doorSpot(to);

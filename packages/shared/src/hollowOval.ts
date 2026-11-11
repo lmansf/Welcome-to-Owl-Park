@@ -126,20 +126,41 @@ export const wayS = (id: HallWay): number => HALL_WAYS.indexOf(id) * WAY_STEP;
 /** A way's point on the rim, or `inset` px in from it. */
 export const wayAt = (id: HallWay, inset = 0): Vec2 => rimAt(wayS(id), inset);
 
+/**
+ * The ways with nothing behind them yet (OP-337; OP-286, the owner's "arches with nothing behind them
+ * come down"): the ink-wash realm has no room and the glass realm no course. No doorway, blockade or
+ * closed sign stands at one: the tree has grown over it (rooms/hollowHall.ts, HALL_GROWN, which a test
+ * holds to what each Commons leads to). A way opens by coming off this list and its Commons gaining the room.
+ */
+export const GROWN_WAYS: readonly HallWay[] = ['to-ink', 'course-glass'];
+
 /** Each Commons' middle round the rim: between its realm's doorway and its course's gate, where its idol stands. */
 export const commonsS = (level: HallLevel): number => (wayS(`to-${level}` as HallWay) + wayS(`course-${level}` as HallWay)) / 2;
 
 /** How the floor is cut in round an idol's base: how deep at its middle, and how far along the rim either way. */
 export const IDOL_BASE = 190;
 export const IDOL_HALF = 240;
-/** How far in from the rim the floor runs at `s`: round each idol's base, eased in and out. */
-export function floorInset(s: number, idols: readonly HallLevel[]): number {
-  let inset = 0;
-  for (const level of idols) {
-    let d = Math.abs(s - commonsS(level));
+/**
+ * A way with nothing behind it yet is no doorway (OP-337): the tree has grown over it, a mound of roots
+ * over the knothole painted there. The knotholes are painted about 30 px above their points on the rim
+ * and a little out past it where the rim runs up the room's ends, so the mound's foot stands GROWN_DROP
+ * below the point and GROWN_OUT out along the rim's lean, and its middle falls on the hole's. The floor
+ * is cut in round it as round an idol's base, so owls walk up to the roots and never stand behind them.
+ */
+export const GROWN_DROP = 105;
+export const GROWN_OUT = 50;
+export const GROWN_BASE = 190;
+export const GROWN_HALF = 240;
+/** How far in from the rim the floor runs at `s`: round each idol's base and each grown-over way, eased in and out. */
+export function floorInset(s: number, idols: readonly HallLevel[], grown: readonly HallWay[] = []): number {
+  const cut = (at: number, base: number, half: number): number => {
+    let d = Math.abs(s - at);
     d = Math.min(d, RIM_LENGTH - d);
-    if (d < IDOL_HALF) inset = Math.max(inset, (IDOL_BASE * (1 + Math.cos((Math.PI * d) / IDOL_HALF))) / 2);
-  }
+    return d < half ? (base * (1 + Math.cos((Math.PI * d) / half))) / 2 : 0;
+  };
+  let inset = 0;
+  for (const level of idols) inset = Math.max(inset, cut(commonsS(level), IDOL_BASE, IDOL_HALF));
+  for (const id of grown) inset = Math.max(inset, cut(wayS(id), GROWN_BASE, GROWN_HALF));
   return inset;
 }
 /** Where an idol's foot stands: on its base, in from the rim, off the floor. */
@@ -167,7 +188,8 @@ export const HALL_MOONBEAMS: ReadonlyArray<{ id: string; pos: Vec2 }> = [
 /**
  * The leaf piles: blown in at the knothole, they drift round the rim, so two lie in each Commons either
  * side of its plaza, clear of its two doorways' signs and landing spots, one by the hatch, one by the trunk's door, two by the knothole, two either side of
- * the heart and one out in front of it, between the trunk's door and the hatch.
+ * the heart and one out in front of it, between the trunk's door and the hatch; and one drifted up by
+ * the roots over each grown-over way.
  */
 export const HALL_LEAVES: ReadonlyArray<{ id: string; pos: Vec2 }> = [
   ...(['glass', 'ink', 'grove', 'market'] as const).flatMap((level) => [
@@ -176,6 +198,9 @@ export const HALL_LEAVES: ReadonlyArray<{ id: string; pos: Vec2 }> = [
   ]),
   { id: 'leaves-hatch', pos: rimAt(wayS('down') + 380, 260) },
   { id: 'leaves-party', pos: rimAt(wayS('to-party') - 380, 260) },
+  // A drift of leaves by the roots grown over each way with nothing behind it (OP-337): with no doorway
+  // there, that stretch of the rim still has something to do within a few seconds' walk.
+  ...GROWN_WAYS.map((id) => ({ id: `leaves-${id}-roots`, pos: rimAt(wayS(id) - 150, 180) })),
   { id: 'leaves-knothole-west', pos: rimAt(wayS('up') - 420, 220) },
   { id: 'leaves-knothole-east', pos: rimAt(wayS('up') + 420, 220) },
   { id: 'leaves-heart-west', pos: { x: HALL_CX - 760, y: HALL_CY + 160 } },

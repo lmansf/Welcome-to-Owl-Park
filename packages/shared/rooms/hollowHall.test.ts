@@ -1,17 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { doorTarget } from '../src/doorways';
 import { pointInPolygon } from '../src/geometry';
-import { HALL_WAYS, RIM_LENGTH, WAY_STEP, rimAt } from '../src/hollowOval';
+import { GROWN_BASE, GROWN_WAYS, HALL_WAYS, RIM_LENGTH, WAY_STEP, rimAt } from '../src/hollowOval';
 import { INTERACTABLES } from '../src/interactables';
 import { kitProblems } from '../src/kit';
 import { KIT_ART } from '../src/kitArt';
 import { hopTier, perchTiers } from '../src/routes';
 import { idolRealms, mapOf, voteRealmAt } from '../src/room';
 import {
+  GROWN_ART,
   HALL_BOWL,
   HALL_COMMONS,
   HALL_CX,
   HALL_CY,
+  HALL_GROWN,
   HALL_ID,
   HALL_MIDDLE,
   HALL_ROOM,
@@ -44,6 +46,8 @@ const middle = (id: string) => {
   const r = doorOf(id).rect;
   return { x: r.x + r.w / 2, y: r.y + r.h / 2 };
 };
+/** Where a way stands: its doorway's middle, or for a way the tree has grown over (no doorway) its point on the rim. */
+const spot = (id: (typeof HALL_WAYS)[number]) => (hall.doors.some((d) => d.id === id) ? middle(id) : rimAt(wayS(id)));
 /** Where a room's ways lead on the new map (doorTarget with map 3). */
 const leadsTo = (room: string) => ROOMS[room]!.doors.map((d) => doorTarget(d, 3)).filter((t) => t !== undefined);
 /** How far out a point is on the oval: 1 on the rim. */
@@ -66,9 +70,9 @@ describe('the Great Hollow (Nov 7; an oval, Nov 8)', () => {
     expect(HALL_BOWL.face).toBeGreaterThan(150);
     expect(HALL_BOWL.face).toBeLessThan(HALL_CY - HALL_RY);
     expect(HALL_CY + HALL_RY + HALL_BOWL.lip).toBeLessThan(hall.size.h);
-    // The floor is the oval, but where it is cut in round an idol's base.
+    // The floor is the oval, but where it is cut in round an idol's base or the roots over a grown-over way.
     for (const p of hall.walkable[0]!) expect(ovalR(p), `${p.x},${p.y}`).toBeLessThanOrEqual(1.001);
-    expect(hall.walkable[0]!.filter((p) => ovalR(p) > 0.995).length / hall.walkable[0]!.length).toBeGreaterThan(0.85);
+    expect(hall.walkable[0]!.filter((p) => ovalR(p) > 0.995).length / hall.walkable[0]!.length).toBeGreaterThan(0.8);
     // Each way out at the front has its opening in the near wall's top.
     for (const id of HALL_WAYS.filter((w) => atFront(w) && w !== 'down'))
       expect(
@@ -80,20 +84,21 @@ describe('the Great Hollow (Nov 7; an oval, Nov 8)', () => {
   it('spaces every way out evenly round the rim, so no two doorways stand side by side', () => {
     expect(HALL_WAYS).toHaveLength(11);
     expect(new Set(HALL_WAYS).size).toBe(HALL_WAYS.length);
+    // Every way is a doorway, or the tree has grown over it (OP-337): never both.
     for (const id of HALL_WAYS)
       expect(
         hall.doors.some((d) => d.id === id),
         id,
-      ).toBe(true);
+      ).toBe(!HALL_GROWN.includes(id));
     HALL_WAYS.forEach((id, i) => {
       expect(wayS(id)).toBeCloseTo(i * WAY_STEP, 6);
       const next = HALL_WAYS[(i + 1) % HALL_WAYS.length]!;
       // A step apart along the rim, and far apart across the floor too.
-      expect(Math.hypot(middle(id).x - middle(next).x, middle(id).y - middle(next).y), `${id} to ${next}`).toBeGreaterThan(900);
+      expect(Math.hypot(spot(id).x - spot(next).x, spot(id).y - spot(next).y), `${id} to ${next}`).toBeGreaterThan(900);
     });
     expect(WAY_STEP * HALL_WAYS.length).toBeCloseTo(RIM_LENGTH, 6);
     // Each doorway straddles the rim (the hatch lies just in from it).
-    for (const id of HALL_WAYS) expect(Math.abs(ovalR(middle(id)) - 1), id).toBeLessThan(id === 'down' ? 0.08 : 0.01);
+    for (const id of HALL_WAYS) expect(Math.abs(ovalR(spot(id)) - 1), id).toBeLessThan(id === 'down' ? 0.08 : 0.01);
     // Every Commons has a way on each half of its stretch of rim: its realm on one side of its idol, its course on the other.
     for (const c of HALL_COMMONS) expect(Math.abs(wayS(realmDoor(c.level)) - wayS(courseDoor(c.level)))).toBeCloseTo(WAY_STEP, 6);
   });
@@ -103,18 +108,47 @@ describe('the Great Hollow (Nov 7; an oval, Nov 8)', () => {
     for (const d of hall.doors) expect(onFloor(middle(d.id)) || onFloor(d.marker!), d.id).toBe(true);
   });
 
-  it("opens each Commons on its realm and its course, and shuts the ways that aren't there yet with a sign", () => {
+  it('opens each Commons on its realm and its course; a way with nothing behind it yet is no doorway, the tree grown over it (OP-337)', () => {
     for (const c of HALL_COMMONS) {
-      const realm = doorOf(realmDoor(c.level));
-      const course = doorOf(courseDoor(c.level));
-      expect(realm.to, c.level).toEqual(c.realm);
-      expect(course.to, c.level).toEqual(c.course);
-      expect(!!realm.closedSign, c.level).toBe(!c.realm);
-      expect(!!course.closedSign, c.level).toBe(!c.course);
-      for (const way of [c.realm, c.course]) if (way) expect(ROOMS[way.room]?.spawns[way.spawn], way.room).toBeDefined();
+      for (const [id, way] of [
+        [realmDoor(c.level), c.realm],
+        [courseDoor(c.level), c.course],
+      ] as const) {
+        const door = hall.doors.find((d) => d.id === id);
+        if (way) {
+          expect(door?.to, id).toEqual(way);
+          expect(ROOMS[way.room]?.spawns[way.spawn], way.room).toBeDefined();
+          expect(HALL_GROWN, id).not.toContain(id);
+        } else {
+          expect(door, id).toBeUndefined();
+          expect(HALL_GROWN, id).toContain(id);
+        }
+      }
     }
-    expect(doorOf(realmDoor('ink')).closedSign).toBe('Hatching Soon');
-    expect(doorOf(courseDoor('glass')).closedSign).toBe('Not Yet Fledged');
+    expect(HALL_GROWN).toBe(GROWN_WAYS);
+    expect([...HALL_GROWN]).toEqual(['to-ink', 'course-glass']);
+    // No blockade and no closed sign anywhere in the room (OP-286): every doorway leads somewhere, or is an idol's vote spot.
+    expect(hall.doors.filter((d) => d.closedSign)).toEqual([]);
+    for (const d of hall.doors) expect(d.to !== undefined || d.id.startsWith('idol-'), d.id).toBe(true);
+    for (const id of HALL_GROWN) {
+      // Roots the kit already has stand over the knothole painted at the way...
+      const roots = hall.pieces!.find((p) => p.id === `${id}-grown`)!;
+      expect(roots.key).toBe(GROWN_ART);
+      expect(KIT_ART[GROWN_ART]).toBeDefined();
+      const rim = rimAt(wayS(id));
+      expect(Math.hypot(roots.x - rim.x, roots.y - rim.y), id).toBeLessThan(140);
+      // ... their foot off the floor, the floor stopping in front of them: owls walk up to the roots, never through.
+      expect(onFloor({ x: roots.x, y: roots.y }), id).toBe(false);
+      // No owl stands behind them either: the mound is drawn up the screen from its foot, over an owl stood
+      // further back, so none of the floor lies under its body (its lower two thirds, a little in from its sides).
+      const art = KIT_ART[GROWN_ART]!;
+      for (let x = roots.x - art.w / 2 + 40; x <= roots.x + art.w / 2 - 40; x += 20)
+        for (let y = roots.y - Math.round((art.h * 2) / 3); y <= roots.y; y += 20) expect(onFloor({ x, y }), `${id}: ${x},${y} behind the roots`).toBe(false);
+      expect(onFloor(rimAt(wayS(id), GROWN_BASE - 30)), id).toBe(false);
+      expect(onFloor(rimAt(wayS(id), GROWN_BASE + 40)), id).toBe(true);
+      // No arrival spot is kept for a way nothing comes in by.
+      expect(hall.spawns[id.startsWith('to-') ? fromRealm(id.slice(3) as HallLevel) : fromCourse(id.slice(7) as HallLevel)], id).toBeUndefined();
+    }
   });
 
   it('brings an owl back from each realm and course to its own doorway', () => {
@@ -124,10 +158,11 @@ describe('the Great Hollow (Nov 7; an oval, Nov 8)', () => {
     }
     // Each comes back in front of its own doorway, not across the hall.
     for (const c of HALL_COMMONS) {
-      for (const [spawn, way] of [
-        [fromRealm(c.level), realmDoor(c.level)],
-        [fromCourse(c.level), courseDoor(c.level)],
+      for (const [spawn, way, open] of [
+        [fromRealm(c.level), realmDoor(c.level), c.realm],
+        [fromCourse(c.level), courseDoor(c.level), c.course],
       ] as const) {
+        if (!open) continue;
         const at = hall.spawns[spawn]!;
         expect(Math.hypot(at.x - middle(way).x, at.y - middle(way).y), spawn).toBeLessThan(560);
       }
