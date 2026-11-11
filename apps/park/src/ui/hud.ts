@@ -198,6 +198,8 @@ export interface Hud {
   /** The run is over: how it ended and what it paid. */
   arcadeResult(result: ArcadeResultView): void;
   closeArcade(): void;
+  /** Escape while an arcade game is open (OP-345): a run under way pauses (a paused one goes on) and this answers true; false when there is nothing to pause. */
+  escapeArcade(): boolean;
   /** The climb screen over everything while a climb is played; it owns its stick, button and keys. */
   openClimb(view: ClimbView, handlers: ClimbHandlers): void;
   /** The climb screen's held controls right now (`jumpPressed` once per press). */
@@ -1268,6 +1270,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       arcade.result(r);
     },
     closeArcade: () => arcade.close(),
+    escapeArcade: () => arcade.isOpen() && arcade.escape(),
     openClimb(view, handlers) {
       if (!climb.isOpen()) makeRoom();
       root.classList.add('covered');

@@ -52,6 +52,8 @@ export interface ArcadeHandlers {
   frame(rect: PreviewRect | null): void;
   /** Play again, at the same cabinet. */
   again(): void;
+  /** Pause the run under way, or let it go on (OP-345). */
+  pause(on: boolean): void;
 }
 
 export interface ArcadeScreen {
@@ -68,9 +70,26 @@ export interface ArcadeScreen {
   playing(score: number, banner: string): void;
   result(r: ArcadeResultView): void;
   close(): void;
+  /**
+   * Escape, or the screen's own Close, while it is open (OP-345): a run under way is paused, with Keep
+   * playing and Leave to choose from, where it used to end at once with nothing said; a paused run
+   * goes on. False when there is no run to pause (the how-to card, a result): the screen then closes
+   * as any other does.
+   */
+  escape(): boolean;
   isOpen(): boolean;
   onClose(cb: () => void): void;
 }
+
+/**
+ * How long after a run ends its result card takes no Play (OP-345). The key that plays the game is
+ * the key that presses the card's first button, so a player still tapping when the run ended started
+ * the next one 0.4 s later without ever seeing how they did.
+ */
+export const RESULT_HOLD_MS = 900;
+
+/** The pause card's words. Visitor-facing. */
+export const PAUSE_WORDS = { title: 'Paused', resume: 'Keep playing', leave: 'Leave the game', note: 'Leaving ends this run.' } as const;
 
 const CSS = `
 #hud .arcade-layer .scrim{background:transparent}
@@ -99,8 +118,14 @@ const CSS = `
 #hud .arcade.howto .a-howto{display:flex}
 #hud .arcade.howto .a-hint{display:none}
 #hud .arcade .a-howto h3{margin:0;color:var(--neon);text-shadow:0 0 10px var(--neon);font-size:22px}
+#hud .arcade .a-howto [data-howto-text]{display:flex;flex-direction:column;gap:10px}
 #hud .arcade .a-howto p{margin:0;font-size:16px;line-height:1.35}
 #hud .arcade .a-howto button{min-height:44px;padding:8px 28px}
+#hud .arcade .a-pause{position:absolute;left:12px;right:12px;top:30%;margin:0 auto;max-width:380px;display:none;flex-direction:column;gap:12px;align-items:center;padding:18px 16px;border-radius:20px;background:rgba(5,6,13,.92);border:1px solid var(--neon);box-shadow:0 0 24px rgba(0,0,0,.5)}
+#hud .arcade.paused .a-pause{display:flex}
+#hud .arcade.paused .a-hint{display:none}
+#hud .arcade .a-pause h3{margin:0;color:var(--neon);text-shadow:0 0 10px var(--neon);font-size:22px}
+#hud .arcade.holding .a-buttons [data-again]{opacity:.45}
 `;
 
 let styled = false;
@@ -155,6 +180,11 @@ export function createArcadeScreen(root: HTMLElement): ArcadeScreen {
         <div data-howto-text></div>
         <button data-howto-go>Play</button>
       </div>
+      <div class="a-pause" data-pause role="dialog" aria-label="${PAUSE_WORDS.title}">
+        <h3>${PAUSE_WORDS.title}</h3>
+        <div class="a-buttons"><button data-resume>${PAUSE_WORDS.resume}</button><button class="ghost" data-leave>${PAUSE_WORDS.leave}</button></div>
+        <div class="a-note">${PAUSE_WORDS.note}</div>
+      </div>
       <div class="a-result" data-result aria-live="polite">
         <div class="a-line" data-line></div>
         <div data-paid></div>
@@ -178,7 +208,14 @@ export function createArcadeScreen(root: HTMLElement): ArcadeScreen {
   let shown = { score: -1, banner: '' };
   /** A pull on the pad's stick under way in the game (Talon Toss). */
   let pulling = false;
-  $<HTMLButtonElement>('[data-again]').addEventListener('click', () => handlers?.again());
+  /** When the result card takes Play again (RESULT_HOLD_MS after the run ended). */
+  let againAt = 0;
+  let holdTimer: ReturnType<typeof setTimeout> | null = null;
+  const againBtn = $<HTMLButtonElement>('[data-again]');
+  againBtn.addEventListener('click', () => {
+    if (Date.now() < againAt) return;
+    handlers?.again();
+  });
   /** A spectator's result offers a Day Ticket (OP-191): the button closes the game for the card before the store. */
   let offerGet: (() => void) | null = null;
   const getBtn = $<HTMLButtonElement>('[data-spectator-get]');
@@ -190,6 +227,27 @@ export function createArcadeScreen(root: HTMLElement): ArcadeScreen {
   });
   $<HTMLButtonElement>('[data-done]').addEventListener('click', () => modal.close());
   const howToUp = () => box.classList.contains('howto');
+  const paused = () => box.classList.contains('paused');
+  /** Pause the run under way, or let it go on: the game stops with the card up, and the field has the keys again after. */
+  const setPaused = (on: boolean) => {
+    if (on === paused()) return;
+    box.classList.toggle('paused', on);
+    drag = null;
+    swipe = null;
+    pulling = false;
+    handlers?.pause(on);
+    requestAnimationFrame(() => (on ? $<HTMLButtonElement>('[data-resume]') : stage).focus({ preventScroll: true }));
+  };
+  /** Whether a run is under way: not before it (the how-to card) and not after (the result). */
+  const running = () => !!view && modal.isOpen() && !over() && !howToUp();
+  /** Escape or Close: pause a run under way, let a paused one go on; false with no run to pause. */
+  const escape = () => {
+    if (!running()) return false;
+    setPaused(!paused());
+    return true;
+  };
+  $<HTMLButtonElement>('[data-resume]').addEventListener('click', () => setPaused(false));
+  $<HTMLButtonElement>('[data-leave]').addEventListener('click', () => modal.close());
   /** The how-to card goes, for good on this device, and the field takes the keys. */
   const howToDone = () => {
     if (!view || !howToUp()) return;
@@ -214,6 +272,9 @@ export function createArcadeScreen(root: HTMLElement): ArcadeScreen {
   watcher?.observe(stage);
   window.addEventListener('resize', frame);
   modal.onClose(() => {
+    box.classList.remove('paused', 'holding');
+    if (holdTimer) clearTimeout(holdTimer);
+    againBtn.disabled = false;
     handlers?.frame(null);
     handlers = null;
     view = null;
@@ -221,7 +282,7 @@ export function createArcadeScreen(root: HTMLElement): ArcadeScreen {
 
   const over = () => box.classList.contains('over');
   stage.addEventListener('pointerdown', (e) => {
-    if (!view || over() || howToUp() || (e.target as Element).closest('button')) return;
+    if (!view || over() || howToUp() || paused() || (e.target as Element).closest('button')) return;
     e.preventDefault();
     if (view.game === 'crossing') {
       swipe = { id: e.pointerId, x: e.clientX, y: e.clientY };
@@ -265,7 +326,7 @@ export function createArcadeScreen(root: HTMLElement): ArcadeScreen {
   });
   // The keys: a hop or a flap; for the slingshot, aim higher or lower, more or less power, and let go.
   box.addEventListener('keydown', (e) => {
-    if (!view || over() || e.ctrlKey || e.metaKey || e.altKey || typingInField(e)) return;
+    if (!view || over() || paused() || e.ctrlKey || e.metaKey || e.altKey || typingInField(e)) return;
     if ((e.target as Element).closest('button') && (e.key === 'Enter' || e.key === ' ')) return;
     // The how-to card: Space or Enter puts it away, and nothing reaches the game until it is.
     if (howToUp()) {
@@ -300,11 +361,15 @@ export function createArcadeScreen(root: HTMLElement): ArcadeScreen {
       handlers = h;
       drag = null;
       shown = { score: -1, banner: '' };
-      box.classList.remove('over');
+      box.classList.remove('over', 'paused', 'holding');
+      if (holdTimer) clearTimeout(holdTimer);
+      againAt = 0;
+      againBtn.disabled = false;
       box.style.setProperty('--neon', v.colour);
       box.querySelector(':scope > header')?.remove();
       const sub = [v.top !== null ? `Today's best ${v.top}` : '', v.best !== null ? `Your best ${v.best}` : ''].filter(Boolean).join(' · ');
-      box.prepend(modalHeader(v.name, { sub, onClose: () => modal.close(), closeLabel: `Close ${v.name}` }));
+      // Close pauses a run under way first (OP-345); with no run to pause it closes.
+      box.prepend(modalHeader(v.name, { sub, onClose: () => void (escape() || modal.close()), closeLabel: `Close ${v.name}` }));
       hintEl.textContent = v.hint;
       bannerEl.textContent = '';
       scoreEl.textContent = '0';
@@ -329,15 +394,15 @@ export function createArcadeScreen(root: HTMLElement): ArcadeScreen {
     },
     padTap() {
       if (howToUp()) howToDone();
-      else if (view && !over()) handlers?.input({ kind: 'tap' });
+      else if (view && !over() && !paused()) handlers?.input({ kind: 'tap' });
     },
     padHop(dir) {
       if (howToUp()) howToDone();
-      else if (view && !over()) handlers?.input({ kind: 'hop', dir });
+      else if (view && !over() && !paused()) handlers?.input({ kind: 'hop', dir });
     },
     padPull(x, y) {
       if (howToUp()) howToDone();
-      else if (view && !over()) {
+      else if (view && !over() && !paused()) {
         pulling = true;
         handlers?.input({ kind: 'pull', x, y });
       }
@@ -366,12 +431,25 @@ export function createArcadeScreen(root: HTMLElement): ArcadeScreen {
       $<HTMLElement>('[data-offer]').textContent = r.offer?.line ?? '';
       offerGet = r.offer?.get ?? null;
       getBtn.hidden = !r.offer;
-      $<HTMLButtonElement>('[data-again]').textContent = r.offer ? SPECTATOR_WORDS.again : 'Play';
+      againBtn.textContent = r.offer ? SPECTATOR_WORDS.again : 'Play';
       bannerEl.textContent = '';
-      box.classList.add('over');
-      requestAnimationFrame(() => (r.offer ? getBtn : $<HTMLButtonElement>('[data-again]')).focus({ preventScroll: true }));
+      box.classList.remove('paused');
+      box.classList.add('over', 'holding');
+      // The card is read before it is played past: Play takes no key or click for a moment, and takes the focus only then.
+      againAt = Date.now() + RESULT_HOLD_MS;
+      againBtn.disabled = true;
+      (document.activeElement as HTMLElement | null)?.blur?.();
+      if (holdTimer) clearTimeout(holdTimer);
+      holdTimer = setTimeout(() => {
+        holdTimer = null;
+        againBtn.disabled = false;
+        if (!over()) return;
+        box.classList.remove('holding');
+        (r.offer ? getBtn : againBtn).focus({ preventScroll: true });
+      }, RESULT_HOLD_MS);
     },
     close: () => modal.close(),
+    escape,
     isOpen: () => modal.isOpen(),
     onClose: (cb) => modal.onClose(cb),
   };

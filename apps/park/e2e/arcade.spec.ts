@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { CABINET, alongTheHall, clearLevel, flyThrough, knockByKeys, knockByStick, loseLives, missTheRest, paintedAsShipped, playAt, run, untilOver, type Game } from './arcadePlay';
-import { doAction, openPark, state, walkToDoor } from './helpers';
+import { doAction, frames, openPark, state, walkToDoor } from './helpers';
 
 async function inRoom(page: Page, room: string): Promise<void> {
   await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe(room);
@@ -38,6 +38,13 @@ async function paidAndOnTheWall(page: Page, game: Game, line: RegExp, before: nu
   expect(wall.mine[game]).toBe(score);
   expect(wall.walls.find((w) => w.game === game)!.top[0]!.score).toBe(score);
 }
+
+/** Where every cart, drone, bat and log of Hoot & Hop's street is now: they move only while the run's clock does (OP-345). */
+const traffic = (page: Page) =>
+  page.evaluate(() => {
+    const sim = window.owlPark.arcade()?.sim as unknown as { lanes?: Array<{ items: Array<{ x: number }> }> } | undefined;
+    return (sim?.lanes ?? []).flatMap((l) => l.items.map((i) => Math.round(i.x * 100) / 100)).join(',');
+  });
 
 // Each test walks in and plays a whole run; on a slow runner a run plays at a third of its speed or
 // less (the games step at most 100 ms a frame), so a run can take a few minutes.
@@ -227,7 +234,7 @@ test.describe('the arcade (this device)', () => {
     const before = await intoArcade(page, `e2e-knock-${test.info().project.name}`);
     await playAt(page, 'sling');
     await paintedAsShipped(page, 'sling');
-    await expect(page.locator('.arcade [data-hint]')).toHaveText(phone ? 'Pull the stick, let go' : 'Pull back and let go, or arrows and space');
+    await expect(page.locator('.arcade [data-hint]')).toHaveText(phone ? 'Pull the stick, let go' : 'Pull back and let go, or aim with the arrows and press Space');
     await expect(page.locator('.arcade [data-banner]')).toHaveText('The stack · 5 shots left');
     // On a phone the owl is pulled back on the pad's stick; on a computer it is aimed with the keys.
     if (phone) await knockByStick(page);
@@ -238,11 +245,78 @@ test.describe('the arcade (this device)', () => {
     // Fourteen shots into the ground: the tower and the nest come and stand, and the run ends.
     await missTheRest(page);
     expect(await run(page)).toMatchObject({ score: first, over: true, level: 2 });
-    await paidAndOnTheWall(page, 'sling', new RegExp(`^No target down, ${first} points\\.$`), before);
+    await paidAndOnTheWall(page, 'sling', new RegExp(`^${first} points\\.$`), before);
     // Back along the hall past the other cabinets to the entrance, and out: on the pavement in front of the doorway.
     await alongTheHall(page, 300, 820);
     await walkToDoor(page, 'to-market');
     await inRoom(page, 'market');
     expect((await state(page)).pos.x).toBeGreaterThan(3000);
+  });
+
+  test('Close or Escape pauses a run, to go on or to leave by choice; and its result card takes no Play for a moment (OP-345)', async ({ page }) => {
+    await intoArcade(page, `e2e-pause-${test.info().project.name}`);
+    await playAt(page, 'crossing');
+    const pause = page.locator('.arcade [data-pause]');
+    await expect(pause).toBeHidden();
+    // The street is moving.
+    const moving = await traffic(page);
+    await expect.poll(() => traffic(page), { timeout: 10_000 }).not.toBe(moving);
+
+    // Close, with the run under way: paused, not ended, and nothing moves.
+    await page.getByRole('button', { name: 'Close Hoot & Hop' }).click();
+    await expect(pause).toBeVisible();
+    await expect(pause.getByRole('button')).toHaveText(['Keep playing', 'Leave the game']);
+    await expect(pause.getByRole('button', { name: 'Keep playing' })).toBeFocused();
+    const held = await traffic(page);
+    await frames(page, 30);
+    expect(await traffic(page)).toBe(held);
+    expect(await run(page)).toMatchObject({ over: false, score: 0 });
+    // A hop asked for while it is paused is not taken.
+    await page.locator('.arcade [data-stage]').dispatchEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true });
+    await frames(page, 10);
+    expect(await traffic(page)).toBe(held);
+
+    // Keep playing: the run goes on from where it stood.
+    await pause.getByRole('button', { name: 'Keep playing' }).click();
+    await expect(pause).toBeHidden();
+    await expect.poll(() => traffic(page), { timeout: 10_000 }).not.toBe(held);
+    // Escape pauses too, and Escape again goes on.
+    await page.keyboard.press('Escape');
+    await expect(pause).toBeVisible();
+    await expect(page.locator('.arcade-layer')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(pause).toBeHidden();
+
+    // The run played to its end. The moment its card comes up, Play takes nothing: it is not pressable and does not hold the focus.
+    await page.evaluate(() => {
+      const box = document.querySelector('.arcade')!;
+      const seen = window as unknown as { atOver?: { disabled: boolean; focused: boolean } };
+      new MutationObserver(() => {
+        if (!box.classList.contains('over') || seen.atOver) return;
+        const again = box.querySelector<HTMLButtonElement>('[data-again]')!;
+        seen.atOver = { disabled: again.disabled, focused: document.activeElement === again };
+      }).observe(box, { attributes: true, attributeFilter: ['class'] });
+    });
+    const seed = await page.evaluate(() => window.owlPark.arcade()?.seed);
+    await loseLives(page);
+    await untilOver(page);
+    const card = page.locator('.arcade [data-result]');
+    await expect(card).toBeVisible();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { atOver?: unknown }).atOver ?? null)).toEqual({ disabled: true, focused: false });
+    // A moment later it is ready, with the focus, and Play again starts a new run.
+    const again = card.locator('[data-again]');
+    await expect(again).toBeEnabled();
+    await expect(again).toBeFocused();
+    expect(await page.evaluate(() => window.owlPark.arcade()?.seed)).toBe(seed);
+    await again.click();
+    await expect.poll(() => page.evaluate(() => window.owlPark.arcade()?.seed)).not.toBe(seed);
+    await expect(card).toBeHidden();
+
+    // Leave, from the pause: the game closes and the owl is back in the arcade.
+    await page.keyboard.press('Escape');
+    await expect(pause).toBeVisible();
+    await pause.getByRole('button', { name: 'Leave the game' }).click();
+    await expect(page.locator('.arcade-layer')).toBeHidden();
+    expect((await state(page)).room).toBe('arcade');
   });
 });

@@ -219,7 +219,8 @@ const keyboard = attachKeyboard(window, {
   journal: () => {
     if (!atHome) hud.toggleJournal();
   },
-  close: () => hud.closePanels(),
+  // Escape: an arcade run under way pauses first (OP-345); anything else open closes.
+  close: () => void (hud.escapeArcade() || hud.closePanels()),
 });
 game.registry.set('keys', {
   direction: () => (hud.isBlocking() ? null : (keyboard.direction() ?? hud.stickDirection())),
