@@ -69,8 +69,16 @@ export interface Look {
   y: number;
 }
 
-/** The opening look's timing (ms): how long the whole room holds, how long it eases in, and how fast a player's first move ends it. */
-export const OPENING = { holdMs: 900, easeMs: 1100, cutMs: 260 } as const;
+/**
+ * The opening look's timing (ms), counted from when the room has faded in: how long the whole room
+ * holds, how long it eases in, the least the whole room shows whatever the player does, and how long a
+ * player's first move takes to bring the camera in.
+ *
+ * Long enough to read the oval. The first timings (0.9 s held, counted from the start of the room's
+ * fade, and a quarter second on a move) left about half a second of it: on the owner's look it was
+ * over before he could see what was on the map (OP-336).
+ */
+export const OPENING = { holdMs: 2400, easeMs: 1600, minMs: 1200, cutMs: 600 } as const;
 
 /** Smooth at both ends. */
 function ease(t: number): number {
@@ -79,14 +87,18 @@ function ease(t: number): number {
 }
 
 /**
- * How far drawn back the opening look is `ms` after the room came in: 1 the whole room, 0 the owl's
- * own view. It holds, then eases in. `cutAt` is when the player first moved, if it has: from then it
- * eases in over OPENING.cutMs from wherever it was, and never slower than it would have anyway.
+ * How far drawn back the opening look is `ms` after the room came in (before that, while it fades in,
+ * `ms` is under 0): 1 the whole room, 0 the owl's own view. It holds, then eases in. `cutAt` is when
+ * the player first moved, if it has. The owl moves at once; the camera comes in over OPENING.cutMs
+ * from wherever it was, but not before the whole room has shown for OPENING.minMs, and never slower
+ * than it would have anyway.
  */
 export function openingAt(ms: number, cutAt: number | null = null): number {
   const plain = (t: number) => 1 - ease((t - OPENING.holdMs) / OPENING.easeMs);
-  if (cutAt === null || ms <= cutAt) return plain(ms);
-  return Math.min(plain(ms), plain(cutAt) * (1 - ease((ms - cutAt) / OPENING.cutMs)));
+  if (cutAt === null) return plain(ms);
+  const from = Math.max(cutAt, OPENING.minMs);
+  if (ms <= from) return plain(ms);
+  return Math.min(plain(ms), plain(from) * (1 - ease((ms - from) / OPENING.cutMs)));
 }
 
 /** When the opening look is over, `ms` after the room came in. */
