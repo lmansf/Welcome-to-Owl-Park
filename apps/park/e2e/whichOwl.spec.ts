@@ -17,6 +17,31 @@ const tap = async (page: Page, selector: string, isMobile: boolean) => {
 };
 const storedLook = (page: Page) => page.evaluate(() => JSON.parse(localStorage.getItem('owl-park:look') ?? 'null') as { body: string; species?: string } | null);
 
+/**
+ * What lies over the owl at the reveal (OP-325): every element above the canvas at the middle of the
+ * owl's frame, with anything in its background stronger than a light glow. The owl is drawn on the
+ * canvas beneath the screen, so an empty list is the owl in view.
+ */
+const overOwl = (page: Page) =>
+  page.evaluate(() => {
+    const stage = document.querySelector('[data-wo-stage]');
+    if (!stage) return ['no frame'];
+    const r = stage.getBoundingClientRect();
+    const alphas = (css: string) =>
+      [...css.matchAll(/rgba?\(([^)]*)\)/g)].map((m) => {
+        const parts = m[1]!.split(/[ ,/]+/).filter(Boolean);
+        return parts.length > 3 ? Number(parts[3]) : 1;
+      });
+    const hidden: string[] = [];
+    for (const el of document.elementsFromPoint(r.left + r.width / 2, r.top + r.height / 2)) {
+      if (el.tagName === 'CANVAS') return hidden;
+      const cs = getComputedStyle(el);
+      const strongest = Math.max(0, ...alphas(cs.backgroundColor), ...alphas(cs.backgroundImage));
+      if (strongest > 0.35 && Number(cs.opacity) > 0) hidden.push(`${el.tagName.toLowerCase()}.${[...el.classList].join('.')} ${strongest}`);
+    }
+    return [...hidden, 'no canvas'];
+  });
+
 async function openHome(page: Page): Promise<void> {
   await page.goto('/?transport=local');
   await page.waitForFunction(() => window.owlPark?.home?.().shown === true, null, { timeout: 20_000 });
@@ -73,6 +98,14 @@ test.describe('which owl are you (OP-076)', () => {
     expect(await page.evaluate(() => window.owlPark.home().loggedIn)).toBe(true);
     expect(await storedLook(page)).toMatchObject({ body: '#3E6B48', species });
     expect(await page.evaluate(() => window.owlPark.game.scene.isActive('builder'))).toBe(true);
+    // And seen (OP-325): nothing solid lies between the owl's frame and the canvas the owl is drawn on.
+    await expect.poll(() => overOwl(page)).toEqual([]);
+    if (!isMobile) {
+      for (const size of [{ width: 1440, height: 900 }, { width: 1024, height: 768 }]) {
+        await page.setViewportSize(size);
+        await expect.poll(() => overOwl(page)).toEqual([]);
+      }
+    }
     await expect(page.locator('[data-wo-keep]')).toBeFocused();
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-which-owl-reveal.png` });
 

@@ -44,7 +44,10 @@ const CSS = `
 #hud .layer.full .modal.which-owl{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(14px,3vh,26px);
   padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));
   background:radial-gradient(ellipse at 50% 18%,rgba(255,211,106,.22),rgba(255,211,106,0) 42%),#0A1626;color:#F6F1E3;overflow:auto;transition:background-color .5s ease-out}
-#hud .layer.full .modal.which-owl.bright{background:radial-gradient(ellipse at 50% 40%,rgba(255,211,106,.32),rgba(255,211,106,0) 60%),#163256}
+/* The reveal (OP-325): the owl is drawn on the canvas beneath this screen, over the preview's own dusk
+   backdrop, so the screen is see-through here: only a light gold glow, and no scrim, lies over the owl. */
+#hud .which-owl-layer.full .scrim{background:transparent}
+#hud .layer.full .modal.which-owl.bright{background:radial-gradient(ellipse at 50% 40%,rgba(255,211,106,.24),rgba(255,211,106,0) 60%)}
 #hud .which-owl .wo-corner{position:absolute;top:max(10px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));display:flex;align-items:center;gap:10px}
 #hud .which-owl .wo-count{font-size:14px;opacity:.75}
 #hud .which-owl .wo-corner button{min-height:44px;padding:6px 16px;font-size:15px}
@@ -104,6 +107,7 @@ export function createWhichOwlScreen(root: HTMLElement): WhichOwlScreen {
   const step = (count: string | null) => {
     box.innerHTML = '';
     box.classList.remove('bright');
+    settle?.disconnect();
     if (stage) {
       stage = null;
       run?.preview(null);
@@ -211,6 +215,9 @@ export function createWhichOwlScreen(root: HTMLElement): WhichOwlScreen {
     actions.append(keep, makeBtn, again);
     el.append(line, owl, you, name, fact, actions);
     stage = owl;
+    settle?.disconnect();
+    settle?.observe(owl);
+    settle?.observe(box);
     requestAnimationFrame(frame);
     focusFirst('[data-wo-keep]');
   }
@@ -220,7 +227,12 @@ export function createWhichOwlScreen(root: HTMLElement): WhichOwlScreen {
     const r = stage.getBoundingClientRect();
     run.preview({ x: r.left, y: r.top, w: r.width, h: r.height });
   };
+  // The owl follows its frame wherever the frame goes (OP-325): a resize, a scroll of a short screen,
+  // and the reveal's own layout settling (its fonts and its step coming in) all move it.
   window.addEventListener('resize', frame);
+  box.addEventListener('scroll', frame, { passive: true });
+  box.addEventListener('animationend', frame);
+  const settle = typeof ResizeObserver === 'function' ? new ResizeObserver(() => frame()) : null;
 
   /** A run from the top (`withIntro`), or again from the first card with a fresh draw (Not me? Try again). */
   function begin(withIntro: boolean): void {
@@ -242,6 +254,7 @@ export function createWhichOwlScreen(root: HTMLElement): WhichOwlScreen {
   modal.onClose(() => {
     const r = run;
     if (stage) r?.preview(null);
+    settle?.disconnect();
     stage = null;
     answers = [];
     run = null;
