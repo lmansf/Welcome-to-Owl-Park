@@ -27,6 +27,7 @@ import {
   angleAt,
   floorInset,
   GROWN_DROP,
+  GROWN_OUT,
   GROWN_WAYS,
   HALL_CX,
   HALL_CY,
@@ -157,6 +158,11 @@ const IDOL_LEVELS: readonly HallLevel[] = HALL_COMMONS.filter((c) => c.votesFor)
 export const HALL_GROWN: readonly HallWay[] = GROWN_WAYS;
 /** The roots grown over such a way: a piece the kit already has. */
 export const GROWN_ART = 'kit-under-barrier-roots';
+/** Where the roots' foot stands, so their middle falls on the knothole painted at the way (src/hollowOval.ts, GROWN_DROP). */
+export function grownFoot(id: HallWay): Vec2 {
+  const at = wayAt(id);
+  return { x: Math.round(at.x + rimNormal(angleAt(wayS(id))).x * GROWN_OUT), y: at.y + GROWN_DROP };
+}
 
 /** Whether a way stands on the front half of the rim, where an owl sees the near wall's top and not its face. */
 export const atFront = (id: HallWay) => rimNormal(angleAt(wayS(id))).y > 0.7;
@@ -291,7 +297,7 @@ const DOORS: DoorDef[] = [
 const PIECES: RoomPiece[] = HALL_WAYS.flatMap((id): RoomPiece[] => {
   const key = wayArt(id);
   // Grown over: the roots stand over the knothole painted there, their foot a little below its point on the rim.
-  if (!key) return HALL_GROWN.includes(id) ? [{ id: `${id}-grown`, key: GROWN_ART, x: wayAt(id).x, y: wayAt(id).y + GROWN_DROP }] : [];
+  if (!key) return HALL_GROWN.includes(id) ? [{ id: `${id}-grown`, key: GROWN_ART, ...grownFoot(id) }] : [];
   if (id === 'down') {
     const at = wayAt('down', HATCH_IN);
     return [{ id: 'root-hatch', key, x: at.x, y: at.y + 50 }];

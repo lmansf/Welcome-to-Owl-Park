@@ -142,14 +142,15 @@ export const IDOL_BASE = 190;
 export const IDOL_HALF = 240;
 /**
  * A way with nothing behind it yet is no doorway (OP-337): the tree has grown over it, a mound of roots
- * over the knothole painted there. The knotholes are painted about 30 px above their points on the rim,
- * so the mound's foot stands GROWN_DROP below the point and its middle falls on the hole's. The floor is
- * cut in round it as round an idol's base, shallower and narrower, so owls walk up to the roots and
- * never through them.
+ * over the knothole painted there. The knotholes are painted about 30 px above their points on the rim
+ * and a little out past it where the rim runs up the room's ends, so the mound's foot stands GROWN_DROP
+ * below the point and GROWN_OUT out along the rim's lean, and its middle falls on the hole's. The floor
+ * is cut in round it as round an idol's base, so owls walk up to the roots and never stand behind them.
  */
 export const GROWN_DROP = 105;
-export const GROWN_BASE = 140;
-export const GROWN_HALF = 220;
+export const GROWN_OUT = 50;
+export const GROWN_BASE = 190;
+export const GROWN_HALF = 240;
 /** How far in from the rim the floor runs at `s`: round each idol's base and each grown-over way, eased in and out. */
 export function floorInset(s: number, idols: readonly HallLevel[], grown: readonly HallWay[] = []): number {
   const cut = (at: number, base: number, half: number): number => {

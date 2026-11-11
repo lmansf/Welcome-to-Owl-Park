@@ -139,6 +139,11 @@ describe('the Great Hollow (Nov 7; an oval, Nov 8)', () => {
       expect(Math.hypot(roots.x - rim.x, roots.y - rim.y), id).toBeLessThan(140);
       // ... their foot off the floor, the floor stopping in front of them: owls walk up to the roots, never through.
       expect(onFloor({ x: roots.x, y: roots.y }), id).toBe(false);
+      // No owl stands behind them either: the mound is drawn up the screen from its foot, over an owl stood
+      // further back, so none of the floor lies under its body (its lower two thirds, a little in from its sides).
+      const art = KIT_ART[GROWN_ART]!;
+      for (let x = roots.x - art.w / 2 + 40; x <= roots.x + art.w / 2 - 40; x += 20)
+        for (let y = roots.y - Math.round((art.h * 2) / 3); y <= roots.y; y += 20) expect(onFloor({ x, y }), `${id}: ${x},${y} behind the roots`).toBe(false);
       expect(onFloor(rimAt(wayS(id), GROWN_BASE - 30)), id).toBe(false);
       expect(onFloor(rimAt(wayS(id), GROWN_BASE + 40)), id).toBe(true);
       // No arrival spot is kept for a way nothing comes in by.
