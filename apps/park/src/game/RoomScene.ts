@@ -184,7 +184,7 @@ import { TRIAL_BACKDROP_VEIL, trialBackdropVeiled } from './skinTrial';
 import { PUZZLE_ART_KEYS, artScale, drawnAsSizeBox, drawsSkinTrial, loadArt, opensSoft, prefetchRoomArt, releaseArt, roomArtCap, roomArtKeys, roomOpeningArt, sharpCopy, sharpenArt } from './art';
 import { SpeechBubbles } from './bubbles';
 import { backWaits, doorwayUnder, doorwaysOff, roomsAhead, takesDoorway, upCounts } from './doors';
-import { TriedDoors, doorSpot, leadsToPlay, trailDoor } from './featherTrail';
+import { PLAY_SPOTS, TriedDoors, doorSpot, leadsToPlay, playSpotsAt, trailTo, type PlaySpot } from './featherTrail';
 import { FeatherTrail } from './featherTrailView';
 import { admitTarget } from './gateAdmit';
 import { enteredRoom, walkingMap } from './walkingMap';
@@ -1818,6 +1818,12 @@ export class RoomScene extends Phaser.Scene {
     });
   }
 
+  /** The games of this room's own that the owl has not stood at yet (OP-338, featherTrail.ts PLAY_SPOTS). */
+  private untriedSpots(): PlaySpot[] {
+    const tried = triedDoors();
+    return (PLAY_SPOTS[this.room.id] ?? []).filter((s) => !tried.has(this.room.id, s.id));
+  }
+
   /**
    * The feather trail (OP-307): a glint on each doorway not tried yet, and feathers from the owl toward
    * one of them (featherTrail.ts, trailDoor), along the way it would walk there (straight in a room seen
@@ -1828,9 +1834,11 @@ export class RoomScene extends Phaser.Scene {
     if (!trail || !this.built || this.leaving) return;
     this.trailIdleAt = Date.now();
     const doors = this.trailOn ? this.untriedDoors() : [];
-    trail.glint(doors);
-    // To play first (OP-337): a course's gate or the arcade's hatch while one is untried, then the nearest of the rest.
-    const to = trailDoor(this.me.pos, doors, (d) => leadsToPlay(roomFor(this.doorTo(d)?.room ?? '')));
+    const spots = this.trailOn ? this.untriedSpots() : [];
+    trail.glint([...spots, ...doors]);
+    // To the room's own games first (OP-338), then to play beyond it (OP-337): a course's gate or the
+    // arcade's hatch while one is untried, then the nearest of the rest.
+    const to = trailTo(this.me.pos, spots, doors, (d) => leadsToPlay(roomFor(this.doorTo(d)?.room ?? '')));
     if (!to) return trail.clear();
     const from = { ...this.me.pos };
     const spot = doorSpot(to);
@@ -1846,6 +1854,10 @@ export class RoomScene extends Phaser.Scene {
     const trail = this.trail;
     if (!trail) return;
     trail.tick(this.me.pos);
+    // Standing at one of the room's own games for the first time: found, so the trail leads on from here (OP-338).
+    let found = false;
+    for (const s of playSpotsAt(this.room.id, this.me.pos)) found = triedDoors().add(this.room.id, s.id) || found;
+    if (found) return this.layTrail();
     if (this.me.walk || trail.showing) this.trailIdleAt = now;
     else if (now - this.trailIdleAt > TRAIL_IDLE_MS) this.layTrail();
   }

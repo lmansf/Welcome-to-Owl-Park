@@ -39,8 +39,8 @@ export class FeatherTrail {
     private readonly calm: () => boolean,
   ) {}
 
-  /** A glint over each doorway not tried yet; one tried since loses its glint. */
-  glint(doors: readonly DoorDef[]): void {
+  /** A glint over each doorway not tried yet (and each of the room's games not stood at, featherTrail.ts PLAY_SPOTS); one tried since loses its glint. */
+  glint(doors: ReadonlyArray<Pick<DoorDef, 'id' | 'rect' | 'marker' | 'markAt'>>): void {
     const want = new Set(doors.map((d) => d.id));
     for (const [id, g] of this.glints) {
       if (want.has(id)) continue;

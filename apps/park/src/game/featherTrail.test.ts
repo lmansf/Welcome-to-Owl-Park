@@ -1,7 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { doorTarget, type DoorDef } from '@owl-park/shared';
+import { COPY_SPOT, FISHING_REACH, FISHING_SPOT, QUIZ_ZONES, distance, doorTarget, isWalkable, pointInRect, quizZoneAt, underBeam, type DoorDef, type Rect } from '@owl-park/shared';
 import { ROOMS } from '@owl-park/shared/rooms';
-import { DOORS_TRIED_KEY, DOORS_TRIED_MAX, TRAIL, TriedDoors, doorKey, doorSpot, leadsToPlay, nearestDoor, parseTried, trailDoor, trailPoints } from './featherTrail';
+import {
+  DOORS_TRIED_KEY,
+  DOORS_TRIED_MAX,
+  PLAY_SPOTS,
+  TRAIL,
+  TriedDoors,
+  doorKey,
+  doorSpot,
+  leadsToPlay,
+  nearestDoor,
+  parseTried,
+  playSpotsAt,
+  trailDoor,
+  trailPoints,
+  trailTo,
+} from './featherTrail';
 
 function memory(): Pick<Storage, 'getItem' | 'setItem'> & { data: Map<string, string> } {
   const data = new Map<string, string>();
@@ -104,5 +119,60 @@ describe('the trail leads to play first (OP-337)', () => {
     const play = (d: DoorDef) => leadsToPlay(ROOMS[doorTarget(d, 3)?.room ?? '']);
     expect(doors.some(play)).toBe(false);
     expect(trailDoor(from, doors, play)).toBe(nearestDoor(from, doors));
+  });
+});
+
+describe('the trail leads to a room’s own games first (OP-338)', () => {
+  // The Party Grove's job is playing together; the first visits to reach it found neither of its games.
+  const mid = (r: Rect) => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
+  const corners = (r: Rect) => [
+    { x: r.x, y: r.y },
+    { x: r.x + r.w, y: r.y },
+    { x: r.x, y: r.y + r.h },
+    { x: r.x + r.w, y: r.y + r.h },
+  ];
+  const toPlay = (d: DoorDef) => leadsToPlay(ROOMS[doorTarget(d, 3)?.room ?? '']);
+  const spot = (room: string, id: string) => PLAY_SPOTS[room]!.find((s) => s.id === id)!;
+
+  it('knows each room’s games by the floor an owl plays them from', () => {
+    expect(Object.keys(PLAY_SPOTS).sort()).toEqual(['grove', 'hub', 'market']);
+    expect(PLAY_SPOTS['hub']!.map((s) => s.id)).toEqual(['play-lanterns', 'play-quiz']);
+    expect(PLAY_SPOTS['grove']!.map((s) => s.id)).toEqual(['play-fishing']);
+    expect(PLAY_SPOTS['market']!.map((s) => s.id)).toEqual(['play-copy']);
+    // The middle of each is floor of its room that an owl can walk to.
+    for (const [room, spots] of Object.entries(PLAY_SPOTS)) for (const s of spots) expect(isWalkable(mid(s.rect), ROOMS[room]!.walkable), `${room} ${s.id}`).toBe(true);
+    // No id could be a doorway's: they are kept among the doorways tried.
+    for (const [room, spots] of Object.entries(PLAY_SPOTS)) for (const s of spots) expect(ROOMS[room]!.doors.some((d) => d.id === s.id), s.id).toBe(false);
+  });
+
+  it('puts each spot where its game is played: under the beam, on an answer, in reach of the fishing spot, before the robot owl', () => {
+    for (const p of [mid(spot('hub', 'play-lanterns').rect), ...corners(spot('hub', 'play-lanterns').rect)]) expect(underBeam(p)).toBe(true);
+    const quiz = spot('hub', 'play-quiz').rect;
+    expect(quizZoneAt(mid(quiz))).toBe('b');
+    for (const zone of Object.values(QUIZ_ZONES)) for (const p of corners(zone)) expect(pointInRect(p, quiz)).toBe(true);
+    for (const p of corners(spot('grove', 'play-fishing').rect)) expect(distance(p, FISHING_SPOT)).toBeLessThanOrEqual(FISHING_REACH);
+    expect(spot('market', 'play-copy').rect).toEqual(COPY_SPOT);
+  });
+
+  it('in the Party Grove leads from where an owl lands to the lantern beam, on to the quiz stage, and only then to a doorway', () => {
+    const grove = ROOMS['hub']!;
+    const landing = grove.spawns['default']!;
+    const doors = grove.doors.filter((d) => doorTarget(d, 3) !== undefined);
+    const [lanterns, quiz] = PLAY_SPOTS['hub']!;
+    // Three arches and the way back are all nearer than either game.
+    expect(distance(landing, doorSpot(nearestDoor(landing, doors)!))).toBeLessThan(distance(landing, mid(lanterns!.rect)));
+    expect(trailTo(landing, PLAY_SPOTS['hub']!, doors, toPlay)).toBe(lanterns);
+    // Under the beam, the lanterns found: on to the stage, right across the room.
+    expect(trailTo(mid(lanterns!.rect), [quiz!], doors, toPlay)).toBe(quiz);
+    // Both found: a doorway, as the trail picks one in any room.
+    expect(trailTo(mid(quiz!.rect), [], doors, toPlay)).toBe(trailDoor(mid(quiz!.rect), doors, toPlay));
+    expect(trailTo(landing, [], [], toPlay)).toBeNull();
+  });
+
+  it('finds the game an owl is standing at, and none out on the open floor', () => {
+    expect(playSpotsAt('hub', mid(spot('hub', 'play-lanterns').rect)).map((s) => s.id)).toEqual(['play-lanterns']);
+    expect(playSpotsAt('hub', ROOMS['hub']!.spawns['default']!)).toEqual([]);
+    expect(playSpotsAt('market', mid(COPY_SPOT)).map((s) => s.id)).toEqual(['play-copy']);
+    expect(playSpotsAt('lobby', { x: 1000, y: 765 })).toEqual([]);
   });
 });

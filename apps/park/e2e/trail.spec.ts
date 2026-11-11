@@ -62,4 +62,30 @@ test.describe('the feather trail (OP-307)', () => {
     await page.evaluate(() => window.owlPark.walkTo(3200, 500));
     await expect.poll(async () => (await state(page)).signShown, { timeout: 15_000 }).toBe('Up to the Treetop Commons');
   });
+
+  test('in the Party Grove the feathers lead to the lantern beam first, then on to the quiz stage, the room’s own games before any arch (OP-338)', async ({ page }) => {
+    await openPark(page, { room: 'hub' });
+    // Both games glint, and the feathers set off west from where the owl lands, toward the beam.
+    await expect.poll(async () => (await state(page)).trail?.glints ?? [], { timeout: 15_000 }).toContain('play-lanterns');
+    expect((await state(page)).trail!.glints).toContain('play-quiz');
+    await expect.poll(async () => (await state(page)).trail?.feathers.length ?? 0, { timeout: 15_000 }).toBeGreaterThan(3);
+    const landed = await state(page);
+    for (const f of landed.trail!.feathers) expect(f.x, `feather at ${f.x},${f.y}`).toBeLessThan(landed.pos.x);
+
+    // Under the beam: the lanterns are found (and there to light), and the feathers lead on east to the stage.
+    await page.evaluate(() => window.owlPark.walkTo(1000, 765));
+    await expect.poll(async () => (await state(page)).trail?.glints ?? ['play-lanterns'], { timeout: 30_000 }).not.toContain('play-lanterns');
+    await expect.poll(async () => (await state(page)).walking, { timeout: 15_000 }).toBe(false);
+    await expect
+      .poll(
+        async () => {
+          const s = await state(page);
+          const feathers = s.trail?.feathers ?? [];
+          return feathers.length > 3 && feathers.every((f) => f.x > s.pos.x);
+        },
+        { timeout: 20_000 },
+      )
+      .toBe(true);
+    expect((await state(page)).trail!.glints).toContain('play-quiz');
+  });
 });
