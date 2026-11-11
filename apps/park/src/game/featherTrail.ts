@@ -1,9 +1,25 @@
-import { distance, type DoorDef, type RoomDef, type Vec2 } from '@owl-park/shared';
+import {
+  COPY_ROOM,
+  COPY_SPOT,
+  FISHING_REACH,
+  FISHING_ROOM,
+  FISHING_SPOT,
+  LANTERN_FLOOR,
+  LANTERN_ROOM,
+  QUIZ_ROOM,
+  QUIZ_ZONES,
+  distance,
+  pointInRect,
+  type DoorDef,
+  type Rect,
+  type RoomDef,
+  type Vec2,
+} from '@owl-park/shared';
 
 /**
  * The feather trail (OP-307): a faint line of drifting feathers from where the owl stands toward a
- * doorway it has not been through yet (one that leads to play first, OP-337, then the nearest), and a
- * small glint on every such doorway. A guest who
+ * game of the room's own it has not stood at yet (OP-338), then a doorway it has not been through (one
+ * that leads to play first, OP-337, then the nearest), and a small glint on every such spot and doorway. A guest who
  * follows the feathers finds every place without a map; once every doorway of a room has been tried
  * the room shows neither. The doorways tried are kept on this device (localStorage), like the map's
  * lit places. Settings has a switch for it (on by default).
@@ -105,6 +121,64 @@ export function leadsToPlay(room: Pick<RoomDef, 'id' | 'course'> | undefined): b
  */
 export function trailDoor<D extends Pick<DoorDef, 'rect' | 'marker' | 'markAt'>>(from: Vec2, doors: readonly D[], toPlay: (door: D) => boolean): D | null {
   return nearestDoor(from, doors.filter(toPlay)) ?? nearestDoor(from, doors);
+}
+
+/**
+ * A game of a room's own (OP-338): the floor an owl stands on to play it. The trail leads there before
+ * it leads to any doorway, and the spot glints, until the owl has stood on it once (kept with the
+ * doorways tried, under the spot's id).
+ */
+export interface PlaySpot {
+  id: string;
+  rect: Rect;
+}
+
+/** Half the side of the square that fits inside the fishing spot's reach. */
+const FISH_HALF = Math.floor(FISHING_REACH / Math.SQRT2);
+
+/** The floor before the stump stage: the quiz's three answer zones, side by side. */
+const QUIZ_FLOOR: Rect = (() => {
+  const zones = Object.values(QUIZ_ZONES);
+  const x = Math.min(...zones.map((z) => z.x));
+  const y = Math.min(...zones.map((z) => z.y));
+  return { x, y, w: Math.max(...zones.map((z) => z.x + z.w)) - x, h: Math.max(...zones.map((z) => z.y + z.h)) - y };
+})();
+
+/**
+ * TODO-DOCS (OP-338): docs/ARCHITECTURE.md's note on the feather trail gains its order: a room's own
+ * games, then doorways into play, then the rest.
+ *
+ * Each room's own games, where an owl stands to play them (activities.ts in @owl-park/shared has their
+ * rules). The Party Grove's job is playing together, and both its games are a few seconds' walk off
+ * screen either side of where an owl lands: the lanterns to light along the beam in the west bay, the
+ * quiz before the stump stage in the east. The first visits to reach it found neither (two visits, 35
+ * seconds between them). The treehouse clearing has its fishing jetty and the neon street the robot
+ * owl's copy game, as easy to miss.
+ */
+export const PLAY_SPOTS: Readonly<Record<string, readonly PlaySpot[]>> = (() => {
+  const all: Array<[string, PlaySpot]> = [
+    [LANTERN_ROOM, { id: 'play-lanterns', rect: LANTERN_FLOOR }],
+    [QUIZ_ROOM, { id: 'play-quiz', rect: QUIZ_FLOOR }],
+    // The square that fits inside the fishing spot's reach: anywhere in it the jetty's Fish is there to press.
+    [FISHING_ROOM, { id: 'play-fishing', rect: { x: FISHING_SPOT.x - FISH_HALF, y: FISHING_SPOT.y - FISH_HALF, w: FISH_HALF * 2, h: FISH_HALF * 2 } }],
+    [COPY_ROOM, { id: 'play-copy', rect: COPY_SPOT }],
+  ];
+  const by: Record<string, PlaySpot[]> = {};
+  for (const [room, spot] of all) (by[room] ??= []).push(spot);
+  return by;
+})();
+
+/** The games of `room` an owl at `pos` is standing at now. */
+export function playSpotsAt(room: string, pos: Vec2): PlaySpot[] {
+  return (PLAY_SPOTS[room] ?? []).filter((s) => pointInRect(pos, s.rect));
+}
+
+/**
+ * Where the trail leads (OP-338): the nearest of the room's own games not stood at yet, while there is
+ * one; after that a doorway, as trailDoor picks it.
+ */
+export function trailTo<D extends Pick<DoorDef, 'rect' | 'marker' | 'markAt'>>(from: Vec2, spots: readonly PlaySpot[], doors: readonly D[], toPlay: (door: D) => boolean): PlaySpot | D | null {
+  return nearestDoor(from, spots) ?? trailDoor(from, doors, toPlay);
 }
 
 /** How a trail is laid: a feather every `gap` px along the way, none nearer the owl than `start` or the doorway than `end`, at most `most`. */
