@@ -22,6 +22,7 @@ export interface FlagSpec {
 export const FLAGS = {
   friends: { param: 'friends', note: 'Play with your friends preview: co-op escape room, party game, friend invites' },
   town: { param: 'town', note: 'The town view: a wider camera in the rooms seen from above, and an opening look over the Great Hollow' },
+  thermal: { param: 'thermal', note: 'The thermal at the heart of the Great Hollow: glide in its moonbeam to rise, see the whole oval, and glide to any way' },
 } as const satisfies Record<string, FlagSpec>;
 
 export type FlagName = keyof typeof FLAGS;
