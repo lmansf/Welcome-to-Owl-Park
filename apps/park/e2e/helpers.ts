@@ -49,6 +49,10 @@ export interface ParkState {
   doorSigns: string[];
   /** Seen from above, the words on the one doorway sign showing now (OP-309). */
   signShown: string | null;
+  /** The words of the course's tip showing now (OP-344), if any. */
+  tipShown: string | null;
+  /** The words of the prompt over the visitor's own owl (OP-344), if any. */
+  promptShown: string | null;
   trail: { feathers: Array<{ x: number; y: number }>; glints: string[]; on: boolean } | null;
   floorShown: boolean;
   /** How many pieces shaping the room's edges seen from above were drawn (edges.ts). */

@@ -110,6 +110,7 @@ import {
   dashHeading,
   dashRefusal,
   holdsDash,
+  courseOfRoom,
   airOut,
   liftAt,
   thermalAt,
@@ -157,7 +158,7 @@ import { keeperToken } from '../net/keeper';
 import type { EscapeLink } from '../net/transport';
 import type { Away } from '../ui/away';
 import { castVote } from '../net/vote';
-import { GATED_ROOMS, NEST_MIRROR, ROOMS, TREE_ARRIVAL, getRoom, groundOf, roomFor, roomOnMap } from '../rooms';
+import { COURSES, GATED_ROOMS, NEST_MIRROR, ROOMS, TREE_ARRIVAL, getRoom, groundOf, roomFor, roomOnMap } from '../rooms';
 import { drawKit, drawnRoom } from './kitView';
 import { TREE_RAISED_BAND, dressTreeRoom, type TreeDress, type TreeDressing } from './treeView';
 import type { DecorateView } from '../ui/decorate';
@@ -208,7 +209,10 @@ import { StreetDoors, addNestsSign, addParkSign } from './street';
 import { cameraBounds, followLead, type CoveredEdges } from './hudInset';
 import { RISE_HEAD, lookBetween, openingAt, restAt, riseBack, screenZoom, townZoom, wholeLook, wholeZoom, type Look } from './townView';
 import { SizeLabels } from './sizeLabels';
+import { CourseTipSigns } from './courseTipSigns';
+import { courseTips } from './courseTips';
 import { DoorSigns } from './doorSigns';
+import { ReachPrompt, promptPlace, promptWords } from './reachPrompt';
 import { sideEdges } from './sideEdges';
 import { drawWalkFloor } from './walkFloor';
 import { BOWL_BEYOND, BOWL_SHADOW, drawBowl } from './bowlView';
@@ -593,6 +597,10 @@ export class RoomScene extends Phaser.Scene {
   private sizeLabels: SizeLabels | null = null;
   /** The signs naming where the doorways lead, in a room seen from above. */
   private doorSigns: DoorSigns | null = null;
+  /** A course's tips in this room (OP-344): words at the first of each thing a visitor has to understand. */
+  private tips: CourseTipSigns | null = null;
+  /** The prompt over the visitor's own owl (OP-344): what it can do where it stands, and the key that does it. */
+  private reach: ReachPrompt | null = null;
   /** Whether this room draws its walkable floor plainly: every room seen from above. */
   private floorShown = false;
   /** How many pieces shape this room's edges (edges.ts), drawn. */
@@ -1074,6 +1082,16 @@ export class RoomScene extends Phaser.Scene {
     this.bubbles = new SpeechBubbles(this, room.size.h + 150, () => this.cfg.pixelRatio / this.cameras.main.zoom);
     if (this.cfg.sizes) this.sizeLabels = new SizeLabels(this, room.size.h + 140, () => this.cfg.pixelRatio / this.cameras.main.zoom);
     this.doorSigns = new DoorSigns(this, room, () => this.cfg.pixelRatio / this.cameras.main.zoom, this.walking(), (id) => this.realmClosed(id), () => this.me.pos);
+    // A course's tips for this room (OP-344), over everything in it: the one nearest the owl shows, where the thing it is about is.
+    const courseDef = courseOfRoom(room, COURSES);
+    const tips = courseDef ? courseTips(courseDef, (id) => ROOMS[id], groundOf, TOUCH_SCREEN).filter((t) => t.room === room.id) : [];
+    this.reach = new ReachPrompt(
+      this,
+      room.size.h + 135,
+      () => this.cfg.pixelRatio / this.cameras.main.zoom,
+      () => promptPlace({ x: this.me.x, y: this.me.y - this.me.flightHeight() }, this.doorSigns?.shownBox() ?? null, this.cfg.pixelRatio / this.cameras.main.zoom),
+    );
+    this.tips = tips.length ? new CourseTipSigns(this, tips, () => this.cfg.pixelRatio / this.cameras.main.zoom, () => ({ x: this.me.pos.x, z: this.flier.air.z }), room.size.h + 130) : null;
     const settings = this.registry.get('settings') as SettingsStore | undefined;
     if (settings) {
       ambience.setCalm(settings.get().calm);
@@ -2282,6 +2300,10 @@ export class RoomScene extends Phaser.Scene {
     doorSigns: string[];
     /** Seen from above, the words on the one doorway sign showing now (OP-309). */
     signShown: string | null;
+    /** The words of the course's tip showing now (OP-344), if any. */
+    tipShown: string | null;
+    /** The words of the prompt over the visitor's own owl (OP-344), if any. */
+    promptShown: string | null;
     /** The feather trail (OP-307): the feathers out now (room px) and the doorways that glint; null in a course. */
     trail: { feathers: Vec2[]; glints: string[]; on: boolean } | null;
     floorShown: boolean;
@@ -2354,6 +2376,8 @@ export class RoomScene extends Phaser.Scene {
       sizeLabels: this.sizeLabels?.keys() ?? [],
       doorSigns: this.doorSigns?.labels() ?? [],
       signShown: this.doorSigns?.shown() ?? null,
+      tipShown: this.tips?.shown() ?? null,
+      promptShown: this.reach?.shown() ?? null,
       trail: this.trail ? { ...this.trail.debug(), on: this.trailOn } : null,
       floorShown: this.floorShown,
       edges: this.edgesDrawn,
@@ -3392,6 +3416,9 @@ export class RoomScene extends Phaser.Scene {
     const goIn: Action[] = here ? [{ id: `door:${here.id}`, label: GO_IN, run: () => void this.upKey() }] : [];
     this.actions = [...goIn, ...this.actionsHere(spots), ...(this.hollow?.actions() ?? [])];
     this.hud.setActions(this.actions.map(({ id, label }) => ({ id, label })));
+    // The same, over the owl itself (OP-344): not while it talks, sleeps, decorates, leaves, or says something of its own.
+    const busy = this.talkingTo !== null || this.decorating || this.leaving || !!this.sleptAt || (this.bubbles?.showing().some((b) => b.id === this.me.id) ?? false);
+    this.reach?.show(busy ? null : promptWords(this.actions[0], TOUCH_SCREEN));
     this.atIdol = spots.includes('idol');
     this.idolRealm = idolRealm;
     if (this.atIdol && walkFinished && this.pendingVote) {

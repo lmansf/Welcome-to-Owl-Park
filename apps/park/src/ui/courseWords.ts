@@ -18,8 +18,42 @@ export const COURSE_WORDS = {
     breakers: (done: number, of: number) => `Switch on every breaker to open this door (${done} of ${of} on)`,
     seals: (done: number, of: number) => `Find every seal to open this door (${done} of ${of} found)`,
   } satisfies Record<ObjectiveKind, (done: number, of: number) => string>,
+  /**
+   * The tips a course shows in the room, each at the first of the thing it is about and only while the
+   * owl is near it (OP-344, courseTips.ts): what the course asks, the moves, and what each new thing does.
+   */
+  tips: {
+    /** At the trail gate's way in: what the course asks, by its objective and how many parts it has. */
+    goal: {
+      bells: (n: number) => `Ring all ${n} bells, then reach the finish.`,
+      breakers: (n: number) => `Switch on all ${n} breakers, then reach the finish.`,
+      seals: (n: number) => `Find all ${n} seals, then reach the finish.`,
+    } satisfies Record<ObjectiveKind, (n: number) => string>,
+    /** Under it: the moves, by what this device plays with. */
+    moves: {
+      keys: 'Space to jump. Press again in the air to flap.\nHold Space to glide. Shift to dash.',
+      touch: 'Tap Jump to jump. Tap again in the air to flap.\nHold Jump to glide. Dash for a quick burst.',
+    },
+    /** Where the walk first ends: what a fall does, by the course (a course with no line of its own says `fall`). */
+    pit: {
+      canopy: 'Bramble sends you back to your checkpoint. Cross on the leaves.',
+      brush: 'Water sends you back to your checkpoint. Cross on the stones.',
+      circuit: 'A fall to the street sends you back to your checkpoint. Cross on the signs.',
+    } as Readonly<Record<string, string>>,
+    fall: 'A fall sends you back to your checkpoint.',
+    /** At the first column of rising air, the first wind, the first ink stone and the first neon sign. */
+    updraft: 'Jump into the rising air and hold Jump. It lifts you up.',
+    wind: 'Glide into the wind and keep holding Jump. It carries you across.',
+    stone: 'Land on an ink stone and it paints a bridge. Cross before it fades.',
+    sign: 'A lit sign holds you up. A dark one lets you fall.',
+    /** At the first bench, and the first part by the course's objective. */
+    bench: 'A bench is a checkpoint. A fall brings you back to the last one you reached.',
+    part: { bells: 'Go up to a bell to ring it.', breakers: 'Go up to a breaker to switch it on.', seals: 'Go up to a seal to find it.' } satisfies Record<ObjectiveKind, string>,
+  },
   /** The objective strip's count of the lost feathers. */
   feathers: 'Lost feathers',
+  /** The objective strip's clock (OP-344): what the gold time is, said while a run can still beat it. */
+  goldUnder: (time: string) => `Gold under ${time}`,
   /** A lost feather found (with the count after it). */
   featherFound: 'Lost feather found',
   /** A bench reached: a fall comes back here. */

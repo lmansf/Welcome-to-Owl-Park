@@ -1,7 +1,7 @@
 # Owl Park cleanup and rebuild: the plan
 
 - Status: in progress. Ticket OP-342. Branch `claude/determined-wozniak-3ljxrf`.
-- Last updated: 2026-11-11, milestone 1 in review (OP-343).
+- Last updated: 2026-11-11, milestone 1 in review (OP-343), milestones 2 and 3 built (OP-344, OP-345).
 - Read first: `FABLE.md` (the owner's rules; it wins over this file).
 
 The owner's brief (Nov 11): a full cleanup pass of the game, end to end, as a player meets it. Two
@@ -59,15 +59,15 @@ measurement; C = read in the code, to confirm.
 | # | What a player meets | Where | Fix planned | State |
 | --- | --- | --- | --- | --- |
 | 1 | Nothing says what to do on arrival: no quest owl or first quest where owls arrive; every quest owl stands in a realm room (V) | `lobby`, `m3-hall` | A first quest given where owls arrive, with the feather trail leading to it (bigger change B1) | open |
-| 2 | A course never says how it is played: no goal, no controls (hold Jump to glide, flap, dash), no clock though the gold prize is timed (V at arrival) | all three courses | A start card, first-time prompts at the first gust, stone, sign and bench, the run's clock in the strip | open, M2 |
+| 2 | A course never says how it is played: no goal, no controls (hold Jump to glide, flap, dash), no clock though the gold prize is timed (V at arrival) | all three courses | A start card, first-time prompts at the first gust, stone, sign and bench, the run's clock in the strip | M2: tips in the room at the first of each thing (the goal and the moves at the way in), and the clock with the gold time in the strip |
 | 3 | A quick tap of Jump is a tiny hop (a short press rose 52 px, a hold 145; the first step of each course is 90 to 120) (V) | everywhere | Raise the least height a jump reaches so a tap clears a first step | M1: a tap now rises 83 to 128 px, a tapped flap is nearly a whole one |
 | 4 | Falls look like floor: pits and water are drawn as the same ground as safe floor, hazards faint (V) | all three courses | Draw every pit as a pit, the same way in each course | M1: the walk ends at a bank; a bramble dip or the street lies a step below it, and in the ink course the walk is flooded with still water; a rule test refuses a pit drawn as a walk |
 | 5 | The hut at the end is open with no bell rung and has no way back; coming in again starts the run over (C, confirmed) | `canopy-3`, `canopy-hut` | The hut's doorway holds until every bell is rung and says what is missing | M1: the doorway waits and says how many bells are rung |
 | 6 | A fall is an instant silent put-back with the camera sliding after; some rooms have no bench; a room entered from its far end sends a fall to its other end (C, confirmed) | courses | A fall beat, a bench where a fall costs a whole room, and the way in as the fall-back | M1: a blink, the camera cut with the owl, a line; back to the nearer of the bench and the way in; one bench added (`circuit-3`) |
-| 7 | The play key skips the result card: a new run started 0.4 s after the crash (V) | arcade | No play key for a moment after a run ends | open, M3 |
-| 8 | No pause; Escape or Close ends a run at once with nothing paid and no question (V) | arcade | Pause first, with Keep playing and Leave | open, M3 |
-| 9 | Unclear rules: "Tap to flap" on a computer; a drag toward the target fires into the ground (V) | arcade | Name the keys; a forward drag is no shot | open, M3 |
-| 10 | The prompt for anything is a pill in the far bottom corner; nothing shows at the thing (V) | everywhere | A prompt over the thing in reach as well | open, M2 |
+| 7 | The play key skips the result card: a new run started 0.4 s after the crash (V) | arcade | No play key for a moment after a run ends | M3: Play again is not pressable and holds no focus for 0.9 s |
+| 8 | No pause; Escape or Close ends a run at once with nothing paid and no question (V) | arcade | Pause first, with Keep playing and Leave | M3: Escape or Close pauses; Keep playing, or Leave the game |
+| 9 | Unclear rules: "Tap to flap" on a computer; a drag toward the target fires into the ground (V) | arcade | Name the keys; a forward drag is no shot | M3: Space to flap; the arrows named for Talon Toss; a pull forward is no shot |
+| 10 | The prompt for anything is a pill in the far bottom corner; nothing shows at the thing (V) | everywhere | A prompt over the thing in reach as well | M2: a prompt on the floor at the owl's own feet, with the key on a computer |
 | 11 | A statue 500 px tall on the near rim hides the player's owl and wears a doorway's sign (V) | `m3-hall` | Tall art fades while the player's owl is behind it; the sign moves onto its doorway | open, M4 |
 | 12 | The pad's label is cut off on a phone: "Look in t..." (V) | phone | A label that fits | open, M5 |
 | 13 | One place, two names: quest steps say "the great tree" and "the glass street", the signs say other names (V) | quests, signs, Menu | One name per place | open, M4 |
@@ -78,7 +78,7 @@ measurement; C = read in the code, to confirm.
 | 18 | The camera eases by the frame, not by time, so it trails further on a slow device; the backdrop shows under the walkway; goals crowd the screen's corners (C, V) | courses | Bigger change B2 | open |
 | 19 | A direction held through a doorway keeps walking the owl in the next room (V) | doorways | Wait for a fresh push after a doorway taken with Up | open, M4 |
 | 20 | The feather trail is faint; edge chips are arrows with no words; HUD words stay lit over the dark between rooms (V) | everywhere | Contrast, a word on each chip, dim with the room | open, M4 |
-| 21 | Words: a one-player game "to play with whoever is in the park"; three ways to word an ending; developer wording a player can meet; fallback emoji symbols (V, C) | arcade, Menu | One wording pass | open, M3 |
+| 21 | Words: a one-player game "to play with whoever is in the park"; three ways to word an ending; developer wording a player can meet; fallback emoji symbols (V, C) | arcade, Menu | One wording pass | M3 for the arcade's lines. Left: the puzzle's emoji faces (a fallback for art that ships), and lines in the ticket and friends screens |
 | 22 | Almost no sound: only the Menu's knock was found (C, partial) | everywhere | Bigger change B3 | open |
 | 23 | The HUD's screens do not share a style: seven corner sizes, five button heights, three golds (C) | HUD, Menu | Bigger change B4 | open |
 | 24 | Home screen on a phone held upright sits in half the width; the free way in is the smallest button (V) | home | Full width; a 44 px target | open, M5 |
@@ -97,7 +97,7 @@ Left alone, and why:
 
 Each leaves the game playable with the bots and the gate passing, and has its own PR and preview link.
 
-- **M1. Courses you can read and survive (OP-343, in review).** Items 3, 4, 5, 6, 15, 16, 17. Done
+- **M1. Courses you can read and survive (OP-343, merged as PR 224 on Nov 12).** Items 3, 4, 5, 6, 15, 16, 17. Done
   when: a tap clears the first step of each course; no pit is drawn as floor; the hut cannot be entered
   a bell short; a fall shows where it puts the owl and never costs more than a screen or two; the bots
   pass with the baseline no longer. Should move: course runs quit before the first bench.
@@ -114,11 +114,21 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
     came in. The room server remembers the way in for as long as it holds the owl (in memory only).
   - The hut (`course.ts`, `endsCourse`, `doorWaitsOn`): a doorway into a room where a course only
     ends waits for every part.
-- **M2. Say what to do.** Items 2, 10. Done when: each course opens with its goal and its three moves,
-  first-time prompts name the key or button, the strip shows the clock, and a prompt stands over the
-  thing in reach. Should move: course runs that reach the first bench, and course clears.
-- **M3. The arcade.** Items 7, 8, 9, 21. Done when: a result card cannot be skipped by accident, a run
-  can be paused, each game names its keys.
+- **M2. Say what to do (OP-344, in review).** Items 2, 10. Done when: each course opens with its goal and
+  its moves, tips name the key or button, the strip shows the clock, and a prompt says what Interact
+  does where the owl stands. Should move: course runs that reach the first bench, and course clears.
+  What it changed, in short:
+  - Tips (`courseTips.ts`, `courseTipSigns.ts`, the words in `courseWords.ts`): a few words in the
+    room at the first of each thing, shown while the owl is near it and about as high as it, one at a
+    time. A thing up high has its tip hung under it.
+  - The clock (`objectiveStrip.ts`): the run's time, and the gold time while it can still be beaten.
+  - The prompt (`reachPrompt.ts`): on the floor at the owl's feet, under a doorway's sign where one
+    lies there. Not for a doorway seen from the side (its arrow says up) or for Decorate.
+- **M3. The arcade (OP-345, built).** Items 7, 8, 9, 21. Done when: a result card cannot be skipped by
+  accident, a run can be paused, each game names its keys. Left for later, with the reason on the
+  ticket: Moon Flap's difficulty (wants the day's scores, not one script's try), the score wall off
+  screen from mid floor, the feather counter over the first cabinet's sign (PR 221 is open on those
+  cabinets).
 - **M4. The Great Hollow and the ways through.** Items 11, 13, 14, 19, 20.
 - **M5. The phone pass.** Items 12, 24 and whatever the phone walk finds: the stick, Jump, Dash, the
   pad, every room at 844x390 and upright.
@@ -172,3 +182,12 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   - Item 16 left alone, and why: see the list.
   - Building faces an owl walks in front of (item 15, second half) moved to M4: it changes how every
     ledge's body is drawn in every kit room, the tree's included, and wants its own look.
+- 2026-11-11: milestone 2 built (OP-344). Choices made on the way:
+  - Tips in the room, not a start card. A card is one more thing to close before playing and needs a
+    memory of who has seen it; a tip stands where the thing is, is read when it is needed, and is
+    passed by a player who knows it. They show on every visit.
+  - The prompt lies at the owl's feet, not over its head or over the thing: over the head it lay
+    across the face of whoever stood behind, and over the thing would need each thing's height. One
+    place for every kind of thing, where the visitor is already looking.
+  - Seen on the way and left for M5 (the phone pass): on a phone held sideways the thumbstick lies
+    over the owl at a course's way in.

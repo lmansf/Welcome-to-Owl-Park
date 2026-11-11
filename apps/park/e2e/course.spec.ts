@@ -111,6 +111,27 @@ test.describe('the parkour courses (OP-224)', () => {
     await expect.poll(async () => (await state(page)).room, { timeout: 15_000 }).toBe('canopy-hut');
   });
 
+  test('a course says what it asks and how it is played, where the owl is, and shows the run its clock (OP-344)', async ({ page }) => {
+    await openPark(page, { room: 'canopy-1', spawn: 'from-gate', kit: '1' });
+    // At the way in from the trail gate: what the course asks, and the moves by what this device plays with.
+    const touch = await page.evaluate(() => matchMedia('(pointer: coarse)').matches);
+    await expect.poll(async () => (await state(page)).tipShown, { timeout: 10_000 }).toContain('Ring all 5 bells, then reach the finish.');
+    expect((await state(page)).tipShown).toContain(touch ? 'Tap Jump to jump' : 'Space to jump');
+    // The strip shows the run's clock, and the gold time it can still beat.
+    await expect(page.locator('[data-objective-clock]')).toContainText(/^0:0\d · Gold under 1:45$/);
+    // At the bank where the walk first ends: what a fall does. One tip at a time.
+    await walkTo(page, 660, 770);
+    await expect.poll(async () => (await state(page)).tipShown, { timeout: 10_000 }).toBe('Bramble sends you back to your checkpoint. Cross on the leaves.');
+    // The ink course's own first things: its stones.
+    await openPark(page, { room: 'brush-1', spawn: 'from-gate', kit: '1' });
+    await expect.poll(async () => (await state(page)).tipShown, { timeout: 10_000 }).toContain('Find all 4 seals, then reach the finish.');
+    await walkTo(page, 540, 770);
+    await expect.poll(async () => (await state(page)).tipShown, { timeout: 10_000 }).toBe('Land on an ink stone and it paints a bridge. Cross before it fades.');
+    // A room that is no course has no tip.
+    await openPark(page);
+    expect((await state(page)).tipShown).toBeNull();
+  });
+
   test('the objective strip counts the bells and the lost feathers; the dash is a course’s alone', async ({ page, isMobile }) => {
     await openPark(page, { room: 'trail-1' });
     const strip = page.locator('[data-objective]');
