@@ -17,17 +17,17 @@ async function hallWidth(page: Page): Promise<number> {
   return up.x * 2;
 }
 
-type HallSeen = { width: number; widest: number; first: number | null; drewIn: number | null };
+type HallSeen = { width: number; widest: number; first: number | null; drewIn: number | null; walkedAt: number | null };
 
 /**
- * In the page: the widest the camera has shown of the Great Hollow, when it first showed it, and when
- * it first drew in to under half the room across. With `tapAtFirst`, the player's first move is made
- * the moment the room is in: a walk out onto the floor below the knothole.
+ * In the page: the widest the camera has shown of the Great Hollow, when it first showed it, when it
+ * first drew in to under half the room across, and when the owl first walked. With `tapAtFirst`, the
+ * player's first move is made the moment the room is in: a walk out onto the floor below the knothole.
  */
 async function watchHall(page: Page, tapAtFirst = false): Promise<void> {
   await page.evaluate((tapAtFirst) => {
-    const w = window as unknown as { __hall: { width: number; widest: number; first: number | null; drewIn: number | null } };
-    w.__hall = { width: 0, widest: 0, first: null, drewIn: null };
+    const w = window as unknown as { __hall: { width: number; widest: number; first: number | null; drewIn: number | null; walkedAt: number | null } };
+    w.__hall = { width: 0, widest: 0, first: null, drewIn: null, walkedAt: null };
     const tick = () => {
       const s = window.owlPark.state();
       const c = s?.room === 'm3-hall' ? window.owlPark.camera() : null;
@@ -40,6 +40,7 @@ async function watchHall(page: Page, tapAtFirst = false): Promise<void> {
           if (tapAtFirst) window.owlPark.walkTo(up.x, up.y + 560);
         }
         w.__hall.widest = Math.max(w.__hall.widest, c.viewW);
+        if (w.__hall.walkedAt === null && s?.walking) w.__hall.walkedAt = now;
         if (w.__hall.drewIn === null && c.viewW < up.x) w.__hall.drewIn = now;
       }
       requestAnimationFrame(tick);
@@ -96,8 +97,8 @@ test.describe('the town view (OP-336)', () => {
     await expect.poll(async () => (await hallSeen(page)).drewIn, { timeout: 10_000 }).not.toBeNull();
     const seen = await hallSeen(page);
     expect(seen.widest).toBeGreaterThanOrEqual(seen.width - 1);
-    // It held on the oval before drawing in: most of two seconds from the room coming in.
-    expect(seen.drewIn! - seen.first!).toBeGreaterThan(1200);
+    // It held on the oval long enough to be read before drawing in: over two and a half seconds from the room coming in.
+    expect(seen.drewIn! - seen.first!).toBeGreaterThan(2600);
     await page.keyboard.up('ArrowUp');
     // Drawn in, the camera is the owl's own again: the owl in view, the room to its edges and no further.
     const settled = await settleCamera(page);
@@ -110,7 +111,7 @@ test.describe('the town view (OP-336)', () => {
     expect(settled.viewY).toBeGreaterThanOrEqual(-0.5);
   });
 
-  test("the player's first move ends the opening look at once", async ({ page }) => {
+  test("the player's first move sets the owl walking at once, and brings the camera in once the whole oval has shown", async ({ page }) => {
     await openPark(page, { room: 'lobby', keeper: '1', newmap: '1', town: '1' });
     // A tap out on the floor the moment the room is in.
     await watchHall(page, true);
@@ -118,9 +119,14 @@ test.describe('the town view (OP-336)', () => {
     await page.keyboard.up('ArrowUp');
     await expect.poll(async () => (await hallSeen(page)).drewIn, { timeout: 10_000 }).not.toBeNull();
     const seen = await hallSeen(page);
-    // Whole at first, and drawn in well inside the second the look would have held for.
     expect(seen.widest).toBeGreaterThanOrEqual(seen.width - 1);
-    expect(seen.drewIn! - seen.first!).toBeLessThan(700);
+    // The owl walks before the camera has come in: the look never holds the owl back.
+    expect(seen.walkedAt).not.toBeNull();
+    expect(seen.walkedAt!).toBeLessThan(seen.drewIn!);
+    // The whole oval showed for a real look first (it was gone in under 0.7 s before), and the camera
+    // was in well before the look would have drawn in left to itself (close on four seconds).
+    expect(seen.drewIn! - seen.first!).toBeGreaterThan(1300);
+    expect(seen.drewIn! - seen.first!).toBeLessThan(3000);
   });
 
   test('without the flag the Great Hollow opens as it always has: on the owl, a screen deep', async ({ page }) => {

@@ -241,6 +241,8 @@ const THERMAL_WORDS = 'Warm air rises here. Jump and keep holding to ride it up.
 const TAP_SLOP = 16;
 /** How long the room fades out on the way to another. */
 const LEAVE_FADE_MS = 220;
+/** How long a room fades in as it comes in. The opening look (townView.ts) counts its time from the end of it. */
+const ROOM_FADE_IN_MS = 350;
 /** The registry's word that the nightly restart sent the owl home (OP-181): the home screen says so once. */
 export const RESTARTED_KEY = 'restarted';
 /** The registry's word that the owl's ticket ran out mid-visit (OP-237): the home screen says so once. */
@@ -613,8 +615,9 @@ export class RoomScene extends Phaser.Scene {
   /** The town view (OP-336, `?town=1`, townView.ts): a wider camera in a room seen from above, and the opening look over the Great Hollow. */
   private readonly town = flagOn('town');
   /**
-   * The opening look under way (townView.ts): when the room came in, and when the player first moved
-   * (which ends it early); null when there is none. The camera is set each frame while it lasts.
+   * The opening look under way (townView.ts): when the room has faded in (its time is counted from
+   * then), and when the player first moved, in that time (which brings it in early); null when there is
+   * none. The camera is set each frame while it lasts.
    */
   private opening: { at: number; cutAt: number | null; covered: CoveredEdges } | null = null;
   /** The thermal (OP-340, `?thermal=1`, thermal.ts in @owl-park/shared): an owl gliding in a room's thermal is lifted, and the camera draws back as it rises. */
@@ -1183,7 +1186,7 @@ export class RoomScene extends Phaser.Scene {
     this.showBoard(this.quests.board);
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());
-    this.cameras.main.fadeIn(350, 12, 30, 54);
+    this.cameras.main.fadeIn(ROOM_FADE_IN_MS, 12, 30, 54);
     this.built = true;
     this.startOpening(this.registry.get('spawnName') as string | undefined);
     // The sign of the doorway the owl came in by waits until it has stepped away once (OP-337, updateHints).
@@ -3226,7 +3229,7 @@ export class RoomScene extends Phaser.Scene {
    */
   walkTo(target: Vec2, fromKeys = false, goal: Vec2 | null = fromKeys ? null : target): boolean {
     if (!this.built) return false;
-    // A walk asked for by a tap is the player's first move: the opening look ends (townView.ts). Held keys end it in frameOpening.
+    // A walk asked for by a tap is the player's first move: the opening look comes in (townView.ts). Held keys do it in frameOpening.
     if (!fromKeys) this.cutOpening();
     const f = this.footingNow();
     let to = resolveTarget({ ...this.me.pos }, target, f.walkable, f.shut);
@@ -4158,13 +4161,14 @@ export class RoomScene extends Phaser.Scene {
 
   /**
    * The opening look (OP-336, townView.ts): through the turnstiles the Great Hollow opens on its whole
-   * oval, holds a moment and eases in on the owl. Only an oval read whole has one (a room with a bowl),
-   * and only for an owl that walked in through the gate, with the town view on.
+   * oval, holds long enough to be read and eases in on the owl. Only an oval read whole has one (a room
+   * with a bowl), and only for an owl that walked in through the gate, with the town view on. Its time
+   * is counted from when the room has faded in, so none of the look is spent under the fade.
    */
   private startOpening(spawn: string | undefined): void {
     if (!this.townViewed() || !this.room.bowl || !walkedThroughGate(this.room.id, spawn)) return;
     const cam = this.cameras.main;
-    this.opening = { at: Date.now(), cutAt: null, covered: this.hud.coveredEdges() };
+    this.opening = { at: Date.now() + ROOM_FADE_IN_MS, cutAt: null, covered: this.hud.coveredEdges() };
     cam.stopFollow();
     cam.removeBounds();
     // Past the room's edges the screen is the dark of the tree's wood, as round the oval itself.
@@ -4172,7 +4176,11 @@ export class RoomScene extends Phaser.Scene {
     this.frameOpening(this.opening.at);
   }
 
-  /** The player's own first move ends the opening look: a walk a tap asked for (walkTo), a jump, or the keys pushed afresh since the doorway (frameOpening). */
+  /**
+   * The player's own first move brings the opening look in: a walk a tap asked for (walkTo), a jump, or
+   * the keys pushed afresh since the doorway (frameOpening). The owl moves at once; the camera comes in
+   * once the whole room has shown its least (townView.ts, openingAt).
+   */
   private cutOpening(): void {
     if (this.opening && this.opening.cutAt === null) this.opening.cutAt = Date.now() - this.opening.at;
   }
