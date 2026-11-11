@@ -253,8 +253,12 @@ function artSpan(s: KitArtSpec): { left: number; right: number; w: number } {
   return { left, right, w: Math.max(1, right - left) };
 }
 
-/** How far under a flooded walk's walking line its water's surface lies (room px, OP-343): the water is seen to lie in the walk, not on it. */
-export const KIT_FLOOD_UNDER = 2;
+/**
+ * How far over a flooded walk's walking line its water stands (room px, OP-343): over the grass that
+ * grows on the walk, so none of it shows above the water as a line of ground to walk on. A bank's own
+ * grass stands as high beside it.
+ */
+export const KIT_FLOOD_OVER = 18;
 
 /**
  * How far into a run piece's art, below its upper edge, an owl's feet stand (its own px): the kit's

@@ -375,8 +375,8 @@ export interface KitRun {
   shade?: number;
   /**
    * A flooded stretch of the ground line (OP-343), a course's pit of another kind: the run stays as it is
-   * drawn, and the game paints still water over its top, from just under the walking line to `depth`
-   * below it in `color` (kitView.ts), until the realm's hazard art (the realm kit's hazard slot) arrives.
+   * drawn, and the game paints still water over its top, from just over the walking line (KIT_FLOOD_OVER)
+   * to `depth` below it in `color` (kitView.ts), until the realm's hazard art (the realm kit's hazard slot) arrives.
    * What stands in it stands in the water; nothing of the run shows through.
    */
   flood?: { depth: number; color: number };

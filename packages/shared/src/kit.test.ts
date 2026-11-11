@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { KIT_DEMOS, KIT_PREVIEWS } from '../rooms/kit';
 import { ROOMS } from '../rooms/index';
-import { KIT_FLOOD_UNDER, KIT_MID_STRETCH, KIT_SCENE_SPAN, KIT_STAND_SINK, kitArtKeys, kitCells, kitCost, kitDrawPlan, kitPerches, kitProblems, kitRoom, kitSceneProblems, kitSceneSpans, kitTiles, midFill, walkedAt, withRow, type KitDraw } from './kit';
+import { KIT_FLOOD_OVER, KIT_MID_STRETCH, KIT_SCENE_SPAN, KIT_STAND_SINK, kitArtKeys, kitCells, kitCost, kitDrawPlan, kitPerches, kitProblems, kitRoom, kitSceneProblems, kitSceneSpans, kitTiles, midFill, walkedAt, withRow, type KitDraw } from './kit';
 import { KIT_ART, KIT_KEY, KIT_PALETTE, drawOps, kitGroup, kitMotifs, kitPlaceholder, periodShifts, shiftOp, type KitOp } from './kitArt';
 import { KIT_CATALOG } from './kitCatalog';
 import { raster } from './raster';
@@ -335,7 +335,7 @@ describe("a course's pit, drawn as a drop or a flooded walk (OP-343)", () => {
     expect(kitDrawPlan(r)).toEqual(kitDrawPlan(dry));
     expect(kitDrawPlan(r).filter((d) => d.id === 'pond').every((d) => d.layer === 'play')).toBe(true);
     expect(kitProblems(r)).toEqual([]);
-    expect(KIT_FLOOD_UNDER).toBeGreaterThan(0);
+    expect(KIT_FLOOD_OVER).toBeGreaterThan(0);
   });
 
   it('refuses a pit drawn as a walk, a drop or a flooded walk where an owl may stand, a drop with a top piece, and a pit drawn both ways', () => {

@@ -28,8 +28,8 @@ export const BRUSH_COURSE_ID = 'brush';
 /** The tree's ground line (TREE_GROUND in rooms/index.ts, which this file cannot import: index.ts imports it). */
 export const BRUSH_GROUND = 770;
 const G = BRUSH_GROUND;
-/** How deep the water over a flooded stretch of the walk is drawn (room px). */
-const WATER_DEEP = 60;
+/** How deep under the walking line the water over a flooded stretch of the walk is drawn (room px). */
+const WATER_DEEP = 62;
 /** The water's colour: a wash of ink-blue. */
 const WATER = 0x6f93ad;
 

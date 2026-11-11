@@ -165,9 +165,10 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
     sunk river: its walkway's numbers had been carried by the path that was painted over the water,
     and its stones and paper cliffs alone are harder and paler than the band allows. So its river is
     the walk flooded (water over the path, the earth and stone showing under it), which keeps every
-    screen inside the bands with room to spare, bar one screen of `brush-2` that is as tight as it
-    was on main. Three small changes there are for that screen and stand on their own: the waterfall
-    is drawn solid and comes down into the river, and a lantern lights the far bank.
+    screen inside the bands with more room than it had on main. The water stands a little over the
+    walking line, over the grass that grows on the walk: with the grass showing above it, the river
+    read as a strip of ground with water under it. Three small changes in `brush-2` stand on their
+    own: the waterfall is drawn solid and comes down into the river, and a lantern lights the far bank.
   - Item 16 left alone, and why: see the list.
   - Building faces an owl walks in front of (item 15, second half) moved to M4: it changes how every
     ledge's body is drawn in every kit room, the tree's included, and wants its own look.

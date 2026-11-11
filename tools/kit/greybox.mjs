@@ -211,7 +211,7 @@ export function planOf(shared, room) {
   const ground = room.kit.ground;
   const floods = (room.kit.paths ?? [])
     .filter((p) => p.flood)
-    .map((p) => ({ id: p.id, x: p.x0, y: ground - p.top + kit.KIT_FLOOD_UNDER, w: p.x1 - p.x0, h: p.flood.depth, color: p.flood.color }));
+    .map((p) => ({ id: p.id, x: p.x0, y: ground - p.top - kit.KIT_FLOOD_OVER, w: p.x1 - p.x0, h: p.flood.depth + kit.KIT_FLOOD_OVER, color: p.flood.color }));
   return {
     id: room.id,
     size: room.size,
