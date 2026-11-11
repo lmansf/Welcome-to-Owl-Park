@@ -3,6 +3,7 @@ import type { Polygon, Rect } from './geometry';
 import type { Perch, Raised } from './perches';
 import type { Vec2 } from './protocol';
 import type { Updraft } from './updraft';
+import type { Thermal } from './thermal';
 import type { WindCurrent } from './wind';
 import type { BrushStone } from './brush';
 import type { NeonSign } from './circuit';
@@ -192,6 +193,8 @@ export interface RoomDef {
   course?: RoomCourse;
   /** In a room seen from the side: columns of rising air that lift a gliding owl (updraft.ts, OP-226). */
   updrafts?: Updraft[];
+  /** In a room seen from above: columns of warm air over a spot of the floor that lift a gliding owl (thermal.ts, OP-340). */
+  thermals?: Thermal[];
   /** In a room seen from the side: sideways currents that carry a gliding owl across a gap (wind.ts, OP-275). */
   winds?: WindCurrent[];
   /**

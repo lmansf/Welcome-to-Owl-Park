@@ -1042,6 +1042,53 @@ describe('Room: updrafts, in a room seen from the side (OP-226)', () => {
   });
 });
 
+describe('Room: a thermal, in a room seen from above (OP-340)', () => {
+  let now = 1_000_000;
+  const rejected: PositionRejection[] = [];
+  beforeEach(() => {
+    now = 1_000_000;
+    rejected.length = 0;
+  });
+
+  it('takes a lifted owl only inside the thermal, rising to its top, as high as it lifts and a jump over', () => {
+    const probe = new Room(def, { now: () => now, random: () => 0.5, cap: 5 });
+    probe.join(new FakePeer(), 'p', hello());
+    const at = probe.positionOf('p')!;
+    // Without a thermal the room holds its owls to a jump and its flaps over the floor.
+    expect(probe.air('p', { z: 600, vz: 0, s: AIRBORNE, f: 0 })).toBe(false);
+
+    // One over where an owl comes in, 900 high; another far across the room.
+    const warm = { ...def, thermals: [{ id: 'heart', pos: { x: at.x, y: at.y }, r: 160, top: 900 }, { id: 'far', pos: { x: at.x + 1200, y: at.y }, r: 160, top: 500 }] };
+    const room = new Room(warm, { now: () => now, random: () => 0.5, cap: 5, rejected: (_id, why) => rejected.push(why) });
+    const a = new FakePeer();
+    const b = new FakePeer();
+    room.join(a, 'a', hello());
+    room.join(b, 'b', hello());
+    const lifted: Air = { z: 400, vz: UPDRAFT_RISE, s: LIFTED, f: 0, h: 900 };
+    expect(room.air('a', lifted)).toBe(true);
+    expect(b.last('air')).toMatchObject({ id: 'a', air: lifted });
+    // To the top, and a glide on from there: both as high as the thermal lifts.
+    expect(room.air('a', { ...lifted, z: 900 })).toBe(true);
+    expect(room.air('a', { z: 880, vz: -80, s: 2, f: 0 })).toBe(true);
+    // A top this thermal has not (the far one's, which the owl is nowhere near): refused.
+    expect(room.air('a', { ...lifted, h: 500 })).toBe(false);
+    expect(rejected).toEqual(['lift']);
+    // Higher than any thermal here lifts, and a jump and its flaps: no air state at all.
+    expect(room.air('a', { z: 900 + 400, vz: 0, s: AIRBORNE, f: 0 })).toBe(false);
+  });
+
+  it('refuses a lifted owl that stands outside every thermal of the room', () => {
+    const probe = new Room(def, { now: () => now, random: () => 0.5, cap: 5 });
+    probe.join(new FakePeer(), 'p', hello());
+    const at = probe.positionOf('p')!;
+    const warm = { ...def, thermals: [{ id: 'far', pos: { x: at.x + 1200, y: at.y }, r: 160, top: 900 }] };
+    const room = new Room(warm, { now: () => now, random: () => 0.5, cap: 5, rejected: (_id, why) => rejected.push(why) });
+    room.join(new FakePeer(), 'a', hello());
+    expect(room.air('a', { z: 120, vz: UPDRAFT_RISE, s: LIFTED, f: 0, h: 900 })).toBe(false);
+    expect(rejected).toEqual(['lift']);
+  });
+});
+
 describe('no walk ends on top of another owl (OP-248)', () => {
   let now = 1_000_000;
   let room: Room;

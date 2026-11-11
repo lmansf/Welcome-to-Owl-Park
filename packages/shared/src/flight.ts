@@ -214,6 +214,18 @@ export function airChanged(a: Air, b: Air): boolean {
   return a.s !== b.s || a.f !== b.f || a.h !== b.h || Math.abs(a.vz - b.vz) > 1;
 }
 
+/**
+ * An air state as a page tells it to the room: its numbers rounded to a tenth, and for a lifted owl the
+ * top it rises to, without which the room server takes no lifted state (checkAir) and no other page
+ * sees the owl rise. The page sent a lifted owl's state without it, so in a course's updrafts every
+ * lifted state was dropped and the others saw the owl glide down while it rose (found with OP-340).
+ */
+export function airOut(a: Air): Air {
+  const tenth = (n: number) => Math.round(n * 10) / 10;
+  const out: Air = { z: tenth(a.z), vz: tenth(a.vz), s: a.s, f: a.f };
+  return a.s === LIFTED && a.h !== undefined ? { ...out, h: tenth(a.h) } : out;
+}
+
 /** Whether a value has an air state's shape: two numbers, a mode and flaps it knows (0 to MAX_FLAPS). */
 export function isAirShape(v: unknown): v is Air {
   if (typeof v !== 'object' || v === null) return false;

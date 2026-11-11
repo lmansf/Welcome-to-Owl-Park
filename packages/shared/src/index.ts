@@ -41,6 +41,7 @@ export * from './climbCity';
 export * from './climbPilot';
 export * from './flight';
 export * from './updraft';
+export * from './thermal';
 export * from './wind';
 export * from './brush';
 export * from './circuit';
