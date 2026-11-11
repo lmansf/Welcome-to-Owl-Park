@@ -139,7 +139,7 @@ export function renderGreybox(shared, room, { scale = 1, placeholders = false } 
     for (let y = 0; y < room.size.h; y += 100) ras.fillRect(out, 0, y * k, W, 1, MARK.grid);
   }
   const plan = kit.kitDrawPlan(room);
-  const order = ['back', 'play', 'piece', 'front'];
+  const order = ['back', 'hazard', 'play', 'piece', 'front'];
   for (const layer of order) {
     for (const d of plan.filter((p) => p.layer === layer)) {
       if (placeholders) {
@@ -200,13 +200,18 @@ export function renderGreybox(shared, room, { scale = 1, placeholders = false } 
  */
 export function planOf(shared, room) {
   const { kit } = shared;
-  const order = ['back', 'play', 'piece', 'front'];
+  const order = ['back', 'hazard', 'play', 'piece', 'front'];
   const plan = kit.kitDrawPlan(room);
   const images = order.flatMap((layer) =>
     plan
       .filter((d) => d.layer === layer)
-      .flatMap((d) => kit.kitCells(d).map((c) => ({ key: d.key, layer, role: d.role, id: d.id, ...c, flip: !!d.flip, alpha: d.alpha ?? 1, tile: d.tile }))),
+      .flatMap((d) => kit.kitCells(d).map((c) => ({ key: d.key, layer, role: d.role, id: d.id, ...c, flip: !!d.flip, alpha: d.alpha ?? 1, tile: d.tile, ...(d.tint !== undefined ? { tint: d.tint } : {}) }))),
   );
+  // A flooded walk's still water (OP-343, KitRun.flood): its box and colour, painted over the walk and under the pieces on it.
+  const ground = room.kit.ground;
+  const floods = (room.kit.paths ?? [])
+    .filter((p) => p.flood)
+    .map((p) => ({ id: p.id, x: p.x0, y: ground - p.top + kit.KIT_FLOOD_UNDER, w: p.x1 - p.x0, h: p.flood.depth, color: p.flood.color }));
   return {
     id: room.id,
     size: room.size,
@@ -215,6 +220,7 @@ export function planOf(shared, room) {
     backgrounds: room.backgrounds ?? [],
     foregrounds: room.foregrounds ?? [],
     images,
+    floods,
     doors: room.doors,
     perches: (room.perches ?? []).map((p) => ({ id: p.id, top: p.top, x0: Math.min(...p.area.map((q) => q.x)), x1: Math.max(...p.area.map((q) => q.x)) })),
     spawns: room.spawns,

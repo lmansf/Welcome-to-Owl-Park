@@ -61,7 +61,7 @@ measurement; C = read in the code, to confirm.
 | 1 | Nothing says what to do on arrival: no quest owl or first quest where owls arrive; every quest owl stands in a realm room (V) | `lobby`, `m3-hall` | A first quest given where owls arrive, with the feather trail leading to it (bigger change B1) | open |
 | 2 | A course never says how it is played: no goal, no controls (hold Jump to glide, flap, dash), no clock though the gold prize is timed (V at arrival) | all three courses | A start card, first-time prompts at the first gust, stone, sign and bench, the run's clock in the strip | open, M2 |
 | 3 | A quick tap of Jump is a tiny hop (a short press rose 52 px, a hold 145; the first step of each course is 90 to 120) (V) | everywhere | Raise the least height a jump reaches so a tap clears a first step | M1: a tap now rises 83 to 128 px, a tapped flap is nearly a whole one |
-| 4 | Falls look like floor: pits and water are drawn as the same ground as safe floor, hazards faint (V) | all three courses | Draw every pit as a pit, the same way in each course | M1: the walk ends at a bank; water, a bramble dip or the street lies a step below; a rule test refuses a pit drawn as a walk |
+| 4 | Falls look like floor: pits and water are drawn as the same ground as safe floor, hazards faint (V) | all three courses | Draw every pit as a pit, the same way in each course | M1: the walk ends at a bank; a bramble dip or the street lies a step below it, and in the ink course the walk is flooded with still water; a rule test refuses a pit drawn as a walk |
 | 5 | The hut at the end is open with no bell rung and has no way back; coming in again starts the run over (C, confirmed) | `canopy-3`, `canopy-hut` | The hut's doorway holds until every bell is rung and says what is missing | M1: the doorway waits and says how many bells are rung |
 | 6 | A fall is an instant silent put-back with the camera sliding after; some rooms have no bench; a room entered from its far end sends a fall to its other end (C, confirmed) | courses | A fall beat, a bench where a fall costs a whole room, and the way in as the fall-back | M1: a blink, the camera cut with the owl, a line; back to the nearer of the bench and the way in; one bench added (`circuit-3`) |
 | 7 | The play key skips the result card: a new run started 0.4 s after the crash (V) | arcade | No play key for a moment after a run ends | open, M3 |
@@ -104,10 +104,12 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   What it changed, in short:
   - The jump (`packages/shared/src/jump.ts`): the speed a rise is cut to on letting go, 180 to 640.
     One number, shared with the glass climb, whose pilot never used a short hop.
-  - The kit (`KitRun.sunk`, `shade`, `fill`): a drop is a stretch of the ground line with no top
-    piece, its texture a step below the walk and in shadow, or painted as still water where the realm
-    has no texture for it. Each realm's hazard art (the realm kit's hazard slot) stands in it at full
-    strength. The ink realm has no hazard art yet, so its water is painted by the game.
+  - The kit (`KitRun.sunk`, `shade`, `flood`; the `hazard` layer): a pit is drawn one of two ways. A
+    drop is a stretch of the ground line with no top piece, its texture a step below the walk and in
+    shadow, with the realm's hazard art (the realm kit's hazard slot) in it at full strength; both are
+    in the new hazard layer, under everything an owl stands on. A flooded walk keeps its run and has
+    still water painted over its top. The canopy and the neon course use drops; the ink course, which
+    has no hazard art yet, is flooded.
   - The fall (`coursebook.ts`): back to the nearer of the run's bench in the room and the way the owl
     came in. The room server remembers the way in for as long as it holds the owl (in memory only).
   - The hut (`course.ts`, `endsCourse`, `doorWaitsOn`): a doorway into a room where a course only
@@ -156,6 +158,16 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
     the realm's own ground texture in shadow, because a realm's rooms may name only its kit's slots.
   - A fall blinks the room dark for a quarter second (not with calm motion on) and the camera cuts
     with the owl. A longer beat (the owl seen in the water first) is left for the sound and feel work.
+  - The style check (`pnpm kit:check`) held the first build back, rightly: it measures each screen's
+    walkway against the bands of `docs/TREE_STYLE.md`, and a drop and its bramble counted as walkway.
+    Hazards are now their own layer, which the check counts as neither backdrop nor walkway (as it
+    does the trunk and walls). The bands themselves are untouched. The ink course could not pass with a
+    sunk river: its walkway's numbers had been carried by the path that was painted over the water,
+    and its stones and paper cliffs alone are harder and paler than the band allows. So its river is
+    the walk flooded (water over the path, the earth and stone showing under it), which keeps every
+    screen inside the bands with room to spare, bar one screen of `brush-2` that is as tight as it
+    was on main. Three small changes there are for that screen and stand on their own: the waterfall
+    is drawn solid and comes down into the river, and a lantern lights the far bank.
   - Item 16 left alone, and why: see the list.
   - Building faces an owl walks in front of (item 15, second half) moved to M4: it changes how every
     ledge's body is drawn in every kit room, the tree's included, and wants its own look.

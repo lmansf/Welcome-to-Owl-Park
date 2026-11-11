@@ -89,7 +89,7 @@ const drop = (id: string, x0: number, x1: number) => ({ id, x0, x1, top: 0, mid:
 /** Live neon tubes standing up out of the street between two buildings, too close together to land among, their tops over the line of the decks: the drop is a fall. */
 function tubes(x0: number, x1: number, step = 140): KitDecal[] {
   const out: KitDecal[] = [];
-  for (let x = x0 + step / 2, i = 0; x < x1; x += step, i++) out.push({ piece: 'kit-neon-neon-tube-hazard', x, y: G + STREET_SUNK - 74, scale: 0.7, ...(i % 2 ? { flip: true } : {}) });
+  for (let x = x0 + step / 2, i = 0; x < x1; x += step, i++) out.push({ piece: 'kit-neon-neon-tube-hazard', x, y: G + STREET_SUNK - 74, scale: 0.7, hazard: true, ...(i % 2 ? { flip: true } : {}) });
   return out;
 }
 

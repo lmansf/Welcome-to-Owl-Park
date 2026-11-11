@@ -101,7 +101,7 @@ const vents = (cols: readonly Updraft[]): KitDecal[] => cols.map((u) => ({ piece
 /** Bramble filling a pit of the ground line, patch by patch, as solid as the thorns it is (OP-343): no walk shows through it. */
 function bramble(x0: number, x1: number, piece = 'kit-clearing-bramble-patch', step = 240): KitDecal[] {
   const out: KitDecal[] = [];
-  for (let x = x0 + step / 2, i = 0; x < x1; x += step, i++) out.push({ piece, x, y: G - 30, ...(i % 2 ? { flip: true } : {}) });
+  for (let x = x0 + step / 2, i = 0; x < x1; x += step, i++) out.push({ piece, x, y: G - 30, hazard: true, ...(i % 2 ? { flip: true } : {}) });
   return out;
 }
 
@@ -130,7 +130,8 @@ function clearingAir(screens: number): KitBackdrop[] {
 function trunkInside(w: number): Pick<RoomKit, 'backdrops' | 'surfaces'> {
   return {
     backdrops: [layer('kit-clearing-sky-a', 1, [0, 0])],
-    surfaces: [{ id: 'hollow', texture: 'kit-tex-clearing-hollow-wood', rect: { x: 0, y: 0, w, h: G } }],
+    // The wall runs on down behind a dip's step (OP-343), so no sky shows between a walk's line and the dip's bed.
+    surfaces: [{ id: 'hollow', texture: 'kit-tex-clearing-hollow-wood', rect: { x: 0, y: 0, w, h: G + PIT_SUNK } }],
   };
 }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { KIT_DEMOS, KIT_PREVIEWS } from '../rooms/kit';
 import { ROOMS } from '../rooms/index';
-import { KIT_MID_STRETCH, KIT_SCENE_SPAN, KIT_STAND_SINK, kitArtKeys, kitCells, kitCost, kitDrawPlan, kitPerches, kitProblems, kitRoom, kitSceneProblems, kitSceneSpans, kitTiles, midFill, walkedAt, withRow, type KitDraw } from './kit';
+import { KIT_FLOOD_UNDER, KIT_MID_STRETCH, KIT_SCENE_SPAN, KIT_STAND_SINK, kitArtKeys, kitCells, kitCost, kitDrawPlan, kitPerches, kitProblems, kitRoom, kitSceneProblems, kitSceneSpans, kitTiles, midFill, walkedAt, withRow, type KitDraw } from './kit';
 import { KIT_ART, KIT_KEY, KIT_PALETTE, drawOps, kitGroup, kitMotifs, kitPlaceholder, periodShifts, shiftOp, type KitOp } from './kitArt';
 import { KIT_CATALOG } from './kitCatalog';
 import { raster } from './raster';
@@ -293,7 +293,7 @@ describe('the kit draw plan (OP-234)', () => {
 const coloursOf = (ops: readonly KitOp[]) => new Set(ops.map((o) => o.c));
 const PALETTE = new Set<number>(Object.values(KIT_PALETTE));
 
-describe("a course's pit, drawn as a drop (OP-343)", () => {
+describe("a course's pit, drawn as a drop or a flooded walk (OP-343)", () => {
   const pit = [
     { x: 600, y: GROUND - 4 },
     { x: 1000, y: GROUND - 4 },
@@ -303,36 +303,73 @@ describe("a course's pit, drawn as a drop (OP-343)", () => {
   const course = { id: 'c', act: 1, pits: [pit] };
   const walk = (id: string, x0: number, x1: number) => ({ id, x0, x1, top: 0, cap: 'kit-plank-mid', mid: 'kit-tex-earth' });
   const drop = (id: string, x0: number, x1: number) => ({ id, x0, x1, top: 0, mid: 'kit-tex-earth', sunk: 30, shade: 0x556655 });
+  const flood = { depth: 60, color: 0x6f93ad };
 
-  it("draws a drop's texture below the walking line, in its shade, and nothing over it", () => {
+  it("draws a drop's texture below the walking line, in its shade, in the hazard layer, and nothing over it", () => {
     const r = room({ paths: [walk('west', 100, 600), drop('dip', 600, 1000), walk('east', 1000, 1500)] }, { course });
     const drawn = kitDrawPlan(r).filter((d) => d.id === 'dip');
-    expect(drawn).toEqual([{ key: 'kit-tex-earth', x: 600, y: GROUND + 30, w: 400, h: 900 - GROUND - 30, tile: 'xy', layer: 'play', role: 'path', id: 'dip', tint: 0x556655 }]);
-    // The walks either side begin at the line, as ever.
-    expect(kitDrawPlan(r).find((d) => d.id === 'west' && d.key === 'kit-tex-earth')!.y).toBe(GROUND);
+    expect(drawn).toEqual([{ key: 'kit-tex-earth', x: 600, y: GROUND + 30, w: 400, h: 900 - GROUND - 30, tile: 'xy', layer: 'hazard', role: 'path', id: 'dip', tint: 0x556655 }]);
+    // The walks either side begin at the line, with what an owl stands on, as ever.
+    expect(kitDrawPlan(r).find((d) => d.id === 'west' && d.key === 'kit-tex-earth')).toMatchObject({ y: GROUND, layer: 'play' });
     expect(kitProblems(r)).toEqual([]);
   });
 
-  it('a drop that the game paints (water) draws no piece, and is no problem', () => {
-    const r = room({ paths: [walk('west', 100, 600), { id: 'pond', x0: 600, x1: 1000, top: 0, sunk: 26, fill: 0x6f93ad }, walk('east', 1000, 1500)] }, { course });
-    expect(kitDrawPlan(r).filter((d) => d.id === 'pond')).toEqual([]);
-    expect(kitProblems(r)).toEqual([]);
+  it('draws the danger that fills a drop in the hazard layer too, and any other decal with the pieces', () => {
+    const r = room(
+      {
+        paths: [walk('west', 100, 600), drop('dip', 600, 1000), walk('east', 1000, 1500)],
+        decals: [
+          { piece: 'kit-barrier-rope', x: 800, y: GROUND, hazard: true },
+          { piece: 'kit-barrier-rope', x: 300, y: GROUND },
+          { piece: 'kit-barrier-rope', x: 1200, y: GROUND, front: true },
+        ],
+      },
+      { course },
+    );
+    expect(kitDrawPlan(r).filter((d) => d.role === 'decal').map((d) => d.layer)).toEqual(['hazard', 'piece', 'front']);
   });
 
-  it('refuses a pit drawn as a walk, a drop where an owl may stand, and a drop with a top piece', () => {
-    expect(kitProblems(room({}, { course }))).toEqual(['the pit at x 608 is drawn as a walk: the path over it should be a drop']);
+  it('a flooded walk keeps its run as it is drawn (the game paints the water over it), and is no problem over a pit', () => {
+    const r = room({ paths: [walk('west', 100, 600), { ...walk('pond', 600, 1000), flood }, walk('east', 1000, 1500)] }, { course });
+    const dry = room({ paths: [walk('west', 100, 600), walk('pond', 600, 1000), walk('east', 1000, 1500)] }, { course });
+    expect(kitDrawPlan(r)).toEqual(kitDrawPlan(dry));
+    expect(kitDrawPlan(r).filter((d) => d.id === 'pond').every((d) => d.layer === 'play')).toBe(true);
+    expect(kitProblems(r)).toEqual([]);
+    expect(KIT_FLOOD_UNDER).toBeGreaterThan(0);
+  });
+
+  it('refuses a pit drawn as a walk, a drop or a flooded walk where an owl may stand, a drop with a top piece, and a pit drawn both ways', () => {
+    expect(kitProblems(room({}, { course }))).toEqual(['the pit at x 608 is drawn as a walk: the path over it should be a drop or a flooded walk']);
     const wide = room({ paths: [walk('west', 100, 500), drop('dip', 500, 1000), walk('east', 1000, 1500)] }, { course });
     expect(kitProblems(wide)).toEqual(['drop dip is drawn where an owl may stand: no pit of the course spans it']);
+    const wet = room({ paths: [walk('west', 100, 500), { ...walk('pond', 500, 1000), flood }, walk('east', 1000, 1500)] }, { course });
+    expect(kitProblems(wet)).toEqual(['flooded walk pond is drawn where an owl may stand: no pit of the course spans it']);
     const capped = room({ paths: [walk('west', 100, 600), { ...drop('dip', 600, 1000), cap: 'kit-plank-mid' }, walk('east', 1000, 1500)] }, { course });
     expect(kitProblems(capped)).toEqual(['drop dip has a top piece: it would look stood on']);
+    const both = room({ paths: [walk('west', 100, 600), { ...drop('dip', 600, 1000), flood }, walk('east', 1000, 1500)] }, { course });
+    expect(kitProblems(both)).toEqual(['drop dip is flooded too: a pit is drawn one way']);
+    // A room with no course has no pit: a drop in it is where an owl may stand.
+    expect(kitProblems(room({ paths: [walk('west', 100, 600), drop('dip', 600, 1000), walk('east', 1000, 1500)] }))).toEqual(['drop dip is drawn where an owl may stand: no pit of the course spans it']);
   });
 
-  it('holds in every course: no pit is drawn as a walk', () => {
+  it('holds in every course: every pit is drawn as a drop or as a flooded walk, and both ways are in use', () => {
     const withPits = KIT_ROOMS.filter((r) => r.course?.pits?.length);
     expect(withPits.length).toBeGreaterThanOrEqual(11);
     for (const r of withPits) {
+      const pits = (r.kit!.paths ?? []).filter((p) => (p.sunk ?? 0) > 0 || p.flood);
+      expect(pits.length, r.id).toBeGreaterThanOrEqual(r.course!.pits!.length);
+    }
+    // The canopy's and the neon course's drops, the ink course's flooded walks.
+    expect(withPits.some((r) => (r.kit!.paths ?? []).some((p) => p.flood))).toBe(true);
+    expect(withPits.some((r) => (r.kit!.paths ?? []).some((p) => (p.sunk ?? 0) > 0))).toBe(true);
+  });
+
+  it('keeps every hazard of the live courses out of what an owl stands on: its drops and what fills them are in the hazard layer', () => {
+    for (const r of KIT_ROOMS.filter((k) => k.course?.pits?.length)) {
+      const plan = kitDrawPlan(r);
       const drops = (r.kit!.paths ?? []).filter((p) => (p.sunk ?? 0) > 0);
-      expect(drops.length, r.id).toBeGreaterThanOrEqual(r.course!.pits!.length);
+      for (const d of drops) for (const draw of plan.filter((x) => x.id === d.id)) expect(draw.layer, `${r.id} ${d.id}`).toBe('hazard');
+      for (const d of r.kit!.decals ?? []) if (d.hazard) expect(drops.some((p) => p.x0 <= d.x && d.x <= p.x1), `${r.id}: a hazard at x ${d.x} outside every drop`).toBe(true);
     }
   });
 });

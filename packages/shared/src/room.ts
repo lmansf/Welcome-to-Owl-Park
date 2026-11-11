@@ -374,10 +374,12 @@ export interface KitRun {
   /** The colour a drop's texture is drawn in (a tint multiplied in): its shadow. */
   shade?: number;
   /**
-   * A drop with no texture: the game paints it in this colour from its sunk line to the room's foot,
-   * as still water (kitView.ts), until the realm's hazard art (the realm kit's hazard slot) is delivered.
+   * A flooded stretch of the ground line (OP-343), a course's pit of another kind: the run stays as it is
+   * drawn, and the game paints still water over its top, from just under the walking line to `depth`
+   * below it in `color` (kitView.ts), until the realm's hazard art (the realm kit's hazard slot) arrives.
+   * What stands in it stands in the water; nothing of the run shows through.
    */
-  fill?: number;
+  flood?: { depth: number; color: number };
 }
 
 export interface KitLedge extends KitRun {
@@ -460,6 +462,8 @@ export interface KitDecal {
   flip?: boolean;
   alpha?: number;
   front?: boolean;
+  /** The danger itself (a course's bramble, its live tubes): drawn in the hazard layer, in the drop, under what an owl stands on (OP-343). */
+  hazard?: boolean;
 }
 
 export interface KitBackdrop {

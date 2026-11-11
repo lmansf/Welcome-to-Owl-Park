@@ -20,7 +20,7 @@ import { HALL_ID, courseDoor, fromCourse } from './hollowHall';
 import { RAIN_BRIDGE_MS, brushPerches, type BrushArrow, type BrushStone } from '../src/brush';
 import type { CourseDef, CoursePiece, CourseThorns, RoomCourse } from '../src/course';
 import { kitPerches, kitRoom } from '../src/kit';
-import { ROOM_W, type DoorDef, type KitBackdrop, type KitLedge, type RoomDef, type RoomKit } from '../src/room';
+import { ROOM_W, type DoorDef, type KitBackdrop, type KitLedge, type KitRun, type RoomDef, type RoomKit } from '../src/room';
 import { inRealmKit } from '../src/kitSlots';
 import { withCourseAir } from './courseAir';
 
@@ -28,8 +28,8 @@ export const BRUSH_COURSE_ID = 'brush';
 /** The tree's ground line (TREE_GROUND in rooms/index.ts, which this file cannot import: index.ts imports it). */
 export const BRUSH_GROUND = 770;
 const G = BRUSH_GROUND;
-/** How far below the walk the water lies (room px): the step down from a bank that says the walk ends here. */
-const WATER_SUNK = 26;
+/** How deep the water over a flooded stretch of the walk is drawn (room px). */
+const WATER_DEEP = 60;
 /** The water's colour: a wash of ink-blue. */
 const WATER = 0x6f93ad;
 
@@ -62,9 +62,9 @@ const PLANK = { row: 'kit-cut-plank-thin' };
  * of a room seen from the side it is jumped up through, not a wall: a wall on the ground line's thin
  * floor would cut the floor in two.
  */
-const pillar = (top: number) => ({ cap: 'kit-ink-rock-pillar', mid: 'kit-tex-ink-ink-stone', depth: top + WATER_SUNK });
-/** A terrace of planks, down to the ground line (or, stood in the water, to its surface). */
-const terrace = (top: number, wet = false) => ({ row: 'kit-cut-plank', mid: 'kit-tex-planks', depth: top + (wet ? WATER_SUNK : 0) });
+const pillar = (top: number) => ({ cap: 'kit-ink-rock-pillar', mid: 'kit-tex-ink-ink-stone', depth: top });
+/** A terrace of planks, down to the ground line. */
+const terrace = (top: number) => ({ row: 'kit-cut-plank', mid: 'kit-tex-planks', depth: top });
 
 /** A brush stone: its ledge, and the stone itself (what it paints and for how long). */
 function stone(id: string, x: number, w: number, top: number, arrow: BrushArrow, ms?: number): { ledge: KitLedge; stone: BrushStone } {
@@ -142,11 +142,12 @@ function brushRoom(
  */
 const bank = (id: string, x0: number, x1: number, row = 'kit-cut-earth-path') => ({ id, x0, x1, top: 0, row, mid: 'kit-tex-ink-ink-stone' });
 /**
- * The water between the banks, the course's pit (OP-343): still water a step below the walk, with no
- * path over it and nothing on it that looks stood on (no lily pad, no rim of stones). The game paints
- * it; the realm kit's hazard slot has no art for the ink realm yet, and its strip takes over when it does.
+ * The water between the banks, the course's pit (OP-343): the walk flooded, still water lying in it
+ * from its line down, with nothing on it that looks stood on (no lily pad, no rim of stones). The game
+ * paints the water; the realm kit's hazard slot has no art for the ink realm yet, and its strip takes
+ * over when it does. Its ends are plain lengths of the walk, not caps: the banks either side end in theirs.
  */
-const river = (id: string, x0: number, x1: number) => ({ id, x0, x1, top: 0, sunk: WATER_SUNK, fill: WATER });
+const river = (id: string, x0: number, x1: number): KitRun => ({ id, x0, x1, top: 0, row: 'kit-cut-earth-path', left: 'kit-cut-earth-path-mid-320', right: 'kit-cut-earth-path-mid-320', mid: 'kit-tex-ink-ink-stone', flood: { depth: WATER_DEEP, color: WATER } });
 const MOUNTAIN_PATH = 'kit-cut-stone-mossy';
 
 // ---------- Act 1: the paper garden ----------
@@ -216,19 +217,22 @@ const RIVER: RoomKit = {
   ],
   props: [
     { id: 'dock-lantern', piece: 'kit-ink-paper-lantern', x: 340, top: 0, scale: 0.7 },
+    { id: 'far-lantern', piece: 'kit-ink-paper-lantern', x: 4640, top: 0, scale: 0.7 },
     { id: 'heron', piece: 'kit-landmark-heron-ink', x: 2150, top: 60, scale: 0.5 },
   ],
   scenes: [
     { id: 'west-dock', story: 'A paper lantern burns on the west dock for travellers waiting out the rain.', props: ['dock-lantern'], about: ['back'] },
+    // The far bank's lantern (OP-343): the one light across the river, so an owl crossing sees where the crossing ends.
+    { id: 'east-dock', story: 'Its twin burns on the far bank, by the door up the mountain: the light to cross the river by.', props: ['far-lantern'], about: ['to-mountain'] },
     { id: 'porch', story: 'Under the temple eave a grey heron in a straw hat waits out the rain on the one dry step.', props: ['heron'], about: ['porch'] },
   ],
   decals: [
     // The temple across the river: its eaves keep the rain off the stones under them, painted far behind, never stood on.
     { piece: 'kit-ink-temple-eave', x: 1560, y: G - 330, alpha: 0.7 },
     { piece: 'kit-ink-eave-shelter', x: 2260, y: G - 260, alpha: 0.7 },
-    // The waterfall from the cliff top to the river, with the dry band behind it where the ledge runs.
-    { piece: 'kit-ink-waterfall-curtain', x: 4270, y: G - 640, alpha: 0.85 },
-    { piece: 'kit-ink-waterfall-curtain', x: 4270, y: G - 220, alpha: 0.85 },
+    // The waterfall from the cliff top down into the river (its foot in the water, OP-343), with the dry band behind it where the ledge runs.
+    { piece: 'kit-ink-waterfall-curtain', x: 4270, y: G - 598 },
+    { piece: 'kit-ink-waterfall-curtain', x: 4270, y: G - 198 },
   ],
 };
 
@@ -273,7 +277,7 @@ const PANEL_2: RoomKit = {
   ground: G,
   backdrops: inkAir(2),
   paths: [bank('ground', 0, 300, MOUNTAIN_PATH), river('tarn', 300, 2 * ROOM_W)],
-  ledges: [...S3B.map((s) => s.ledge), ledge('n1', 620, 200, 520, ROCK), ledge('n2', 1700, 160, 260, DRY), ledge('n3', 2360, 200, 540, CLIFF), ledge('n4', 2610, 590, 540, terrace(540, true))],
+  ledges: [...S3B.map((s) => s.ledge), ledge('n1', 620, 200, 520, ROCK), ledge('n2', 1700, 160, 260, DRY), ledge('n3', 2360, 200, 540, CLIFF), ledge('n4', 2610, 590, 540, terrace(540))],
   doors: [
     { door: 'back', piece: 'kit-ink-door-paper-open', scale: 0.7 },
     { door: 'home', piece: 'kit-ink-moon-gate', scale: 0.5 },

@@ -1002,7 +1002,7 @@ export class RoomScene extends Phaser.Scene {
       this.add.rectangle(-2000, -2000, room.size.w + 4000, room.size.h + 4000, TRIAL_BACKDROP_VEIL.colour, TRIAL_BACKDROP_VEIL.alpha).setOrigin(0).setDepth(-0.98);
     }
     // The kit's surfaces, platforms and pieces over its backdrops; its front props over the owls, under the overlay.
-    if (art.kit) drawKit(this, art, { back: -0.97, play: -0.95, piece: -0.93, front: room.size.h + 50 });
+    if (art.kit) drawKit(this, art, { back: -0.97, hazard: -0.96, play: -0.95, piece: -0.93, front: room.size.h + 50 });
     // A plaza's floor: the painting's foot runs on over it, mirrored and fading, so the two meet with no seam (plazaSkirt.ts).
     if (!room.drawn) drawSkirts(this, art);
     // Seen from above: roots, ferns, pillars and the rim that break up its rectangles (edges.ts), under the floor's edge line.

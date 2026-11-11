@@ -1,5 +1,5 @@
 import type Phaser from 'phaser';
-import { EDGE_ART, KIT_ART, kitCells, kitDrawPlan, kitFrames, seenFromSide, type EdgeStrip, type KitDraw, type KitLayer, type KitOp, type RoomDef } from '@owl-park/shared';
+import { EDGE_ART, KIT_ART, KIT_FLOOD_UNDER, kitCells, kitDrawPlan, kitFrames, seenFromSide, type EdgeStrip, type KitDraw, type KitLayer, type KitOp, type RoomDef } from '@owl-park/shared';
 import { kitDemoFor } from '@owl-park/shared/rooms/kit';
 import { TREE_PLAY_TINT } from './treeView';
 import { artLookRoom } from './artLooks';
@@ -60,10 +60,10 @@ export function drawKit(scene: Phaser.Scene, room: RoomDef, depths: KitDepths): 
     // Drawn straight after the body they frame, at its depth, so the caps an owl lands on (drawn later) stay over them.
     for (const s of kitFrames(d, room.size, plan)) frames += drawStrip(scene, s, depths[d.layer], tint);
   }
-  // A drop with no texture of its own is still water (OP-343): over the backdrops, under everything an owl stands on.
+  // A flooded walk's still water (OP-343): over the walk and what stands in it, under the pieces on it and the owls.
   const ground = room.kit?.ground ?? room.size.h;
   for (const p of room.kit?.paths ?? []) {
-    if (p.fill !== undefined) drawWater(scene, p.x0, p.x1, ground - p.top + (p.sunk ?? 0), room.size.h, p.fill, (depths.back + depths.play) / 2);
+    if (p.flood) drawWater(scene, p.x0, p.x1, ground - p.top + KIT_FLOOD_UNDER, ground - p.top + KIT_FLOOD_UNDER + p.flood.depth, p.flood.color, (depths.play + depths.piece) / 2);
   }
   return { pieces: plan.length, images, frames };
 }
