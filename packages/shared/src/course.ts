@@ -194,6 +194,16 @@ export function inPit(room: Pick<RoomDef, 'course'> | undefined, p: Vec2): boole
   return (room?.course?.pits ?? []).some((pit) => pointInPolygon(p, pit));
 }
 
+/**
+ * Whether an owl has fallen into one of a room's pits: down on the floor over one. Up on a ledge over a
+ * pit it has not, nor in the air over one, nor on the step off a ledge's end, when it is still at the
+ * ledge's height with only the pit under it: it drops from there, its flaps and its glide still to come.
+ * `grounded` is whether it stands on something (not in the air) and `z` how high it is over the floor.
+ */
+export function fellInPit(room: Pick<RoomDef, 'course'> | undefined, p: Vec2, grounded: boolean, z: number): boolean {
+  return grounded && z < 1 && inPit(room, p);
+}
+
 /** The shortcuts of a room still shut for an owl that has opened `open`: their gates, as floor no owl crosses. */
 export function shutShortcuts(room: Pick<RoomDef, 'course'> | undefined, open: ReadonlySet<string>): Polygon[] {
   return (room?.course?.shortcuts ?? []).filter((s) => !open.has(s.id)).map((s) => s.gate);

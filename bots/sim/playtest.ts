@@ -103,13 +103,48 @@ function waysIn(room: RoomDef, course: CourseDef | undefined): string[] {
   return ids.length > 0 ? ids : Object.keys(room.spawns);
 }
 
-/** Whether a doorway of a course's room leads on through the course: to a later act, to a room of its act holding what the course needs, or out by the exit. */
-function onward(course: CourseDef, room: RoomDef, to: string): boolean {
+/**
+ * How far into a course each of its rooms is: the fewest doorways from its first act's room, the way a
+ * run goes forward. A doorway to a room no further in is a way back.
+ */
+function courseDepths(course: CourseDef): Map<string, number> {
+  const ids = new Set([...course.acts, ...(course.rooms ?? [])]);
+  const first = course.acts[0]!;
+  const depth = new Map<string, number>([[first, 0]]);
+  const queue = [first];
+  while (queue.length) {
+    const id = queue.shift()!;
+    for (const d of ROOMS[id]?.doors ?? []) {
+      const to = leadsOn(d);
+      if (to === null || !ids.has(to) || depth.has(to)) continue;
+      depth.set(to, depth.get(id)! + 1);
+      queue.push(to);
+    }
+  }
+  return depth;
+}
+
+/**
+ * Whether a doorway of a course's room leads on through the course: out by the exit, or forward (to a
+ * room further in, never back) to a later act, or to a room of its own act that holds what the course
+ * needs or itself leads on. The last is a storey of a climb (the Updraft Canopy's trunk, a storey a
+ * room): its hatch is the only way up to the next act, though the storey above holds no bell of its own.
+ */
+export function onward(course: CourseDef, room: RoomDef, to: string): boolean {
   if (course.exit.room === room.id && leadsOn(room.doors.find((d) => d.id === course.exit.door)!) === to) return true;
-  const next = ROOMS[to];
-  if (!next?.course || next.course.id !== course.id) return false;
-  if (next.course.act > room.course!.act) return true;
-  return next.course.act === room.course!.act && ((next.course.parts?.length ?? 0) > 0 || next.course.shrine !== undefined);
+  const depth = courseDepths(course);
+  const needed = (from: RoomDef, id: string): boolean => {
+    const next = ROOMS[id];
+    if (!next?.course || next.course.id !== course.id) return false;
+    if ((depth.get(id) ?? -1) <= (depth.get(from.id) ?? Infinity)) return false;
+    if (next.course.act > from.course!.act) return true;
+    if ((next.course.parts?.length ?? 0) > 0 || next.course.shrine !== undefined) return true;
+    return next.doors.some((d) => {
+      const on = leadsOn(d);
+      return on !== null && needed(next, on);
+    });
+  };
+  return needed(room, to);
 }
 
 export function playtestRoom(id: string): RoomReport {

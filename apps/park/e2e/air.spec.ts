@@ -11,6 +11,10 @@ import { openPark, state } from './helpers';
  * over c13 and it comes down there. Jump is held as this device holds it: Space on a computer, the pad's
  * Jump on a phone. The shapes of the air (no column or current reaches a ledge a course keeps for its
  * mechanic, nor runs into a course's thorns) are in packages/shared's tests.
+ *
+ * And the drops: a step off a ledge's end over a pit is no fall (the owl drops from there), and off a
+ * high ledge before hanging thorns it lands on the low ledge under it (the course as eased for a 10
+ * year old; the layout's rules are in packages/shared/rooms/updraftCanopy.test.ts).
  */
 
 const LIFTED = 3;
@@ -21,6 +25,15 @@ const CROWN_LIFT_TOP = 740;
 const WIND_Z = 660;
 const WIND_END = 5640;
 const C13 = { x0: 5460, x1: 5700, top: 520 };
+const C12 = { x1: 5100, top: 180 };
+/**
+ * The drops under hanging thorns the course was eased with (a 10 year old's course): the high ledge's
+ * spawn and height, and the low ledge under its end with the spot on it a walk east ends at.
+ */
+const DROPS = [
+  { what: 'the high bough of the fern floor', room: 'canopy-1', spawn: 'on-l5', from: 500, to: { x: 2660, x0: 2540, x1: 2780, top: 120 } },
+  { what: 'the high shelf under the crown', room: 'canopy-2c', spawn: 'on-v2', from: 480, to: { x: 930, x0: 780, x1: 1020, top: 100 } },
+] as const;
 
 /** Jump pressed and held as this device does, and a walk east to `x` asked for in the same frame (the owl is off the twig before it can walk off it). */
 async function holdJumpAndWalk(page: Page, phone: boolean, x: number): Promise<void> {
@@ -109,4 +122,52 @@ test.describe('the courses’ air (OP-275)', () => {
       await shot(page, 'across-landscape');
     }
   });
+
+  test('a step off the end of a bough over the drop is no fall: the owl is in the air, and falls from there', async ({ page }) => {
+    // On the low bough c12, the crown's drop under it. Walking off its east end used to count as a fall on
+    // the spot, the owl still at the bough's height: it never got to drop, flap or glide.
+    await openPark(page, { room: 'canopy-3', spawn: 'on-c12', kit: '1' });
+    await expect.poll(async () => (await state(page)).air.z, { timeout: 10_000 }).toBe(C12.top);
+    // Watched in the page itself, frame by frame: off the bough, the owl is seen in the air below the
+    // bough's height before any fall is counted.
+    const seenInAir = page.evaluate(
+      (top) =>
+        new Promise<{ z: number; falls: number } | null>((done) => {
+          const until = performance.now() + 8000;
+          const look = () => {
+            const s = window.owlPark?.state();
+            if (s && (s.course?.falls ?? 0) > 0) return done(null);
+            if (s && s.air.s !== 0 && s.air.z < top - 5) return done({ z: s.air.z, falls: s.course?.falls ?? 0 });
+            if (performance.now() > until) return done(null);
+            requestAnimationFrame(look);
+          };
+          look();
+        }),
+      C12.top,
+    );
+    await page.evaluate((x) => window.owlPark.walkTo(x, window.owlPark.state()!.pos.y, true), C12.x1 + 120);
+    const air = await seenInAir;
+    expect(air, `off the bough the owl was never in the air: ${await seen(page)}`).not.toBeNull();
+    expect(air!.falls).toBe(0);
+    // Nothing pressed: it comes down in the drop, and that is the fall.
+    await expect.poll(async () => (await state(page)).course?.falls ?? 0, { timeout: 10_000, message: `no fall in the drop: ${await seen(page)}` }).toBe(1);
+  });
+
+  for (const drop of DROPS) {
+    test(`walking off ${drop.what} lands the owl on the ledge under it, under the hanging thorns, with no fall`, async ({ page }) => {
+      await openPark(page, { room: drop.room, spawn: drop.spawn, kit: '1' });
+      await expect.poll(async () => (await state(page)).air.z, { timeout: 10_000 }).toBe(drop.from);
+      // East past the high ledge's end, as held keys walk: off it, down under the thorns, onto the low ledge.
+      await page.evaluate((x) => window.owlPark.walkTo(x, window.owlPark.state()!.pos.y, true), drop.to.x);
+      await expect
+        .poll(async () => { const s = await state(page); return [s.air.s, s.air.z]; }, { timeout: 10_000, intervals: [50], message: `not down on the low ledge: ${await seen(page)}` })
+        .toEqual([0, drop.to.top]);
+      const landed = await state(page);
+      expect(landed.pos.x).toBeGreaterThanOrEqual(drop.to.x0);
+      expect(landed.pos.x).toBeLessThanOrEqual(drop.to.x1);
+      expect(landed.course?.falls ?? 0).toBe(0);
+      expect(landed.flown.n).toBeGreaterThanOrEqual(1);
+      await shot(page, `drop-${drop.room}`);
+    });
+  }
 });
