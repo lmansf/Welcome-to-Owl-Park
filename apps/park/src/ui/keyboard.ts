@@ -91,6 +91,12 @@ export interface KeyActions {
 export interface Keys {
   /** Where the held walking keys point right now. */
   direction(): Vec2 | null;
+  /**
+   * How many times the walking keys have all been let go (the thumbstick come to rest, where the HUD's
+   * is counted in): it moves even when a key is let go and pressed again between two looks at
+   * `direction`, which a doorway back waits on (game/doors.ts, backWaits).
+   */
+  rests(): number;
   detach(): void;
 }
 
@@ -130,10 +136,17 @@ function pressesControl(e: KeyboardEvent): boolean {
 
 export function attachKeyboard(win: Window, actions: KeyActions): Keys {
   const held = new Set<string>();
+  let rests = 0;
+  /** Change which keys are held, and count it when that leaves the owl no way to walk where it had one. */
+  const hold = (change: () => void) => {
+    const walked = heldDirection(held) !== null;
+    change();
+    if (walked && heldDirection(held) === null) rests += 1;
+  };
   const onDown = (e: KeyboardEvent) => {
     if (ignored(e)) return;
     if (e.code in WALK_KEYS) {
-      held.add(e.code);
+      hold(() => held.add(e.code));
       e.preventDefault(); // arrow keys would otherwise scroll whatever has focus
       if (UP_KEYS.has(e.code) && !e.repeat) actions.up(eventTime(e));
       return;
@@ -158,17 +171,17 @@ export function attachKeyboard(win: Window, actions: KeyActions): Keys {
     }
   };
   const onUp = (e: KeyboardEvent) => {
-    held.delete(e.code);
+    hold(() => held.delete(e.code));
     if (e.code === 'Space') {
       // A button presses on the space bar's letting go: in the play bar that press is the jump's (OP-293).
       if (inPlayBar(e)) e.preventDefault();
       actions.jumpEnd(eventTime(e));
     }
     // While Cmd is down, macOS sends no key-ups for the other keys: start afresh when it lifts.
-    if (e.key === 'Meta') held.clear();
+    if (e.key === 'Meta') hold(() => held.clear());
   };
   const release = () => {
-    held.clear();
+    hold(() => held.clear());
     actions.jumpEnd();
   };
   const onVisibility = () => {
@@ -182,6 +195,7 @@ export function attachKeyboard(win: Window, actions: KeyActions): Keys {
   const stopTyping = releaseOnTyping(win.document, release);
   return {
     direction: () => heldDirection(held),
+    rests: () => rests,
     detach() {
       win.removeEventListener('keydown', onDown);
       win.removeEventListener('keyup', onUp);

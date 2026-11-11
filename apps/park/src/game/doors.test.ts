@@ -1,7 +1,7 @@
 import { STREET_ROOM, TREE_STREET_ROOM, type DoorDef } from '@owl-park/shared';
 import { describe, expect, it } from 'vitest';
 import { NEST_ROOM, ROOMS } from '../rooms';
-import { AHEAD_PX, DOOR_AIM_PX, UP_GRACE_MS, WAY_DOOR_PX, doorwayUnder, doorwaysOff, roomsAhead, takesDoorway, upCounts } from './doors';
+import { AHEAD_PX, DOOR_AIM_PX, UP_GRACE_MS, WAY_DOOR_PX, backWaits, doorwayUnder, doorwaysOff, roomsAhead, takesDoorway, upCounts } from './doors';
 
 const door = { x: 1700, y: 610, w: 130, h: 90 };
 
@@ -17,6 +17,34 @@ describe('takesDoorway', () => {
     expect(takesDoorway(door, { x: 2000, y: 640 }, false, false)).toBe(false);
     expect(takesDoorway(door, { x: 1765, y: 700 + DOOR_AIM_PX + 1 }, false, false)).toBe(false);
     expect(takesDoorway(door, { x: 1765, y: 655 }, false, true)).toBe(false);
+  });
+});
+
+describe('backWaits: the way back waits for a fresh push', () => {
+  it('waits while the way the owl came in with is still held', () => {
+    expect(backWaits(true, true, false)).toBe(true);
+  });
+
+  it('opens once the keys are let go, and stays open however they are pushed after', () => {
+    const open = backWaits(true, false, false);
+    expect(open).toBe(false);
+    expect(backWaits(open, true, false)).toBe(false);
+    expect(backWaits(open, true, true)).toBe(false);
+  });
+
+  it('keeps waiting under a screen that takes the keys: held keys read as let go there', () => {
+    expect(backWaits(true, false, true)).toBe(true);
+    expect(backWaits(backWaits(true, false, true), true, false)).toBe(true);
+  });
+
+  it('is open for an owl that came in holding nothing', () => {
+    expect(backWaits(true, false, false)).toBe(false);
+  });
+
+  it('opens on the letting go itself, though the key is down again by the next look or a screen covers the room', () => {
+    expect(backWaits(true, true, false, true)).toBe(false);
+    expect(backWaits(true, false, true, true)).toBe(false);
+    expect(backWaits(true, true, false, false)).toBe(true);
   });
 });
 

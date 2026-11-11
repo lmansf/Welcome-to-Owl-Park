@@ -165,6 +165,35 @@ describe('attachKeyboard', () => {
     expect(calls).toEqual(['jump', 'jump end', 'jump end']);
   });
 
+  it('counts each time the walking keys are all let go, however soon one is pressed again', () => {
+    const { key, keys, fire } = setup();
+    expect(keys.rests()).toBe(0);
+    key('keydown', 'KeyW');
+    key('keydown', 'KeyD');
+    key('keyup', 'KeyD'); // W is still held: nothing let go
+    expect(keys.rests()).toBe(0);
+    key('keyup', 'KeyW');
+    expect(keys.rests()).toBe(1);
+    // Down again before anything looked: the count has it, where the held direction alone would not.
+    key('keydown', 'KeyW');
+    expect(keys.direction()).toEqual({ x: 0, y: -1 });
+    expect(keys.rests()).toBe(1);
+    // A key that repeats while held, and a key let go that was not held, let nothing go.
+    key('keydown', 'KeyW', { repeat: true });
+    key('keyup', 'KeyA');
+    expect(keys.rests()).toBe(1);
+    // The window losing focus lets go too; with nothing held, it lets nothing go.
+    fire('blur');
+    expect(keys.rests()).toBe(2);
+    fire('blur');
+    expect(keys.rests()).toBe(2);
+    // Left and right held together walk nowhere: the owl has stopped, as when both are let go.
+    key('keydown', 'KeyA');
+    key('keydown', 'KeyD');
+    expect(keys.direction()).toBeNull();
+    expect(keys.rests()).toBe(3);
+  });
+
   it('leaves typing and browser shortcuts alone', () => {
     const { key, keys, calls } = setup();
     expect(key('keydown', 'KeyW', { target: { tagName: 'INPUT', isContentEditable: false } })).toBe(false);

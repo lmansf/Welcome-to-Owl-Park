@@ -182,7 +182,7 @@ import { ESCAPE_WORDS, escapeFor, type EscapeDoorway, type EscapeHollow } from '
 import { TRIAL_BACKDROP_VEIL, trialBackdropVeiled } from './skinTrial';
 import { PUZZLE_ART_KEYS, artScale, drawnAsSizeBox, drawsSkinTrial, loadArt, opensSoft, prefetchRoomArt, releaseArt, roomArtCap, roomArtKeys, roomOpeningArt, sharpCopy, sharpenArt } from './art';
 import { SpeechBubbles } from './bubbles';
-import { doorwayUnder, doorwaysOff, roomsAhead, takesDoorway, upCounts } from './doors';
+import { backWaits, doorwayUnder, doorwaysOff, roomsAhead, takesDoorway, upCounts } from './doors';
 import { TriedDoors, doorSpot, nearestDoor } from './featherTrail';
 import { FeatherTrail } from './featherTrailView';
 import { admitTarget } from './gateAdmit';
@@ -220,6 +220,8 @@ export interface RoomStart {
   from?: { room: string; spawn: string | undefined } | undefined;
   /** How far across the doorway the owl came through, so it comes out as far across the doorway back (OP-124). */
   lane?: Lane | undefined;
+  /** How many times the walking keys had been let go as the owl left the last room (Keys.rests): the way back waits on one more (doors.ts, backWaits). */
+  rests?: number | undefined;
   /** Come by travel from the Menu's map (OP-130): into the park, the room server lets it in only once it has walked through the gate. */
   via?: 'travel' | undefined;
   /**
@@ -439,6 +441,10 @@ export class RoomScene extends Phaser.Scene {
   /** When a game object (the idol, an NPC) last took a tap, so the room does not walk there too. */
   private tapTakenAt = 0;
   private cameFrom: RoomStart['from'];
+  /** The owl has not let go of the walking keys since it came in: the doorway back where it came from waits (doors.ts, backWaits). */
+  private backWaiting = false;
+  /** How many times the walking keys had been let go as the owl took the doorway here (Keys.rests). */
+  private restsThen = 0;
   /** How the owl came: by travel from the map, or (undefined) through a doorway, Play or the page's address. */
   private via: RoomStart['via'];
   private lane: Lane | undefined;
@@ -648,6 +654,8 @@ export class RoomScene extends Phaser.Scene {
     this.pendingVote = false;
     this.pieces = {};
     this.cameFrom = data.from;
+    this.backWaiting = data.from !== undefined;
+    this.restsThen = data.rests ?? this.keys?.rests() ?? 0;
     this.cameWith = data.ticket ?? null;
     this.lane = data.lane;
     this.via = data.via;
@@ -1179,6 +1187,9 @@ export class RoomScene extends Phaser.Scene {
     // Where in the tree the owl is, on the computer's minimap (OP-213); none out of the tree.
     this.hud.setTreeSpot(this.sideView() ? { room: this.room.id, x: this.me.pos.x } : null);
     if (!this.leaving) {
+      // Let go of since the owl took the doorway here, the keys open the way back (doors.ts, backWaits).
+      const rested = (this.keys?.rests() ?? 0) !== this.restsThen;
+      this.backWaiting = backWaits(this.backWaiting, (this.keys?.direction() ?? null) !== null, this.hud.isBlocking(), rested);
       this.steer();
       this.checkDoors(finished);
       this.checkItems(now);
@@ -3254,6 +3265,8 @@ export class RoomScene extends Phaser.Scene {
       // A doorway to another room takes the owl from where its step came in, a step across it included.
       const cameIn = (to && stepFrom ? entryPoint(door.rect, stepFrom, pos) : null) ?? (inside ? pos : null);
       if (!cameIn || !this.atDoorLevel(door)) continue;
+      // The way back, to an owl still holding the keys it came in with: not until it lets go (a new press of up is a new push).
+      if (this.backWaiting && !pressed && this.leadsBack(door)) continue;
       // Up pressed or held standing in it (a side view): through it; a press says a shut one's sign, once (OP-212).
       const up = upNow && inside && this.errand === null;
       const said = walkFinished || (up && pressed);
@@ -3618,7 +3631,9 @@ export class RoomScene extends Phaser.Scene {
   }
 
   private async goTo(roomId: string, spawn: string, from: RoomStart['from'], fadeMs = LEAVE_FADE_MS, lane?: Lane, via?: RoomStart['via']): Promise<void> {
-    if (await this.leaveRoom(fadeMs)) this.scene.start('room', { room: roomId, spawn, from, lane, via } satisfies RoomStart);
+    // Counted before the room fades: keys let go during the fade or the next room's load are let go all the same.
+    const rests = this.keys?.rests();
+    if (await this.leaveRoom(fadeMs)) this.scene.start('room', { room: roomId, spawn, from, lane, via, rests } satisfies RoomStart);
   }
 
   /** The owl stops, the room fades and its connection closes. False when the room is already being left. */
@@ -3830,11 +3845,33 @@ export class RoomScene extends Phaser.Scene {
     return this.room.doors.flatMap((d) => (d.marker && this.realmClosed(d.to?.room) ? [{ x: d.rect.x, y: 0, w: d.rect.w, h: d.marker.y + 2 }] : []));
   }
 
+  /**
+   * Whether a doorway leads back where the owl just came from: its way to that room, or on the street
+   * the nest door the owl came out in front of (an owl out of a nest stands before the door it went in by).
+   */
+  private leadsBack(door: DoorDef): boolean {
+    const from = this.cameFrom?.room;
+    if (!from) return false;
+    const n = isStreetRoom(this.room.id) ? nestDoorIndex(door.id) : null;
+    if (n === null) return this.doorTo(door)?.room === from;
+    return isNestRoom(from) && this.registry.get('spawnName') === `from-nest-${n}`;
+  }
+
+  /**
+   * The doorway back where the owl came from, to an owl still holding the keys it came in with
+   * (doors.ts, backWaits): floor it stops at the edge of, so letting go leaves it standing before the
+   * doorway and not in it. Seen from the side a doorway is stood in, and up takes it.
+   */
+  private backFloor(): Rect[] {
+    if (!this.backWaiting || !this.me || this.sideView()) return [];
+    return this.room.doors.filter((d) => this.leadsBack(d) && !pointInRect(this.me.pos, d.rect)).map((d) => d.rect);
+  }
+
   /** Where the owl can walk at the height it is now (OP-084, perches.ts): the floor and the perch tops at or below it, less the floor shut for now. */
   private footingNow(): { walkable: Polygon[]; shut: Shut[] } {
     // The room's two sides, so the whole owl stays on screen at the end of a floor (OP-296).
     const edges = sideEdges(this.room, this.me ? (OWL_W * Math.abs(this.me.scaleX)) / 2 : 0);
-    return footing(this.room, this.flier.air.z, [...edges, ...this.shutFloor(), ...(this.course?.shut() ?? [])]);
+    return footing(this.room, this.flier.air.z, [...edges, ...this.shutFloor(), ...this.backFloor(), ...(this.course?.shut() ?? [])]);
   }
 
   /** What the owl stands on, or would come down on, now: a perch's top, else the floor (0). */

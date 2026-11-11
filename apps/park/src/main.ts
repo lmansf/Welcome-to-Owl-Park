@@ -221,7 +221,11 @@ const keyboard = attachKeyboard(window, {
   },
   close: () => hud.closePanels(),
 });
-game.registry.set('keys', { direction: () => (hud.isBlocking() ? null : (keyboard.direction() ?? hud.stickDirection())), detach: () => keyboard.detach() } satisfies Keys);
+game.registry.set('keys', {
+  direction: () => (hud.isBlocking() ? null : (keyboard.direction() ?? hud.stickDirection())),
+  rests: () => keyboard.rests() + hud.stickRests(),
+  detach: () => keyboard.detach(),
+} satisfies Keys);
 
 let resizeTimer: ReturnType<typeof setTimeout> | null = null;
 window.addEventListener('resize', () => {

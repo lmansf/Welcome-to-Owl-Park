@@ -49,9 +49,16 @@ export interface StickPull {
   release(): void;
 }
 
+/** Whether the stick came to rest: it pointed a way (`was`) and points none now. */
+export function cameToRest(was: number | null, now: number | null): boolean {
+  return was !== null && now === null;
+}
+
 export interface Joystick {
   /** Where the stick points: one of eight unit vectors, or null while it rests. */
   direction(): Vec2 | null;
+  /** How many times the stick has come to rest from pointing a way: the thumb lifted, or back at the middle (keyboard.ts, Keys.rests). */
+  rests(): number;
   /** While `cb` is set the stick points four ways, and calls it once for each push into one (null: eight ways again). */
   flicks(cb: ((dir: Vec2) => void) | null): void;
   /**
@@ -100,6 +107,7 @@ export function createJoystick(parent: HTMLElement, prefix = 'hud'): Joystick {
 
   let pointer: number | null = null;
   let way: number | null = null;
+  let rests = 0;
   let flick: ((dir: Vec2) => void) | null = null;
   let pulled: StickPull | null = null;
 
@@ -118,12 +126,14 @@ export function createJoystick(parent: HTMLElement, prefix = 'hud'): Joystick {
     if (pulled) return pulled.pull(dx / reach, dy / reach);
     const was = way;
     way = stickWay(dx, dy, radius, way, flick ? 4 : 8);
+    if (cameToRest(was, way)) rests += 1;
     if (flick && way !== null && way !== was) flick(STICK_WAYS[way]!);
   };
   /** Where the thumb on the stick was last seen (client px), to know it is still down when another touch ends. */
   let at: { x: number; y: number } | null = null;
   const rest = () => {
     pointer = null;
+    if (cameToRest(way, null)) rests += 1;
     way = null;
     at = null;
     knob.style.transform = '';
@@ -203,6 +213,7 @@ export function createJoystick(parent: HTMLElement, prefix = 'hud'): Joystick {
 
   return {
     direction: () => (way === null ? null : STICK_WAYS[way]!),
+    rests: () => rests,
     flicks(cb) {
       flick = cb;
       rest();
