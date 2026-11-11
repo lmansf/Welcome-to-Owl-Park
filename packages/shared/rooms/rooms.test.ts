@@ -387,6 +387,22 @@ describe('the arcade', () => {
     }
   });
 
+  it("has each cabinet's spot reach its front, so an owl against the cabinet or walking the hall is at it (OP-323)", () => {
+    const front = (x: number) => {
+      for (let y = 600; y < 900; y++) if (isWalkable({ x, y }, arcade.walkable)) return y;
+      throw new Error(`no floor at ${x}`);
+    };
+    const walkedAt = findSpawn(arcade, 'from-cavern').y;
+    for (const id of ['cabinet-crossing', 'cabinet-flight', 'cabinet-sling']) {
+      const r = spot(id).rect;
+      for (let x = r.x + 5; x < r.x + r.w; x += 10) {
+        const y = front(x);
+        expect(y >= r.y && y + 2 <= r.y + r.h, `${id}: against its front at x ${x} (y ${y})`).toBe(true);
+        expect(walkedAt >= r.y && walkedAt <= r.y + r.h, `${id}: along the hall at y ${walkedAt}`).toBe(true);
+      }
+    }
+  });
+
   it('is entered from the street at its west end, where an owl arrives clear of the doorway', () => {
     const door = spot('to-market');
     expect(door.rect.x).toBe(0);
