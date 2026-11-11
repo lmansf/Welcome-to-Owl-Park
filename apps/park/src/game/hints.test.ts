@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ROOMS, groundOf } from '@owl-park/shared/rooms';
-import { SIDE_HINT_OVER, SIGN_HOLD, SIGN_REACH, doorHintTarget, nearTargets, nearestOffSides, placeHints, signFocus, signX, touchBottom, type ScreenBox, type ViewRect } from './hints';
+import { SIDE_HINT_OVER, SIGN_HOLD, SIGN_REACH, doorHintTarget, nearTargets, nearestOffSides, placeHints, signFocus, signWaits, signX, touchBottom, type ScreenBox, type ViewRect } from './hints';
 
 // A 1000 x 600 screen showing room pixels 1000-2000 by 0-600 (one CSS pixel per room pixel).
 const view: ViewRect = { x: 1000, y: 0, w: 1000, h: 600 };
@@ -147,6 +147,38 @@ describe('one doorway sign at a time, seen from above (OP-309)', () => {
     const step = (shown === 'west' ? 1 : -1) * (SIGN_HOLD / 2 - 5);
     expect(signFocus(pair, { x: mid.x + step, y: mid.y }, null, shown)).toBe(shown);
     expect(signFocus(pair, { x: mid.x + 4 * step, y: mid.y }, null, shown)).toBe(other);
+  });
+});
+
+describe('the doorway an owl came in by keeps its sign back (OP-337)', () => {
+  // The first words an owl read in the Great Hollow were the way back out: "Up to the Treetop Commons".
+  const HALL = ROOMS['m3-hall']!;
+  const doorways = HALL.doors.filter((d) => d.to).map((d) => doorHintTarget(d, null));
+  const up = doorways.find((d) => d.id === 'up')!;
+  const landing = HALL.spawns['from-lobby']!;
+
+  it('shows no sign to an owl standing where it arrived, where the way back would have shown', () => {
+    expect(signFocus(doorways, landing, null)).toBe('up');
+    expect(signFocus(doorways, landing, null, null, 'up')).toBeNull();
+    // Nor does it hold on to a sign that was showing.
+    expect(signFocus(doorways, landing, null, 'up', 'up')).toBeNull();
+  });
+
+  it('still shows it for a walk to that doorway, and shows any other doorway in reach as ever', () => {
+    expect(signFocus(doorways, landing, { x: up.x, y: up.y + 40 }, null, 'up')).toBe('up');
+    expect(signFocus(doorways, HALL.spawns['from-party']!, null, null, 'up')).toBe('to-party');
+  });
+
+  it('waits until the owl has been out of the sign’s reach once, and not after', () => {
+    // 190 px from the knothole, where the turnstiles land an owl: still waiting.
+    expect(Math.hypot(landing.x - up.x, landing.y - up.y)).toBeLessThan(SIGN_REACH);
+    expect(signWaits(true, up, landing)).toBe(true);
+    expect(signWaits(true, up, { x: up.x, y: up.y + SIGN_REACH })).toBe(true);
+    // A step further: it has left, and from then the sign is the doorway's own again.
+    expect(signWaits(true, up, { x: up.x, y: up.y + SIGN_REACH + 1 })).toBe(false);
+    expect(signWaits(false, up, landing)).toBe(false);
+    // A room with no doorway back (come by travel, or the page opened there) keeps nothing back.
+    expect(signWaits(true, undefined, landing)).toBe(false);
   });
 });
 

@@ -17,7 +17,7 @@ describe('door signs', () => {
     expect(ids).toContain('to-party');
     expect(ids).toContain('up');
     expect(ids).toContain('down');
-    // A shut doorway shows its blockade, not a name.
+    // A way with nothing behind it yet is no doorway at all (OP-337): no sign, no blockade.
     expect(ids).not.toContain('to-ink');
   });
 

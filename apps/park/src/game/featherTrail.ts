@@ -1,8 +1,9 @@
-import { distance, type DoorDef, type Vec2 } from '@owl-park/shared';
+import { distance, type DoorDef, type RoomDef, type Vec2 } from '@owl-park/shared';
 
 /**
- * The feather trail (OP-307): a faint line of drifting feathers from where the owl stands toward the
- * nearest doorway it has not been through yet, and a small glint on every such doorway. A guest who
+ * The feather trail (OP-307): a faint line of drifting feathers from where the owl stands toward a
+ * doorway it has not been through yet (one that leads to play first, OP-337, then the nearest), and a
+ * small glint on every such doorway. A guest who
  * follows the feathers finds every place without a map; once every doorway of a room has been tried
  * the room shows neither. The doorways tried are kept on this device (localStorage), like the map's
  * lit places. Settings has a switch for it (on by default).
@@ -84,6 +85,26 @@ export function nearestDoor<D extends Pick<DoorDef, 'rect' | 'marker' | 'markAt'
     }
   }
   return best;
+}
+
+/** The arcade: its cabinets are games to play at once. */
+const ARCADE_ROOM = 'arcade';
+
+/**
+ * Whether a room is somewhere to play straight away (OP-337): a parkour course's room, or the arcade.
+ * Of the first visits that reached the Great Hollow, the ones that stayed were the ones that found a
+ * course or the arcade; the realm rooms' own things to do take finding.
+ */
+export function leadsToPlay(room: Pick<RoomDef, 'id' | 'course'> | undefined): boolean {
+  return room !== undefined && (room.course !== undefined || room.id === ARCADE_ROOM);
+}
+
+/**
+ * The doorway the trail leads to (OP-337): the nearest of those not tried yet that lead to play, while
+ * there is one, and after that the nearest of the rest. Every doorway not tried keeps its glint.
+ */
+export function trailDoor<D extends Pick<DoorDef, 'rect' | 'marker' | 'markAt'>>(from: Vec2, doors: readonly D[], toPlay: (door: D) => boolean): D | null {
+  return nearestDoor(from, doors.filter(toPlay)) ?? nearestDoor(from, doors);
 }
 
 /** How a trail is laid: a feather every `gap` px along the way, none nearer the owl than `start` or the doorway than `end`, at most `most`. */

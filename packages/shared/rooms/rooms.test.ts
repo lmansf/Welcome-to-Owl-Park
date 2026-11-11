@@ -1280,8 +1280,8 @@ describe('the new map (map 3): the park as one tree', () => {
       // In from the Party Grove's arch, back out to it.
       expect(ways(ROOMS[realm]!, 'hub').find((w) => w.door.id === 'to-hub')?.to.room, realm).toBe('hub');
     }
-    // The ink-wash realm has no room yet: its doorway is shut.
-    expect(ROOMS['m3-hall']!.doors.find((d) => d.id === 'to-ink')!.to).toBeUndefined();
+    // The ink-wash realm has no room yet: no doorway stands at its way (the tree has grown over it, OP-337).
+    expect(ROOMS['m3-hall']!.doors.some((d) => d.id === 'to-ink')).toBe(false);
   });
 
   it('leaves the old stairs strand no one: nothing leads into them now, and every one of them still leads out to the hall\'s map', () => {
