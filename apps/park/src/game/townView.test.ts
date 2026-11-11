@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ROOM_H, seenFromSide } from '@owl-park/shared';
 import { ROOMS } from '../rooms';
-import { OPENING, TOWN_VIEW, coverZoom, lookBetween, openingAt, openingOver, restAt, screenZoom, townZoom, wholeZoom, type Size } from './townView';
+import { OPENING, RISE_HEAD, TOWN_VIEW, coverZoom, lookBetween, openingAt, openingOver, restAt, riseBack, screenZoom, townZoom, wholeLook, wholeZoom, type Size } from './townView';
 
 const HALL = ROOMS['m3-hall']!.size;
 const LOBBY = ROOMS['lobby']!.size;
@@ -164,5 +164,45 @@ describe('the opening look over the Great Hollow (OP-336)', () => {
     expect(restAt({ x: 6300, y: 1400 }, view, bounds).x).toBe(6400 - 1200);
     // A view bigger than the bounds rests at their start, as the camera does.
     expect(restAt({ x: 100, y: 100 }, { w: 8000, h: 4000 }, bounds)).toEqual({ x: 4000, y: -77 + 2000 });
+  });
+});
+
+describe('the camera on an owl riding a thermal (OP-340)', () => {
+  const top = ROOMS['m3-hall']!.thermals![0]!.top;
+
+  it('draws back with the owl’s height: not at all where the thermal took it, all the way at the top', () => {
+    const from = 150;
+    expect(riseBack(from, top, from)).toBe(0);
+    expect(riseBack(top, top, from)).toBe(1);
+    expect(riseBack((from + top) / 2, top, from)).toBeCloseTo(0.5);
+    // Below where it was taken (a glide nearly down): none, and never less than none or more than all.
+    expect(riseBack(40, top, from)).toBe(0);
+    expect(riseBack(top + 200, top, from)).toBe(1);
+    let last = 0;
+    for (let z = from; z <= top; z += 10) {
+      const k = riseBack(z, top, from);
+      expect(k).toBeGreaterThanOrEqual(last);
+      last = k;
+    }
+    // A thermal no higher than where it took the owl draws nothing back.
+    expect(riseBack(300, 200, 250)).toBe(0);
+  });
+
+  it('at the top shows the whole room and the air over its back wall, where an owl that high is drawn', () => {
+    for (const s of SCREENS) {
+      const look = wholeLook(HALL, s.screen, RISE_HEAD);
+      const view = shown(s.screen, look.zoom);
+      const y0 = look.y - view.h / 2;
+      // The room from side to side and front to back, and RISE_HEAD over it.
+      expect(view.w, s.name).toBeGreaterThanOrEqual(HALL.w - 1e-6);
+      expect(y0, s.name).toBeLessThanOrEqual(-RISE_HEAD + 1e-6);
+      expect(y0 + view.h, s.name).toBeGreaterThanOrEqual(HALL.h - 1e-6);
+      expect(look.x).toBe(HALL.w / 2);
+    }
+    // With no air asked for it is the opening look's: the whole room, about its middle.
+    expect(wholeLook(HALL, { w: 1440, h: 900 })).toEqual({ zoom: wholeZoom(HALL, { w: 1440, h: 900 }), x: 3200, y: 1400 });
+    // An owl hovering at the top over the heart is on screen: drawn its height up the room from the heart.
+    const heart = ROOMS['m3-hall']!.thermals![0]!.pos;
+    expect(heart.y - top).toBeGreaterThan(-RISE_HEAD);
   });
 });

@@ -112,6 +112,7 @@ import {
   holdsDash,
   airOut,
   liftAt,
+  thermalAt,
   spendDash,
   windAt,
   windEnd,
@@ -205,7 +206,7 @@ import { QuestItemMarker, SpotGlow } from './QuestItem';
 import { PuzzleMarker, markKey, type PuzzleMarkKind, type PuzzleMarkLook } from './PuzzleMarker';
 import { StreetDoors, addNestsSign, addParkSign } from './street';
 import { cameraBounds, followLead, type CoveredEdges } from './hudInset';
-import { lookBetween, openingAt, restAt, screenZoom, townZoom, wholeZoom, type Look } from './townView';
+import { RISE_HEAD, lookBetween, openingAt, restAt, riseBack, screenZoom, townZoom, wholeLook, wholeZoom, type Look } from './townView';
 import { SizeLabels } from './sizeLabels';
 import { DoorSigns } from './doorSigns';
 import { sideEdges } from './sideEdges';
@@ -234,6 +235,8 @@ export interface RoomStart {
   ticket?: WalletEntry | undefined;
 }
 
+/** What an owl is told the first time it stands in a thermal (OP-340): the one line of words the thermal has. */
+const THERMAL_WORDS = 'Warm air rises here. Jump and keep holding to ride it up.';
 /** How far a tap may drift before it counts as a drag (game pixels). */
 const TAP_SLOP = 16;
 /** How long the room fades out on the way to another. */
@@ -614,6 +617,16 @@ export class RoomScene extends Phaser.Scene {
    * (which ends it early); null when there is none. The camera is set each frame while it lasts.
    */
   private opening: { at: number; cutAt: number | null; covered: CoveredEdges } | null = null;
+  /** The thermal (OP-340, `?thermal=1`, thermal.ts in @owl-park/shared): an owl gliding in a room's thermal is lifted, and the camera draws back as it rises. */
+  private readonly thermalOn = flagOn('thermal');
+  /**
+   * The owl's ride on a thermal, from the moment it was lifted until it is down again: the height it
+   * was taken at, the thermal's top, what the HUD covered, and whether the camera has been drawn back
+   * for it yet (townView.ts, riseBack). While it is, the camera is set each frame; null, it follows as ever.
+   */
+  private rise: { from: number; top: number; covered: CoveredEdges; back: boolean } | null = null;
+  /** Whether this room's visit has said what its thermal is for (once, as the owl first stands in it). */
+  private thermalTold = false;
   /** The Decorate sheet's pictures of pieces, drawn once each from their textures. */
   private readonly thumbs = new Map<string, string>();
   /** How sharp this room's art is drawn (pixels per room pixel at most): a nest's furniture loads at it too. */
@@ -667,6 +680,8 @@ export class RoomScene extends Phaser.Scene {
     this.pendingVote = false;
     this.pieces = {};
     this.opening = null;
+    this.rise = null;
+    this.thermalTold = false;
     this.cameFrom = data.from;
     this.backWaiting = data.from !== undefined;
     this.restsThen = data.rests ?? this.keys?.rests() ?? 0;
@@ -1197,6 +1212,7 @@ export class RoomScene extends Phaser.Scene {
     this.camAt.x = this.me.x;
     this.camAt.y = this.me.y - this.flier.air.z;
     this.frameOpening(now);
+    this.frameRise();
     // A leg of a way around a bend done (OP-148): the next sets off at once, and the walk goes on.
     if (finished && this.wayTo && this.walkOn()) finished = false;
     // At what a tap asked for: nothing left for a jump to carry on to (OP-084).
@@ -3066,10 +3082,14 @@ export class RoomScene extends Phaser.Scene {
       // Else a wind current it glides into (wind.ts, OP-275) holds it at the current's height.
       const column = this.room.updrafts ? (liftAt(this.room.updrafts, this.me.pos.x, this.flier.air.z, at + this.clockSkew())?.top ?? null) : null;
       const gust = column === null ? windAt(this.room.winds, this.me.pos.x, this.flier.air.z) : undefined;
-      const lift = column ?? gust?.z ?? null;
+      // Else, in a room seen from above, the thermal it glides in carries it up to its top (thermal.ts, OP-340, `?thermal=1`).
+      const warm = this.thermalOn && column === null && !gust ? (thermalAt(this.room.thermals, this.me.pos, this.flier.air.z)?.top ?? null) : null;
+      const lift = column ?? gust?.z ?? warm;
       const wasLifted = this.flier.air.s === LIFTED;
       this.flier = stepFlier(this.flier, { pressed, held }, groundAt(this.room.perches, this.me.pos, this.flier.air.z), this.abilities, lift);
       const air = this.flier.air;
+      // Taken up by a thermal: the camera draws back with the owl's height from here until it is down again (frameRise).
+      if (warm !== null && air.s === LIFTED && !this.rise) this.rise = { from: air.z, top: warm, covered: this.hud.coveredEdges(), back: false };
       if (gust && air.s === LIFTED && air.h === gust.z) this.rideWind(gust, !wasLifted);
       const level = footingLevel(this.room, air.z);
       if (level !== this.footLevel) {
@@ -4096,6 +4116,11 @@ export class RoomScene extends Phaser.Scene {
       this.opening.covered = this.hud.coveredEdges();
       return this.frameOpening(Date.now());
     }
+    // So does an owl's ride on a thermal (frameRise).
+    if (this.rise?.back) {
+      this.rise.covered = this.hud.coveredEdges();
+      return this.frameRise();
+    }
     // Cover the room across, and a screen of it down: a room taller than a screen (the Great Hollow's
     // plazas) scrolls down under the camera as it does along, following the owl, its owls no smaller.
     // The town view (OP-336) draws back from that in a room seen from above.
@@ -4182,6 +4207,43 @@ export class RoomScene extends Phaser.Scene {
     const { width, height } = this.scale.gameSize;
     const whole: Look = { zoom: wholeZoom(this.room.size, { w: width, h: height }), x: this.room.size.w / 2, y: this.room.size.h / 2 };
     const look = lookBetween(this.nearLook(o.covered), whole, k);
+    cam.setZoom(look.zoom);
+    cam.centerOn(look.x, look.y);
+  }
+
+  /**
+   * One frame of an owl's ride on a thermal (OP-340): the camera drawn back by the owl's height, from
+   * its own view where the thermal took it to the whole room at the thermal's top, and in again as its
+   * glide brings it down. Down, or back at the height it was taken at, the camera follows as ever. Also
+   * the first time the owl stands in a thermal here, a line says what it is for.
+   */
+  private frameRise(): void {
+    if (!this.thermalOn) return;
+    if (!this.thermalTold && this.flier.air.s === GROUNDED && thermalAt(this.room.thermals, this.me.pos, 0)) {
+      this.thermalTold = true;
+      this.hud.toast(THERMAL_WORDS, 4200, '#FFD36A');
+    }
+    const r = this.rise;
+    if (!r || this.opening) return;
+    const cam = this.cameras.main;
+    const air = this.flier.air;
+    const k = riseBack(air.z, r.top, r.from);
+    if (air.s === GROUNDED || (k <= 0 && air.s !== LIFTED)) {
+      this.rise = null;
+      if (!r.back) return;
+      cam.setBackgroundColor('rgba(0,0,0,0)');
+      this.fitCamera();
+      cam.startFollow(this.followed(), true, 0.12, 0.12);
+      return;
+    }
+    if (!r.back) {
+      r.back = true;
+      cam.stopFollow();
+      cam.removeBounds();
+      cam.setBackgroundColor(artTrialFor(globalThis.location?.search ?? '', this.room.id)?.beyond ?? BOWL_BEYOND);
+    }
+    const { width, height } = this.scale.gameSize;
+    const look = lookBetween(this.nearLook(r.covered), wholeLook(this.room.size, { w: width, h: height }, RISE_HEAD), k);
     cam.setZoom(look.zoom);
     cam.centerOn(look.x, look.y);
   }

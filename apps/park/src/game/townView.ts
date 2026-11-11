@@ -109,6 +109,27 @@ export function lookBetween(near: Look, far: Look, k: number): Look {
 }
 
 /**
+ * How far the camera is drawn back for an owl `z` up that a thermal is lifting, or has lifted, to `top`
+ * (OP-340): not at all at the height the thermal took it at (`from`), all the way at the top, so it
+ * draws back as the owl rises and comes in again as its glide brings it down.
+ */
+export function riseBack(z: number, top: number, from: number): number {
+  if (!(top > from)) return 0;
+  return ease((z - from) / (top - from));
+}
+
+/**
+ * The look that shows a whole room with `head` room px of air over its back wall: an owl high over the
+ * floor is drawn up the screen from its place on it, past the wall when it flies near the back.
+ */
+export function wholeLook(room: Size, screen: Size, head = 0): Look {
+  return { zoom: Math.min(screen.w / room.w, screen.h / (room.h + head)), x: room.w / 2, y: (room.h - head) / 2 };
+}
+
+/** How much air over a room's back wall the camera shows an owl riding a thermal (room px). */
+export const RISE_HEAD = 320;
+
+/**
  * Where a camera following `at` rests: `at` at the middle of the screen, held inside `bounds` (the
  * room, and what the HUD covers past it). A view wider or taller than the bounds rests at their start,
  * as the camera does.
