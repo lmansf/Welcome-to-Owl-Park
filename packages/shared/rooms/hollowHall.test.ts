@@ -5,7 +5,9 @@ import { GROWN_BASE, GROWN_WAYS, HALL_WAYS, RIM_LENGTH, WAY_STEP, rimAt } from '
 import { INTERACTABLES } from '../src/interactables';
 import { kitProblems } from '../src/kit';
 import { KIT_ART } from '../src/kitArt';
+import { GLIDE_SLOPE, MAX_AIR_Z } from '../src/flight';
 import { hopTier, perchTiers } from '../src/routes';
+import { inThermal, thermalProblems } from '../src/thermal';
 import { idolRealms, mapOf, voteRealmAt } from '../src/room';
 import {
   GROWN_ART,
@@ -15,6 +17,7 @@ import {
   HALL_CY,
   HALL_GROWN,
   HALL_ID,
+  HEART_THERMAL,
   HALL_MIDDLE,
   HALL_ROOM,
   HALL_RX,
@@ -272,6 +275,38 @@ describe('the Great Hollow (Nov 7; an oval, Nov 8)', () => {
         const near = Math.min(...things.map((t) => Math.hypot(t.x - x, t.y - y)));
         expect(near, `${x},${y}`).toBeLessThanOrEqual(560);
       }
+  });
+});
+
+describe('the thermal at the Great Hollow’s heart (OP-340)', () => {
+  const heart = INTERACTABLES.find((t) => t.id === 'm3-hall-moonbeam-heart')!.pos;
+
+  it('rises where the heart’s moonbeam falls, a column an owl can stand in, on open floor', () => {
+    expect(hall.thermals).toEqual([HEART_THERMAL]);
+    expect(thermalProblems(HEART_THERMAL)).toEqual([]);
+    expect(HEART_THERMAL.pos).toEqual(heart);
+    // All of the column is floor, clear of the root runs and every doorway.
+    for (let a = 0; a < 2 * Math.PI; a += Math.PI / 8) {
+      const edge = { x: heart.x + HEART_THERMAL.r * Math.cos(a), y: heart.y + HEART_THERMAL.r * Math.sin(a) };
+      expect(onFloor(edge), `${Math.round(edge.x)},${Math.round(edge.y)}`).toBe(true);
+    }
+    for (const p of hall.perches ?? []) for (const q of p.area) expect(inThermal(HEART_THERMAL, q, 60), p.id).toBe(false);
+    for (const d of hall.doors) expect(inThermal(HEART_THERMAL, d.marker ?? middle(d.id), 200), d.id).toBe(false);
+    // No owl arrives inside it: a jump on landing in the room is only a jump.
+    for (const [name, at] of Object.entries(hall.spawns)) expect(inThermal(HEART_THERMAL, at, 40), name).toBe(false);
+  });
+
+  it('lifts high enough for a held glide to reach where any way’s arrivals stand, and no higher than an owl may be', () => {
+    const reach = HEART_THERMAL.top * GLIDE_SLOPE;
+    let farthest = 0;
+    for (const [name, at] of Object.entries(hall.spawns)) {
+      const far = Math.hypot(at.x - heart.x, at.y - heart.y);
+      expect(far, name).toBeLessThan(reach);
+      farthest = Math.max(farthest, far);
+    }
+    // Not much over: the farthest arrival, and a turn's worth to spare.
+    expect(reach - farthest).toBeLessThan(200);
+    expect(HEART_THERMAL.top).toBeLessThan(MAX_AIR_Z);
   });
 });
 

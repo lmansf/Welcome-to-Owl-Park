@@ -110,6 +110,7 @@ import {
   dashHeading,
   dashRefusal,
   holdsDash,
+  airOut,
   liftAt,
   spendDash,
   windAt,
@@ -3093,7 +3094,7 @@ export class RoomScene extends Phaser.Scene {
         const wasPerched = this.roomTold.air.s === GROUNDED && this.roomTold.air.z > 0;
         this.roomAir = air;
         this.roomTold = { air, at };
-        this.conn?.send({ t: 'air', id: this.playerId, air: { z: Math.round(air.z * 10) / 10, vz: Math.round(air.vz * 10) / 10, s: air.s, f: air.f }, at });
+        this.conn?.send({ t: 'air', id: this.playerId, air: airOut(air), at });
         // A newcomer on the peer transports reads the snapshot: up on a perch, or just off one, it is told afresh (OP-084).
         if (wasPerched || (air.s === GROUNDED && air.z > 0)) this.conn?.track(this.snapshot());
       }
@@ -3138,7 +3139,7 @@ export class RoomScene extends Phaser.Scene {
     if (!this.takeAirToken(at)) return;
     this.roomAir = air;
     this.roomTold = { air, at };
-    this.conn?.send({ t: 'air', id: this.playerId, air: { z: Math.round(air.z * 10) / 10, vz: Math.round(air.vz * 10) / 10, s: air.s, f: air.f }, at });
+    this.conn?.send({ t: 'air', id: this.playerId, air: airOut(air), at });
     this.conn?.track(this.snapshot());
   }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DOUBLE_JUMP_IMPULSE, GRAVITY, JUMP_CUT_SPEED, JUMP_IMPULSE } from './jump';
-import { AIRBORNE, ALL_FLIGHT, FLAP_RISE, FLIGHT_STEP_MS, GLIDE_SINK, GLIDING, GROUNDED, JUMP_RISE, MAX_RISE, ON_GROUND, PARK_FLIGHT, carryOn, checkAir, flightFor, newFlier, stepFlier, type Flier, type FlightAbilities, type FlightInput } from './flight';
+import { AIRBORNE, ALL_FLIGHT, FLAP_RISE, FLIGHT_STEP_MS, GLIDE_SINK, GLIDING, GROUNDED, JUMP_RISE, LIFTED, MAX_RISE, ON_GROUND, PARK_FLIGHT, airOut, carryOn, checkAir, flightFor, newFlier, stepFlier, type Air, type Flier, type FlightAbilities, type FlightInput } from './flight';
+import { UPDRAFT_RISE } from './updraft';
 
 const NONE: FlightInput = { pressed: false, held: false };
 const PRESS: FlightInput = { pressed: true, held: true };
@@ -176,5 +177,21 @@ describe('flight (OP-084)', () => {
     ]) {
       expect(checkAir(bad, MAX_RISE), JSON.stringify(bad)).toBeNull();
     }
+  });
+});
+
+describe('an air state as a page tells it to the room (airOut)', () => {
+  it('rounds its numbers to a tenth and sends nothing a page does not need', () => {
+    expect(airOut({ z: 120.26, vz: -86.666, s: GLIDING, f: 1 })).toEqual({ z: 120.3, vz: -86.7, s: GLIDING, f: 1 });
+    // The top is a lifted owl's alone: a stale one on any other state is not sent.
+    expect(airOut({ z: 300, vz: 0, s: AIRBORNE, f: 0, h: 300 })).toEqual({ z: 300, vz: 0, s: AIRBORNE, f: 0 });
+  });
+
+  it('keeps the top a lifted owl rises to, which the room server needs to take the state at all', () => {
+    const lifted: Air = { z: 120.04, vz: UPDRAFT_RISE, s: LIFTED, f: 0, h: 300 };
+    expect(airOut(lifted)).toEqual({ z: 120, vz: UPDRAFT_RISE, s: LIFTED, f: 0, h: 300 });
+    expect(checkAir(airOut(lifted), 700, null)).toEqual({ z: 120, vz: UPDRAFT_RISE, s: LIFTED, f: 0, h: 300 });
+    // As the page sent it before: no top, and the room server dropped it.
+    expect(checkAir({ z: 120, vz: UPDRAFT_RISE, s: LIFTED, f: 0 }, 700, null)).toBeNull();
   });
 });

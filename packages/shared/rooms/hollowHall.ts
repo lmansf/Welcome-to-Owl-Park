@@ -53,10 +53,12 @@ import {
   type HallWay,
 } from '../src/hollowOval';
 import type { EdgePlacement } from '../src/edges';
+import { GLIDE_SLOPE } from '../src/flight';
 import type { Polygon } from '../src/geometry';
 import type { Perch } from '../src/perches';
 import type { Vec2 } from '../src/protocol';
 import type { DoorDef, RoomBowl, RoomDef, RoomKit, RoomPiece } from '../src/room';
+import type { Thermal } from '../src/thermal';
 import { KIT_ART } from '../src/kitArt';
 
 export {
@@ -478,6 +480,34 @@ const SPOTS: Vec2[] = [
   { x: HALL_CX, y: HALL_CY + 420 },
 ];
 
+/** Where owls arrive in the hollow: the middle of the floor, and in front of each way that leads somewhere. */
+const SPAWNS: Record<string, Vec2> = {
+  default: { x: HALL_CX, y: HALL_CY + 260 },
+  'from-lobby': wayAt('up', ARRIVE),
+  'from-party': wayAt('to-party', arriveAt('to-party')),
+  'from-under': wayAt('down', 330),
+  // An arrival spot in front of each way that leads somewhere (a grown-over way has none).
+  ...Object.fromEntries(
+    HALL_COMMONS.flatMap((c) => [
+      ...(c.realm ? [[fromRealm(c.level), wayAt(realmDoor(c.level), arriveAt(realmDoor(c.level)))]] : []),
+      ...(c.course ? [[fromCourse(c.level), wayAt(courseDoor(c.level), arriveAt(courseDoor(c.level)))]] : []),
+    ]),
+  ),
+};
+
+/**
+ * The thermal at the hollow's heart (OP-340, src/thermal.ts): warm air rises where the light falls
+ * brightest. An owl that glides in the heart's moonbeam is carried up to its top, sees the whole oval,
+ * and from there a held glide (one down for three along) carries it to where any way's arrivals stand:
+ * the top is as high as the farthest of them needs, and a little over for a turn on the way.
+ */
+export const HEART_THERMAL: Thermal = {
+  id: 'heart',
+  pos: HALL_HEART,
+  r: 160,
+  top: Math.ceil((Math.max(...Object.values(SPAWNS).map((at) => Math.hypot(at.x - HALL_HEART.x, at.y - HALL_HEART.y))) / GLIDE_SLOPE + 40) / 10) * 10,
+};
+
 export const HALL_ROOM: RoomDef = {
   id: HALL_ID,
   size: { w: HALL_W, h: HALL_H },
@@ -486,22 +516,11 @@ export const HALL_ROOM: RoomDef = {
   foregrounds: [],
   mood: 'hub',
   walkable: [hollowFloor()],
-  spawns: {
-    default: { x: HALL_CX, y: HALL_CY + 260 },
-    'from-lobby': wayAt('up', ARRIVE),
-    'from-party': wayAt('to-party', arriveAt('to-party')),
-    'from-under': wayAt('down', 330),
-    // An arrival spot in front of each way that leads somewhere (a grown-over way has none).
-    ...Object.fromEntries(
-      HALL_COMMONS.flatMap((c) => [
-        ...(c.realm ? [[fromRealm(c.level), wayAt(realmDoor(c.level), arriveAt(realmDoor(c.level)))]] : []),
-        ...(c.course ? [[fromCourse(c.level), wayAt(courseDoor(c.level), arriveAt(courseDoor(c.level)))]] : []),
-      ]),
-    ),
-  },
+  spawns: SPAWNS,
   doors: DOORS,
   pieces: [...PIECES, ...ROOT_PIECES],
   perches: [...ROOT_PERCHES],
+  thermals: [HEART_THERMAL],
   edges: [...HALL_EDGES],
   bowl: HALL_BOWL,
   // A Realm Vote idol in each Commons of a realm that has one, each over its own spot (RoomDef.idols).
