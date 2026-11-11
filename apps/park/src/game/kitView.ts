@@ -60,7 +60,32 @@ export function drawKit(scene: Phaser.Scene, room: RoomDef, depths: KitDepths): 
     // Drawn straight after the body they frame, at its depth, so the caps an owl lands on (drawn later) stay over them.
     for (const s of kitFrames(d, room.size, plan)) frames += drawStrip(scene, s, depths[d.layer], tint);
   }
+  // A drop with no texture of its own is still water (OP-343): over the backdrops, under everything an owl stands on.
+  const ground = room.kit?.ground ?? room.size.h;
+  for (const p of room.kit?.paths ?? []) {
+    if (p.fill !== undefined) drawWater(scene, p.x0, p.x1, ground - p.top + (p.sunk ?? 0), room.size.h, p.fill, (depths.back + depths.play) / 2);
+  }
   return { pieces: plan.length, images, frames };
+}
+
+/**
+ * Still water from `y0` down to `y1`, in plain shapes until a realm has art for it: its colour, a
+ * pale line where its surface is, darker towards its foot, and a few short ripples (the same ones on
+ * every visit: they are placed by where they are, not by chance).
+ */
+function drawWater(scene: Phaser.Scene, x0: number, x1: number, y0: number, y1: number, color: number, depth: number): void {
+  if (x1 <= x0 || y1 <= y0) return;
+  const g = scene.add.graphics().setDepth(depth);
+  const w = x1 - x0;
+  const h = y1 - y0;
+  g.fillStyle(color, 1).fillRect(x0, y0, w, h);
+  g.fillStyle(0x000000, 0.1).fillRect(x0, y0 + h * 0.45, w, h * 0.55);
+  g.fillStyle(0x000000, 0.1).fillRect(x0, y0 + h * 0.75, w, h * 0.25);
+  g.fillStyle(0xffffff, 0.3).fillRect(x0, y0, w, 4);
+  for (let x = x0 + 30, i = 0; x < x1 - 60; x += 110, i++) {
+    const y = y0 + 16 + ((i * 7) % 4) * 14;
+    g.lineStyle(3, 0xffffff, 0.24).lineBetween(x + ((i * 29) % 40), y, x + ((i * 29) % 40) + 30 + ((i * 13) % 3) * 12, y);
+  }
 }
 
 /** One frame strip, repeated down or along its box at its piece's own size; 1 if drawn. */

@@ -107,6 +107,47 @@ describe('the course book: runs and checkpoints', () => {
     expect(courses.fall(CID, 'brush-1', MON + 3)).toMatchObject({ ok: true, at: { x: 1500 }, top: 360 });
   });
 
+  it('sends a fall back the way the owl came into the room, not to its other end, and never onward (OP-343)', () => {
+    const { courses } = setup();
+    const room = ROOMS['canopy-1']!;
+    expect(courses.start(CID, 'canopy-1', MON).ok).toBe(true);
+    // In at the gate with no bench yet: the gate's way in, with or without the way in being named.
+    expect(courses.fall(CID, 'canopy-1', MON + 1, { entry: 'from-gate', pos: { x: 900, y: 770 } })).toMatchObject({ ok: true, at: room.spawns['from-gate'] });
+    expect(courses.fall(CID, 'canopy-1', MON + 1)).toMatchObject({ ok: true, at: room.spawns['from-gate'] });
+    // A bench reached further on: back at the bench, which is nearer than the way in.
+    courses.reach(CID, 'canopy-1', 'bench', 'bench-1', MON + 2);
+    expect(courses.fall(CID, 'canopy-1', MON + 3, { entry: 'from-gate', pos: { x: 2500, y: 770 } })).toMatchObject({ ok: true, at: { x: 1800 } });
+    // Back in from the room's far end (down from the trunk), a fall near there: that way in, not the bench
+    // two screens back, and not the gate four screens back as it was before.
+    expect(courses.fall(CID, 'canopy-1', MON + 4, { entry: 'from-trunk', pos: { x: 3900, y: 770 } })).toMatchObject({ ok: true, at: room.spawns['from-trunk'] });
+    // The same owl on towards the bench it has reached: the bench, once it is the nearer of the two.
+    expect(courses.fall(CID, 'canopy-1', MON + 5, { entry: 'from-trunk', pos: { x: 2200, y: 770 } })).toMatchObject({ ok: true, at: { x: 1800 } });
+    // The last bench is in another room now: the way in, where before it was the gate.
+    courses.reach(CID, 'canopy-2a', 'bench', 'bench-2', MON + 6);
+    expect(courses.fall(CID, 'canopy-1', MON + 7, { entry: 'from-trunk', pos: { x: 2200, y: 770 } })).toMatchObject({ ok: true, at: room.spawns['from-trunk'] });
+    expect(courses.fall(CID, 'canopy-1', MON + 7, { pos: { x: 2200, y: 770 } })).toMatchObject({ ok: true, at: room.spawns['from-gate'] });
+    // A way in the room does not have is no way in: the act's own.
+    expect(courses.fall(CID, 'canopy-1', MON + 8, { entry: 'from-nowhere', pos: { x: 2200, y: 770 } })).toMatchObject({ ok: true, at: room.spawns['from-gate'] });
+    // A way in up on a ledge puts the owl back up on it.
+    expect(courses.fall(CID, 'brush-1', MON + 9, { entry: 'from-rain', pos: { x: 4000, y: 770 } })).toMatchObject({ ok: true, at: ROOMS['brush-1']!.spawns['from-rain'], top: 160 });
+    // With no place told, a bench in the room is where a fall goes, as it always was.
+    courses.reach(CID, 'canopy-1', 'bench', 'bench-1b', MON + 10);
+    expect(courses.fall(CID, 'canopy-1', MON + 11, { entry: 'from-trunk' })).toMatchObject({ ok: true, at: { x: 3285 }, top: 120 });
+  });
+
+  it('no way into a room of a course stands in one of its pits or its thorns: a fall back there would fall again', () => {
+    for (const def of Object.values(COURSES)) {
+      for (const id of [...def.acts, ...(def.rooms ?? [])]) {
+        const room = ROOMS[id]!;
+        for (const [name, at] of Object.entries(room.spawns)) {
+          const top = room.spawnTops?.[name] ?? 0;
+          expect(top === 0 && inPit(room, at), `${id} ${name} is in a pit`).toBe(false);
+          expect(inThorns(room, at.x, top), `${id} ${name} is in thorns`).toBe(false);
+        }
+      }
+    }
+  });
+
   it('reads thorns hanging in a side-view act as a fall at any height inside them, and nowhere else', () => {
     const act = { course: { id: 'x', act: 1, thorns: [{ id: 'h1', x0: 1960, x1: 2020, z0: 260, z1: 940 }] } };
     expect(inThorns(act, 1990, 300)).toBe(true);

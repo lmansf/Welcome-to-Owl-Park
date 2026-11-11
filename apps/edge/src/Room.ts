@@ -94,6 +94,8 @@ interface Visitor {
   /** Session id of the socket that currently owns this visitor; a replacement gets a new one. */
   sid: string;
   st: VisitorState;
+  /** The way it came into the room (the spawn its page named on arriving through a doorway, OP-343); unknown for one re-attached after the host was recycled. */
+  cameIn?: string;
   seq: number;
   tokens: number;
   refilledAt: number;
@@ -444,6 +446,7 @@ export class Room {
 
     const now = this.now();
     const v: Visitor = { peer, sid, st: { id, look: hello.look, pos, walk: null }, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, airTokens: LIMITS.airBurst, airRefilledAt: now, saidAt: 0, usedAt: 0, arrangedAt: 0, dash: { ...FRESH_DASH } };
+    if (hello.spawn !== undefined && Object.hasOwn(this.def.spawns, hello.spawn)) v.cameIn = hello.spawn;
     this.visitors.set(id, v);
     this.leavers.delete(id);
     peer.persist?.(v.st);
@@ -717,6 +720,11 @@ export class Room {
   /** The visitor's current look (what everyone else sees), if present. */
   lookOf(id: string): OwlLook | null {
     return this.visitors.get(id)?.st.look ?? null;
+  }
+
+  /** The way a visitor came into the room (a spawn of the room), when the room saw it arrive by one (OP-343: a course's fall goes back there). */
+  cameInBy(id: string): string | undefined {
+    return this.visitors.get(id)?.cameIn;
   }
 
   /** Where a visitor stands right now on the server clock (mid-walk positions included). */

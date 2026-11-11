@@ -20,7 +20,7 @@ import { HALL_ID, courseDoor, fromCourse } from './hollowHall';
 import { RAIN_BRIDGE_MS, brushPerches, type BrushArrow, type BrushStone } from '../src/brush';
 import type { CourseDef, CoursePiece, CourseThorns, RoomCourse } from '../src/course';
 import { kitPerches, kitRoom } from '../src/kit';
-import { ROOM_W, type DoorDef, type KitBackdrop, type KitDecal, type KitLedge, type RoomDef, type RoomKit } from '../src/room';
+import { ROOM_W, type DoorDef, type KitBackdrop, type KitLedge, type RoomDef, type RoomKit } from '../src/room';
 import { inRealmKit } from '../src/kitSlots';
 import { withCourseAir } from './courseAir';
 
@@ -28,6 +28,10 @@ export const BRUSH_COURSE_ID = 'brush';
 /** The tree's ground line (TREE_GROUND in rooms/index.ts, which this file cannot import: index.ts imports it). */
 export const BRUSH_GROUND = 770;
 const G = BRUSH_GROUND;
+/** How far below the walk the water lies (room px): the step down from a bank that says the walk ends here. */
+const WATER_SUNK = 26;
+/** The water's colour: a wash of ink-blue. */
+const WATER = 0x6f93ad;
 
 /** A walk along the ground line. */
 function floor(x0: number, x1: number) {
@@ -58,9 +62,9 @@ const PLANK = { row: 'kit-cut-plank-thin' };
  * of a room seen from the side it is jumped up through, not a wall: a wall on the ground line's thin
  * floor would cut the floor in two.
  */
-const pillar = (top: number) => ({ cap: 'kit-ink-rock-pillar', mid: 'kit-tex-ink-ink-stone', depth: top });
-/** A terrace of planks, down to the ground line. */
-const terrace = (top: number) => ({ row: 'kit-cut-plank', mid: 'kit-tex-planks', depth: top });
+const pillar = (top: number) => ({ cap: 'kit-ink-rock-pillar', mid: 'kit-tex-ink-ink-stone', depth: top + WATER_SUNK });
+/** A terrace of planks, down to the ground line (or, stood in the water, to its surface). */
+const terrace = (top: number, wet = false) => ({ row: 'kit-cut-plank', mid: 'kit-tex-planks', depth: top + (wet ? WATER_SUNK : 0) });
 
 /** A brush stone: its ledge, and the stone itself (what it paints and for how long). */
 function stone(id: string, x: number, w: number, top: number, arrow: BrushArrow, ms?: number): { ledge: KitLedge; stone: BrushStone } {
@@ -82,13 +86,6 @@ function piece(id: string, x: number, top = 0): CoursePiece {
 /** A hazard in the air over `x0` to `x1`, from `z0` up (z 940: higher than an owl may be): the waterfall, a cloud bank. */
 function hazard(id: string, x0: number, x1: number, z0: number, look: NonNullable<CourseThorns['look']>, z1 = 940): CourseThorns {
   return { id, x0, x1, z0, z1, look };
-}
-
-/** Ink-wash water over a stretch of the ground line, half see-through so the floor still reads: the game marks the hazard. */
-function water(x0: number, x1: number, step = 320): KitDecal[] {
-  const out: KitDecal[] = [];
-  for (let x = x0 + step / 2, i = 0; x < x1; x += step, i++) out.push({ piece: i % 3 === 1 ? 'kit-ink-lotus-pads' : 'kit-ink-pond-edge', x, y: G - 20, alpha: 0.45, ...(i % 2 ? { flip: true } : {}) });
-  return out;
 }
 
 const layer = (key: string, rate: number, screens: readonly [number, number], fade?: KitBackdrop['fade']): KitBackdrop => ({ key, rate, screens, ...(fade ? { fade } : {}) });
@@ -140,10 +137,16 @@ function brushRoom(
 }
 
 /**
- * The ground line's walk, drawn: a path along the whole room over ink-washed stone, the water over its
- * hazards laid on as decals. Up the mountain (act 3) the path is mossy stone.
+ * The ground line's walk, drawn: a bank of path over ink-washed stone wherever an owl may stand, and
+ * water wherever it may not. Up the mountain (act 3) the path is mossy stone.
  */
-const groundPath = (w: number, row = 'kit-cut-earth-path') => ({ id: 'ground', x0: 0, x1: w, top: 0, row, mid: 'kit-tex-ink-ink-stone' });
+const bank = (id: string, x0: number, x1: number, row = 'kit-cut-earth-path') => ({ id, x0, x1, top: 0, row, mid: 'kit-tex-ink-ink-stone' });
+/**
+ * The water between the banks, the course's pit (OP-343): still water a step below the walk, with no
+ * path over it and nothing on it that looks stood on (no lily pad, no rim of stones). The game paints
+ * it; the realm kit's hazard slot has no art for the ink realm yet, and its strip takes over when it does.
+ */
+const river = (id: string, x0: number, x1: number) => ({ id, x0, x1, top: 0, sunk: WATER_SUNK, fill: WATER });
 const MOUNTAIN_PATH = 'kit-cut-stone-mossy';
 
 // ---------- Act 1: the paper garden ----------
@@ -153,7 +156,7 @@ const S1 = [stone('k1', 480, 140, 100, 'R'), stone('k2', 1700, 140, 140, 'R'), s
 const GARDEN: RoomKit = {
   ground: G,
   backdrops: inkAir(3),
-  paths: [groundPath(3 * ROOM_W)],
+  paths: [bank('ground', 0, 700), river('pond', 700, 4300), bank('far-bank', 4300, 3 * ROOM_W)],
   ledges: [
     ledge('g1', 300, 120, 70, ROCK),
     ...S1.map((s) => s.ledge),
@@ -180,7 +183,6 @@ const GARDEN: RoomKit = {
     { id: 'crane', story: 'A paper crane sleeps on a rock in the middle of the pond, its head tucked under a wing.', props: ['crane'], about: ['crane-rock'] },
     { id: 'painting', story: 'On the tea terrace an easel holds an ink painting of this very garden, one stroke short of finished.', props: ['easel', 'tea'], about: ['t1'] },
   ],
-  decals: water(700, 4300),
 };
 
 // ---------- Act 2: the washing rain ----------
@@ -198,7 +200,7 @@ const S2 = [
 const RIVER: RoomKit = {
   ground: G,
   backdrops: inkAir(3),
-  paths: [groundPath(3 * ROOM_W)],
+  paths: [bank('ground', 0, 500), river('river', 500, 4400), bank('far-bank', 4400, 3 * ROOM_W)],
   ledges: [
     ...S2.map((s) => s.ledge),
     ledge('r1', 1280, 140, 380, pillar(380)),
@@ -221,7 +223,6 @@ const RIVER: RoomKit = {
     { id: 'porch', story: 'Under the temple eave a grey heron in a straw hat waits out the rain on the one dry step.', props: ['heron'], about: ['porch'] },
   ],
   decals: [
-    ...water(500, 4400),
     // The temple across the river: its eaves keep the rain off the stones under them, painted far behind, never stood on.
     { piece: 'kit-ink-temple-eave', x: 1560, y: G - 330, alpha: 0.7 },
     { piece: 'kit-ink-eave-shelter', x: 2260, y: G - 260, alpha: 0.7 },
@@ -235,7 +236,7 @@ const FALLS_CAVE: RoomKit = {
   ground: G,
   backdrops: [layer('kit-ink-sky-b', 1, [0, 0])],
   surfaces: [{ id: 'cave', texture: 'kit-tex-ink-ink-stone', rect: { x: 0, y: 0, w: ROOM_W, h: G } }],
-  paths: [groundPath(ROOM_W, MOUNTAIN_PATH)],
+  paths: [bank('ground', 0, ROOM_W, MOUNTAIN_PATH)],
   ledges: [ledge('seal-shelf', 700, 200, 200, ROCK), ledge('high-shelf', 1150, 160, 380, ROCK)],
   doors: [{ door: 'out', piece: 'kit-ink-waterfall-curtain', scale: 0.5 }],
   props: [{ id: 'tower-scroll', piece: 'kit-landmark-scroll-tower', x: 1000, top: 0, scale: 0.6 }],
@@ -249,7 +250,7 @@ const S3A = [stone('k11', 420, 120, 100, 'R'), stone('k12', 1060, 120, 150, 'L')
 const PANEL_1: RoomKit = {
   ground: G,
   backdrops: inkAir(2),
-  paths: [groundPath(2 * ROOM_W, MOUNTAIN_PATH)],
+  paths: [bank('ground', 0, 400, MOUNTAIN_PATH), river('tarn', 400, 2 * ROOM_W)],
   ledges: [
     ...S3A.map((s) => s.ledge),
     ledge('pine', 40, 100, 540, PINE),
@@ -264,7 +265,6 @@ const PANEL_1: RoomKit = {
   ],
   props: [{ id: 'foot-lantern', piece: 'kit-ink-stone-lantern', x: 300, top: 0, scale: 0.5 }],
   scenes: [{ id: 'foot', story: "A stone lantern marks the mountain's foot, where the scroll's first panel begins.", props: ['foot-lantern'], about: ['back'] }],
-  decals: water(400, 2 * ROOM_W),
 };
 
 const S3B = [stone('k16', 360, 160, 110, 'U'), stone('k18', 1000, 120, 60, 'R')];
@@ -272,15 +272,14 @@ const S3B = [stone('k16', 360, 160, 110, 'U'), stone('k18', 1000, 120, 60, 'R')]
 const PANEL_2: RoomKit = {
   ground: G,
   backdrops: inkAir(2),
-  paths: [groundPath(2 * ROOM_W, MOUNTAIN_PATH)],
-  ledges: [...S3B.map((s) => s.ledge), ledge('n1', 620, 200, 520, ROCK), ledge('n2', 1700, 160, 260, DRY), ledge('n3', 2360, 200, 540, CLIFF), ledge('n4', 2610, 590, 540, terrace(540))],
+  paths: [bank('ground', 0, 300, MOUNTAIN_PATH), river('tarn', 300, 2 * ROOM_W)],
+  ledges: [...S3B.map((s) => s.ledge), ledge('n1', 620, 200, 520, ROCK), ledge('n2', 1700, 160, 260, DRY), ledge('n3', 2360, 200, 540, CLIFF), ledge('n4', 2610, 590, 540, terrace(540, true))],
   doors: [
     { door: 'back', piece: 'kit-ink-door-paper-open', scale: 0.7 },
     { door: 'home', piece: 'kit-ink-moon-gate', scale: 0.5 },
   ],
   props: [{ id: 'summit-lantern', piece: 'kit-ink-paper-lantern', x: 2700, top: 540, scale: 0.6 }],
   scenes: [{ id: 'pavilion', story: "A paper lantern hangs by the pavilion's moon gate, the way home down the mountain.", props: ['summit-lantern'], about: ['home'] }],
-  decals: water(300, 2 * ROOM_W),
 };
 
 export const BRUSH_ROOMS: Record<string, RoomDef> = inRealmKit('ink', withCourseAir('ink', {

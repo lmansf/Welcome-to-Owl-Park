@@ -282,7 +282,11 @@ function runDraws(given: KitRun, ground: number, depth: number, role: 'path' | '
       id: run.id,
     };
   };
-  if (run.mid) out.push({ key: run.mid, x: run.x0, y: walk, w: run.x1 - run.x0, h: depth, tile: sizeOf(run.mid).tile, layer: 'play', role, id: run.id });
+  // A drop's texture begins below the walking line, in its shade (OP-343); a path's or a ledge's, at the line.
+  const sunk = run.sunk ?? 0;
+  if (run.mid && depth > sunk) {
+    out.push({ key: run.mid, x: run.x0, y: walk + sunk, w: run.x1 - run.x0, h: depth - sunk, tile: sizeOf(run.mid).tile, layer: 'play', role, id: run.id, ...(run.shade !== undefined ? { tint: run.shade } : {}) });
+  }
   const lw = run.left ? artSpan(sizeOf(run.left)).w : 0;
   const rw = run.right ? artSpan(sizeOf(run.right)).w : 0;
   const pieces: KitDraw[] = [];
@@ -750,6 +754,23 @@ export function kitProblems(room: RoomDef): string[] {
 
   // The floor an owl walks is drawn.
   const floorPaths = (kit.paths ?? []).filter((p) => p.top === 0);
+  // A course's pits (OP-343): each is drawn as a drop, a stretch of the ground line with nothing over it
+  // that looks stood on, and a drop is drawn nowhere an owl may stand.
+  // TODO-DOCS (OP-343): docs/MAP.md gains the drop (KitRun's sunk, shade and fill) and this rule.
+  const isDrop = (p: KitRun) => (p.sunk ?? 0) > 0;
+  const pits = (room.course?.pits ?? []).map((pit) => ({ x0: Math.min(...pit.map((v) => v.x)), x1: Math.max(...pit.map((v) => v.x)) }));
+  for (const d of floorPaths.filter(isDrop)) {
+    if (d.row || d.cap || d.left || d.right || d.mids?.length) out.push(`drop ${d.id} has a top piece: it would look stood on`);
+    if (!pits.some((pit) => pit.x0 <= d.x0 && d.x1 <= pit.x1)) out.push(`drop ${d.id} is drawn where an owl may stand: no pit of the course spans it`);
+  }
+  for (const pit of pits) {
+    for (let x = pit.x0 + 8; x <= pit.x1 - 8; x += 8) {
+      if (floorPaths.some((p) => !isDrop(p) && p.x0 <= x && x <= p.x1)) {
+        out.push(`the pit at x ${x} is drawn as a walk: the path over it should be a drop`);
+        break;
+      }
+    }
+  }
   for (const [a, b] of walkedAt(room, g, 0, 0, room.size.w)) {
     for (let x = a; x <= b; x += 8) {
       if (!floorPaths.some((p) => p.x0 <= x && x <= p.x1)) {

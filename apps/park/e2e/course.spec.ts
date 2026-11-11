@@ -91,6 +91,26 @@ test.describe('the parkour courses (OP-224)', () => {
     expect(Math.hypot(back.pos.x - 220, back.pos.y - 580)).toBeLessThan(2);
   });
 
+  test("the hut at the canopy's end keeps its doorway shut until every bell is rung, and says how many are (OP-343)", async ({ page, isMobile }) => {
+    // A run, started at the trail gate's way into the first act.
+    await openPark(page, { room: 'canopy-1', spawn: 'from-gate', kit: '1' });
+    await expect.poll(async () => (await state(page)).course?.run ?? null, { timeout: 10_000 }).not.toBeNull();
+    // On the lookout's deck in the last act with no bell rung: the hut's doorway says what is missing, and the owl stays.
+    await openPark(page, { room: 'canopy-3', spawn: 'on-deck', kit: '1' });
+    await expect.poll(async () => (await state(page)).course?.run ?? null, { timeout: 10_000 }).not.toBeNull();
+    await walkTo(page, 6200, 770);
+    await expect(page.locator('[data-toasts]')).toContainText('Ring every bell to open this door (0 of 5 rung)');
+    // Up pressed standing in it is no way through either (a phone held upright is asked to turn first, so the key is a computer's).
+    if (!isMobile) await page.keyboard.press('ArrowUp');
+    await page.waitForTimeout(1200);
+    expect((await state(page)).room).toBe('canopy-3');
+    // With no run there is nothing to lose: the doorway takes the owl, as it always has.
+    await page.evaluate(() => localStorage.removeItem('owl-park:courses'));
+    await openPark(page, { room: 'canopy-3', spawn: 'on-deck', kit: '1' });
+    await page.evaluate(() => window.owlPark.walkTo(6200, 770));
+    await expect.poll(async () => (await state(page)).room, { timeout: 15_000 }).toBe('canopy-hut');
+  });
+
   test('the objective strip counts the bells and the lost feathers; the dash is a course’s alone', async ({ page, isMobile }) => {
     await openPark(page, { room: 'trail-1' });
     const strip = page.locator('[data-objective]');

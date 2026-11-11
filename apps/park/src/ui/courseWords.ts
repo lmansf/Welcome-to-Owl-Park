@@ -12,12 +12,20 @@ export const COURSE_WORDS = {
   partDone: { bells: 'Bell rung', breakers: 'Breaker on', seals: 'Seal found' } satisfies Record<ObjectiveKind, string>,
   /** At the finish shrine with parts left. */
   partsFirst: { bells: 'Ring every bell first', breakers: 'Switch on every breaker first', seals: 'Find every seal first' } satisfies Record<ObjectiveKind, string>,
+  /** At the doorway to the finish with parts left: the door waits, and says how many are done (OP-343). */
+  doorWaits: {
+    bells: (done: number, of: number) => `Ring every bell to open this door (${done} of ${of} rung)`,
+    breakers: (done: number, of: number) => `Switch on every breaker to open this door (${done} of ${of} on)`,
+    seals: (done: number, of: number) => `Find every seal to open this door (${done} of ${of} found)`,
+  } satisfies Record<ObjectiveKind, (done: number, of: number) => string>,
   /** The objective strip's count of the lost feathers. */
   feathers: 'Lost feathers',
   /** A lost feather found (with the count after it). */
   featherFound: 'Lost feather found',
   /** A bench reached: a fall comes back here. */
   bench: 'Checkpoint',
+  /** A fall: the owl is back at its bench, or at the way it came in (OP-343). */
+  fell: 'Back to your last checkpoint',
   /** A shortcut opened from its far side. */
   shortcut: 'Shortcut open',
   /** A part or the shrine with no run under way (or one too long ago). */

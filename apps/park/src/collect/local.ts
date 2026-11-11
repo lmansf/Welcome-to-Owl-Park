@@ -9,6 +9,7 @@ import {
   CourseBook,
   courseOfRoom,
   inPit,
+  inThorns,
   MemoryCourseStore,
   pieceIn,
   shortcutIn,
@@ -295,7 +296,7 @@ export class LocalCollections implements CollectionService {
    * A parkour course in one of its acts, kept by the same class as the room server's, with the same
    * checks of where the owl stands (OP-224).
    */
-  courseLink(room: string, _conn: RoomConnection | null, where: () => Vec2, ground: () => number): CourseLink | null {
+  courseLink(room: string, _conn: RoomConnection | null, where: () => Vec2, ground: () => number, air?: () => { z: number; entry: string | undefined }): CourseLink | null {
     const def = ROOMS[room];
     const course = courseOfRoom(def, COURSES);
     if (!def || !course) return null;
@@ -322,8 +323,14 @@ export class LocalCollections implements CollectionService {
         return this.courses((c) => c.open(cid, room, id, this.now()));
       },
       fall: async () => {
-        if (!inPit(def, where())) return far;
-        return this.courses((c) => c.fall(cid, room, this.now()));
+        // As the room server sees a fall (RoomObject.ts, OP-343): down on the floor over a pit, or in thorns
+        // at any height, with the same slack either side of them; and back by the same rule.
+        const p = where();
+        const up = air?.() ?? { z: 0, entry: undefined };
+        const pit = inPit(def, p) && ground() === 0;
+        const thorny = [-REACH_SLACK, 0, REACH_SLACK].some((dx) => [-REACH_SLACK, 0, REACH_SLACK].some((dz) => inThorns(def, p.x + dx, up.z + dz)));
+        if (!pit && !thorny) return far;
+        return this.courses((c) => c.fall(cid, room, this.now(), { ...(up.entry !== undefined ? { entry: up.entry } : {}), pos: p }));
       },
       finish: async () => {
         const shrine = def.course?.shrine;

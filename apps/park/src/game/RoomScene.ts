@@ -243,6 +243,8 @@ const TAP_SLOP = 16;
 const LEAVE_FADE_MS = 220;
 /** How long a room fades in as it comes in. The opening look (townView.ts) counts its time from the end of it. */
 const ROOM_FADE_IN_MS = 350;
+/** How long the room takes to come back after a fall in a course blinks it dark (OP-343). */
+const FALL_BLINK_MS = 260;
 /** The registry's word that the nightly restart sent the owl home (OP-181): the home screen says so once. */
 export const RESTARTED_KEY = 'restarted';
 /** The registry's word that the owl's ticket ran out mid-visit (OP-237): the home screen says so once. */
@@ -1049,10 +1051,11 @@ export class RoomScene extends Phaser.Scene {
       link: () => this.courseLink,
       me: () => ({ pos: { ...this.me.pos }, grounded: this.flier.air.s === GROUNDED, ground: this.groundNow(), z: this.flier.air.z }),
       spawn: () => this.registry.get('spawnName') as string | undefined,
-      place: (at, top) => this.placeAt(at, top),
+      fell: (at, top) => this.fellTo(at, top),
       feathers: (total) => this.collection.setFeathers(total),
       awarded: () => void this.collection.refresh(),
       hudRoot: () => document.getElementById('hud'),
+      calm: () => this.calm(),
     });
     ({ hollow: this.hollow, doorway: this.doorway } = escapeFor(room, {
       scene: this,
@@ -1377,7 +1380,7 @@ export class RoomScene extends Phaser.Scene {
     this.play?.attach(this.acts);
     this.nests = this.collection.service.nestLink(this.room.id, conn, pushes, () => nestLook(this.look));
     if (this.course) {
-      this.courseLink = this.collection.service.courseLink(this.room.id, conn, () => ({ ...this.me.pos }), () => this.groundNow());
+      this.courseLink = this.collection.service.courseLink(this.room.id, conn, () => ({ ...this.me.pos }), () => this.groundNow(), () => ({ z: this.flier.air.z, entry: this.registry.get('spawnName') as string | undefined }));
       void this.course.connected();
     }
     this.escapeLink = conn.escape ?? null;
@@ -3000,6 +3003,19 @@ export class RoomScene extends Phaser.Scene {
     this.walkTo(to);
   }
 
+  /**
+   * A fall in a course, shown (OP-343). The owl is back where the fall takes it at once, as ever; the
+   * camera goes with it in the same frame, where it used to slide back across the room after an owl
+   * that had silently moved, and the room blinks dark and comes back, so the player sees that something
+   * happened (the course says where the owl is). With calm motion on there is no blink.
+   */
+  private fellTo(at: Vec2, top = 0): void {
+    this.placeAt(at, top);
+    const cam = this.cameras.main;
+    if (!this.mirrorFrame && !this.decorating) cam.startFollow(this.followed(), true, 0.12, 0.12);
+    if (!this.calm()) cam.fadeIn(FALL_BLINK_MS, 12, 30, 54);
+  }
+
   /** Back where a fall in a course takes the owl (OP-224): there at once, standing, and the room told. */
   private placeAt(at: Vec2, top = 0): void {
     this.walkGoal = null;
@@ -3342,6 +3358,12 @@ export class RoomScene extends Phaser.Scene {
         }
         // A walk that ended past a doorway it crossed in its last frame goes through only as one that ends there would.
         if (!up && !takesDoorway(door.rect, (this.me.walk ?? (stepFrom ? walk : null))?.to ?? null, this.keyWalk, this.errand !== null, side)) continue;
+        // A course's doorway that waits on its run (the way to the finish with parts left, OP-343): its words, and no way through yet.
+        const waits = this.course?.holds(to.room) ?? null;
+        if (waits !== null) {
+          if (said) this.hud.toast(waits, 2600);
+          continue;
+        }
         triedDoors().add(this.room.id, door.id);
         if (door.id === 'gate') {
           void this.throughGate(door, cameIn);

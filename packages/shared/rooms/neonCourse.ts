@@ -35,16 +35,20 @@ function floor(x0: number, x1: number) {
   ];
 }
 
+/** How far below the roof decks the street lies, as far as the room shows (room px). */
+const STREET_SUNK = 70;
+
 /** A ledge of the plan: `x` its west end, `w` its width, `top` its height. */
 function ledge(id: string, x: number, w: number, top: number, look: Omit<KitLedge, 'id' | 'x0' | 'x1' | 'top'>): KitLedge {
   return { id, x0: x, x1: x + w, top, ...look };
 }
 
 /**
- * A building whose roof is a ledge: its parapet, and brick down to the ground line. Like every ledge of
- * a room seen from the side it is jumped up through, not a wall.
+ * A building whose roof is a ledge: its parapet, and brick down to the ground line, or for one that
+ * stands in a drop (`street`), down to the street. Like every ledge of a room seen from the side it is
+ * jumped up through, not a wall.
  */
-const roof = (top: number) => ({ cap: 'kit-neon-rooftop-ledge', mid: 'kit-tex-high-silvered-planks', depth: top });
+const roof = (top: number, street = false) => ({ cap: 'kit-neon-rooftop-ledge', mid: 'kit-tex-high-silvered-planks', depth: top + (street ? STREET_SUNK : 0) });
 /** A footbridge strung between towers, over the street. */
 const FOOTBRIDGE = { cap: 'kit-neon-sky-bridge-mid' };
 /** A billboard on its legs: stood on along its top. */
@@ -76,13 +80,16 @@ function wires(id: string, x0: number, x1: number, z0: number, z1 = 940): Course
 
 /** The roof deck along the ground line from `x0` to `x1`, its edge stone over brick. */
 const deck = (id: string, x0: number, x1: number) => ({ id, x0, x1, top: 0, row: 'kit-cut-stone', mid: 'kit-tex-neon-corrugated-tin' });
-/** The drop between two buildings, from `x0` to `x1`: the wet street far below, with nothing to stand on (the course's pit). */
-const drop = (id: string, x0: number, x1: number) => ({ id, x0, x1, top: 0, mid: 'kit-tex-neon-corrugated-tin' });
+/**
+ * The drop between two buildings, from `x0` to `x1`, the course's pit (OP-343): no deck over it, the
+ * night between the walls, and the wet street far below with nothing to stand on.
+ */
+const drop = (id: string, x0: number, x1: number) => ({ id, x0, x1, top: 0, mid: 'kit-tex-neon-corrugated-tin', sunk: STREET_SUNK, shade: 0x4a4470 });
 
-/** Live neon tubes standing up out of the street between two buildings: the drop is a fall, and the game marks it. */
-function tubes(x0: number, x1: number, step = 260): KitDecal[] {
+/** Live neon tubes standing up out of the street between two buildings, too close together to land among, their tops over the line of the decks: the drop is a fall. */
+function tubes(x0: number, x1: number, step = 140): KitDecal[] {
   const out: KitDecal[] = [];
-  for (let x = x0 + step / 2, i = 0; x < x1; x += step, i++) out.push({ piece: 'kit-neon-neon-tube-hazard', x, y: G - 50, scale: 0.7, alpha: 0.9, ...(i % 2 ? { flip: true } : {}) });
+  for (let x = x0 + step / 2, i = 0; x < x1; x += step, i++) out.push({ piece: 'kit-neon-neon-tube-hazard', x, y: G + STREET_SUNK - 74, scale: 0.7, ...(i % 2 ? { flip: true } : {}) });
   return out;
 }
 
@@ -171,10 +178,10 @@ const POWER_CUT: RoomKit = {
   backdrops: cityAir(3),
   paths: [deck('deck-a', 0, 600), drop('street-1', 600, 2300), deck('deck-b', 2300, 2700), drop('street-2', 2700, 4300), deck('deck-c', 4300, 3 * ROOM_W)],
   ledges: [
-    ledge('r1', 800, 300, 420, roof(420)),
-    ledge('r2', 2050, 250, 540, roof(540)),
+    ledge('r1', 800, 300, 420, roof(420, true)),
+    ledge('r2', 2050, 250, 540, roof(540, true)),
     ledge('bridge2', 2750, 160, 100, FOOTBRIDGE),
-    ledge('r3', 3500, 260, 540, roof(540)),
+    ledge('r3', 3500, 260, 540, roof(540, true)),
     ledge('board2', 4500, 200, 480, BILLBOARD),
   ],
   doors: [
@@ -201,10 +208,10 @@ const ANTENNA: RoomKit = {
   backdrops: cityAir(2),
   paths: [deck('deck-a', 0, 700), drop('street', 700, 2 * ROOM_W)],
   ledges: [
-    ledge('m1', 800, 200, 380, roof(380)),
+    ledge('m1', 800, 200, 380, roof(380, true)),
     ledge('board3', 1500, 200, 260, BILLBOARD),
-    ledge('m2', 2250, 120, 540, roof(540)),
-    ledge('summit', 2600, 600, 540, roof(540)),
+    ledge('m2', 2250, 120, 540, roof(540, true)),
+    ledge('summit', 2600, 600, 540, roof(540, true)),
   ],
   doors: [
     { door: 'back', piece: 'kit-neon-rooftop-door-open', scale: 0.7 },
@@ -251,7 +258,9 @@ export const CIRCUIT_ROOMS: Record<string, RoomDef> = inRealmKit('neon', withCou
       pits: [floor(700, 2 * ROOM_W)],
       // Sparks off the antenna's guy wires, over the climb: the signs are taken one at a time, not glided past.
       thorns: [wires('sparks', 1170, 2240, 700)],
-      benches: [piece('bench-4', 250)],
+      // A second bench up on the first roof, by its breaker (OP-343): a fall from the signs beyond it
+      // comes back here, where before it cost the whole climb from the deck.
+      benches: [piece('bench-4', 250), piece('bench-5', 840, 380)],
       parts: [piece('breaker-3', 900, 380)],
       feathers: [piece('feather-5', 1600, 260)],
       shrine: piece('shrine', 3000, 540),

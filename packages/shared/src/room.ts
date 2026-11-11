@@ -365,6 +365,19 @@ export interface KitRun {
   mids?: string[];
   /** Pieces set into the run (a transition, a corner), each with its art's left edge at x; the middles fill around them. */
   joins?: { x: number; piece: string }[];
+  /**
+   * A drop (OP-343): a stretch of the ground line no owl stands on, a course's pit. It has no top
+   * piece, and its texture begins this far below the walking line, so the path beside it visibly ends
+   * and what lies here reads as below it: water, a thicket in a dip, the street between two roofs.
+   */
+  sunk?: number;
+  /** The colour a drop's texture is drawn in (a tint multiplied in): its shadow. */
+  shade?: number;
+  /**
+   * A drop with no texture: the game paints it in this colour from its sunk line to the room's foot,
+   * as still water (kitView.ts), until the realm's hazard art (the realm kit's hazard slot) is delivered.
+   */
+  fill?: number;
 }
 
 export interface KitLedge extends KitRun {

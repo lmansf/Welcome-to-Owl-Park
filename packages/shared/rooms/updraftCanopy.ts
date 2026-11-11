@@ -91,17 +91,26 @@ const GUST_LATE = { ...GUST, phase: 0.5 };
 
 /** Where the fern floor's bramble ends and the moss among the trunk's roots begins: bell 2's column rises from the moss. */
 const ROOTS_MOSS = 4050;
+/** What lies under the walk: the clearing's fern floor, and inside the trunk its wood. */
+const FERN = 'kit-tex-clearing-fern-floor';
+const WOOD = 'kit-tex-inner-wood';
 
 /** The vent each column rises from, at its foot. */
 const vents = (cols: readonly Updraft[]): KitDecal[] => cols.map((u) => ({ piece: 'kit-clearing-updraft-vent', x: u.x + u.w / 2, y: G - 40, scale: 0.6 }));
 
-/** Bramble over a pit of the fern floor, patch by patch. */
+/** Bramble filling a pit of the ground line, patch by patch, as solid as the thorns it is (OP-343): no walk shows through it. */
 function bramble(x0: number, x1: number, piece = 'kit-clearing-bramble-patch', step = 240): KitDecal[] {
   const out: KitDecal[] = [];
-  // Half see-through, so the floor under them still reads as the floor: the game marks the pits.
-  for (let x = x0 + step / 2, i = 0; x < x1; x += step, i++) out.push({ piece, x, y: G - 30, alpha: 0.4, ...(i % 2 ? { flip: true } : {}) });
+  for (let x = x0 + step / 2, i = 0; x < x1; x += step, i++) out.push({ piece, x, y: G - 30, ...(i % 2 ? { flip: true } : {}) });
   return out;
 }
+
+/** How far below the walk a pit's bed lies (room px): the step down that says the walk ends here. */
+const PIT_SUNK = 30;
+/** A stretch of the ground line an owl walks: its path over `mid`. */
+const walk = (id: string, x0: number, x1: number, mid: string, row = 'kit-cut-earth-path') => ({ id, x0, x1, top: 0, row, mid });
+/** A pit of the ground line (OP-343): a dip with no path over it, its bed in shadow under the bramble that fills it. */
+const dip = (id: string, x0: number, x1: number, mid: string) => ({ id, x0, x1, top: 0, mid, sunk: PIT_SUNK, shade: 0x55664a });
 
 const layer = (key: string, rate: number, screens: readonly [number, number], fade?: KitBackdrop['fade']): KitBackdrop => ({ key, rate, screens, ...(fade ? { fade } : {}) });
 const FADES = { left: 230, right: 230 };
@@ -162,7 +171,13 @@ const U_ACT1 = [
 const CANOPY_1: RoomKit = {
   ground: G,
   backdrops: clearingAir(3),
-  paths: [{ id: 'fern-floor', x0: 0, x1: 3 * ROOM_W, top: 0, row: 'kit-cut-earth-path', mid: 'kit-tex-clearing-fern-floor' }],
+  paths: [
+    walk('fern-floor', 0, 700, FERN),
+    dip('bramble-west', 700, 1500, FERN),
+    walk('fern-rise', 1500, 2000, FERN),
+    dip('bramble-east', 2000, ROOTS_MOSS, FERN),
+    walk('roots-moss', ROOTS_MOSS, 3 * ROOM_W, FERN),
+  ],
   ledges: [
     ledge('s1', 300, 160, 90, BOULDER),
     ledge('s2', 520, 140, 200, BOULDER),
@@ -229,7 +244,7 @@ const U_2B = [updraft('U7', 640, 530, GUST), updraft('U8', 1190, 590, GUST_LATE)
 const TRUNK_B: RoomKit = {
   ground: G,
   ...trunkInside(ROOM_W),
-  paths: [{ id: 'trunk-floor', x0: 0, x1: ROOM_W, top: 0, row: 'kit-cut-earth-path', mid: 'kit-tex-inner-wood' }],
+  paths: [walk('trunk-floor', 0, 400, WOOD), dip('thorn-roots', 400, ROOM_W, WOOD)],
   ledges: [
     ledge('u1', 420, 160, 100, SHELF),
     ledge('knot-shelf', 300, 100, 520, SHELF),
@@ -248,7 +263,7 @@ const U_2C = [updraft('U9', 520, 520, GUST), updraft('U10', 1060, 560, GUST_LATE
 const TRUNK_C: RoomKit = {
   ground: G,
   ...trunkInside(ROOM_W),
-  paths: [{ id: 'trunk-floor', x0: 0, x1: ROOM_W, top: 0, row: 'kit-cut-earth-path', mid: 'kit-tex-inner-wood' }],
+  paths: [walk('trunk-floor', 0, 300, WOOD), dip('thorn-roots', 300, ROOM_W, WOOD)],
   ledges: [ledge('v1', 320, 140, 70, SHELF), ledge('v2', 700, 120, 480, SHELF), ledge('v2b', 780, 240, 100, ROOT), ledge('v3', 1220, 160, 520, SHELF), ledge('v4', 1420, 160, 540, SHELF)],
   doors: [
     { door: 'down', piece: 'kit-hatch-down' },
@@ -268,8 +283,8 @@ const U_ACT3 = [
 const CROWN: RoomKit = {
   ground: G,
   backdrops: clearingAir(4),
-  // Far below the crown run, the clearing's leaves: the drop an owl falls back from.
-  paths: [{ id: 'crown-floor', x0: 0, x1: 4 * ROOM_W, top: 0, row: 'kit-cut-earth-path', mid: 'kit-tex-clearing-leaf-canopy' }],
+  // Under the crown run, bramble grown up through the clearing's leaves: the drop an owl falls back from.
+  paths: [walk('crown-floor', 0, 600, 'kit-tex-clearing-leaf-canopy'), dip('crown-drop', 600, 4 * ROOM_W, 'kit-tex-clearing-leaf-canopy')],
   ledges: [
     ledge('c1', 620, 160, 120, TWIG),
     ledge('c2', 920, 160, 160, TWIG),
@@ -287,7 +302,7 @@ const CROWN: RoomKit = {
     ledge('c12', 4900, 200, 180, BRANCH),
     ledge('c13', 5460, 240, 520, BRANCH),
     ledge('c14', 5760, 180, 520, BRANCH),
-    ledge('c15', 6020, 360, 540, { row: 'kit-cut-plank', mid: 'kit-tex-planks', depth: 540 }),
+    ledge('c15', 6020, 360, 540, { row: 'kit-cut-plank', mid: 'kit-tex-planks', depth: 540 + PIT_SUNK }),
   ],
   doors: [
     { door: 'down', piece: 'kit-hatch-down' },
@@ -368,10 +383,11 @@ export const CANOPY_ROOMS: Record<string, RoomDef> = inRealmKit('clearing', with
     },
   }),
   'canopy-3': canopyRoom('canopy-3', 4, CROWN, {
-    spawns: { default: { x: 150, y: G }, 'from-below': { x: 150, y: G }, 'from-hut': { x: 400, y: G }, 'on-c2': { x: 1040, y: G }, 'on-c12': { x: 5000, y: G } },
+    spawns: { default: { x: 150, y: G }, 'from-below': { x: 150, y: G }, 'from-hut': { x: 400, y: G }, 'on-c2': { x: 1040, y: G }, 'on-c12': { x: 5000, y: G }, 'on-deck': { x: 6100, y: G } },
     // On the twig c2, by the first column (U11), and on the low bough c12, by the crown's column and wind:
-    // where the browser test of the course's air starts each of its two flights (e2e/air.spec.ts).
-    spawnTops: { 'on-c2': 160, 'on-c12': 180 },
+    // where the browser test of the course's air starts each of its two flights (e2e/air.spec.ts). And on
+    // the lookout's deck (c15) beside the hut's doorway, where the test of that doorway stands (e2e/course.spec.ts, OP-343).
+    spawnTops: { 'on-c2': 160, 'on-c12': 180, 'on-deck': 540 },
     doors: [door('down', 40, { room: 'canopy-2c', spawn: 'from-above' }, { w: 60, way: 'down' }), door('hut', 6200, { room: 'canopy-hut', spawn: 'from-deck' }, { top: 540, w: 100 })],
     updrafts: U_ACT3,
     course: {

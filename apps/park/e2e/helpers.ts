@@ -375,7 +375,7 @@ export async function holdSpace(page: Page, ms: number): Promise<void> {
 }
 
 /** How fast an owl still rises once Jump is let go on the way up (JUMP_CUT_SPEED, packages/shared jump.ts). */
-const CUT_SPEED = 180;
+const CUT_SPEED = 640;
 
 /**
  * A jump held `jumpMs` (by default to its top and a little past), then the flap, held `ms`: from the

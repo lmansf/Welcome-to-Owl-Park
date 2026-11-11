@@ -31,11 +31,27 @@ describe('flight (OP-084)', () => {
     expect(path.at(-1)!.air).toEqual(ON_GROUND);
   });
 
-  it('a tap rises less than a press held: let go on the way up and the rise is cut', () => {
+  it('a tap is a jump: let go on the way up, the rise is cut, and it still clears a first step (OP-343)', () => {
     const tap = run(newFlier(), [[PRESS, 1], [NONE, steps(800)]]);
+    const quick = run(newFlier(), [[PRESS, steps(50)], [NONE, steps(800)]]);
     const held = run(newFlier(), [[PRESS, steps(340)], [NONE, steps(800)]]);
     expect(tap[1]!.air.vz).toBeLessThanOrEqual(JUMP_CUT_SPEED);
-    expect(top(tap)).toBeLessThan(top(held) / 4);
+    // The shortest press there is, one step: over 80 px, and less than a press held.
+    expect(top(tap)).toBeGreaterThan(80);
+    expect(top(tap)).toBeLessThan(top(held) - 40);
+    // A quick tap, a twentieth of a second: over 110 px. A tenth of a second: the whole jump.
+    expect(top(quick)).toBeGreaterThan(110);
+    expect(top(quick)).toBeLessThan(top(held) - 20);
+    expect(top(run(newFlier(), [[PRESS, steps(100)], [NONE, steps(800)]]))).toBeCloseTo(top(held), 0);
+  });
+
+  it('a tapped flap is nearly a whole flap (OP-343)', () => {
+    const park = (plan: Array<[FlightInput, number]>) => run(newFlier(), plan, 0, PARK_FLIGHT);
+    const jump = top(park([[PRESS, steps(340)], [NONE, steps(800)]]));
+    const heldFlap = top(park([[PRESS, steps(340)], [PRESS, steps(300)], [NONE, steps(1200)]]));
+    const tappedFlap = top(park([[PRESS, steps(340)], [PRESS, steps(50)], [NONE, steps(1200)]]));
+    expect(heldFlap - jump).toBeGreaterThan(100);
+    expect(tappedFlap - jump).toBeGreaterThan((heldFlap - jump) * 0.9);
   });
 
   it("flaps once more in today's park, and only once", () => {

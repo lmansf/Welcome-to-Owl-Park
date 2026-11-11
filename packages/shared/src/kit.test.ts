@@ -293,6 +293,50 @@ describe('the kit draw plan (OP-234)', () => {
 const coloursOf = (ops: readonly KitOp[]) => new Set(ops.map((o) => o.c));
 const PALETTE = new Set<number>(Object.values(KIT_PALETTE));
 
+describe("a course's pit, drawn as a drop (OP-343)", () => {
+  const pit = [
+    { x: 600, y: GROUND - 4 },
+    { x: 1000, y: GROUND - 4 },
+    { x: 1000, y: GROUND + 4 },
+    { x: 600, y: GROUND + 4 },
+  ];
+  const course = { id: 'c', act: 1, pits: [pit] };
+  const walk = (id: string, x0: number, x1: number) => ({ id, x0, x1, top: 0, cap: 'kit-plank-mid', mid: 'kit-tex-earth' });
+  const drop = (id: string, x0: number, x1: number) => ({ id, x0, x1, top: 0, mid: 'kit-tex-earth', sunk: 30, shade: 0x556655 });
+
+  it("draws a drop's texture below the walking line, in its shade, and nothing over it", () => {
+    const r = room({ paths: [walk('west', 100, 600), drop('dip', 600, 1000), walk('east', 1000, 1500)] }, { course });
+    const drawn = kitDrawPlan(r).filter((d) => d.id === 'dip');
+    expect(drawn).toEqual([{ key: 'kit-tex-earth', x: 600, y: GROUND + 30, w: 400, h: 900 - GROUND - 30, tile: 'xy', layer: 'play', role: 'path', id: 'dip', tint: 0x556655 }]);
+    // The walks either side begin at the line, as ever.
+    expect(kitDrawPlan(r).find((d) => d.id === 'west' && d.key === 'kit-tex-earth')!.y).toBe(GROUND);
+    expect(kitProblems(r)).toEqual([]);
+  });
+
+  it('a drop that the game paints (water) draws no piece, and is no problem', () => {
+    const r = room({ paths: [walk('west', 100, 600), { id: 'pond', x0: 600, x1: 1000, top: 0, sunk: 26, fill: 0x6f93ad }, walk('east', 1000, 1500)] }, { course });
+    expect(kitDrawPlan(r).filter((d) => d.id === 'pond')).toEqual([]);
+    expect(kitProblems(r)).toEqual([]);
+  });
+
+  it('refuses a pit drawn as a walk, a drop where an owl may stand, and a drop with a top piece', () => {
+    expect(kitProblems(room({}, { course }))).toEqual(['the pit at x 608 is drawn as a walk: the path over it should be a drop']);
+    const wide = room({ paths: [walk('west', 100, 500), drop('dip', 500, 1000), walk('east', 1000, 1500)] }, { course });
+    expect(kitProblems(wide)).toEqual(['drop dip is drawn where an owl may stand: no pit of the course spans it']);
+    const capped = room({ paths: [walk('west', 100, 600), { ...drop('dip', 600, 1000), cap: 'kit-plank-mid' }, walk('east', 1000, 1500)] }, { course });
+    expect(kitProblems(capped)).toEqual(['drop dip has a top piece: it would look stood on']);
+  });
+
+  it('holds in every course: no pit is drawn as a walk', () => {
+    const withPits = KIT_ROOMS.filter((r) => r.course?.pits?.length);
+    expect(withPits.length).toBeGreaterThanOrEqual(11);
+    for (const r of withPits) {
+      const drops = (r.kit!.paths ?? []).filter((p) => (p.sunk ?? 0) > 0);
+      expect(drops.length, r.id).toBeGreaterThanOrEqual(r.course!.pits!.length);
+    }
+  });
+});
+
 describe('runs and columns of the recut kit (OP-251)', () => {
   const ROW = 'kit-cut-plank';
   const mids = [320, 480, 640].map((l) => `${ROW}-mid-${l}`);
