@@ -21,10 +21,12 @@ export interface ArtTrial {
   room: string;
   /** Its art key: one picture of the whole room in public/art (`<key>.webp`), stretched to the room's size. */
   key: string;
+  /** The colour the picture has along its edges: what a camera drawn back past the room shows round it (townView.ts). */
+  beyond: string;
 }
 
 export const ART_TRIALS: Record<string, ArtTrial> = {
-  hollow: { room: 'm3-hall', key: 'hollow-painted' },
+  hollow: { room: 'm3-hall', key: 'hollow-painted', beyond: '#0e0a06' },
 };
 
 /** Drawn over the room's own floor and wall, under everything drawn on them. */
