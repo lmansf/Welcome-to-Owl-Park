@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { STICK_WAYS, stickWay } from './joystick';
+import { STICK_WAYS, cameToRest, stickWay } from './joystick';
 
 const R = 64;
 const at = (deg: number, len = 40) => [Math.cos((deg * Math.PI) / 180) * len, Math.sin((deg * Math.PI) / 180) * len] as const;
@@ -26,6 +26,17 @@ describe('the thumbstick', () => {
     expect(stickWay(...at(165), R, 4)).toBe(4);
     // Letting go to the middle stops it.
     expect(stickWay(2, 2, R, 3)).toBeNull();
+  });
+
+  it('comes to rest when it pointed a way and points none: the thumb lifted or back at the middle', () => {
+    expect(cameToRest(3, null)).toBe(true);
+    expect(cameToRest(0, null)).toBe(true); // way 0 (right) is a way
+    expect(cameToRest(3, 4)).toBe(false);
+    expect(cameToRest(null, 4)).toBe(false);
+    expect(cameToRest(null, null)).toBe(false);
+    // As the stick reads a thumb: pushed up, then back inside the middle.
+    const up = stickWay(...at(-90), R, null);
+    expect(cameToRest(up, stickWay(2, -3, R, up))).toBe(true);
   });
 
   it('points only right, down, left or up for a game played by flicks, and holds a way past its edge (OP-137)', () => {

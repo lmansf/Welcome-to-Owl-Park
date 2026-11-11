@@ -25,6 +25,28 @@ export function takesDoorway(rect: Rect, walkTo: Vec2 | null, fromKeys: boolean,
 }
 
 /**
+ * The way back waits for a fresh push. An owl walks into a doorway with a key or the thumbstick held,
+ * and is still holding it as the next room comes in. Where the two rooms' doorways lie the same way
+ * (up into the turnstiles and up into the knothole they open on; a nest's door and the street's), the
+ * same push walked it straight back out, and in again, for as long as it was held (the play log, Nov 8
+ * to 10: five of the seven trips from the Great Hollow up to the Treetop Commons were back within five
+ * seconds). So the doorway back where an owl just came from stays shut to it until it has let go once.
+ *
+ * `waiting` is true from the moment the owl comes in. It holds while a way is still `held`, and while a
+ * screen that takes the keys covers the room (`covered`): held keys read as let go under one. `rested`
+ * is the letting go itself, counted as it happens (Keys.rests) since the owl took the doorway: a key let
+ * go and pressed again between two looks, as a quick thumb does on a slow phone, is a fresh push too.
+ *
+ * TODO-DOCS (OP-333): docs/ARCHITECTURE.md's client rules, where a walk takes a doorway: the doorway
+ * back where an owl came from waits until the keys or the thumbstick held as it came in are let go
+ * (seen from above the owl stops at its foot; seen from the side a held up does not take it, a new
+ * press does). The check: apps/park/e2e/wayBack.spec.ts.
+ */
+export function backWaits(waiting: boolean, held: boolean, covered: boolean, rested = false): boolean {
+  return waiting && !rested && (held || covered);
+}
+
+/**
  * How long a press of the up key (or the Go in action) waits for the owl to stand in a doorway
  * (OP-212): pressed a moment before it lands in one, or before the frame that finds it there, it
  * still goes through.

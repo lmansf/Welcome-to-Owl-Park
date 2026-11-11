@@ -273,6 +273,8 @@ export interface Hud {
   onCopy(cb: (note: string | null) => void): void;
   /** Where the thumbstick points (touch screens), one of eight ways like the walking keys; null while it rests. */
   stickDirection(): Vec2 | null;
+  /** How many times the thumbstick has come to rest from pointing a way (keyboard.ts, Keys.rests). */
+  stickRests(): number;
   /** The Decorate sheet for the owner's own nest, starting at `spot`; it hides the bottom bar while open. */
   openDecorate(view: DecorateView, spot: NestSpotId, actions: DecorateActions): void;
   /** The nest changed while the sheet is open. */
@@ -1405,6 +1407,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     setCopy: (v) => cards.setCopy(v),
     onCopy: (cb) => cards.onCopy(cb),
     stickDirection: () => stick.direction(),
+    stickRests: () => stick.rests(),
     openDecorate(view, spot, actions) {
       decorateActions = actions;
       decorate ??= createDecorateSheet(
