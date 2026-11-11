@@ -13,20 +13,43 @@
  */
 import type { Vec2 } from './protocol';
 
-/** The room: four screens wide (as the hollow always was) and a little over three screens high. */
-export const HALL_W = 6400;
-export const HALL_H = 2800;
+/**
+ * How big the hollow is, against the size it was first laid out and painted at (6400 by 2800). At that
+ * size its floor was 8.7 times what 80 owls need to gather (OWL_ROOM_PX2) and the nearest thing to play
+ * was seven to nine seconds' walk from where an owl lands. At 0.85 (OP-339) every walk across it is
+ * 15% shorter and the floor is 6.3 times that.
+ *
+ * The room's painting is one picture stretched to the room, with every knothole, idol base and root
+ * painted in, so the room is sized as a whole: every measure that is a place on the painting is taken
+ * through `sized`, and keeps its place on it. Measures that are room for an owl or for a piece of art
+ * (how far in an arrival stands, how wide a doorway is, how deep the floor is cut in round an idol)
+ * are not: owls and art are the size they are.
+ *
+ * Why 0.85 and no smaller with this painting: the root runs (rooms/hollowHall.ts) keep their lengths
+ * and the glide's gap between them, and need the hollow about 5,000 px across to stand in. At 1 the
+ * room is exactly as it was first laid out. A hollow re-spaced for the ways that are open (nine of the
+ * eleven places round the rim) is a new painting, the owner's to commission.
+ *
+ * TODO-DOCS (OP-339): docs/MAP-AUDIT.md's inventory has the Great Hollow at 6400 by 2800; it is 5440 by 2380.
+ */
+export const HALL_SCALE = 0.85;
+/** A measure of the hollow as first laid out, at the size the hollow is now (room px). */
+export const sized = (n: number): number => Math.round(n * HALL_SCALE);
+
+/** The room: four screens wide and a little over three high as first laid out, sized as a whole (HALL_SCALE). */
+export const HALL_W = sized(6400);
+export const HALL_H = sized(2800);
 /** The oval's middle and its half widths: the rim is where the floor meets the wall's foot. */
 export const HALL_CX = HALL_W / 2;
-export const HALL_CY = 1480;
-export const HALL_RX = 2950;
-export const HALL_RY = 1150;
+export const HALL_CY = sized(1480);
+export const HALL_RX = sized(2950);
+export const HALL_RY = sized(1150);
 /** The middle of the hollow, along it. */
 export const HALL_MIDDLE = HALL_CX;
 /** How tall the far wall's face is drawn at the very back (room px), less toward the ends, none at them. */
-export const WALL_FACE = 260;
+export const WALL_FACE = sized(260);
 /** How deep the near wall's top is drawn past the rim at the front. */
-export const WALL_LIP = 70;
+export const WALL_LIP = sized(70);
 /**
  * How much floor an owl at a gathering takes (room px²): an owl is drawn about 100 by 120, and stood
  * among others it wants about 140 across by 110 deep, so names and bubbles don't pile up.
@@ -147,8 +170,8 @@ export const IDOL_HALF = 240;
  * below the point and GROWN_OUT out along the rim's lean, and its middle falls on the hole's. The floor
  * is cut in round it as round an idol's base, so owls walk up to the roots and never stand behind them.
  */
-export const GROWN_DROP = 105;
-export const GROWN_OUT = 50;
+export const GROWN_DROP = Math.round(135 - 30 * HALL_SCALE);
+export const GROWN_OUT = sized(50);
 export const GROWN_BASE = 190;
 export const GROWN_HALF = 240;
 /** How far in from the rim the floor runs at `s`: round each idol's base and each grown-over way, eased in and out. */
@@ -164,20 +187,30 @@ export function floorInset(s: number, idols: readonly HallLevel[], grown: readon
   return inset;
 }
 /** Where an idol's foot stands: on its base, in from the rim, off the floor. */
-export const idolAt = (level: HallLevel): Vec2 => rimAt(commonsS(level), 70);
-/** Its Realm Vote spot: on the floor just in front of its base. */
-export const voteAt = (level: HallLevel): Vec2 => rimAt(commonsS(level), 300);
+export const idolAt = (level: HallLevel): Vec2 => rimAt(commonsS(level), sized(70));
+/** Its Realm Vote spot: on the floor just in front of its base, on the stone painted there. */
+export const voteAt = (level: HallLevel): Vec2 => rimAt(commonsS(level), sized(300));
 
 /** Each Commons' plaza: out from its idol toward the middle, where its moonbeam falls. */
 export const plazaAt = (level: HallLevel): Vec2 => ringAt(commonsS(level), 0.62);
 /** The hollow's heart: the middle of the floor, where the light falls brightest. */
-export const HALL_HEART: Vec2 = { x: HALL_CX, y: HALL_CY - 340 };
+export const HALL_HEART: Vec2 = { x: HALL_CX, y: HALL_CY - sized(340) };
 
 /**
  * The root runs (OP-308) stand in a line across the middle of the floor, where it is widest: the same
  * runs as ever, in the same order along the hollow, glide for glide, the Commons round the rim either side.
  */
 export const RUN_Y = HALL_CY;
+
+/**
+ * Which way along the rim leads away from the hollow's middle line (where the root runs stand) at `s`:
+ * 1 clockwise, -1 the other way. On the west side clockwise runs toward the back, on the east toward the front.
+ */
+function awayFromMiddle(s: number): 1 | -1 {
+  const back = rimAt(s).y < HALL_CY;
+  const west = rimAt(s).x < HALL_CX;
+  return back === west ? 1 : -1;
+}
 
 /** The moonbeams: one in each Commons' plaza and one at the heart. */
 export const HALL_MOONBEAMS: ReadonlyArray<{ id: string; pos: Vec2 }> = [
@@ -190,20 +223,25 @@ export const HALL_MOONBEAMS: ReadonlyArray<{ id: string; pos: Vec2 }> = [
  * side of its plaza, clear of its two doorways' signs and landing spots, one by the hatch, one by the trunk's door, two by the knothole, two either side of
  * the heart and one out in front of it, between the trunk's door and the hatch; and one drifted up by
  * the roots over each grown-over way.
+ *
+ * A Commons' two piles lie COMMONS_PILE round the rim from its middle, where its idol's vote stone is.
+ * That is room between two pieces of art, a pile and a stone, so it keeps its size in a smaller hollow.
  */
+const COMMONS_PILE = 600;
 export const HALL_LEAVES: ReadonlyArray<{ id: string; pos: Vec2 }> = [
   ...(['glass', 'ink', 'grove', 'market'] as const).flatMap((level) => [
-    { id: `leaves-${level}`, pos: ringAt(commonsS(level) - 600, 0.74) },
-    { id: `leaves-${level}-far`, pos: ringAt(commonsS(level) + 600, 0.74) },
+    { id: `leaves-${level}`, pos: ringAt(commonsS(level) - COMMONS_PILE, 0.74) },
+    { id: `leaves-${level}-far`, pos: ringAt(commonsS(level) + COMMONS_PILE, 0.74) },
   ]),
-  { id: 'leaves-hatch', pos: rimAt(wayS('down') + 380, 260) },
-  { id: 'leaves-party', pos: rimAt(wayS('to-party') - 380, 260) },
+  { id: 'leaves-hatch', pos: rimAt(wayS('down') + sized(380), 260) },
+  { id: 'leaves-party', pos: rimAt(wayS('to-party') - sized(380), 260) },
   // A drift of leaves by the roots grown over each way with nothing behind it (OP-337): with no doorway
   // there, that stretch of the rim still has something to do within a few seconds' walk.
-  ...GROWN_WAYS.map((id) => ({ id: `leaves-${id}-roots`, pos: rimAt(wayS(id) - 150, 180) })),
-  { id: 'leaves-knothole-west', pos: rimAt(wayS('up') - 420, 220) },
-  { id: 'leaves-knothole-east', pos: rimAt(wayS('up') + 420, 220) },
-  { id: 'leaves-heart-west', pos: { x: HALL_CX - 760, y: HALL_CY + 160 } },
-  { id: 'leaves-heart-east', pos: { x: HALL_CX + 760, y: HALL_CY + 160 } },
-  { id: 'leaves-front', pos: { x: HALL_CX, y: HALL_CY + 700 } },
+  // Each on the side of its roots away from the middle of the hollow, where the root runs' stumps stand.
+  ...GROWN_WAYS.map((id) => ({ id: `leaves-${id}-roots`, pos: rimAt(wayS(id) + awayFromMiddle(wayS(id)) * 150, 180) })),
+  { id: 'leaves-knothole-west', pos: rimAt(wayS('up') - sized(420), 220) },
+  { id: 'leaves-knothole-east', pos: rimAt(wayS('up') + sized(420), 220) },
+  { id: 'leaves-heart-west', pos: { x: HALL_CX - sized(760), y: HALL_CY + sized(160) } },
+  { id: 'leaves-heart-east', pos: { x: HALL_CX + sized(760), y: HALL_CY + sized(160) } },
+  { id: 'leaves-front', pos: { x: HALL_CX, y: HALL_CY + sized(700) } },
 ];

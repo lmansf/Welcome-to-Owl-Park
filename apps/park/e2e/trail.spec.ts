@@ -56,10 +56,11 @@ test.describe('the feather trail (OP-307)', () => {
     await frames(page, 40);
     expect((await state(page)).signShown).toBeNull();
     // Out onto the floor, clear of every doorway, and back: now the knothole is named.
-    await page.evaluate(() => window.owlPark.walkTo(3200, 900));
-    await expect.poll(async () => (await state(page)).pos.y, { timeout: 15_000 }).toBeGreaterThan(880);
+    const up = doors.find((d) => d.id === 'up')!;
+    await page.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), { x: up.x, y: up.y + 570 });
+    await expect.poll(async () => (await state(page)).pos.y, { timeout: 15_000 }).toBeGreaterThan(up.y + 550);
     expect((await state(page)).signShown).toBeNull();
-    await page.evaluate(() => window.owlPark.walkTo(3200, 500));
+    await page.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), { x: up.x, y: up.y + 170 });
     await expect.poll(async () => (await state(page)).signShown, { timeout: 15_000 }).toBe('Up to the Treetop Commons');
   });
 

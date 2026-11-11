@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { doorTarget } from '../src/doorways';
 import { pointInPolygon } from '../src/geometry';
-import { GROWN_BASE, GROWN_WAYS, HALL_WAYS, RIM_LENGTH, WAY_STEP, rimAt } from '../src/hollowOval';
+import { GROWN_BASE, GROWN_WAYS, HALL_SCALE, HALL_WAYS, RIM_LENGTH, WAY_STEP, rimAt } from '../src/hollowOval';
 import { INTERACTABLES } from '../src/interactables';
 import { kitProblems } from '../src/kit';
 import { KIT_ART } from '../src/kitArt';
 import { GLIDE_SLOPE, MAX_AIR_Z } from '../src/flight';
 import { hopTier, perchTiers } from '../src/routes';
 import { inThermal, thermalProblems } from '../src/thermal';
+import { WALK_SPEED } from '../src/walk';
 import { idolRealms, mapOf, voteRealmAt } from '../src/room';
 import {
   GROWN_ART,
@@ -24,8 +25,11 @@ import {
   HALL_RY,
   HALL_W,
   OWL_ROOM_PX2,
+  ROOT_ART,
   ROOT_RUNS,
+  RUN_END_CLEAR,
   RUN_HALF,
+  RUN_START,
   RUN_Y,
   atFront,
   courseDoor,
@@ -275,6 +279,66 @@ describe('the Great Hollow (Nov 7; an oval, Nov 8)', () => {
         const near = Math.min(...things.map((t) => Math.hypot(t.x - x, t.y - y)));
         expect(near, `${x},${y}`).toBeLessThanOrEqual(560);
       }
+  });
+});
+
+describe('the Great Hollow, sized for the park that is open (OP-339)', () => {
+  /** How the hollow was first laid out and painted: the size its painting's places are measured against. */
+  const FIRST = { w: 6400, h: 2800, cx: 3200, cy: 1480, rx: 2950, ry: 1150 };
+
+  it('is still a town centre, and no longer most of nine of them: between four and six and a half times the floor 80 owls need', () => {
+    const floor = Math.PI * HALL_RX * HALL_RY;
+    const crowd = 80 * OWL_ROOM_PX2;
+    expect(floor / crowd).toBeGreaterThan(4);
+    expect(floor / crowd).toBeLessThan(6.5);
+  });
+
+  it('puts something to play within seven seconds’ walk of where the turnstiles land an owl', () => {
+    const landing = hall.spawns['from-lobby']!;
+    const play = hall.doors.filter((d) => d.to && (ROOMS[d.to.room]?.course !== undefined || d.to.room === 'arcade'));
+    expect(play.map((d) => d.id).sort()).toEqual(['course-grove', 'course-ink', 'course-market', 'down']);
+    const nearest = Math.min(...play.map((d) => Math.hypot(d.marker!.x - landing.x, d.marker!.y - landing.y)));
+    expect(nearest / WALK_SPEED).toBeLessThan(7);
+  });
+
+  it('keeps every place where the room’s painting has it: the room, the oval and each way are one size of the first layout', () => {
+    expect(HALL_W / FIRST.w).toBeCloseTo(HALL_SCALE, 3);
+    expect(hall.size.h / FIRST.h).toBeCloseTo(HALL_SCALE, 3);
+    expect(HALL_CX / FIRST.cx).toBeCloseTo(HALL_SCALE, 3);
+    expect(HALL_CY / FIRST.cy).toBeCloseTo(HALL_SCALE, 3);
+    expect(HALL_RX / FIRST.rx).toBeCloseTo(HALL_SCALE, 3);
+    expect(HALL_RY / FIRST.ry).toBeCloseTo(HALL_SCALE, 3);
+    // The knothole up is at the middle of the back wall, as painted; the ways an equal step apart round the rim.
+    expect(rimAt(wayS('up'))).toEqual({ x: HALL_CX, y: HALL_CY - HALL_RY });
+    expect(WAY_STEP * HALL_WAYS.length).toBeCloseTo(RIM_LENGTH, 6);
+    // What is not painted keeps the size owls and art are: an arrival stands as far in from its doorway as ever.
+    expect(Math.hypot(hall.spawns['from-lobby']!.x - HALL_CX, hall.spawns['from-lobby']!.y - (HALL_CY - HALL_RY))).toBeCloseTo(190, 0);
+  });
+
+  it('still has room for the root runs, the same length and the same glide apart, clear of the middle and of the rim', () => {
+    // From the middle out: clear floor to walk through between the two inner runs, and past each outer stump to the rim.
+    expect(RUN_START).toBeGreaterThanOrEqual(200);
+    for (const run of ROOT_RUNS) {
+      const xs = run.steps.map(([, x]) => Math.abs(x - HALL_CX));
+      // A run's roots stand 220 and 200 apart, whatever the hollow's size: their art is the size it is.
+      expect(xs[1]! - xs[0]!).toBe(220);
+      expect(xs[2]! - xs[1]!).toBe(200);
+      const art = KIT_ART[ROOT_ART.stump.key]!;
+      expect(xs[2]! + art.w / 2, run.level).toBeLessThanOrEqual(HALL_RX - RUN_END_CLEAR);
+    }
+    // The inner run's start to the outer run's: the glide between them is as long as it was.
+    const starts = (level: HallLevel) => Math.abs(ROOT_RUNS.find((r) => r.level === level)!.steps[0]![1] - HALL_CX);
+    expect(starts('market') - starts('grove')).toBe(1400);
+    expect(starts('glass') - starts('ink')).toBe(1400);
+  });
+
+  it('leaves each idol’s vote stone the room its art had: no leaf pile nearer than at the first size', () => {
+    const piles = INTERACTABLES.filter((t) => t.id.startsWith('m3-hall-leaves-'));
+    for (const idol of hall.idols ?? []) {
+      const stone = hall.doors.find((d) => d.id === idol.door)!.rect;
+      const mid = { x: stone.x + stone.w / 2, y: stone.y + stone.h / 2 };
+      for (const pile of piles) expect(Math.hypot(pile.pos.x - mid.x, pile.pos.y - mid.y), `${idol.door} and ${pile.id}`).toBeGreaterThanOrEqual(116);
+    }
   });
 });
 
