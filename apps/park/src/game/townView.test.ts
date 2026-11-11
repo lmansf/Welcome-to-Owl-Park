@@ -25,7 +25,7 @@ describe('the town view (OP-336)', () => {
   it('without it a screen shows one screen of a room down, as it always has', () => {
     expect(screenZoom(HALL, { w: 1440, h: 900 })).toBe(900 / ROOM_H);
     expect(shown({ w: 1440, h: 900 }, screenZoom(HALL, { w: 1440, h: 900 }))).toEqual({ w: 1440, h: 900 });
-    // A phone held upright sees 416 of the Great Hollow's 6,400 px across.
+    // A phone held upright sees 416 room px of the Great Hollow across, a sliver of it.
     expect(Math.round(shown({ w: 780, h: 1688 }, screenZoom(HALL, { w: 780, h: 1688 })).w)).toBe(416);
   });
 
@@ -102,7 +102,7 @@ describe('the opening look over the Great Hollow (OP-336)', () => {
       expect(view.w, s.name).toBeGreaterThanOrEqual(HALL.w - 1e-6);
       expect(view.h, s.name).toBeGreaterThanOrEqual(HALL.h - 1e-6);
     }
-    expect(wholeZoom(HALL, { w: 1440, h: 900 })).toBeCloseTo(0.225);
+    expect(wholeZoom(HALL, { w: 1440, h: 900 })).toBeCloseTo(1440 / HALL.w);
   });
 
   it('holds on the whole room, then eases in on the owl, never drawing back again', () => {
@@ -200,7 +200,7 @@ describe('the camera on an owl riding a thermal (OP-340)', () => {
       expect(look.x).toBe(HALL.w / 2);
     }
     // With no air asked for it is the opening look's: the whole room, about its middle.
-    expect(wholeLook(HALL, { w: 1440, h: 900 })).toEqual({ zoom: wholeZoom(HALL, { w: 1440, h: 900 }), x: 3200, y: 1400 });
+    expect(wholeLook(HALL, { w: 1440, h: 900 })).toEqual({ zoom: wholeZoom(HALL, { w: 1440, h: 900 }), x: HALL.w / 2, y: HALL.h / 2 });
     // An owl hovering at the top over the heart is on screen: drawn its height up the room from the heart.
     const heart = ROOMS['m3-hall']!.thermals![0]!.pos;
     expect(heart.y - top).toBeGreaterThan(-RISE_HEAD);

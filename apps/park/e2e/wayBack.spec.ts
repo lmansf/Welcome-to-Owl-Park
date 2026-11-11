@@ -12,13 +12,16 @@ import { frames, openPark, state, walkAndStop, walkToDoor } from './helpers';
  * key has been let go and pressed again.
  */
 
-/** The doorways' near edges (room px, rooms/hollowHall.ts and rooms/index.ts): an owl stopped before one stands below it. */
-const KNOTHOLE_FOOT = 370;
+/**
+ * The doorways' near edges (room px, rooms/hollowHall.ts and rooms/index.ts): an owl stopped before one
+ * stands below it. The knothole's is taken from the room (its doorway's middle, and half its depth).
+ */
+const KNOTHOLE_HALF = 40;
 const TURNSTILES_FOOT = 714;
 const NEST_DOOR_FOOT = 716;
 
 /** Where an owl lands by each doorway (the rooms' spawns), which it walks up from with the key held. */
-const BY_KNOTHOLE = 520;
+const KNOTHOLE_LANDING = 190;
 const BY_TURNSTILES = 800;
 const BY_NEST_DOOR = 752;
 
@@ -56,7 +59,9 @@ test.describe('the way back waits for a fresh push', () => {
     await walkAndStop(page, 2595, BY_TURNSTILES);
     await page.keyboard.down('ArrowUp');
     await inRoom(page, 'm3-hall');
-    await standsBefore(page, 'm3-hall', BY_KNOTHOLE, KNOTHOLE_FOOT);
+    await page.waitForFunction(() => window.owlPark.state()?.connected === true);
+    const knothole = (await state(page)).doors.find((d) => d.id === 'up')!;
+    await standsBefore(page, 'm3-hall', knothole.y + KNOTHOLE_LANDING, knothole.y + KNOTHOLE_HALF);
 
     // Let go: the owl stays where it stands, and the knothole is open to it again.
     await page.keyboard.up('ArrowUp');

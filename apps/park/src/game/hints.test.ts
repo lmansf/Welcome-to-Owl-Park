@@ -94,7 +94,8 @@ describe('hints seen from above (the Great Hollow, a huge oval of doorways)', ()
   const HALL = ROOMS['m3-hall']!;
   const doorways = HALL.doors.filter((d) => d.to).map((d) => doorHintTarget(d, null));
   // A phone held upright at the glass realm's doorway, at the back of the oval: about 500 room px across.
-  const phone: ViewRect = { x: 1730, y: 100, w: 500, h: 700 };
+  const glass = doorways.find((d) => d.id === 'to-glass')!;
+  const phone: ViewRect = { x: glass.x - 250, y: glass.y - 330, w: 500, h: 700 };
 
   it('points at the nearest two doorways off each side, not at every doorway round the room', () => {
     expect(doorways.filter((t) => t.x > phone.x + phone.w).length).toBeGreaterThan(4);
@@ -124,14 +125,14 @@ describe('one doorway sign at a time, seen from above (OP-309)', () => {
     expect(signFocus(doorways, HALL.spawns['from-party']!, null)).toBe('to-party');
     expect(signFocus(doorways, HALL.spawns['from-lobby']!, null)).toBe('up');
     expect(signFocus(doorways, HALL.spawns['from-under']!, null)).toBe('down');
-    expect(signFocus(doorways, { x: 3200, y: 1300 + SIGN_REACH + 200 }, null)).toBeNull();
+    expect(signFocus(doorways, { x: HALL.size.w / 2, y: HALL.spawns['from-lobby']!.y + SIGN_REACH + 500 }, null)).toBeNull();
   });
 
   it('shows the doorway a tap walk is going to, however far, over the one the owl passes', () => {
     const market = doorways.find((d) => d.id === 'to-market')!;
     expect(signFocus(doorways, HALL.spawns['from-party']!, { x: market.x - 60, y: market.y })).toBe('to-market');
     // A walk to open floor names no doorway: the nearest by the owl shows.
-    expect(signFocus(doorways, HALL.spawns['from-party']!, { x: 3200, y: 1480 })).toBe('to-party');
+    expect(signFocus(doorways, HALL.spawns['from-party']!, { x: HALL.size.w / 2, y: HALL.size.h / 2 })).toBe('to-party');
   });
 
   it('keeps the sign showing between two near doorways until another is clearly nearer, so they never flicker', () => {

@@ -26,6 +26,7 @@ import {
   rimNormal,
   angleAt,
   floorInset,
+  sized,
   GROWN_DROP,
   GROWN_OUT,
   GROWN_WAYS,
@@ -354,41 +355,36 @@ export interface RootRun {
 }
 
 /** West of the middle, then east, each from the middle outward: the inner west run glides to the outer one, the inner east run to the outer east one. */
+/**
+ * Where the runs stand across the hollow, out from its middle (room px). The pieces are the size their
+ * art is and the glides between them are flown, not painted, so a run and the gap to the next keep
+ * their lengths at any size of the hollow: a fallen root from RUN_START out, its knot and its stump, a
+ * glide's gap, and the next run the same. What changes with the hollow is only how far from the
+ * middle they start: as far as they always did where there is room (430), and nearer in a smaller
+ * hollow, so the outer stump's art still stands RUN_END_CLEAR in from the rim.
+ */
+export const RUN_END_CLEAR = 100;
+/** A run's pieces from its start: the log's middle, the knot's, the stump's; and from one run's start to the next's. */
+const RUN_LOG = 150;
+const RUN_KNOT = 370;
+const RUN_STUMP = 570;
+const RUN_NEXT = 1400;
+/** How far past its middle the outer stump's art reaches. */
+const STUMP_ART_HALF = 160;
+export const RUN_START = Math.min(430, Math.floor((HALL_RX - RUN_END_CLEAR - STUMP_ART_HALF - RUN_NEXT - RUN_STUMP) / 10) * 10);
+
+/** One run's roots, `start` out from the middle on the side `way` (1 east, -1 west). */
+const runSteps = (start: number, way: 1 | -1): RootRun['steps'] => [
+  ['log', HALL_CX + way * (start + RUN_LOG)],
+  ['knot', HALL_CX + way * (start + RUN_KNOT)],
+  ['stump', HALL_CX + way * (start + RUN_STUMP)],
+];
+
 export const ROOT_RUNS: readonly RootRun[] = [
-  {
-    level: 'ink',
-    flip: true,
-    steps: [
-      ['log', 2620],
-      ['knot', 2400],
-      ['stump', 2200],
-    ],
-  },
-  {
-    level: 'glass',
-    flip: true,
-    steps: [
-      ['log', 1220],
-      ['knot', 1000],
-      ['stump', 800],
-    ],
-  },
-  {
-    level: 'grove',
-    steps: [
-      ['log', 3780],
-      ['knot', 4000],
-      ['stump', 4200],
-    ],
-  },
-  {
-    level: 'market',
-    steps: [
-      ['log', 5180],
-      ['knot', 5400],
-      ['stump', 5600],
-    ],
-  },
+  { level: 'ink', flip: true, steps: runSteps(RUN_START, -1) },
+  { level: 'glass', flip: true, steps: runSteps(RUN_START + RUN_NEXT, -1) },
+  { level: 'grove', steps: runSteps(RUN_START, 1) },
+  { level: 'market', steps: runSteps(RUN_START + RUN_NEXT, 1) },
 ];
 
 export const rootId = (level: HallLevel, kind: RootKind) => `root-${level}-${kind}`;
@@ -451,8 +447,8 @@ export const HALL_BOWL: RoomBowl = {
   face: WALL_FACE,
   lip: WALL_LIP,
   pools: [
-    ...HALL_COMMONS.map((c) => ({ ...ringAt(commonsS(c.level), 0.84), r: 900, color: c.colour })),
-    { ...HALL_HEART, r: 1100, color: 0xffe2a8 },
+    ...HALL_COMMONS.map((c) => ({ ...ringAt(commonsS(c.level), 0.84), r: sized(900), color: c.colour })),
+    { ...HALL_HEART, r: sized(1100), color: 0xffe2a8 },
   ],
   gaps: HALL_WAYS.filter((id) => atFront(id) && id !== 'down' && !HALL_GROWN.includes(id)).map((id) => ({ ...wayAt(id), w: 220 })),
 };
@@ -466,23 +462,36 @@ export function clearOfRoots(p: Vec2): boolean {
   });
 }
 
+/** The first of some places for a hiding spot that no root's art hides. */
+const clearSpot = (...places: Vec2[]): Vec2 => places.find(clearOfRoots) ?? places[0]!;
+
 /**
  * Hiding spots round the rim between the ways, out across each plaza and round the heart, so a find
  * can be anywhere a crowd stands.
  */
 const SPOTS: Vec2[] = [
   // A third of the way on from each way (clear of the idols midway between a Commons' two), or a third
-  // of the way back from the next where the roots across the middle would hide it.
-  ...HALL_WAYS.map((id) => [rimAt(wayS(id) + WAY_STEP * 0.3, 260), rimAt(wayS(id) + WAY_STEP * 0.7, 260)].find(clearOfRoots)!),
-  ...HALL_COMMONS.flatMap((c) => [ringAt(commonsS(c.level) - 300, 0.55), ringAt(commonsS(c.level) + 300, 0.55)]),
-  { x: HALL_CX - 420, y: HALL_CY - 520 },
-  { x: HALL_CX + 420, y: HALL_CY - 520 },
-  { x: HALL_CX, y: HALL_CY + 420 },
+  // of the way back from the next where the roots across the middle would hide it. Where a run's outer
+  // stump stands close to the rim (a smaller hollow), nearer the wall than its art reaches, or well out past it.
+  ...HALL_WAYS.map((id) =>
+    clearSpot(
+      rimAt(wayS(id) + WAY_STEP * 0.3, 260),
+      rimAt(wayS(id) + WAY_STEP * 0.7, 260),
+      rimAt(wayS(id) + WAY_STEP * 0.3, 110),
+      rimAt(wayS(id) + WAY_STEP * 0.7, 110),
+      rimAt(wayS(id) + WAY_STEP * 0.5, 520),
+    ),
+  ),
+  // Either side of each Commons' middle, out toward its plaza, or nearer in or further out where a root would hide it.
+  ...HALL_COMMONS.flatMap((c) => [-300, 300].map((along) => clearSpot(...[0.55, 0.42, 0.68].map((ring) => ringAt(commonsS(c.level) + along, ring))))),
+  { x: HALL_CX - sized(420), y: HALL_CY - sized(520) },
+  { x: HALL_CX + sized(420), y: HALL_CY - sized(520) },
+  { x: HALL_CX, y: HALL_CY + sized(420) },
 ];
 
 /** Where owls arrive in the hollow: the middle of the floor, and in front of each way that leads somewhere. */
 const SPAWNS: Record<string, Vec2> = {
-  default: { x: HALL_CX, y: HALL_CY + 260 },
+  default: { x: HALL_CX, y: HALL_CY + sized(260) },
   'from-lobby': wayAt('up', ARRIVE),
   'from-party': wayAt('to-party', arriveAt('to-party')),
   'from-under': wayAt('down', 330),
