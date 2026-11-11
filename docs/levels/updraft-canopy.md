@@ -3,7 +3,7 @@
 - Status: PLANNED (OP-226). A level plan: nothing here is built.
 - Verified against: main 503b9bf (2026-11-02); every hop re-measured with both flaps (the triple jump, OP-239) on 2026-11-04; eased for younger players and played again by the kid bots on 2026-11-10 (section 10), against main 048655a
 - Code: none yet. Built on `packages/shared/src/jump.ts`, `flight.ts`, `routes.ts` (`hopTier`), `perches.ts` (`MAX_PERCH_TOP`), `packages/shared/src/room.ts` (`ROOM_W`, `ROOM_MAX_W`, a door's `top`) and `packages/shared/rooms/index.ts` (`treeLedge`, `TREE_GROUND`)
-- Tickets: OP-226, OP-239 (the triple jump: re-measured, section 9); eased for younger players (section 10; no ticket yet)
+- Tickets: OP-226, OP-239 (the triple jump: re-measured, section 9); OP-332 (eased for younger players, section 10)
 - Related: `docs/levels/README.md` (the shared rules, the physics and how to read the tables), `docs/MAP.md` (the tree's rooms, ledges and doors)
 
 The Treehouse Clearing's course, after its Commons: up through the fern floor, inside the hollow
