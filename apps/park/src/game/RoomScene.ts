@@ -140,6 +140,7 @@ import {
   FROM_STUMP_SPAWN,
   STUMP_ROOM,
   isPartyRoom,
+  throughGate as walkedThroughGate,
 } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { ActivityLink, ActivityPushes, CourseLink, NestLink, NestPushes, NestSeen, PuzzleArgs, PuzzleReply, QuestLink, QuestPushes, QuestReply } from '../collect/service';
@@ -202,13 +203,14 @@ import { OWL_SCALE, OWL_W, Owl } from './Owl';
 import { QuestItemMarker, SpotGlow } from './QuestItem';
 import { PuzzleMarker, markKey, type PuzzleMarkKind, type PuzzleMarkLook } from './PuzzleMarker';
 import { StreetDoors, addNestsSign, addParkSign } from './street';
-import { cameraBounds, followLead } from './hudInset';
+import { cameraBounds, followLead, type CoveredEdges } from './hudInset';
+import { lookBetween, openingAt, restAt, screenZoom, townZoom, wholeZoom, type Look } from './townView';
 import { SizeLabels } from './sizeLabels';
 import { DoorSigns } from './doorSigns';
 import { sideEdges } from './sideEdges';
 import { drawWalkFloor } from './walkFloor';
-import { BOWL_SHADOW, drawBowl } from './bowlView';
-import { drawArtTrial } from './artTrial';
+import { BOWL_BEYOND, BOWL_SHADOW, drawBowl } from './bowlView';
+import { artTrialFor, drawArtTrial } from './artTrial';
 import { drawEdges } from './edgeView';
 import { drawSkirts } from './plazaSkirt';
 import { setVignette } from './vignette';
@@ -602,6 +604,13 @@ export class RoomScene extends Phaser.Scene {
   private decorSpot: NestSpotId = 'f1';
   /** CSS pixels the Decorate sheet covers at the bottom of the screen. */
   private sheetPx = 0;
+  /** The town view (OP-336, `?town=1`, townView.ts): a wider camera in a room seen from above, and the opening look over the Great Hollow. */
+  private readonly town = flagOn('town');
+  /**
+   * The opening look under way (townView.ts): when the room came in, and when the player first moved
+   * (which ends it early); null when there is none. The camera is set each frame while it lasts.
+   */
+  private opening: { at: number; cutAt: number | null; covered: CoveredEdges } | null = null;
   /** The Decorate sheet's pictures of pieces, drawn once each from their textures. */
   private readonly thumbs = new Map<string, string>();
   /** How sharp this room's art is drawn (pixels per room pixel at most): a nest's furniture loads at it too. */
@@ -653,6 +662,7 @@ export class RoomScene extends Phaser.Scene {
     this.voting = false;
     this.pendingVote = false;
     this.pieces = {};
+    this.opening = null;
     this.cameFrom = data.from;
     this.backWaiting = data.from !== undefined;
     this.restsThen = data.rests ?? this.keys?.rests() ?? 0;
@@ -1156,6 +1166,7 @@ export class RoomScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());
     this.cameras.main.fadeIn(350, 12, 30, 54);
     this.built = true;
+    this.startOpening(this.registry.get('spawnName') as string | undefined);
     // The feather trail (OP-307): the doorway the owl came in by counts as tried, and the feathers come out once the room is in.
     if (!room.course) {
       this.trail = new FeatherTrail(this, () => this.calm());
@@ -1179,6 +1190,7 @@ export class RoomScene extends Phaser.Scene {
     this.tickTrail(now);
     this.camAt.x = this.me.x;
     this.camAt.y = this.me.y - this.flier.air.z;
+    this.frameOpening(now);
     // A leg of a way around a bend done (OP-148): the next sets off at once, and the walk goes on.
     if (finished && this.wayTo && this.walkOn()) finished = false;
     // At what a tap asked for: nothing left for a jump to carry on to (OP-084).
@@ -3173,6 +3185,8 @@ export class RoomScene extends Phaser.Scene {
    */
   walkTo(target: Vec2, fromKeys = false, goal: Vec2 | null = fromKeys ? null : target): boolean {
     if (!this.built) return false;
+    // A walk asked for by a tap is the player's first move: the opening look ends (townView.ts). Held keys end it in frameOpening.
+    if (!fromKeys) this.cutOpening();
     const f = this.footingNow();
     let to = resolveTarget({ ...this.me.pos }, target, f.walkable, f.shut);
     // Kept for a jump to carry on (OP-084): a perch's top asked for from the floor stops at its face.
@@ -4056,18 +4070,99 @@ export class RoomScene extends Phaser.Scene {
     }
     const h = Math.max(1, height - Math.round(this.sheetPx * this.cfg.pixelRatio));
     cam.setViewport(0, 0, width, h);
+    // The opening look (townView.ts) sets the camera itself each frame until it is over.
+    if (this.opening) {
+      this.opening.covered = this.hud.coveredEdges();
+      return this.frameOpening(Date.now());
+    }
     // Cover the room across, and a screen of it down: a room taller than a screen (the Great Hollow's
     // plazas) scrolls down under the camera as it does along, following the owl, its owls no smaller.
-    cam.setZoom(Math.max(width / this.room.size.w, h / Math.min(this.room.size.h, ROOM_H)));
+    // The town view (OP-336) draws back from that in a room seen from above.
+    cam.setZoom(this.viewZoom({ w: width, h }));
     // Doorways, landings, hatches and leaf piles at the room's edges can scroll out from under the HUD,
     // seen from the side (OP-278) or from above (OP-292); the
     // Decorate sheet's own view stops above it already.
-    const covered = this.sheetPx > 0 ? { top: 0, bottom: 0 } : this.hud.coveredEdges();
+    const covered = this.sheetPx > 0 ? { top: 0, bottom: 0 } : this.viewEdges(this.hud.coveredEdges());
     const b = cameraBounds(this.room.size, covered, this.cfg.pixelRatio / cam.zoom);
     cam.setBounds(b.x, b.y, b.w, b.h);
     // A room taller than a screen, seen from above: the owl stands lower on screen, the back of the room in view (hudInset.ts).
     cam.setFollowOffset(0, followLead(this.room.size.h, seenFromSide(this.room), h / cam.zoom, ROOM_H));
     for (const { t, img } of this.parallax) this.placeParallax(t, img);
+  }
+
+  /** Whether this room has the town view (OP-336): the flag is on and the room is seen from above. */
+  private townViewed(): boolean {
+    return this.town && !seenFromSide(this.room);
+  }
+
+  /**
+   * How far past the room's top and bottom the camera may scroll for what the HUD covers (hudInset.ts).
+   * The town view shows a room seen from above from its back wall down, often its whole depth, so there
+   * the camera stays on the room at the top (nothing an owl uses is up the back wall, and the screen
+   * would show a bare band over it); the floor's front edge still comes out from under the HUD.
+   */
+  private viewEdges(covered: CoveredEdges): CoveredEdges {
+    return this.townViewed() ? { top: 0, bottom: covered.bottom } : covered;
+  }
+
+  /** The camera's zoom while it follows the owl on a screen this size (the game's own pixels). */
+  private viewZoom(screen: { w: number; h: number }): number {
+    return this.townViewed() ? townZoom(this.room.size, screen, this.cfg.pixelRatio) : screenZoom(this.room.size, screen);
+  }
+
+  /**
+   * The opening look (OP-336, townView.ts): through the turnstiles the Great Hollow opens on its whole
+   * oval, holds a moment and eases in on the owl. Only an oval read whole has one (a room with a bowl),
+   * and only for an owl that walked in through the gate, with the town view on.
+   */
+  private startOpening(spawn: string | undefined): void {
+    if (!this.townViewed() || !this.room.bowl || !walkedThroughGate(this.room.id, spawn)) return;
+    const cam = this.cameras.main;
+    this.opening = { at: Date.now(), cutAt: null, covered: this.hud.coveredEdges() };
+    cam.stopFollow();
+    cam.removeBounds();
+    // Past the room's edges the screen is the dark of the tree's wood, as round the oval itself.
+    cam.setBackgroundColor(artTrialFor(globalThis.location?.search ?? '', this.room.id)?.beyond ?? BOWL_BEYOND);
+    this.frameOpening(this.opening.at);
+  }
+
+  /** The player's own first move ends the opening look: a walk a tap asked for (walkTo), a jump, or the keys pushed afresh since the doorway (frameOpening). */
+  private cutOpening(): void {
+    if (this.opening && this.opening.cutAt === null) this.opening.cutAt = Date.now() - this.opening.at;
+  }
+
+  /** The owl's own view just now: the zoom it is followed at, and where that camera rests (`covered`: what the HUD covers, hudInset.ts). */
+  private nearLook(covered: CoveredEdges): Look {
+    const { width, height } = this.scale.gameSize;
+    const zoom = this.viewZoom({ w: width, h: height });
+    const view = { w: width / zoom, h: height / zoom };
+    const bounds = cameraBounds(this.room.size, this.viewEdges(covered), this.cfg.pixelRatio / zoom);
+    const at = this.followed();
+    const lead = followLead(this.room.size.h, seenFromSide(this.room), view.h, ROOM_H);
+    return { zoom, ...restAt({ x: at.x, y: at.y - lead }, view, bounds) };
+  }
+
+  /** One frame of the opening look; over, the camera follows the owl again as in any room. */
+  private frameOpening(now: number): void {
+    const o = this.opening;
+    if (!o) return;
+    const cam = this.cameras.main;
+    // Keys held since before the doorway are not a move (they brought the owl here); let go and pushed again, they are.
+    const pushed = (this.keys?.direction() ?? null) !== null && (this.keys?.rests() ?? 0) !== this.restsThen;
+    if (pushed || this.flier.air.s !== GROUNDED) this.cutOpening();
+    const k = openingAt(now - o.at, o.cutAt);
+    if (k <= 0) {
+      this.opening = null;
+      cam.setBackgroundColor('rgba(0,0,0,0)');
+      this.fitCamera();
+      cam.startFollow(this.followed(), true, 0.12, 0.12);
+      return;
+    }
+    const { width, height } = this.scale.gameSize;
+    const whole: Look = { zoom: wholeZoom(this.room.size, { w: width, h: height }), x: this.room.size.w / 2, y: this.room.size.h / 2 };
+    const look = lookBetween(this.nearLook(o.covered), whole, k);
+    cam.setZoom(look.zoom);
+    cam.centerOn(look.x, look.y);
   }
 
   private drawDebug(): void {

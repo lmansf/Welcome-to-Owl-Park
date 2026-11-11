@@ -24,9 +24,12 @@ export const BOWL_SCALE = 1 / 3;
 /** How thick the wall's top is, round the rim (room px), and how much more it shows at the very front. */
 export const CAP = 46;
 
+/** The dark of the tree's wood past the wall, round the whole oval: what a camera drawn back past the room's edges shows too (townView.ts). */
+export const BOWL_BEYOND = '#140d08';
+
 /** The palette: the tree's inner wood, warm where lit. */
 const C = {
-  beyond: '#140d08',
+  beyond: BOWL_BEYOND,
   capLit: '#8c6640',
   capShade: '#5a3d24',
   faceTop: '#6b4a2e',
