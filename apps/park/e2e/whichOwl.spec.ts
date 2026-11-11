@@ -22,6 +22,67 @@ async function openHome(page: Page): Promise<void> {
   await page.waitForFunction(() => window.owlPark?.home?.().shown === true, null, { timeout: 20_000 });
 }
 
+/**
+ * OP-325: at the reveal the owl is drawn on the game canvas, under the HUD, in the stage's frame. Nothing
+ * the HUD lays over that frame may be solid (the quiz's own background hid the owl), and the canvas
+ * there must hold the owl: enough of its pixels differ from the builder scene's plain dusk backdrop.
+ */
+async function expectOwlShown(page: Page): Promise<void> {
+  const stage = page.locator('[data-wo-stage]');
+  await expect(stage).toBeVisible();
+  const solid = await stage.evaluate((el) => {
+    const alpha = (c: string) => {
+      const m = c.match(/rgba?\(([^)]+)\)/);
+      if (!m) return 0;
+      const parts = m[1]!.split(/[\s,/]+/).filter(Boolean);
+      return parts.length > 3 ? Number(parts[3]) : 1;
+    };
+    const r = el.getBoundingClientRect();
+    const over: string[] = [];
+    for (const e of document.elementsFromPoint(r.left + r.width / 2, r.top + r.height / 2)) {
+      if (e instanceof HTMLCanvasElement) break;
+      const cs = getComputedStyle(e);
+      const colours = [cs.backgroundColor, ...(cs.backgroundImage.match(/rgba?\([^)]+\)/g) ?? [])];
+      if (colours.some((c) => alpha(c) >= 0.6)) over.push(`${e.tagName.toLowerCase()}.${(e as HTMLElement).className}`);
+    }
+    return over;
+  });
+  expect(solid).toEqual([]);
+  const box = (await stage.boundingBox())!;
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          (r) =>
+            new Promise<number>((done) => {
+              const game = window.owlPark.game;
+              const k = game.canvas.width / game.canvas.clientWidth;
+              game.renderer.snapshotArea(Math.round(r.x * k), Math.round(r.y * k), Math.max(1, Math.round(r.width * k)), Math.max(1, Math.round(r.height * k)), (shot) => {
+                const img = shot as HTMLImageElement;
+                const c = document.createElement('canvas');
+                c.width = img.width;
+                c.height = img.height;
+                const g = c.getContext('2d');
+                if (!g || !c.width || !c.height) return done(0);
+                g.drawImage(img, 0, 0);
+                const d = g.getImageData(0, 0, c.width, c.height).data;
+                // The backdrop is #0C1E36; its glow and floor ellipse stay close to it.
+                let owl = 0;
+                let all = 0;
+                for (let i = 0; i < d.length; i += 16) {
+                  all++;
+                  if (Math.abs(d[i]! - 12) + Math.abs(d[i + 1]! - 30) + Math.abs(d[i + 2]! - 54) > 90) owl++;
+                }
+                done(all ? owl / all : 0);
+              });
+            }),
+          box,
+        ),
+      { timeout: 10_000 },
+    )
+    .toBeGreaterThan(0.04);
+}
+
 /** Eight cards, each answered with the picture at `pick`; returns the cards' ids in the order shown. */
 async function answerCards(page: Page, pick: number, isMobile: boolean): Promise<string[]> {
   const ids: string[] = [];
@@ -73,6 +134,7 @@ test.describe('which owl are you (OP-076)', () => {
     expect(await page.evaluate(() => window.owlPark.home().loggedIn)).toBe(true);
     expect(await storedLook(page)).toMatchObject({ body: '#3E6B48', species });
     expect(await page.evaluate(() => window.owlPark.game.scene.isActive('builder'))).toBe(true);
+    await expectOwlShown(page);
     await expect(page.locator('[data-wo-keep]')).toBeFocused();
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-which-owl-reveal.png` });
 
@@ -135,6 +197,7 @@ test.describe('which owl are you (OP-076)', () => {
     await retake();
     await tap(page, '[data-wo-colours="dusk"]', isMobile);
     const species = (await page.locator('[data-wo-result]').getAttribute('data-wo-result'))!;
+    await expectOwlShown(page);
     await tap(page, '[data-wo-keep]', isMobile);
     await expect(quiz(page)).toBeHidden();
     await expect.poll(async () => (await state(page)).look.body).toBe('#2F3E5C');
