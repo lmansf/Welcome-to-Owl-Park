@@ -109,8 +109,21 @@ describe('Brushstroke Bridges (OP-235)', () => {
     for (const id of ids) {
       for (const [ledge, tier] of Object.entries(tiersFrom(id))) expect(tier, `${id} ${ledge}`).not.toBeNull();
     }
-    // With no ink at all the cliffs, the crossing to the falls and the high ledges of the scroll are out of reach.
-    expect(tiersFrom('brush-1', false)).toMatchObject({ c1: null, c2: null, c3: null, reed1: null });
+    // The first screen is laid for a newcomer's plain plays (OP-360). From the door, with the ink, its way
+    // across is a stair any beginner climbs (tier 1: single jumps and walks), and the paper cliffs over it
+    // take the flaps (or the rising air beside them).
+    const garden = ROOMS['brush-1']!;
+    const fromTheDoor = (ink: boolean) => {
+      const strokes = new Set(allStrokes(garden.brushStones).map((s) => s.id));
+      return perchTiers({ ...garden, walkable: [safeFloor(garden)[0]!], perches: (garden.perches ?? []).filter((p) => ink || !strokes.has(p.id)) });
+    };
+    expect(fromTheDoor(true)).toMatchObject({ g1: 1, k1: 1, 'k1~': 1, isle1: 1, k2: 1, 'k2~': 1, k3: 1, 'k3~': 1, isle2: 1, c1: 2, c2: 2 });
+    // With no ink at all nothing past the first stone is reached from the door short of a glide, and
+    // the seal's ledge, from either bank, not at all: the bridges are the way across for an owl that
+    // does not fly well yet, and the upward stroke the way to the seal for every owl.
+    expect(fromTheDoor(false)).toMatchObject({ k1: 1, isle1: 3, k2: 3, k3: 3, isle2: 3, c1: 3, c2: 3, c3: null });
+    expect(tiersFrom('brush-1', false)).toMatchObject({ c3: null });
+    // Past it, with no ink the crossing to the falls and the high ledges of the scroll are out of reach.
     expect(tiersFrom('brush-2', false)).toMatchObject({ post: null, r2: null, k9: null, k10: null, 'falls-ledge': null });
     // On the scroll the treads are the way up; the cloud banks that stop the long glides past k14's and
     // k18's bridges are hazards in the air, which the route check does not count (the plan's section 5).

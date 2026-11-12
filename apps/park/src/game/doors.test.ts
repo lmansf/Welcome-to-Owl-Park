@@ -1,7 +1,7 @@
 import { STREET_ROOM, TREE_STREET_ROOM, type DoorDef } from '@owl-park/shared';
 import { describe, expect, it } from 'vitest';
 import { NEST_ROOM, ROOMS } from '../rooms';
-import { AHEAD_PX, CARRIED_COS, DOOR_AIM_PX, UP_GRACE_MS, WAY_DOOR_PX, backWaits, carriedIn, doorwayUnder, doorwaysOff, roomsAhead, stillCarried, takesDoorway, upCounts } from './doors';
+import { AHEAD_PX, CARRIED_COS, DOOR_AIM_PX, UP_GRACE_MS, WAY_DOOR_PX, backWaits, carriedIn, doorwayUnder, doorwaysOff, heldAtFall, roomsAhead, stillCarried, stillHeldSinceFall, takesDoorway, upCounts } from './doors';
 
 const door = { x: 1700, y: 610, w: 130, h: 90 };
 
@@ -84,6 +84,36 @@ describe('carriedIn: a direction held across a change of view is not a walk (OP-
     expect(stillCarried(null, up)).toBeNull();
     // The 45 degrees between two neighbouring ways of the keys is past the turn a carried direction allows.
     expect(Math.SQRT1_2).toBeLessThan(CARRIED_COS);
+  });
+});
+
+describe('heldAtFall: a push held as a fall puts the owl back is not a walk (OP-360)', () => {
+  const right = { x: 1, y: 0 };
+  const left = { x: -1, y: 0 };
+
+  it('is the push held at the fall, with how often the keys had been let go by then; nothing with nothing held', () => {
+    expect(heldAtFall(right, 3)).toEqual({ dir: right, rests: 3 });
+    expect(heldAtFall(null, 3)).toBeNull();
+    // Its own copy: the keys' direction is theirs to change.
+    const held = { x: 1, y: 0 };
+    const then = heldAtFall(held, 0)!;
+    held.x = -1;
+    expect(then.dir).toEqual(right);
+  });
+
+  it('still holds while the same push is held, a wavering thumbstick included', () => {
+    const then = heldAtFall(right, 3);
+    expect(stillHeldSinceFall(then, right, 3)).toBe(true);
+    expect(stillHeldSinceFall(then, { x: Math.cos(0.3), y: Math.sin(0.3) }, 3)).toBe(true);
+  });
+
+  it('is over once the push is let go, was let go and pressed again between two looks, or points another way', () => {
+    const then = heldAtFall(right, 3);
+    expect(stillHeldSinceFall(then, null, 3)).toBe(false);
+    expect(stillHeldSinceFall(then, right, 4)).toBe(false);
+    expect(stillHeldSinceFall(then, left, 3)).toBe(false);
+    expect(stillHeldSinceFall(then, { x: Math.SQRT1_2, y: -Math.SQRT1_2 }, 3)).toBe(false);
+    expect(stillHeldSinceFall(null, right, 3)).toBe(false);
   });
 });
 

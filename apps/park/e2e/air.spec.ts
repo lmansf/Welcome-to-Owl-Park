@@ -264,3 +264,62 @@ test.describe('the owl’s flight at any frame rate (OP-353)', () => {
     expect(slow).toEqual({ falls: 1, dashes: 1, x: 760 });
   });
 });
+
+/** The ink course's first screen (packages/shared/rooms/brushstrokeBridges.ts): where the pond's water lies, and the door. */
+const POND = { x0: 580, x1: 3540 };
+
+test.describe('the ink course’s first screen, played the plain ways (OP-360)', () => {
+  test('from the door, one jump before the water and the walking key held east take the owl across the pond with no fall', async ({ page }) => {
+    test.slow(); // three screens walked, every frame stepped by hand
+    // The play log's first phone runs of this screen (Nov 12) fell at every crossing. As it is laid
+    // now, the jump onto the first stone is the only press the way across asks for: each bridge runs
+    // onto ground at its own height, and each stone starts where the walk before it ends. On a clock
+    // the test moves, at twenty frames a second.
+    await holdTheClock(page);
+    await openOnTheHeldClock(page, { room: 'brush-1', spawn: 'from-gate', kit: '1' });
+    await until(page, 'the owl at the door, the course counting its falls', async () => { const s = await now(page); return s.air.s === 0 && s.course?.falls === 0; });
+    await page.keyboard.down('ArrowRight');
+    let jumped = false;
+    let across = false;
+    for (let t = 0; t < 30_000 && !across; t += 50) {
+      await page.clock.fastForward(50);
+      const s = await now(page);
+      expect(s.course?.falls ?? 0, `a fall on the way across: ${JSON.stringify({ pos: s.pos, air: s.air })}`).toBe(0);
+      // From the bank's floor, a few strides short of the water: the jump passes over the first stone, which paints its bridge.
+      if (!jumped && s.pos.x >= POND.x0 - 140) {
+        expect(await page.evaluate(() => window.owlPark.jump(250))).toBe(true);
+        jumped = true;
+      }
+      across = s.pos.x >= POND.x1 + 60 && s.air.s === 0 && s.air.z === 0;
+    }
+    await page.keyboard.up('ArrowRight');
+    expect(across, `not across the pond: ${await seen(page)}`).toBe(true);
+    expect((await now(page)).course?.falls ?? 0).toBe(0);
+    await shot(page, 'ink-across');
+  });
+
+  test('a walking key held through a fall does not walk the owl off again: it stands where it is put until the key is pushed afresh', async ({ page }) => {
+    test.slow(); // every frame stepped by hand
+    await holdTheClock(page);
+    await openOnTheHeldClock(page, { room: 'brush-1', spawn: 'from-gate', kit: '1' });
+    await until(page, 'the owl at the door, the course counting its falls', async () => { const s = await now(page); return s.air.s === 0 && s.course?.falls === 0; });
+    const door = (await now(page)).pos;
+    // East along the bank with the walking key alone: into the water, the one mistake the screen leaves a walker.
+    await page.keyboard.down('ArrowRight');
+    await until(page, 'the fall in the pond', async () => ((await now(page)).course?.falls ?? 0) === 1);
+    await until(page, 'the owl put back at the door', async () => Math.abs((await now(page)).pos.x - door.x) < 2);
+    // The key is still down. A second and a half of frames: the owl has not moved, and has not fallen again.
+    for (let t = 0; t < 1500; t += 50) {
+      await page.clock.fastForward(50);
+      const s = await now(page);
+      expect(Math.abs(s.pos.x - door.x), `walked off with the key held since the fall: ${JSON.stringify(s.pos)}`).toBeLessThan(2);
+      expect(s.course?.falls).toBe(1);
+    }
+    // Let go and pushed again, it walks.
+    await page.keyboard.up('ArrowRight');
+    await page.clock.fastForward(50);
+    await page.keyboard.down('ArrowRight');
+    await until(page, 'the owl walking east again', async () => (await now(page)).pos.x > door.x + 40);
+    await page.keyboard.up('ArrowRight');
+  });
+});

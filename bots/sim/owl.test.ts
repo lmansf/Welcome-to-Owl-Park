@@ -60,7 +60,8 @@ describe('the bot owl', () => {
 
   it('falls into a course’s pit, as the game sends the owl back to its bench', () => {
     const pit = brush.room.course!.pits![0]!;
-    const x = (pit[0]!.x + pit[1]!.x) / 2;
+    // Over open water just inside the pond's near edge, clear of its rocks and islands (the first stone's bridge is not painted).
+    const x = pit[0]!.x + 60;
     const o = owlAt(x, 40, 100_000);
     let fell = false;
     for (let i = 0; i < 2 * STEPS_PER_S && !fell; i++) fell = stepOwl(brush, o, { way: 0, pressed: false, held: false }) === 'fall';

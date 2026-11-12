@@ -7,11 +7,20 @@
  * the rain) from the landing, greys over its last BRUSH_FADE_MS, then is gone, and an owl standing on
  * it falls. Landing on the stone again paints it afresh.
  *
+ * A pass over a stone paints it too (OP-360, brushTouch): an owl in the air over the stone, no higher
+ * than BRUSH_SWEEP above its top. A jump that clears a stone lands on the bridge it has just painted,
+ * where it used to land in the water beside a stone it had reached (the play log, Nov 12: a jump from
+ * a ledge's very edge carries 35 to 70 px past a stone 140 px wide).
+ *
+ * TODO-DOCS (OP-360): docs/levels/brushstroke-bridges.md, section 2 (what paints a stone), and its
+ * act 1 tables (the first screen as laid again).
+ *
  * Every stroke a stone can paint is a perch of its room, declared in the room's data (brushPerches), so
  * the room server believes an owl standing on one while it lasts. Each page decides what is painted
  * for itself: by its own owl's landings and by the other owls it sees land on a stone, so every owl in
  * the room sees the bridges the others paint and none is seen standing on air (livePerches).
  */
+import { MAX_RISE } from './flight';
 import { MAX_PERCH_TOP, type Perch } from './perches';
 
 /** Which way a stone paints: across to the right, back to the left, or up. */
@@ -102,6 +111,44 @@ export function inkLeft(stone: Pick<BrushStone, 'ms'>, paintedAt: number | undef
 /** The stone an owl stands on: standing (not in the air) at its top, over it. */
 export function stoneUnder(stones: readonly BrushStone[] | undefined, x: number, z: number): BrushStone | undefined {
   return (stones ?? []).find((s) => x >= s.x0 && x <= s.x1 && Math.abs(z - s.top) <= 0.5);
+}
+
+/**
+ * How far over a stone's top an owl in the air still paints it as it passes (room px): as high as a
+ * jump with every flap rises (MAX_RISE), so no jump taken from the stone's own height, however it is
+ * flapped, goes over the stone unpainted. A glide from far above it paints nothing.
+ */
+export const BRUSH_SWEEP = MAX_RISE;
+
+/** What an owl touches of a room's stones where it is: the stone it stands on, or the one it is passing over in the air; none otherwise. */
+export interface BrushTouch {
+  /** The stone's id, or null for none. */
+  stone: string | null;
+  /** Standing on it (true), or in the air over it (false). */
+  standing: boolean;
+}
+
+export const NO_TOUCH: BrushTouch = { stone: null, standing: false };
+
+/** The stone an owl at `x`, `z` up touches: standing on it, or in the air over it at its top or up to BRUSH_SWEEP above. */
+export function brushTouch(stones: readonly BrushStone[] | undefined, x: number, z: number, grounded: boolean): BrushTouch {
+  if (grounded) {
+    const under = stoneUnder(stones, x, z);
+    return under ? { stone: under.id, standing: true } : NO_TOUCH;
+  }
+  const over = (stones ?? []).find((s) => x >= s.x0 && x <= s.x1 && z >= s.top && z - s.top <= BRUSH_SWEEP);
+  return over ? { stone: over.id, standing: false } : NO_TOUCH;
+}
+
+/**
+ * Whether what an owl touches now paints its stone afresh, given what it touched a moment before: a
+ * landing on the stone (it was not standing on it), or coming over it in the air (it was neither on
+ * it nor over it). A jump up off a stone, still over it, paints nothing; coming down on it again does.
+ */
+export function paintsStone(before: BrushTouch | undefined, now: BrushTouch): boolean {
+  if (now.stone === null) return false;
+  const same = before?.stone === now.stone;
+  return now.standing ? !(same && before!.standing) : !same;
 }
 
 /** The strokes painted at `now`, by the stones painted at the times in `painted`. */

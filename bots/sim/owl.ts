@@ -2,7 +2,7 @@
  * A bot owl in a room seen from the side, stepped as the page steps its own owl (RoomScene's `fly` and
  * its walks), with nothing drawn: the same flight (stepFlier), the same ground under it (groundAt), the
  * same footing for walking at a height (footing), the room's updrafts and wind currents, its brush
- * stones' ink (painted by a landing on a stone, livePerches) and its neon signs lit by park time
+ * stones' ink (painted by a landing on a stone or a pass low over it, livePerches) and its neon signs lit by park time
  * (litPerches), its pits and thorns, and the dash. Everything comes from packages/shared, so a change to
  * the game's movement rules is a change to the bots' too; only the walk is the bots' own: a held way,
  * moved at the walk's pace and stopped where the footing ends, as a held key moves the owl.
@@ -29,7 +29,8 @@ import {
   newFlier,
   shutShortcuts,
   stepFlier,
-  stoneUnder,
+  brushTouch,
+  paintsStone,
   windAt,
   windEnd,
   type Flier,
@@ -65,7 +66,9 @@ export interface Owl {
   fl: Flier;
   t: number;
   painted: Map<string, number>;
+  /** The stone it stands on, and the one it is passing low over in the air (brushTouch): one of them at most. */
   onStone: string | null;
+  overStone: string | null;
   dashSpent: boolean;
   /** Steps of a dash left, and its way. */
   dashLeft: number;
@@ -82,7 +85,7 @@ export interface Press {
 
 export function owlAt(x: number, z: number, t: number, painted: Map<string, number> = new Map()): Owl {
   const fl = newFlier();
-  return { x, fl: { ...fl, air: { ...fl.air, z } }, t, painted, onStone: null, dashSpent: false, dashLeft: 0, dashDir: 1 };
+  return { x, fl: { ...fl, air: { ...fl.air, z } }, t, painted, onStone: null, overStone: null, dashSpent: false, dashLeft: 0, dashDir: 1 };
 }
 
 /** The room's perches at park time `t` with this owl's ink: what the page's standPerches gives it. */
@@ -159,11 +162,13 @@ export function stepOwl(br: BotRoom, o: Owl, p: Press): StepEvent {
     if (isWalkable({ x: nx, y: br.y }, f.walkable, f.shut)) o.x = nx;
   }
   o.t += FLIGHT_STEP_MS;
-  // A landing on a stone paints it afresh (brushInk.ts).
+  // A landing on a stone, or a pass low over it in the air, paints it afresh (brushInk.ts, brushTouch).
   if (r.brushStones?.length) {
-    const stone = o.fl.air.s === GROUNDED ? (stoneUnder(r.brushStones, o.x, o.fl.air.z)?.id ?? null) : null;
-    if (stone && o.onStone !== stone) o.painted.set(stone, o.t);
-    o.onStone = stone;
+    const touch = brushTouch(r.brushStones, o.x, o.fl.air.z, o.fl.air.s === GROUNDED);
+    const before = o.onStone !== null ? { stone: o.onStone, standing: true } : { stone: o.overStone, standing: false };
+    if (touch.stone !== null && paintsStone(before, touch)) o.painted.set(touch.stone, o.t);
+    o.onStone = touch.standing ? touch.stone : null;
+    o.overStone = touch.standing ? null : touch.stone;
   }
   if (inThorns(r, o.x, o.fl.air.z)) return 'fall';
   if (fellInPit(r, { x: o.x, y: br.y }, o.fl.air.s === GROUNDED, o.fl.air.z)) return 'fall';
