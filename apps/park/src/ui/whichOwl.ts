@@ -45,13 +45,14 @@ export interface WhichOwlScreen {
 }
 
 const CSS = `
-#hud .layer.full .modal.which-owl{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(14px,3vh,26px);
-  padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));
+#hud .layer.full .modal.which-owl{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;justify-content:safe center;gap:clamp(14px,3vh,26px);
+  padding:calc(max(10px,env(safe-area-inset-top)) + 56px) max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));
   background:radial-gradient(ellipse at 50% 18%,rgba(255,211,106,.3),rgba(255,211,106,0) 48%),linear-gradient(180deg,#24497A,#1B3A63 60%,#16304F);color:#F6F1E3;overflow:auto;transition:background-color .5s ease-out}
 /* The reveal is see-through (OP-325): the owl is drawn on the game canvas under the HUD, over the builder scene's own dusk backdrop. */
 #hud .layer.full .modal.which-owl.bright{background:radial-gradient(ellipse at 50% 40%,rgba(255,211,106,.26),rgba(255,211,106,0) 60%)}
 #hud .which-owl-layer.full .scrim{background:transparent}
-#hud .which-owl .wo-corner{position:absolute;top:max(10px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));display:flex;align-items:center;gap:10px}
+/* The corner stays on top and its row stays clear (OP-330): a reveal taller than a phone scrolls under it, never over Close. */
+#hud .which-owl .wo-corner{position:absolute;z-index:2;top:max(10px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));display:flex;align-items:center;gap:10px}
 #hud .which-owl .wo-count{font-size:14px;opacity:.75}
 #hud .which-owl .wo-corner button{min-height:44px;padding:6px 16px;font-size:15px}
 #hud .which-owl .wo-say{max-width:34em;margin:0;text-align:center;font-size:clamp(19px,3.2vh,26px);line-height:1.35;text-shadow:0 2px 10px rgba(0,0,0,.6)}
