@@ -9,7 +9,7 @@ import { GLIDE_SLOPE, MAX_AIR_Z } from '../src/flight';
 import { hopTier, perchTiers } from '../src/routes';
 import { inThermal, thermalProblems } from '../src/thermal';
 import { WALK_SPEED } from '../src/walk';
-import { idolRealms, mapOf, voteRealmAt } from '../src/room';
+import { idolRealms, mapOf, spawnTop, voteRealmAt } from '../src/room';
 import {
   GROWN_ART,
   HALL_BOWL,
@@ -454,9 +454,18 @@ describe('the Great Hollow’s root runs (OP-308)', () => {
       // A moonbeam is a ring of light across its whole plaza: a root at its rim hides none of it.
       ...INTERACTABLES.filter((i) => i.room === HALL_ID && i.kind !== 'moonbeam').map((i) => ({ id: i.id, ...i.pos })),
       ...(hall.spots ?? []).map((s, i) => ({ id: `spot-${i}`, ...s })),
-      ...Object.entries(hall.spawns).map(([id, p]) => ({ id, ...p })),
+      // A spawn up on a root's own top (the stump the first flight's test glides from, OP-347) stands on the art, not behind it.
+      ...Object.entries(hall.spawns)
+        .filter(([id]) => spawnTop(hall, id) === 0)
+        .map(([id, p]) => ({ id, ...p })),
       ...hall.doors.map((d) => ({ id: d.id, ...middle(d.id) })),
     ];
+    // The one spawn up on a root is on that root's own strip, at its top.
+    const up = Object.keys(hall.spawns).filter((id) => spawnTop(hall, id) > 0);
+    expect(up).toEqual(['on-stump']);
+    const stump = hall.perches!.find((p) => p.id === rootId('ink', 'stump'))!;
+    expect(pointInPolygon(hall.spawns['on-stump']!, stump.area)).toBe(true);
+    expect(spawnTop(hall, 'on-stump')).toBe(stump.top);
     for (const b of boxes)
       for (const t of things) expect(t.x > b.x0 - 40 && t.x < b.x1 + 40 && t.y > b.y0 && t.y < b.y1, `${t.id} behind ${b.id}`).toBe(false);
   });

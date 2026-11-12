@@ -189,7 +189,9 @@ import { TRIAL_BACKDROP_VEIL, trialBackdropVeiled } from './skinTrial';
 import { PUZZLE_ART_KEYS, artScale, drawnAsSizeBox, drawsSkinTrial, loadArt, opensSoft, prefetchRoomArt, releaseArt, roomArtCap, roomArtKeys, roomOpeningArt, sharpCopy, sharpenArt } from './art';
 import { SpeechBubbles } from './bubbles';
 import { backWaits, carriedIn, doorwayUnder, doorwaysOff, roomsAhead, stillCarried, takesDoorway, upCounts } from './doors';
-import { PLAY_SPOTS, TriedDoors, doorSpot, leadsToPlay, playSpotsAt, trailTo, type PlaySpot } from './featherTrail';
+import { PLAY_SPOTS, ROOTS_SPOT, TriedDoors, doorSpot, leadsToPlay, playSpotsAt, trailTo, type PlaySpot } from './featherTrail';
+import { FIRST_FLIGHT_MARK, glidedOff, hallTipFor, hallTips } from './hallTips';
+import { HALL_WORDS } from '../ui/hallWords';
 import { FeatherTrail } from './featherTrailView';
 import { admitTarget } from './gateAdmit';
 import { enteredRoom, walkingMap } from './walkingMap';
@@ -212,7 +214,7 @@ import { cameraBounds, followLead, type CoveredEdges } from './hudInset';
 import { RISE_HEAD, lookBetween, openingAt, restAt, riseBack, screenZoom, townZoom, wholeLook, wholeZoom, type Look } from './townView';
 import { SizeLabels } from './sizeLabels';
 import { CourseTipSigns } from './courseTipSigns';
-import { courseTips } from './courseTips';
+import { courseTips, tipFor } from './courseTips';
 import { DoorSigns } from './doorSigns';
 import { ReachPrompt, promptPlace, promptWords } from './reachPrompt';
 import { SeeThrough } from './seeThroughArt';
@@ -568,6 +570,11 @@ export class RoomScene extends Phaser.Scene {
   /** The owl's take-offs as its flight steps them (for tests): how many on this page, and the last one's top, whether it glided and how long it was up. */
   private flown = { n: 0, peak: 0, glided: false, ms: 0 };
   private flownFrom = 0;
+  /** Where the flight under way left the ground, and how high that was (a perch's top, 0 on the floor). */
+  private flownOff: { pos: Vec2; z: number } = { pos: { x: 0, y: 0 }, z: 0 };
+  /** Whether this room has the Great Hollow's root tips (hallTips.ts), and whether this device's owl has made its first glide off a root (OP-347). */
+  private rootTips = false;
+  private firstFlown = false;
   /** Where the room put the own owl when it last let it in (its welcome), until the room is caught up with the owl (OP-138). */
   private roomHas: Vec2 | null = null;
   /** Where the owl came into this room. */
@@ -1104,7 +1111,14 @@ export class RoomScene extends Phaser.Scene {
       () => this.cfg.pixelRatio / this.cameras.main.zoom,
       () => promptPlace({ x: this.me.x, y: this.me.y - this.me.flightHeight() }, this.doorSigns?.shownBox() ?? null, this.cfg.pixelRatio / this.cameras.main.zoom),
     );
-    this.tips = tips.length ? new CourseTipSigns(this, tips, () => this.cfg.pixelRatio / this.cameras.main.zoom, () => ({ x: this.me.pos.x, z: this.flier.air.z }), room.size.h + 130) : null;
+    // The Great Hollow's own tips (OP-347): how to hop up its roots and glide off them, until this device's owl has done it once.
+    const hall = courseDef ? [] : hallTips(room, TOUCH_SCREEN);
+    this.rootTips = hall.length > 0;
+    this.firstFlown = this.rootTips && triedDoors().has(room.id, FIRST_FLIGHT_MARK);
+    const pick = tips.length
+      ? () => tipFor(tips, this.me.pos.x, this.flier.air.z)?.id ?? null
+      : () => (this.firstFlown ? null : (hallTipFor(hall, this.me.pos, this.flier.air.z)?.id ?? null));
+    this.tips = tips.length || hall.length ? new CourseTipSigns(this, tips.length ? tips : hall, () => this.cfg.pixelRatio / this.cameras.main.zoom, pick, room.size.h + 130) : null;
     const settings = this.registry.get('settings') as SettingsStore | undefined;
     if (settings) {
       ambience.setCalm(settings.get().calm);
@@ -1892,6 +1906,21 @@ export class RoomScene extends Phaser.Scene {
     });
   }
 
+  /**
+   * Down from a flight (OP-347): the first glide off one of the Great Hollow's roots is marked, once on
+   * this device. The roots' tips have done their work and show no more, a line says so, and the trail
+   * leads on to a doorway.
+   */
+  private landedFromFlight(): void {
+    if (!this.rootTips || this.firstFlown || !this.flown.glided) return;
+    if (!glidedOff(this.flownOff.pos, this.flownOff.z, this.me.pos)) return;
+    this.firstFlown = true;
+    triedDoors().add(this.room.id, FIRST_FLIGHT_MARK);
+    triedDoors().add(this.room.id, ROOTS_SPOT);
+    this.hud.toast(HALL_WORDS.flown, 4200);
+    this.layTrail();
+  }
+
   /** The games of this room's own that the owl has not stood at yet (OP-338, featherTrail.ts PLAY_SPOTS). */
   private untriedSpots(): PlaySpot[] {
     const tried = triedDoors();
@@ -2337,6 +2366,8 @@ export class RoomScene extends Phaser.Scene {
     signBox: { left: number; right: number; top: number; bottom: number } | null;
     /** The words of the course's tip showing now (OP-344), if any. */
     tipShown: string | null;
+    /** Whether this device's owl has glided off one of the Great Hollow's roots (OP-347). */
+    firstFlight: boolean;
     /** The words of the prompt over the visitor's own owl (OP-344), if any. */
     promptShown: string | null;
     /** The tall art gone see-through because the visitor's own owl is behind it (OP-346), by its art's key. */
@@ -2415,6 +2446,7 @@ export class RoomScene extends Phaser.Scene {
       signShown: this.doorSigns?.shown() ?? null,
       signBox: this.doorSigns?.shownBox() ?? null,
       tipShown: this.tips?.shown() ?? null,
+      firstFlight: this.firstFlown,
       promptShown: this.reach?.shown() ?? null,
       seeThrough: this.seeThrough?.faded() ?? [],
       trail: this.trail ? { ...this.trail.debug(), on: this.trailOn } : null,
@@ -3168,6 +3200,7 @@ export class RoomScene extends Phaser.Scene {
       const warm = this.thermalOn && column === null && !gust ? (thermalAt(this.room.thermals, this.me.pos, this.flier.air.z)?.top ?? null) : null;
       const lift = column ?? gust?.z ?? warm;
       const wasLifted = this.flier.air.s === LIFTED;
+      const stoodAt = this.flier.air.z;
       this.flier = stepFlier(this.flier, { pressed, held }, groundAt(this.room.perches, this.me.pos, this.flier.air.z), this.abilities, lift);
       const air = this.flier.air;
       // Taken up by a thermal: the camera draws back with the owl's height from here until it is down again (frameRise).
@@ -3182,10 +3215,14 @@ export class RoomScene extends Phaser.Scene {
         if (grounded) {
           this.flown = { n: this.flown.n + 1, peak: 0, glided: false, ms: 0 };
           this.flownFrom = at;
+          this.flownOff = { pos: { x: this.me.pos.x, y: this.me.pos.y }, z: stoodAt };
         }
         this.flown.peak = Math.max(this.flown.peak, air.z);
         if (air.s === GLIDING || air.s === LIFTED) this.flown.glided = true;
-      } else if (!grounded) this.flown.ms = at - this.flownFrom;
+      } else if (!grounded) {
+        this.flown.ms = at - this.flownFrom;
+        this.landedFromFlight();
+      }
       this.drawnAir = fall(this.drawnAir, FLIGHT_STEP_MS);
       if (airChanged(this.drawnAir, air)) {
         this.drawnAir = air;

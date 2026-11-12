@@ -515,8 +515,13 @@ const SPOTS: Vec2[] = [
 ];
 
 /** Where owls arrive in the hollow: the middle of the floor, and in front of each way that leads somewhere. */
+/** The stump of the inner west run: where the browser test of the first flight stands to glide (e2e/park.spec.ts, OP-347). */
+const STUMP_SPAWN = 'on-stump';
+const WEST_STUMP = ROOT_PERCHES.find((p) => p.id === rootId('ink', 'stump'))!;
+
 const SPAWNS: Record<string, Vec2> = {
   default: { x: HALL_CX, y: HALL_CY + sized(260) },
+  [STUMP_SPAWN]: { x: Math.round((Math.min(...WEST_STUMP.area.map((p) => p.x)) + Math.max(...WEST_STUMP.area.map((p) => p.x))) / 2), y: RUN_Y },
   'from-lobby': wayAt('up', ARRIVE),
   'from-party': wayAt('to-party', arriveAt('to-party')),
   'from-under': wayAt('down', 330),
@@ -551,6 +556,7 @@ export const HALL_ROOM: RoomDef = {
   mood: 'hub',
   walkable: [hollowFloor()],
   spawns: SPAWNS,
+  spawnTops: { [STUMP_SPAWN]: WEST_STUMP.top },
   doors: DOORS,
   pieces: [...PIECES, ...ROOT_PIECES],
   perches: [...ROOT_PERCHES],

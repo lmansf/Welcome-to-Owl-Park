@@ -594,3 +594,54 @@ test.describe('the Great Hollow reads (OP-346)', () => {
     expect(box.top, 'level with the doorway, or under the owl standing on it').toBeGreaterThan(way.y - 80);
   });
 });
+
+test.describe('a first flight where owls arrive (OP-347)', () => {
+  test.describe.configure({ timeout: 120_000 });
+
+  test('the trail leads a new owl to the Great Hollow\'s roots, tips say how to hop up and glide, and the first glide is marked once', async ({ page }) => {
+    const touch = await (async () => {
+      await openPark(page, { room: 'm3-hall', spawn: 'from-lobby', keeper: '1', newmap: '1' });
+      return page.evaluate(() => matchMedia('(pointer: coarse)').matches);
+    })();
+    // Come in from the Treetop Commons: no tip yet, and the feathers lead down the hall to the roots, not to a doorway.
+    expect((await state(page)).tipShown).toBeNull();
+    expect((await state(page)).firstFlight).toBe(false);
+    await expect.poll(async () => (await state(page)).trail?.feathers.length ?? 0, { timeout: 15_000 }).toBeGreaterThan(3);
+    const s0 = await state(page);
+    const last = s0.trail!.feathers[s0.trail!.feathers.length - 1]!;
+    // The first root of the inner run on each side of the hall's middle (rooms/hollowHall.ts, ROOT_RUNS and RUN_Y).
+    const roots = [
+      { x: 2300, y: 1238 },
+      { x: 3140, y: 1238 },
+    ];
+    const near = roots.map((p) => Math.hypot(last.x - p.x, last.y - p.y));
+    expect(Math.min(...near), 'the trail ends by an inner run\'s first root').toBeLessThan(260);
+    expect(s0.trail!.glints).toContain('play-roots');
+
+    // Walked down to the roots: how to get up them, in this device's words.
+    const log = roots.reduce((a, b) => (Math.hypot(last.x - a.x, last.y - a.y) < Math.hypot(last.x - b.x, last.y - b.y) ? a : b));
+    await walkAndStop(page, log.x, log.y + 90);
+    await expect.poll(async () => (await state(page)).tipShown, { timeout: 10_000 }).toBe(touch ? 'Hop up the roots. Tap Jump, and again in the air to flap.' : 'Hop up the roots. Space to jump, and again in the air to flap.');
+    // Stood there, the roots are found: the trail leads on to a doorway.
+    await expect.poll(async () => (await state(page)).trail?.glints.includes('play-roots') ?? true, { timeout: 10_000 }).toBe(false);
+
+    // Up on the stump: how to leave it. Then the glide itself.
+    await openPark(page, { room: 'm3-hall', spawn: 'on-stump', keeper: '1', newmap: '1' });
+    await expect.poll(async () => (await state(page)).tipShown, { timeout: 10_000 }).toBe(touch ? 'Jump off the top and hold Jump to glide.' : 'Jump off the top and hold Space to glide.');
+    const from = (await state(page)).pos;
+    await page.keyboard.down('ArrowLeft');
+    await page.keyboard.down('Space');
+    await expect.poll(async () => (await state(page)).firstFlight, { timeout: 15_000, intervals: [100] }).toBe(true);
+    await page.keyboard.up('Space');
+    await page.keyboard.up('ArrowLeft');
+    const landed = (await state(page)).pos;
+    expect(from.x - landed.x, 'a glide, not a step off').toBeGreaterThan(320);
+    await expect(page.locator('#hud [data-toasts]')).toContainText('That is flying!');
+    // The tips have done their work: none now, and none on the next visit of this device.
+    expect((await state(page)).tipShown).toBeNull();
+    await openPark(page, { room: 'm3-hall', spawn: 'on-stump', keeper: '1', newmap: '1' });
+    await frames(page, 30);
+    expect((await state(page)).firstFlight).toBe(true);
+    expect((await state(page)).tipShown).toBeNull();
+  });
+});

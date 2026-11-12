@@ -157,7 +157,7 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
 
 ## Bigger changes, after the cleanup
 
-- **B1. A first flight where owls arrive.** Goal: an owl that has just come in has something to do
+- **B1. A first flight where owls arrive (OP-347, built).** Goal: an owl that has just come in has something to do
   within ten seconds, and has jumped, flapped and glided before it meets a course. Why it beats what
   is there: 15 of 20 visits end in the Great Hollow, half a minute after the owl comes in. The first
   plan was a first quest given at the way in. The play log says who those visitors are: every one is a
@@ -248,4 +248,33 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
     `pnpm kit:check` measures on every screen of every kit room, and the ink rooms sit at the edge of
     their bands already. It belongs with the art pass (a face texture per realm), not with a recolour.
   - The trail's look is only brighter. Where it leads is bigger change B1's.
+- 2026-11-11: bigger change B1 built (OP-347), ahead of the phone pass. Choices made on the way:
+  - Not a quest. The visitors who leave from the Great Hollow are guests, and the room server gives a
+    guest no quest. The hall's root runs are free to everyone and were explained by nothing.
+  - The roots are one more of the trail's "games of the room's own" (`featherTrail.ts`, `PLAY_SPOTS`):
+    the floor before each inner run's first root, one find between the two. Standing there finds
+    them, and the trail leads on to a doorway as before.
+  - Two tips, drawn by the course's own signs: how to hop up, at the first root; how to glide, up on
+    the knot or the stump. They show until this device's owl has glided off a root once, and then no
+    more (one mark kept with the doorways tried). A line marks that glide.
+  - A glide counts from the stump's height and 320 px or further: a hop between roots or a step off
+    the first one is not it.
+- 2026-11-11: the art pass begun (OP-348), on the owner's word that day: "the art is kind of clunky
+  and ugly and disconnected". Eighteen rooms looked at side by side. The rooms that are one painting
+  each hold together. What does not: the Great Hollow, the courses' borrowed ground, and the canopy's
+  repeating plank wall. Part one, with the art that exists and no spend:
+  - The Great Hollow's floor is the painting the owner chose on Nov 10; what lay over it was not
+    matched to it. Its plaza rings were placeholder shapes in the tree's moss greens (now the
+    moonbeam's light pooled on the floor and a ring of stones); the shadows at the feet of its roots,
+    doorways and idols were drawn under the painting (now over it); the roots and idols kept the cold
+    light they were painted in (now multiplied by the room's); the neon idol's glow, sized for an idol
+    twice as tall, lit the roots 400 px away green (now the idol's size); and each root had an amber
+    box round its strip of floor (now a soft footprint; a solid perch that is part of a room's
+    painting keeps its amber edge, the owner's ask of Nov 7).
+  - Tried and rolled back: toning the neon course's roofs (the treetop's silvered planks, a stand-in)
+    toward its night. A dark tone fails the walkway's lightness and contrast on one screen of
+    `circuit-3`; a pale one fails the palette check. The bands and the palette are the owner's and are
+    not loosened, so the courses' ground waits for part two.
+  - Part two is new paintings through `tools/art`: a neon wall, an ink ground, the canopy's trunk wall.
+    It needs the owner's yes to spend (asked: a cap of 10 dollars) and his pick from contact sheets.
 
