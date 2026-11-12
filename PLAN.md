@@ -182,10 +182,18 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   trail goes on to a doorway. Done when: a new owl's first minute has a jump, a flap and a glide in it
   (browser test), and the play log shows fewer visits ending in `m3-hall` in their first minute.
   A first quest for ticket holders can follow once the log shows ticket holders.
-- **B2. The camera in side-view rooms.** Goal: the camera shows where the owl is going. Why: it eases
-  by the frame, so it lags on slow devices; it has no look-ahead; it slides after a fall. Steps: ease
-  by time; look ahead of the owl's flight; frame the goal when it is high; cut under the fall's fade.
-  Behind a flag first.
+- **B2. The camera in side-view rooms (OP-351, built, behind the `sideCam` flag: `?cam=1`).** Goal: the
+  camera shows where the owl is going. Why it beats what is there: a course is played by jumping at
+  what comes next, and with the owl dead centre the next ledge or pit is half a screen away at best;
+  the whole view rose and fell with every hop; and it eased by a share each frame, so at half the
+  frames (a slow phone) it trailed the owl. What it is (`apps/park/src/game/sideCamera.ts`, rules only,
+  tested): the view leads the way the owl travels, up to a sixth of the screen, more the faster, and
+  swings round in about half a second when it turns; it holds the height the owl last stood at
+  through a whole jump, climbs with a flap on top or rising air, and follows a fall down at once; and
+  it eases by time. Rooms seen from above keep their camera. A fall already cuts to the owl
+  (milestone 1). Not done: framing a goal that is high up. Done when: the rule tests and a browser
+  test pass, the flag check passes, and the owner has played with it. Should move, once on: course
+  runs that reach the first bench; falls per run.
 - **B3. A small sound set (OP-350, built, behind the `sounds` flag: `?sfx=1`).** Goal: every move a
   player makes is heard, from one module, one switch. Why it beats what is there: the park is silent
   but for a knock as the Menu opens, so nothing a player presses is answered by anything but what they
@@ -338,3 +346,11 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   - Each cue has its own shortest gap, so a held key or five feathers at once is one sound.
   - Not done: other owls' sounds (80 owls jumping would be a din; a quiet, near-only version can
     follow), music, a volume slider, the arcade's games (PR 221 is open on its cabinets).
+- 2026-11-11: B2 built (OP-351), hidden behind `?cam=1`. Choices made on the way:
+  - The band a jump may rise in before the view climbs is a whole jump and a little (161 px): at 120
+    a plain jump still nudged the view. A flap on top of a jump takes the owl out of it, which is
+    when what is above matters.
+  - On a phone held upright a course is 442 room px across, so a sixth of it is a lead of 70 px:
+    small, and right for that width.
+  - The lead follows travel, not facing: a glide carried backwards by a wind leads backwards.
+  - It goes up in one flag-hidden PR with the sound set, each behind its own flag.

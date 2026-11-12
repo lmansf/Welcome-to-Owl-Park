@@ -61,6 +61,8 @@ export interface ParkState {
   seeThrough: string[];
   /** The sounds played for the visitor's own owl on this page, the newest last (OP-350, `?sfx=1`): none without the flag. */
   sounds: string[];
+  /** The side camera (OP-351, `?cam=1`): its lead (room px, to the right is positive), the height it holds and where it looks; null without the flag or in a room seen from above. */
+  sideCam: { lead: number; level: number; x: number; y: number } | null;
   trail: { feathers: Array<{ x: number; y: number }>; glints: string[]; on: boolean } | null;
   floorShown: boolean;
   /** How many pieces shaping the room's edges seen from above were drawn (edges.ts). */

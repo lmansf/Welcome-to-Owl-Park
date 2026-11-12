@@ -685,3 +685,67 @@ test.describe('the park’s sounds for the visitor’s own owl (OP-350)', () => 
     expect((await state(page)).sounds).toEqual([]);
   });
 });
+
+test.describe('the side camera (OP-351)', () => {
+  test.describe.configure({ timeout: 90_000 });
+
+  test('with the flag the view leads the way the owl travels, swings round when it turns, and holds its height through a hop', async ({ page }) => {
+    await openPark(page, { room: 'canopy-1', cam: '1' });
+    await page.waitForFunction(() => window.owlPark.state()?.sideCam != null);
+    // Standing where it came in, facing into the course: the view looks a little that way.
+    const rest = (await state(page)).sideCam!;
+    expect(rest.lead).toBeGreaterThan(10);
+    expect(rest.level).toBe(0);
+
+    // Walking into the course: the lead grows to well past what a still owl has.
+    await page.keyboard.down('ArrowRight');
+    await expect.poll(async () => (await state(page)).sideCam!.lead, { timeout: 10_000, intervals: [50] }).toBeGreaterThan(rest.lead * 1.4);
+    const walking = await state(page);
+    await page.keyboard.up('ArrowRight');
+    // The view is ahead of the owl by about its lead, wherever the room's west wall does not hold it.
+    const cam = await cameraView(page);
+    const centre = cam.viewX + cam.viewW / 2;
+    if (cam.viewX > 1) expect(centre - walking.pos.x).toBeGreaterThan(walking.sideCam!.lead * 0.5);
+
+    // Turned round: the lead swings to the other side, in its own time.
+    await page.keyboard.down('ArrowLeft');
+    await expect.poll(async () => (await state(page)).sideCam!.lead, { timeout: 10_000, intervals: [50] }).toBeLessThan(-rest.lead);
+    await page.keyboard.up('ArrowLeft');
+    await expect.poll(async () => (await state(page)).walking, { timeout: 10_000 }).toBe(false);
+
+    // A jump on the spot: the owl goes up and comes down, the height the view holds does not move.
+    // Watched from inside the page, frame by frame, so a slow runner misses none of it.
+    await page.keyboard.down('Space');
+    const jump = await page.evaluate(
+      () =>
+        new Promise<{ peak: number; moved: number }>((resolve) => {
+          const from = window.owlPark.state()!.sideCam!.level;
+          const t0 = performance.now();
+          let peak = 0;
+          let moved = 0;
+          const tick = () => {
+            const s = window.owlPark.state();
+            const t = performance.now() - t0;
+            if (s?.sideCam) {
+              peak = Math.max(peak, s.air.z);
+              moved = Math.max(moved, Math.abs(s.sideCam.level - from));
+            }
+            if (t < 4000 && !(t > 400 && s?.air.s === 0)) requestAnimationFrame(tick);
+            else resolve({ peak, moved });
+          };
+          requestAnimationFrame(tick);
+        }),
+    );
+    await page.keyboard.up('Space');
+    expect(jump.peak).toBeGreaterThan(100);
+    expect(jump.moved).toBeLessThan(1);
+  });
+
+  test('without the flag, and in a room seen from above with it, the camera is on the owl as ever', async ({ page }) => {
+    await openPark(page, { room: 'canopy-1' });
+    expect((await state(page)).sideCam).toBeNull();
+    await openPark(page, { room: 'hub', cam: '1' });
+    expect((await state(page)).sideCam).toBeNull();
+  });
+});
+

@@ -24,6 +24,7 @@ export const FLAGS = {
   town: { param: 'town', note: 'The town view: a wider camera in the rooms seen from above, and an opening look over the Great Hollow' },
   thermal: { param: 'thermal', note: 'The thermal at the heart of the Great Hollow: glide in its moonbeam to rise, see the whole oval, and glide to any way' },
   sounds: { param: 'sfx', note: 'The park’s sounds for your own owl: a jump, a flap, a glide, a landing, a bell, a feather, a bench, a fall, a doorway' },
+  sideCam: { param: 'cam', note: 'The camera in a course and the tree looks where your owl is going: it leads the way you travel and holds still through a hop' },
 } as const satisfies Record<string, FlagSpec>;
 
 export type FlagName = keyof typeof FLAGS;
