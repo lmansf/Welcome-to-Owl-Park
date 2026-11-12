@@ -442,6 +442,17 @@ describe('runs and columns of the recut kit (OP-251)', () => {
     expect(d.y + (art.top! + KIT_STAND_SINK) * (d.h / art.h)).toBeCloseTo(770 - 60, 0);
   });
 
+  it('draws a run’s top pieces in its tint and its texture in its shade, each its own (OP-348)', () => {
+    const draws = plan({ paths: [{ id: 'deck', x0: 0, x1: 2000, top: 0, row: ROW, tint: 0x96c0ff, mid: 'kit-tex-earth' }, { id: 'wall', x0: 2000, x1: 3000, top: 0, row: ROW, mid: 'kit-tex-earth', shade: 0x808080 }] });
+    const deck = draws.filter((d) => d.id === 'deck');
+    expect(deck.filter((d) => d.tile === 'none').every((d) => d.tint === 0x96c0ff)).toBe(true);
+    expect(deck.filter((d) => d.tile === 'none').length).toBeGreaterThan(3);
+    expect(deck.find((d) => d.key === 'kit-tex-earth')!.tint).toBeUndefined();
+    const wall = draws.filter((d) => d.id === 'wall');
+    expect(wall.filter((d) => d.tile === 'none').every((d) => d.tint === undefined)).toBe(true);
+    expect(wall.find((d) => d.key === 'kit-tex-earth')!.tint).toBe(0x808080);
+  });
+
   it('shows only the outer part of each end on a run shorter than an end, the two meeting between (OP-348)', () => {
     const STONE = 'kit-cut-stone';
     const [left, right] = [`${STONE}-cap-left`, `${STONE}-cap-right`];

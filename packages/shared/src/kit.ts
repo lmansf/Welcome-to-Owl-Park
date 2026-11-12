@@ -334,6 +334,7 @@ function runDraws(given: KitRun, ground: number, depth: number, role: 'path' | '
       tile: repeats ? 'x' : 'none',
       layer: 'play',
       ...(flip ? { flip: true } : {}),
+      ...(run.tint !== undefined ? { tint: run.tint } : {}),
       role,
       id: run.id,
     };

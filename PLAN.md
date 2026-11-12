@@ -293,7 +293,16 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   - A run shorter than one of its ends had both ends laid whole, one over the other and out past the
     run: the ink course's first stone step was drawn 200 px wide and stood 120. Each end now shows
     only its outer part (`KitDraw.crop`).
+  - The neon course stood on the tree's cut stone, with walls of the treetop's silvered planks:
+    cream and bleached wood in a violet night. Both are stand-ins from another realm's kit. They are
+    now drawn multiplied by a blue (`NEON_LIGHT`, `KitRun.tint` and `shade`), a stone and a wall lit
+    by the street's own signs. This takes back the "tried and rolled back" of Nov 11: a tone does
+    pass, when it is aimed. The check measures how far a colour family's pixels lean off the
+    palette, so the blue has to be as full as the palette's sky blue (a greyer one drifts 13 to 19
+    against the 13 allowed) and light enough to keep the walkway's contrast over 7.5. Candidates were
+    put through the check itself until one held all eight screens: 0x96c0ff.
   - Left, with the reason: a step at least an end long keeps its overlapped ends. Cut the same way,
     one screen of `brush-falls` goes from 13.96 to 14.11 against the 14.0 the style check allows a
     walkway's contrast, and the band is not loosened. Also left for paintings: the tone of the earth
-    path's middle pieces against its ends, the neon course's pale stone, the ink pond's flat water.
+    path's middle pieces against its ends, the ink course's green mounds on its paper, the ink
+    pond's flat water, and a row and a wall of the neon realm's own.

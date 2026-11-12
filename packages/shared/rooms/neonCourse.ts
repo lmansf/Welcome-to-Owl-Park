@@ -38,6 +38,19 @@ function floor(x0: number, x1: number) {
 /** How far below the roof decks the street lies, as far as the room shows (room px). */
 const STREET_SUNK = 70;
 
+/**
+ * The light the neon course's borrowed pieces are drawn in (OP-348). Its decks' edge is the tree's cut
+ * stone and its buildings' walls the treetop's silvered planks, both stand-ins from another realm's kit
+ * and both pale and warm: a cream ledge and a wall of bleached wood in a violet night. Multiplied by
+ * this blue they sit on the palette's sky blue, a stone and a wall lit by the street's own signs.
+ * The colour is not a taste: it was found by putting candidates through the style check
+ * (tools/kit/preview.py). A blue less full leaves the stone greyer than the palette's blue (sky blue
+ * drifts 13 to 19 against the 13 allowed); a darker one takes the walkway's contrast under its floor
+ * of 7.5 on one screen of `circuit-3`. This one holds every screen of the three rooms inside the bands.
+ * Until the realm has a row and a wall of its own, which are the artists'.
+ */
+export const NEON_LIGHT = 0x96c0ff;
+
 /** A ledge of the plan: `x` its west end, `w` its width, `top` its height. */
 function ledge(id: string, x: number, w: number, top: number, look: Omit<KitLedge, 'id' | 'x0' | 'x1' | 'top'>): KitLedge {
   return { id, x0: x, x1: x + w, top, ...look };
@@ -48,7 +61,7 @@ function ledge(id: string, x: number, w: number, top: number, look: Omit<KitLedg
  * stands in a drop (`street`), down to the street. Like every ledge of a room seen from the side it is
  * jumped up through, not a wall.
  */
-const roof = (top: number, street = false) => ({ cap: 'kit-neon-rooftop-ledge', mid: 'kit-tex-high-silvered-planks', depth: top + (street ? STREET_SUNK : 0) });
+const roof = (top: number, street = false) => ({ cap: 'kit-neon-rooftop-ledge', mid: 'kit-tex-high-silvered-planks', depth: top + (street ? STREET_SUNK : 0), shade: NEON_LIGHT });
 /** A footbridge strung between towers, over the street. */
 const FOOTBRIDGE = { cap: 'kit-neon-sky-bridge-mid' };
 /** A billboard on its legs: stood on along its top. */
@@ -79,7 +92,7 @@ function wires(id: string, x0: number, x1: number, z0: number, z1 = 940): Course
 }
 
 /** The roof deck along the ground line from `x0` to `x1`, its edge stone over brick. */
-const deck = (id: string, x0: number, x1: number) => ({ id, x0, x1, top: 0, row: 'kit-cut-stone', mid: 'kit-tex-neon-corrugated-tin' });
+const deck = (id: string, x0: number, x1: number) => ({ id, x0, x1, top: 0, row: 'kit-cut-stone', tint: NEON_LIGHT, mid: 'kit-tex-neon-corrugated-tin' });
 /**
  * The drop between two buildings, from `x0` to `x1`, the course's pit (OP-343): no deck over it, the
  * night between the walls, and the wet street far below with nothing to stand on.
