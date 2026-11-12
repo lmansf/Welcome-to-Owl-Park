@@ -189,6 +189,39 @@ export function inThorns(room: Pick<RoomDef, 'course'> | undefined, x: number, z
   return (room?.course?.thorns ?? []).some((t) => x >= t.x0 && x <= t.x1 && z >= t.z0 && z <= t.z1);
 }
 
+/**
+ * Whether an owl that went straight from `a` to `b` (x along, z up) touched one of a room's thorns on
+ * the way, its two ends included (OP-353): `inThorns` for a move. A page looks at its owl once a frame,
+ * and a frame's move can be longer than a hazard is thick: a dash goes 30 px a frame at thirty frames a
+ * second, and the thinnest stalks are 30 px. Looked for only where the owl is, such a move stepped over
+ * them on a slow device, some of the time.
+ */
+export function thornsBetween(room: Pick<RoomDef, 'course'> | undefined, a: { x: number; z: number }, b: { x: number; z: number }): boolean {
+  return (room?.course?.thorns ?? []).some((t) => {
+    // The stretch of the way, from 0 at `a` to 1 at `b`, that is inside the box: there is one, or there is not.
+    let from = 0;
+    let to = 1;
+    const sides: Array<[number, number]> = [
+      [a.x - b.x, a.x - t.x0],
+      [b.x - a.x, t.x1 - a.x],
+      [a.z - b.z, a.z - t.z0],
+      [b.z - a.z, t.z1 - a.z],
+    ];
+    for (const [along, gap] of sides) {
+      // Going along this side, not toward or away from it: inside it all the way, or outside it all the way.
+      if (along === 0) {
+        if (gap < 0) return false;
+        continue;
+      }
+      const at = gap / along;
+      if (along < 0) from = Math.max(from, at);
+      else to = Math.min(to, at);
+      if (from > to) return false;
+    }
+    return true;
+  });
+}
+
 /** Whether a point is over one of a room's pits. */
 export function inPit(room: Pick<RoomDef, 'course'> | undefined, p: Vec2): boolean {
   return (room?.course?.pits ?? []).some((pit) => pointInPolygon(p, pit));

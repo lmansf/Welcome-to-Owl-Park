@@ -7,7 +7,7 @@ import {
   distance,
   doorWaitsOn,
   fellInPit,
-  inThorns,
+  thornsBetween,
   openerAt,
   sameLevel,
   shutShortcuts,
@@ -65,6 +65,15 @@ export interface CourseHost {
 
 /** How long before a piece the room said was out of reach is asked again (the room has the owl a moment behind). */
 const FAR_RETRY_MS = 300;
+/**
+ * How long ago and how far off the owl's last place may be for the way from it to count as a move
+ * (OP-353): a frame at seven a second, and the furthest a dash goes in that. Longer or further and the
+ * page stalled or the owl was put somewhere, and only where it is now is looked at. Within it the
+ * straight way between two frames is at most 7 px under the arc a jump really took, so an owl that
+ * cleared a hazard is not read as through it.
+ */
+const MOVE_LOOK_MS = 150;
+const MOVE_LOOK_PX = 140;
 /** How long before a refusal is asked again, or said again. */
 const REFUSED_RETRY_MS = 4000;
 
@@ -115,6 +124,8 @@ export class Course {
   private runStartedAt: number | null = null;
   /** Falls and finishes this page has had answered, for the tests. */
   private falls = 0;
+  /** Where the owl was a frame ago, and when: its move since is looked along for thorns (OP-353). Null as a room starts and where a fall puts the owl. */
+  private wasAt: { x: number; z: number; at: number } | null = null;
   private finishes = 0;
 
   constructor(
@@ -166,9 +177,17 @@ export class Course {
     if (!c) return;
     // Down on the floor over a pit: a fall. Up on a ledge over a drop (a course seen from the side) is not
     // one, nor is the step off a ledge's end: the owl is still at the ledge's height then, and drops.
-    if (fellInPit(this.room, me.pos, me.grounded, me.z) || inThorns(this.room, me.pos.x, me.z)) {
+    // Thorns are looked for along the way the owl came since the last frame, not only where it is: a
+    // dash is longer in a slow device's frame than the thinnest of them are thick.
+    const here = { x: me.pos.x, z: me.z, at: now };
+    const was = this.wasAt;
+    this.wasAt = here;
+    const came = was && now - was.at <= MOVE_LOOK_MS && Math.abs(here.x - was.x) <= MOVE_LOOK_PX ? was : here;
+    if (fellInPit(this.room, me.pos, me.grounded, me.z) || thornsBetween(this.room, came, here)) {
       this.ask('fall', now, () => link.fall(), (res) => {
         if (res.at) {
+          // Put somewhere else: the way from here to there is no move of the owl's.
+          this.wasAt = null;
           this.host.fell(res.at, res.top ?? 0);
           this.host.hud.toast(COURSE_WORDS.fell, 1500);
           this.host.sound?.('fall');

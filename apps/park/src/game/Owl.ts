@@ -399,6 +399,17 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     this.held = held;
   }
 
+  /**
+   * Where the owl is at `at` (this page's clock): along the walk it is on, or the leg that follows on
+   * once that one is done, as every page reckons a walk; where it stands without one. `pos` is where
+   * the last frame drew it, a frame's walk behind by the time the next frame asks (OP-353).
+   */
+  placeAt(at: number): Vec2 {
+    if (!this.walk) return this.pos;
+    const here = positionAlongWalk(this.walk, at);
+    return here.done && this.nextWalk ? positionAlongWalk(this.nextWalk, at).pos : here.pos;
+  }
+
   /** How high the owl is drawn above the floor right now, in room pixels (0 on the ground). */
   flightHeight(): number {
     return this.air.z;

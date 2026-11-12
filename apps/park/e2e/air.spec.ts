@@ -171,3 +171,97 @@ test.describe('the courses’ air (OP-275)', () => {
     });
   }
 });
+
+/**
+ * A clock only the test moves, from before the park is opened (OP-353): the page's own clock never
+ * runs, so a frame is exactly as long as the test makes it and a slow runner changes nothing. Held
+ * before the first page, not stopped once the park is up: stopping a clock that is running races the
+ * frame the game is in the middle of, and the stop can be undone (the game then draws no frame at all).
+ */
+async function holdTheClock(page: Page): Promise<void> {
+  await page.clock.install();
+  await page.clock.pauseAt(new Date(Date.now() + 1_000));
+}
+
+/** Time moved on a tenth of a second at a go, its frames a sixtieth apart as a quick device draws them, until `done` says so (or the test fails: `what` did not come about). */
+async function until(page: Page, what: string, done: () => Promise<boolean>): Promise<void> {
+  for (let i = 0; i < 600; i++) {
+    if (await done()) return;
+    await page.clock.runFor(100);
+  }
+  throw new Error(`on the held clock: ${what} did not come about`);
+}
+
+/** The park opened on the held clock, as openPark opens it (the local transport, the painted rooms). */
+async function openOnTheHeldClock(page: Page, params: Record<string, string>): Promise<void> {
+  const q = new URLSearchParams({ transport: 'local', kit: '0', art: 'old', ...params });
+  await page.goto(`/?${q.toString()}`);
+  await until(page, 'the room coming up', () => page.evaluate(() => window.owlPark?.state()?.connected === true));
+}
+
+/** What the page says of its owl now (the clock is held: nothing waits). */
+const now = (page: Page) => page.evaluate(() => window.owlPark.state()!) as Promise<Awaited<ReturnType<typeof state>>>;
+
+/**
+ * One hop at `frameMs` a frame: from 110 on the fern floor a walk east, and Jump 200 ms in. The owl
+ * comes down 3 px inside the near end of the first step (300 to 460, 90 up). Returns how it stands a
+ * quarter of a second after it should have landed.
+ */
+async function hopOntoTheFirstStep(page: Page, frameMs: number): Promise<{ z: number; s: number; x: number }> {
+  await openOnTheHeldClock(page, { room: 'canopy-1' });
+  await page.evaluate(() => window.owlPark.walkTo(110, window.owlPark.state()!.pos.y));
+  await until(page, 'the owl standing at 110', async () => { const s = await now(page); return !s.walking && Math.abs(s.pos.x - 110) < 1; });
+  await page.evaluate(() => window.owlPark.walkTo(690, window.owlPark.state()!.pos.y));
+  for (let t = 0; t < 1000; t += frameMs) {
+    if (t === 200) expect(await page.evaluate(() => window.owlPark.jump(300))).toBe(true);
+    await page.clock.fastForward(frameMs);
+  }
+  const s = await now(page);
+  return { z: s.air.z, s: s.air.s, x: s.pos.x };
+}
+
+/**
+ * One dash at `frameMs` a frame: off the high shelf of the trunk's top storey (v2, 480 up) a jump
+ * east, and 700 ms in, 18 px short of the hanging thorns (960 to 990, from 280 up), a dash through
+ * them. Returns the falls the course counts 300 ms later, and where the owl is.
+ */
+async function dashThroughTheHangingThorns(page: Page, frameMs: number): Promise<{ falls: number; dashes: number; x: number }> {
+  await openOnTheHeldClock(page, { room: 'canopy-2c', spawn: 'on-v2' });
+  await until(page, 'the owl standing on the shelf, the course counting its falls', async () => { const s = await now(page); return s.air.z === 480 && s.air.s === 0 && s.course?.falls === 0; });
+  await page.evaluate(() => window.owlPark.walkTo(1100, window.owlPark.state()!.pos.y));
+  for (let t = 0; t < 1000; t += frameMs) {
+    if (t === 200) expect(await page.evaluate(() => window.owlPark.jump(300))).toBe(true);
+    if (t === 700) await page.evaluate(() => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ShiftLeft', key: 'Shift', bubbles: true })));
+    await page.clock.fastForward(frameMs);
+  }
+  const s = await now(page);
+  return { falls: s.course?.falls ?? -1, dashes: s.dash.dashes, x: s.pos.x };
+}
+
+test.describe('the owl’s flight at any frame rate (OP-353)', () => {
+  test('a hop that comes down just inside a ledge’s end lands on it at ten frames a second as at fifty', async ({ page }) => {
+    test.slow(); // the park opened twice, every frame stepped by hand
+    await holdTheClock(page);
+    // The flight goes in steps of its own, many to a frame, and asks at each what is under the owl. Asked of
+    // where the last frame drew the owl, that was a frame's walk behind it (26 px at ten frames a second):
+    // the step's end was not yet under an owl coming down onto it, and it fell past it to the floor.
+    const quick = await hopOntoTheFirstStep(page, 20);
+    const slow = await hopOntoTheFirstStep(page, 100);
+    expect(quick).toMatchObject({ z: 90, s: 0 });
+    expect(slow).toMatchObject({ z: 90, s: 0 });
+    // The same hop, the same place: a frame's length is not part of the game.
+    expect(Math.abs(slow.x - quick.x), JSON.stringify({ quick, slow })).toBeLessThan(1);
+  });
+
+  test('a dash through thorns is a fall at ten frames a second as at fifty: no frame steps over them', async ({ page }) => {
+    test.slow(); // the park opened twice, every frame stepped by hand
+    await holdTheClock(page);
+    // A dash goes 90 px in a tenth of a second and these thorns are 30 px thick. The course looked for
+    // them where the owl was each frame, so at ten frames a second it was before them, then past them.
+    const quick = await dashThroughTheHangingThorns(page, 20);
+    const slow = await dashThroughTheHangingThorns(page, 100);
+    // Both dashed, both fell, and both are back on the shelf they left.
+    expect(quick).toEqual({ falls: 1, dashes: 1, x: 760 });
+    expect(slow).toEqual({ falls: 1, dashes: 1, x: 760 });
+  });
+});

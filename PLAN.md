@@ -3,9 +3,10 @@
 - Status: in progress. Ticket OP-342. Branch `claude/determined-wozniak-3ljxrf`.
 - Last updated: 2026-11-12. The cleanup's five milestones are merged and live (OP-343 to OP-346,
   OP-349), with the first flight (OP-347) and the art pass's no-spend part (OP-348: the Great Hollow,
-  the courses' ground, the neon course's light). In review, each behind its own flag: the sound set
-  (OP-350, `?sfx=1`) and the side camera (OP-351, `?cam=1`). Next: new paintings for the courses, on
-  the owner's yes of Nov 12 (a cap of 10 dollars), his pick from contact sheets first.
+  the courses' ground, the neon course's light). Merged and live behind flags, for the owner to try:
+  the sound set (OP-350, `?sfx=1`) and the side camera (OP-351, `?cam=1`). In review: the side camera
+  keeps up (OP-352) and the flight is the same at any frame rate (OP-353). Waiting on the owner: his
+  pick of the new paintings for the courses (OP-348, 2.16 of 10 dollars spent on candidates).
 - Read first: `FABLE.md` (the owner's rules; it wins over this file).
 
 The owner's brief (Nov 11): a full cleanup pass of the game, end to end, as a player meets it. Two
@@ -214,9 +215,19 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   Should move, once on: course runs that reach the first bench; visit length.
 - **B4. One HUD style.** Goal: one set of sizes, corners and colours for the Menu, the cards, the
   shop and the arcade.
-- **B5. Movement that forgives.** Goal: the walk runs inside the flight's fixed step so it does not
-  depend on the frame rate; a little more grace at a ledge's edge; thin hazards tested along the
-  path moved, not at a point.
+- **B5. Movement that forgives (OP-353, in review).** Goal: the flight is the same game at any frame
+  rate, and a slow device is not a harder park. Why it beats what is there: on a clock the test
+  drives, the same presses gave two games. A hop that comes down 3 px inside the end of the canopy
+  course's first step landed at 50 frames a second and fell past it at 10; a dash through 30 px of
+  thorns was a fall at 50 and stepped over them at 10. The test bots step the owl's place with its
+  flight, so they certified a game slow devices did not get. What it is: the flight asks where the
+  owl is at each of its own steps, along its walk (it asked where the last frame drew it, a frame's
+  walk behind); thorns are looked for along the way the owl came since the last frame
+  (`thornsBetween`); and the grace for a jump after stepping off a ledge's end is 120 ms, not 90
+  (`EDGE_GRACE_MS`): what a thirty-frames-a-second phone had while its owl was read a frame late,
+  now the same on every device. Done when: the two browser tests on a driven clock pass (they fail
+  on what is live at ten frames a second), the rule tests, `pnpm check`, the bots. Should move:
+  falls per course run on phones toward the computers' rate; runs that reach the first bench.
 
 ## Log
 
@@ -392,3 +403,21 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   - Left for the owner's eye: the view meets the edge of its band at the owl's own speed (the
     usual way of a camera window). If that reads as a kick at the start of a long fall, the edge
     can be made soft.
+- 2026-11-12: B5 built (OP-353). How it was found and what was chosen:
+  - A browser test can drive the page's clock (`page.clock`: the game's loop, its timers and
+    `Date.now()` all follow it), so a frame is exactly as long as the test says and a slow runner
+    changes nothing. The same walk, jump and dash were played at 20 ms a frame and at 100.
+  - The walk was already by the clock. What was not: the flight's many steps a frame all read the
+    owl's place as the last frame left it. Coming down onto a ledge, the ledge's near end was not
+    yet under the owl for a frame's walk (4 px at sixty frames a second, 9 at thirty, 26 at ten),
+    and by the next frame the owl was under its top.
+  - Going off a ledge's end the same lateness held the owl on it a frame longer, then gave the 90
+    ms of grace: 107 ms at sixty frames a second, 123 at thirty. Read on time, every device would
+    have had 90. The grace is 120, so no usual device loses what it had. The climb keeps its own 90.
+  - Thorns: 20 in the courses, the thinnest four 30 px, all 450 px tall or more. A walk or a glide
+    cannot step over one above nine frames a second; a dash (900 px a second) can from thirty down.
+    The look along the move is a straight line between two frames, at most 7 px under the arc a
+    jump really took in the longest frame it is used for (150 ms), so an owl that cleared a hazard
+    is not read as through it. A longer frame is a stall: only where the owl is counts.
+  - Not done: a ledge's end is still its end (no reaching past it to land), and pits are looked for
+    where the owl stands, which no frame steps over.
