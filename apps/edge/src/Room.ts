@@ -31,6 +31,7 @@ import {
   findSpawn,
   isWalkable,
   inExit,
+  walkCrossesExit,
   positionAlongWalk,
   resolveTarget,
   snapToWalkable,
@@ -379,6 +380,14 @@ export class Room {
    * where the page has its owl when the room will not let it in there: a point whose straight walk
    * reaches it comes first, so the room's copy walks over to the owl and the page never has to move
    * its owl back to the room's spot (OP-138).
+   *
+   * No point is picked whose straight walk from where the owl stands (`toward`, else the spawn) passes
+   * through a way out. The page walks its owl over to the room's spot (its step aside), and that walk
+   * took it through the doorway and out of the room it had only just come into: in the grove, one
+   * arrival in fifteen of those that come in beside another owl with no doorway named (OP-342).
+   *
+   * TODO-DOCS (OP-342): docs/ARCHITECTURE.md, "Entering a room": the scatter also passes over any spot
+   * whose straight walk from where the owl stands would go through a way out.
    */
   scatter(spawn: Vec2, radius: number, except?: string, toward?: Vec2): Vec2 {
     let r = radius;
@@ -386,13 +395,14 @@ export class Room {
     let walled: Vec2 | null = null; // free, but its straight walk to `toward` meets a wall
     // The straight walk from a spot on the floor, as the page asks it of an owl on the ground (OP-084: a solid perch is a wall below its top).
     const ground = toward ? footing(this.def, 0) : null;
-    for (let i = 0; i < LIMITS.scatterAttempts && r > 0; i++) {
+    const stands = toward ?? spawn;
+    for (let i = 0; i < LIMITS.scatterAttempts && r > 0; i++, r -= LIMITS.scatterShrink) {
       const p = { x: Math.round(spawn.x + (this.rnd() * 2 - 1) * r), y: Math.round(spawn.y + (this.rnd() * 2 - 1) * r * 0.5) };
+      if (walkCrossesExit(this.def, stands, p)) continue;
       if (this.free(p, except)) {
         if (!toward || !ground || distance(resolveTarget(p, toward, ground.walkable, ground.shut), toward) < 3) return p;
         walled ??= p;
       } else if (!fallback && isWalkable(p, this.def.walkable) && !inExit(this.def, p)) fallback = p;
-      r -= LIMITS.scatterShrink;
     }
     if (walled) return walled;
     if (isWalkable(spawn, this.def.walkable) && !inExit(this.def, spawn)) return { ...spawn };

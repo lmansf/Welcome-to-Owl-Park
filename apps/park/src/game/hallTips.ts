@@ -3,11 +3,14 @@ import { HALL_MIDDLE, ROOT_RUNS, rootId, type RootRun } from '@owl-park/shared/r
 import { HALL_WORDS } from '../ui/hallWords';
 
 /**
- * A first flight where owls arrive (OP-347). The play log, test visits left out: 15 of 20 visits end
- * in the Great Hollow, half a minute after the owl comes in, and every one of those visitors is a
- * guest, who may take no quest. What a guest may do is already in the hall: the root runs across its
- * middle (OP-308), a fallen root to hop up, a knot, and a stump to glide off. Nothing led to them and
- * nothing said what they are for, so an owl met its first course without ever having jumped.
+ * A first flight where owls arrive (OP-347). The play log's outside visitors mostly never reach the
+ * arcade or a course (on a phone, 11 of 13 visits since Nov 1), and every one of them is a guest, who
+ * may take no quest. (This note first said 15 of 20 visits end in the Great Hollow half a minute
+ * after the owl comes in; read owl by owl on Nov 12, 11 of those 15 were a keeper's own phone and
+ * automated visits. PLAN.md, Baseline.) What a guest may do is already in the hall: the root runs
+ * across its middle (OP-308), a fallen root to hop up, a knot, and a stump to glide off. Nothing led
+ * to them and nothing said what they are for, so an owl met its first course without ever having
+ * jumped.
  *
  * This file is the rule, pure and unit-tested: where the tips stand and which one speaks to an owl,
  * where the feather trail leads (the floor before each inner run's first root), and what counts as the

@@ -1,32 +1,28 @@
 # Owl Park cleanup and rebuild: the plan
 
-- Status: the pass is done, and the owner's word of Nov 12 on what was waiting (the art is mine to
-  pick; everything else approved as it stood) is carried out in three changes: the sounds and the
-  side camera on for every visitor (OP-355, merged as PR 232), the town view and the thermal on
-  (OP-356, merged as PR 234), and the courses' own art (OP-348, this change: put up again on the
-  owner's second word of Nov 12, to make every change of the pass live). Ticket OP-342. Branch
+- Status: the pass is done and every change of it is live. The owner's word of Nov 12 on what was
+  waiting (the art is mine to pick; everything else approved as it stood) was carried out in three
+  changes: the sounds and the side camera on for every visitor (OP-355, PR 232), the town view and
+  the thermal on (OP-356, PR 234), and the courses' own art (OP-348, PR 235, put up again and
+  merged on his second and third words of that day). Ticket OP-342. Branch
   `claude/determined-wozniak-3ljxrf`.
 - Last updated: 2026-11-12. Live for every visitor: the cleanup's five milestones (OP-343 to
-  OP-346, OP-349), the first flight (OP-347), the art pass's no-spend part (OP-348: the Great
-  Hollow, the courses' ground, the neon course's light), the flight at any frame rate (OP-353),
-  three small controls on a phone (OP-354), the sound set (OP-350), the side camera (OP-351,
-  OP-352), the town view (OP-336) and the thermal (OP-340). No feature of the pass is behind a
-  flag any more (`friends`, from before it, is the one flag left). With this change the neon and
-  ink courses stand on art of their own realms (OP-348; 4.32 of the owner's 10 dollars spent), and
-  nothing the pass built is left off `main`. Looked at and left, with why in the log: one HUD
-  style (B4).
-- How this change is merged: the merge sweep leaves it to the owner, as it did PR 233 (it adds
-  119 KB to the art record, `tools/art/provenance.jsonl`; GitHub will not show a change that size,
-  and the sweep leaves what it cannot check to him). His word of Nov 12, to make every change
-  live, is that yes: the pull request is merged on it once every check is green, and the deploy
-  follows the merge as for any other.
+  OP-346, OP-349), the first flight (OP-347), the art pass (OP-348: the Great Hollow, the courses'
+  ground, and the neon and ink courses on art of their own realms; 4.32 of the owner's 10 dollars
+  spent), the flight at any frame rate (OP-353), three small controls on a phone (OP-354), the
+  sound set (OP-350), the side camera (OP-351, OP-352), the town view (OP-336) and the thermal
+  (OP-340). No feature of the pass is behind a flag (`friends`, from before it, is the one flag
+  left). Looked at and left, with why in the log: one HUD style (B4).
+- What comes next is the owner's to choose: on Nov 12 he asked for one larger-than-life change
+  that would make the park far more inviting to a new player or bring a player back. The one
+  recommended, and why, is the log's last entry. Nothing of it is built.
 - Still the owner's to say: OP-335 and OP-341 (each needs a change under `.github/`, which his
   rules keep his unless he says so of that change); the "at the park" quest step (naming the
   place changes a logged step's words); OP-357 (the art tool's own tests are not part of CI and
   three have gone stale).
-- To pick up after a break: the play log has had no real visit since the cleanup went live (last
-  read Nov 12 at 13:58 UTC, after the last switch-on). Read it first (the baseline below), then
-  the punch list's items 14 and 16 and the log's last entries.
+- To pick up after a break: no outside visitor has come since the cleanup went live (last read
+  Nov 12). Read the play log first, owl by owl (the correction under Baseline says why), then the
+  punch list's items 14 and 16 and the log's last entries.
 - Read first: `FABLE.md` (the owner's rules; it wins over this file).
 
 The owner's brief (Nov 11): a full cleanup pass of the game, end to end, as a player meets it. Two
@@ -68,6 +64,26 @@ the park's own checks, each under half a minute): 20 visits by about ten owls, 1
 three quarters within three minutes). No course run has started since Nov 10. So few visits cannot
 show a milestone moving in a day; they do say where visits end, and the first quest where owls arrive
 (B1) goes ahead of the phone pass.
+
+**Corrected on Nov 12.** The numbers above counted every visit the log does not mark as a test, and
+that was wrong. Read owl by owl:
+
+- Of the 20 visits of Nov 9 to 11, 10 were one owl on a phone that has come on every day since
+  Nov 1 (49 visits; a keeper's, by its pattern), 3 were automated by their pattern (they start inside
+  the park, stay in one room for under 30 seconds, and each is a new owl), and 7 were outside
+  visitors (4 owls).
+- Of the 15 that ended in `m3-hall`, 11 were the keeper's and the automated ones. The outside
+  visitors' median visit was 12.3 minutes, not half a minute in the hall.
+- What every outside visit since Nov 1 does show (24 visits by 12 owls, so small numbers): on a
+  phone 11 of 13 visits never reached the arcade or a course; the six visits that did reach one
+  lasted 15 to 75 minutes, against a median of 3.6 minutes for the rest; two owls came back on
+  another day; every outside visitor was a guest; and no two were ever in the park at once.
+
+Where this file's milestones and log quote 15 of 19 or 15 of 20, read them with this correction. The
+first flight (B1) was built on that figure. Its case now rests on the third point: most visits never
+reach play, and the hall is where a guest has the roots, the glide and the thermal to play with.
+To tell outside visitors apart: leave out any owl with thirty visits or more, and any visit that
+starts inside the park, stays in one room and lasts under 30 seconds.
 
 ## The walk and what it covered
 
@@ -557,3 +573,51 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   his word is the yes it waits for, so it is merged on that word when its checks are green. Not
   taken as said of them, and still his: the two changes under `.github/` (OP-335, OP-341), the
   "at the park" quest step, OP-357, and the other sessions' open pull requests.
+- 2026-11-12: the courses' own art merged (PR 235, `29b2018`) on the owner's word, and is live: the
+  deploy (run 308) ran on the merge commit. `main` had moved twice while its checks ran (two pull
+  requests of the owner's, sharing no file with it), so the full check and the kit check were run on
+  the branch merged with the new `main` before it went in; `main`'s tree after the merge is the tree
+  that was checked. Every change of the pass is live.
+- 2026-11-12: the baseline corrected (see Baseline). I had not read the log owl by owl: half of the
+  visits I called real were a keeper's phone and automated visits. Kept for next time: before
+  quoting the play log, list the owls behind the visits.
+- 2026-11-12: the owner asked for one larger-than-life change, to make the park far more inviting to
+  a new player or to bring one back. Recommended, and waiting for his word (nothing is built): bring
+  the guardian to life. The park's own account of itself is that its attractions are legendary owls,
+  larger than life; in the game they are still statues four owls tall, and the painted great horned
+  owl (`guardian.png`) stands only at the `grove` start. The change: that owl, eight or more owls
+  tall, alive at the heart of `m3-hall`, where every visitor comes in. It breathes, its eyes follow
+  the nearest owl, it turns its head to a newcomer, answers a hoot with its own, and its wingbeat is
+  the thermal that is already there. Later: it knows an owl that has come before, its mood follows
+  the park's moon, and owls gathered under it are lifted together.
+  - Why this one. The log's outside visitors mostly never reach play, were never in the park with
+    another visitor, and are guests for whom nothing counts. A living giant in the first hall is
+    play that needs no finding, company in an empty park, and the same for every player.
+  - What it should move: visits that end in `m3-hall` within a minute (down), visits that reach the
+    arcade or a course (up), owls back on another day (up).
+  - The first slice would hide behind a flag, change nothing on the room server and spend nothing:
+    the painting that exists, enlarged, until a larger one is painted.
+  - Weighed and set aside: an arrival by air (a glide down the tree in place of the walk from the
+    nest), which gets a new owl playing at once but gives the park no face; and replays of earlier
+    visitors' flights, which need stored data the owner's rules keep his.
+- 2026-11-12: `main`'s browser suite went red on the art's merge commit, and this change's first run
+  was red too, each on a different test neither had touched. Neither was chance, and one was the
+  park's own fault.
+  - The canopy's "a step off the end of a bough" test watched the page's own frames for the owl in
+    the air. The drop takes 0.37 s and the flight catches up with however long a frame was (OP-353),
+    so a runner drawing fewer than three frames a second never draws the owl in it. Driven by hand:
+    at frames of 0.4 s and over a fall is counted and the owl is never seen in the air, the very
+    state the failed run reported. The park is right there. The test now runs on a clock it moves
+    itself, at fifty frames a second and at ten.
+  - The room server's "a leaf pile is shared" test failed with the pile not among the second owl's
+    objects: that owl was no longer in the grove. An owl that comes in with no doorway named, on top
+    of another, is given a spot up to 220 px from the spawn and walks over to it (its step aside),
+    and the grove's way to the hub is 65 px from its spawn: one such arrival in fifteen was walked
+    out through it (20 of 300 rolls of the room's own rule; 3 of 45 arrivals on a room server run
+    here). Nineteen rooms had some share of it. Small in the live park, where visitors come in by
+    named doorways that spread arrivals by 60 px, which reaches no way out; it bites a link straight
+    to a room, and every test that opens two owls in one. The room now gives no arrival a spot whose
+    walk over would pass through a way out (`walkCrossesExit`): 0 of 300 rolls in every room, 0 of
+    45 arrivals on the room server, and the second owl still stands apart from the first every time.
+  - Kept for next time: a red test on code a change did not touch is a finding until shown
+    otherwise; "it passed on the last run" was true of both of these for weeks.

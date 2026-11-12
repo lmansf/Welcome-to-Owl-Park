@@ -6,7 +6,7 @@
  * doorway in the far wall that comes out in a side wall turns a corner, and the owl arrives at the
  * spawn as it always has.
  */
-import { isWalkable, pointInRect, type Rect } from './geometry';
+import { isWalkable, pointInRect, segmentTouchesRect, type Rect } from './geometry';
 import { nestDoorIndex } from './homes';
 import type { Vec2 } from './protocol';
 import { findSpawn, type DoorDef, type RoomDef } from './room';
@@ -91,7 +91,19 @@ export function doorLabel(door: DoorDef, map: WalkMap): string | undefined {
 }
 
 export function inExit(room: RoomDef, p: Vec2): boolean {
-  return room.doors.some((d) => (d.to !== undefined || nestDoorIndex(d.id) !== null) && pointInRect(p, d.rect));
+  return room.doors.some((d) => leadsOut(d) && pointInRect(p, d.rect));
+}
+
+/** A doorway that takes an owl out of its room: one that leads somewhere, or a nest's door on the street. */
+const leadsOut = (d: DoorDef): boolean => d.to !== undefined || nestDoorIndex(d.id) !== null;
+
+/**
+ * Whether the straight walk from `from` to `to` passes through a doorway out of `room` (inExit's
+ * doorways). An owl walked that way by the park itself, not by its visitor, would leave the room it
+ * has only just come into: the room server puts no arrival where its step aside would do that.
+ */
+export function walkCrossesExit(room: RoomDef, from: Vec2, to: Vec2): boolean {
+  return room.doors.some((d) => leadsOut(d) && segmentTouchesRect(from, to, d.rect));
 }
 
 /**

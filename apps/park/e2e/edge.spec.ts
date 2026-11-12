@@ -568,9 +568,16 @@ test.describe('room server', () => {
     const a = await visitor(browser, { room: 'grove' });
     const b = await visitor(browser, { room: 'grove' });
     await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(1);
-    const pile = (await state(a)).objects.find((o) => o.kind === 'leaf-pile' && o.here)!;
+    // A pile on the floor, which an owl flops into from where it stands (the grove has two more up in
+    // its treehouses, which take a jump: with the three on the floor used up, the first one "here" was one of those).
+    const pile = (await state(a)).objects.find((o) => o.kind === 'leaf-pile' && o.here && o.top === 0)!;
+    expect(pile, 'a leaf pile on the grove’s floor that has not been flopped into').toBeDefined();
     expect(await a.evaluate((id) => window.owlPark.use(id), pile.id)).toBe(true);
     await expect.poll(async () => (await state(a)).objects.find((o) => o.id === pile.id)?.here, { timeout: 20_000 }).toBe(false);
+    // The second owl is still in the grove. The room gives it a spot of its own beside the first, and
+    // its walk over used to pass, one time in fifteen, through the way to the hub and take it out
+    // (OP-342): this test then failed with the pile not among the objects of the room it was in.
+    expect((await state(b)).room).toBe('grove');
     await expect.poll(async () => (await state(b)).objects.find((o) => o.id === pile.id)?.here, { timeout: 10_000 }).toBe(false);
     await a.screenshot({ path: 'e2e-screenshots/edge-leaves.png' });
     // A newcomer hears about it too.
