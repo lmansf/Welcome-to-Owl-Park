@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ROOMS, groundOf } from '@owl-park/shared/rooms';
-import { SIDE_HINT_OVER, SIGN_HOLD, SIGN_REACH, doorHintTarget, nearTargets, nearestOffSides, placeHints, signFocus, signWaits, signX, touchBottom, type ScreenBox, type ViewRect } from './hints';
+import { SIDE_HINT_OVER, SIGN_HOLD, SIGN_REACH, doorHintTarget, nearTargets, nearestOffSides, placeHints, signFocus, signWaits, signX, touchBottom, type ScreenBox, type ViewRect, CHIP_WORDS, sideChipWords } from './hints';
 
 // A 1000 x 600 screen showing room pixels 1000-2000 by 0-600 (one CSS pixel per room pixel).
 const view: ViewRect = { x: 1000, y: 0, w: 1000, h: 600 };
@@ -194,5 +194,24 @@ describe('a sign by a doorway at the screen’s edge slides in so all its words 
   });
   it('stands in the middle when it is wider than the screen', () => {
     expect(signX(900, 600, view, 10)).toBe(1200);
+  });
+});
+
+describe('sideChipWords: what a chip says for a doorway seen from the side (OP-346)', () => {
+  it('names the place the doorway leads to, where it has a name', () => {
+    expect(sideChipWords({ way: 'down' }, 'the Great Hollow', { finish: false })).toBe('To the Great Hollow');
+    expect(sideChipWords({}, 'the quiet landing', null)).toBe('To the quiet landing');
+  });
+
+  it('says which way along a course a doorway goes, and names the finish', () => {
+    expect(sideChipWords({ way: 'up' }, null, { finish: false })).toBe(CHIP_WORDS.on);
+    expect(sideChipWords({ way: 'down' }, null, { finish: false })).toBe(CHIP_WORDS.back);
+    expect(sideChipWords({}, null, { finish: true })).toBe(CHIP_WORDS.finish);
+    expect(sideChipWords({ way: 'up' }, null, { finish: true })).toBe(CHIP_WORDS.finish);
+  });
+
+  it('says nothing for a side room of a course, or for a doorway out of a course that leads nowhere named', () => {
+    expect(sideChipWords({}, null, { finish: false })).toBeUndefined();
+    expect(sideChipWords({ way: 'up' }, null, null)).toBeUndefined();
   });
 });

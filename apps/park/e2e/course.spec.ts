@@ -132,6 +132,20 @@ test.describe('the parkour courses (OP-224)', () => {
     expect((await state(page)).tipShown).toBeNull();
   });
 
+  test('the chips at the screen\'s edge say where a course\'s doorways lead (OP-346)', async ({ page }) => {
+    // At the way in: the way on is off screen to the east, and its chip says so; the side room's chip is an arrow alone.
+    await openPark(page, { room: 'canopy-1', spawn: 'from-gate', kit: '1' });
+    await expect(page.locator('[data-hint="to-trunk"]')).toHaveText('Next part');
+    await expect(page.locator('[data-hint="to-trunk"]')).toHaveAttribute('aria-label', 'Next part, off screen: walk there');
+    await expect(page.locator('[data-hint="roots"]')).toHaveText('');
+    // In the last room the finish is named.
+    await openPark(page, { room: 'canopy-3', spawn: 'from-below', kit: '1' });
+    await expect(page.locator('[data-hint="hut"]')).toHaveText('Finish');
+    // Come in at the far end of the first room, the way out to the hall is off screen to the west: named by where it leads.
+    await openPark(page, { room: 'canopy-1', spawn: 'from-trunk', kit: '1', keeper: '1', newmap: '1' });
+    await expect(page.locator('[data-hint="to-commons"]')).toHaveText('To the Great Hollow');
+  });
+
   test('the objective strip counts the bells and the lost feathers; the dash is a course’s alone', async ({ page, isMobile }) => {
     await openPark(page, { room: 'trail-1' });
     const strip = page.locator('[data-objective]');

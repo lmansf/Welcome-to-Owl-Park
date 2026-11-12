@@ -567,3 +567,30 @@ test.describe('two visitors on one device', () => {
     });
   }
 });
+
+test.describe('the Great Hollow reads (OP-346)', () => {
+  test.describe.configure({ timeout: 120_000 });
+
+  test('tall art goes see-through while the visitor\'s own owl is behind it, and a doorway at the hall\'s end has its sign beside it', async ({ page }) => {
+    await openPark(page, { room: 'm3-hall', keeper: '1', newmap: '1' });
+    const doors = (await state(page)).doors;
+    const idol = doors.find((d) => d.id === 'idol-market')!;
+    const way = doors.find((d) => d.id === 'to-market')!;
+    // Out on the open floor nothing hides the owl.
+    expect((await state(page)).seeThrough).toEqual([]);
+    // Behind the neon street's idol (north of its foot, inside its picture): it fades so the owl shows.
+    await walkAndStop(page, idol.x + 10, idol.y - 130);
+    await expect.poll(async () => (await state(page)).seeThrough, { timeout: 10_000 }).toContain('robot-owl');
+    // Out from behind it, the idol stands solid again.
+    await walkAndStop(page, idol.x - 420, idol.y - 130);
+    await expect.poll(async () => (await state(page)).seeThrough, { timeout: 10_000 }).toEqual([]);
+
+    // By the doorway at the hall's east end: its sign stands beside the doorway, not out over the idol.
+    await walkAndStop(page, way.x - 150, way.y + 30);
+    await expect.poll(async () => (await state(page)).signShown, { timeout: 10_000 }).toBe('The neon street');
+    const box = (await state(page)).signBox!;
+    expect(box.right, 'the sign ends just in from the doorway').toBeLessThan(way.x);
+    expect(way.x - box.right, 'and stands by it').toBeLessThan(140);
+    expect(box.top, 'level with the doorway, or under the owl standing on it').toBeGreaterThan(way.y - 80);
+  });
+});

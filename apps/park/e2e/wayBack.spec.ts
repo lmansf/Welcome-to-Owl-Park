@@ -75,6 +75,45 @@ test.describe('the way back waits for a fresh push', () => {
     await page.keyboard.up('ArrowUp');
   });
 
+  test('up held out of a course leaves the owl standing where it lands in the Great Hollow, and a push held into a course leaves it at the way in (OP-346)', async ({ page }) => {
+    // Out of a side view with up held: seen from above that up was a walk north, 1,000 px in three seconds.
+    await openPark(page, { room: 'brush-1', spawn: 'from-gate', keeper: '1', newmap: '1' });
+    const out = (await state(page)).doors.find((d) => d.id === 'to-commons')!;
+    await walkAndStop(page, out.x, (await state(page)).pos.y);
+    await page.keyboard.down('ArrowUp');
+    await inRoom(page, 'm3-hall');
+    await page.waitForFunction(() => window.owlPark.state()?.connected === true);
+    const landed = (await state(page)).pos;
+    await frames(page, 45);
+    let s = await state(page);
+    expect(s.walking, 'the up that took the doorway is not a walk').toBe(false);
+    expect(Math.hypot(s.pos.x - landed.x, s.pos.y - landed.y)).toBeLessThan(2);
+    // Let go and pushed again, it walks.
+    await page.keyboard.up('ArrowUp');
+    await frames(page, 5);
+    await page.keyboard.down('ArrowUp');
+    await expect.poll(async () => (await state(page)).pos.y, { timeout: 10_000 }).toBeLessThan(landed.y - 30);
+    await page.keyboard.up('ArrowUp');
+
+    // Into a side view with the walking key held: the owl stands at the way in until the key is pushed afresh.
+    const gate = (await state(page)).doors.find((d) => d.id === 'course-grove')!;
+    await walkAndStop(page, gate.x - 190, gate.y);
+    await page.keyboard.down('ArrowRight');
+    await inRoom(page, 'canopy-1');
+    await page.waitForFunction(() => window.owlPark.state()?.connected === true);
+    const wayIn = (await state(page)).pos;
+    await frames(page, 45);
+    s = await state(page);
+    expect(s.room).toBe('canopy-1');
+    expect(Math.abs(s.pos.x - wayIn.x), 'the push that walked it in does not walk it on toward the first drop').toBeLessThan(2);
+    // A key added is a new push: it walks. (Up does not walk a side view; right does.)
+    await page.keyboard.up('ArrowRight');
+    await frames(page, 5);
+    await page.keyboard.down('ArrowRight');
+    await expect.poll(async () => (await state(page)).pos.x, { timeout: 10_000 }).toBeGreaterThan(wayIn.x + 30);
+    await page.keyboard.up('ArrowRight');
+  });
+
   test('up held out of its nest leaves the owl on the street, before its own door', async ({ page }) => {
     await openPark(page, { room: 'homes', collector: `e2e-way-back-${test.info().project.name}` });
     await walkToDoor(page, 'nest-door-0');

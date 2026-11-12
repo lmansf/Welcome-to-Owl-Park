@@ -589,6 +589,12 @@ export interface DoorDef {
   labelNew?: string;
   /** Where the doorway's sign stands (room pixels, its top middle); the marker when not given. */
   labelAt?: Vec2;
+  /**
+   * Which part of the sign stands at `labelAt`, across (OP-346): its middle (0.5) when not given. A
+   * doorway in a room's east side gives 1, the sign's right edge, and one in its west side 0, its left:
+   * the words then lie on the floor beside the doorway whatever their length, none under its art.
+   */
+  labelAnchor?: 0 | 0.5 | 1;
   /** Where to place a visual hint (sign, glow) for the door. */
   marker?: Vec2;
 }

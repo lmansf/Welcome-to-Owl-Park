@@ -1,7 +1,7 @@
 import { STREET_ROOM, TREE_STREET_ROOM, type DoorDef } from '@owl-park/shared';
 import { describe, expect, it } from 'vitest';
 import { NEST_ROOM, ROOMS } from '../rooms';
-import { AHEAD_PX, DOOR_AIM_PX, UP_GRACE_MS, WAY_DOOR_PX, backWaits, doorwayUnder, doorwaysOff, roomsAhead, takesDoorway, upCounts } from './doors';
+import { AHEAD_PX, CARRIED_COS, DOOR_AIM_PX, UP_GRACE_MS, WAY_DOOR_PX, backWaits, carriedIn, doorwayUnder, doorwaysOff, roomsAhead, stillCarried, takesDoorway, upCounts } from './doors';
 
 const door = { x: 1700, y: 610, w: 130, h: 90 };
 
@@ -45,6 +45,45 @@ describe('backWaits: the way back waits for a fresh push', () => {
     expect(backWaits(true, true, false, true)).toBe(false);
     expect(backWaits(true, false, true, true)).toBe(false);
     expect(backWaits(true, true, false, false)).toBe(true);
+  });
+});
+
+describe('carriedIn: a direction held across a change of view is not a walk (OP-346)', () => {
+  const up = { x: 0, y: -1 };
+  const right = { x: 1, y: 0 };
+  const diagonal = { x: Math.SQRT1_2, y: -Math.SQRT1_2 };
+
+  it('is the direction held as the owl comes out of a side view into a room seen from above, and the other way round', () => {
+    expect(carriedIn(true, false, up, false)).toEqual(up);
+    expect(carriedIn(false, true, right, false)).toEqual(right);
+  });
+
+  it('is nothing between two rooms seen the same way: there a held direction walks on', () => {
+    expect(carriedIn(false, false, up, false)).toBeNull();
+    expect(carriedIn(true, true, right, false)).toBeNull();
+  });
+
+  it('is nothing for an owl that came by no doorway, that holds nothing, or that let go on the way', () => {
+    expect(carriedIn(undefined, false, up, false)).toBeNull();
+    expect(carriedIn(true, false, null, false)).toBeNull();
+    expect(carriedIn(true, false, up, true)).toBeNull();
+  });
+
+  it('stays carried while the same direction is held, a wavering thumbstick included', () => {
+    expect(stillCarried(up, up)).toBe(up);
+    const wavered = { x: Math.sin(0.3), y: -Math.cos(0.3) };
+    expect(stillCarried(up, wavered)).toBe(up);
+  });
+
+  it('is free once the direction is let go, or points elsewhere: any walking key added or let go is a new push', () => {
+    expect(stillCarried(up, null)).toBeNull();
+    expect(stillCarried(up, diagonal)).toBeNull();
+    expect(stillCarried(diagonal, right)).toBeNull();
+    expect(stillCarried(diagonal, up)).toBeNull();
+    expect(stillCarried(up, { x: 0, y: 1 })).toBeNull();
+    expect(stillCarried(null, up)).toBeNull();
+    // The 45 degrees between two neighbouring ways of the keys is past the turn a carried direction allows.
+    expect(Math.SQRT1_2).toBeLessThan(CARRIED_COS);
   });
 });
 

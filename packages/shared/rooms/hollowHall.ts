@@ -192,6 +192,8 @@ function hollowFloor(): Polygon {
 /** How far in from the rim a way's arrivals stand, and its marker. */
 const ARRIVE = 190;
 const MARK = 24;
+/** How far in from the rim (out, so under zero) the foot of a doorway's art stands at the back and the two ends. */
+const END_ART_OUT = -6;
 
 /** The art standing at each way: its realm's doorway, the knothole, the trunk's door, the hatch. */
 function wayArt(id: HallWay): string | null {
@@ -211,14 +213,30 @@ function wayArt(id: HallWay): string | null {
  */
 export const FRONT_ART = 0.6;
 
-/** How wide a way's doorway art is drawn (room px). */
-function artWide(id: HallWay): number {
+/** How far in from an end doorway's art its sign's near edge stands, and how far over the doorway's middle its top (room px). */
+export const END_SIGN_GAP = 16;
+export const END_SIGN_UP = 30;
+
+/** Half the width of what a way's doorway art draws (its measured box where the kit has one), in room px. */
+function artHalf(id: HallWay): number {
   const art = wayArt(id);
-  return (art ? (KIT_ART[art]?.w ?? 240) : 240) * (atFront(id) ? FRONT_ART : 1);
+  const a = art ? KIT_ART[art] : undefined;
+  const wide = a?.left !== undefined && a.right !== undefined ? a.right - a.left : (a?.w ?? 240);
+  return (wide * (atFront(id) ? FRONT_ART : 1)) / 2;
 }
 
-/** How far past an end doorway's inner edge its sign's middle stands (room px). */
-export const END_SIGN_CLEAR = 240;
+/**
+ * An end way's sign (OP-346): beside its doorway and level with it, the sign's near edge just in from
+ * the doorway's art (DoorDef.labelAnchor). Its words lie on the floor an owl walks up over whatever
+ * their length, and none slips under the art (the neon street read "The neon stre", Nov 9). Before, the
+ * sign's middle stood half a long label further in along the leaning rim: a short sign on a computer
+ * stood 340 px from its doorway and 240 over it, across the face of the idol between the Commons' ways.
+ */
+function endSign(id: HallWay): Pick<DoorDef, 'labelAt' | 'labelAnchor'> {
+  const out = Math.sign(rimNormal(angleAt(wayS(id))).x);
+  const art = wayAt(id, END_ART_OUT);
+  return { labelAt: { x: Math.round(art.x - out * (artHalf(id) + END_SIGN_GAP)), y: wayAt(id).y - END_SIGN_UP }, labelAnchor: out > 0 ? 1 : 0 };
+}
 
 /** How tall a way's doorway art is drawn (room px). */
 function artTall(id: HallWay): number {
@@ -232,10 +250,7 @@ function artTall(id: HallWay): number {
  */
 export function signInset(id: HallWay): number {
   if (id === 'down') return 200;
-  // At an end the doorway's art stands beside the floor: its sign stands clear of it, half a long
-  // label (a phone held sideways draws one up to about 440 room px wide) past the art's inner edge.
-  // The rim leans there, so the step in is lengthened until it is that far across.
-  if (atEnd(id)) return Math.round((artWide(id) / 2 + END_SIGN_CLEAR) / Math.abs(rimNormal(angleAt(wayS(id))).x));
+  // At an end the doorway's art stands beside the floor, and its sign beside the art (endSign).
   if (!atFront(id)) return 150;
   return Math.min(300, artTall(id) + 20);
 }
@@ -258,7 +273,7 @@ function rimDoor(id: HallWay, to: NonNullable<DoorDef['to']>, label?: string): D
     rect: { x: p.x - w / 2, y: p.y - h / 2, w, h },
     to,
     marker: rimAt(s, MARK),
-    ...(label ? { label, labelAt: rimAt(s, signInset(id)) } : {}),
+    ...(label ? { label, ...(atEnd(id) ? endSign(id) : { labelAt: rimAt(s, signInset(id)) }) } : {}),
   };
 }
 
@@ -305,7 +320,7 @@ const PIECES: RoomPiece[] = HALL_WAYS.flatMap((id): RoomPiece[] => {
     const at = wayAt('down', HATCH_IN);
     return [{ id: 'root-hatch', key, x: at.x, y: at.y + 50 }];
   }
-  const foot = wayAt(id, atFront(id) ? -40 : -6);
+  const foot = wayAt(id, atFront(id) ? -40 : END_ART_OUT);
   const p = wayAt(id);
   // Course gates face their realm's doorway along the rim.
   return [

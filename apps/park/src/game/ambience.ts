@@ -109,6 +109,8 @@ export interface SetPieces {
   gate?: { react(): void };
   /** The hub's arches into gated realms, by door id: the blockade while the realm is closed, the doorway's glow while it is open. */
   arches?: Record<string, { blockade: Phaser.GameObjects.Image | null; glow: Phaser.GameObjects.Image }>;
+  /** Every piece stood among the owls, its foot its depth: the tall ones go see-through while the visitor's own owl is behind them (seeThroughArt.ts, OP-346). */
+  standing?: Phaser.GameObjects.Image[];
 }
 
 /** Each idol glow's size before any swell, and the swell under way, so pledges close together never stack. */
@@ -158,12 +160,14 @@ export function addSetPieces(
   // several over its own spot (the Great Hollow's Commons, RoomDef.idols).
   const realms = idolRealms(room);
   const tallest = room.bowl ? BOWL_IDOL_TALL : Number.POSITIVE_INFINITY;
-  const pieces: SetPieces = {};
+  const standing: Phaser.GameObjects.Image[] = [];
+  const pieces: SetPieces = { standing };
   const tappable = (img: Phaser.GameObjects.Image, realm: string) => {
     img.setInteractive(hugging(img, img.texture.key));
     img.on(Phaser.Input.Events.GAMEOBJECT_POINTER_UP, (pointer: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => onIdolTap?.(pointer, event, realm));
   };
   const stood = (realm: string, idol: Idol) => {
+    standing.push(idol.image);
     pieces.idol ??= idol;
     if (!room.idols) return;
     pieces.idols ??= {};
@@ -266,6 +270,7 @@ export function addSetPieces(
     if (!scene.textures.exists(p.key)) continue;
     const img = piece(scene, p.x, p.y, p.key).setDepth(p.y).setFlipX(!!p.flip);
     if (p.scale) img.setDisplaySize(img.displayWidth * p.scale, img.displayHeight * p.scale);
+    standing.push(img);
   }
   for (const door of room.doors) {
     const m = door.marker;
@@ -277,6 +282,7 @@ export function addSetPieces(
       // gated realm also has a doorway's glow, shown instead of the blockade once the realm opens.
       const key = blockadeKey(door.closedSign);
       const blockade = scene.textures.exists(key) ? piece(scene, m.x, m.y, key).setDepth(m.y) : null;
+      if (blockade) standing.push(blockade);
       if (door.to) (pieces.arches ??= {})[door.id] = { blockade, glow: doorGlow(scene, m, door.to.room).setVisible(false) };
     } else if (room.id === 'hub' && door.id === WAY_OUT_DOOR) {
       // The way out of the park (C43): a soft gold ring on the floor where the owls came in.

@@ -36,6 +36,14 @@ The bots rate every hop as easy enough, so runs are not quit because hops are to
 points at what comes before the hop: nothing says how a course is played, a tap of Jump is a tiny
 hop, and falls look like floor.
 
+Read again late on Nov 11 (`game.v_session_end` joined to `game.fact_session`, `game.v_course_run`),
+before any of this pass was live. Test visits left out (`is_test`: 21 of the 41 visits since Nov 9 are
+the park's own checks, each under half a minute): 20 visits by about ten owls, 15 of them ending in
+`m3-hall`. Those 15 left half a minute after coming into the hall (median 28 s; a quarter within 13 s,
+three quarters within three minutes). No course run has started since Nov 10. So few visits cannot
+show a milestone moving in a day; they do say where visits end, and the first quest where owls arrive
+(B1) goes ahead of the phone pass.
+
 ## The walk and what it covered
 
 Five walkers played the 24 rooms a visitor can reach on the live map (from `lobby`: `homes`,
@@ -58,7 +66,7 @@ measurement; C = read in the code, to confirm.
 
 | # | What a player meets | Where | Fix planned | State |
 | --- | --- | --- | --- | --- |
-| 1 | Nothing says what to do on arrival: no quest owl or first quest where owls arrive; every quest owl stands in a realm room (V) | `lobby`, `m3-hall` | A first quest given where owls arrive, with the feather trail leading to it (bigger change B1) | open |
+| 1 | Nothing says what to do on arrival: no quest owl or first quest where owls arrive; every quest owl stands in a realm room (V) | `lobby`, `m3-hall` | A first thing to do where owls arrive, with the feather trail leading to it (bigger change B1; a guest may take no quest, so it is the hall's root runs) | open |
 | 2 | A course never says how it is played: no goal, no controls (hold Jump to glide, flap, dash), no clock though the gold prize is timed (V at arrival) | all three courses | A start card, first-time prompts at the first gust, stone, sign and bench, the run's clock in the strip | M2: tips in the room at the first of each thing (the goal and the moves at the way in), and the clock with the gold time in the strip |
 | 3 | A quick tap of Jump is a tiny hop (a short press rose 52 px, a hold 145; the first step of each course is 90 to 120) (V) | everywhere | Raise the least height a jump reaches so a tap clears a first step | M1: a tap now rises 83 to 128 px, a tapped flap is nearly a whole one |
 | 4 | Falls look like floor: pits and water are drawn as the same ground as safe floor, hazards faint (V) | all three courses | Draw every pit as a pit, the same way in each course | M1: the walk ends at a bank; a bramble dip or the street lies a step below it, and in the ink course the walk is flooded with still water; a rule test refuses a pit drawn as a walk |
@@ -68,16 +76,16 @@ measurement; C = read in the code, to confirm.
 | 8 | No pause; Escape or Close ends a run at once with nothing paid and no question (V) | arcade | Pause first, with Keep playing and Leave | M3: Escape or Close pauses; Keep playing, or Leave the game |
 | 9 | Unclear rules: "Tap to flap" on a computer; a drag toward the target fires into the ground (V) | arcade | Name the keys; a forward drag is no shot | M3: Space to flap; the arrows named for Talon Toss; a pull forward is no shot |
 | 10 | The prompt for anything is a pill in the far bottom corner; nothing shows at the thing (V) | everywhere | A prompt over the thing in reach as well | M2: a prompt on the floor at the owl's own feet, with the key on a computer |
-| 11 | A statue 500 px tall on the near rim hides the player's owl and wears a doorway's sign (V) | `m3-hall` | Tall art fades while the player's owl is behind it; the sign moves onto its doorway | open, M4 |
+| 11 | A statue 500 px tall on the near rim hides the player's owl and wears a doorway's sign (V) | `m3-hall` | Tall art fades while the player's owl is behind it; the sign moves onto its doorway | M4: tall standing art goes see-through while the visitor's own owl is behind it; a doorway at the hall's end has its sign beside it, by the sign's own edge |
 | 12 | The pad's label is cut off on a phone: "Look in t..." (V) | phone | A label that fits | open, M5 |
-| 13 | One place, two names: quest steps say "the great tree" and "the glass street", the signs say other names (V) | quests, signs, Menu | One name per place | open, M4 |
-| 14 | Human objects where owl ones belong: a trapdoor with a ladder, a plank hut door, park-bench checkpoints, a door booth, a vending machine (V) | courses, `m3-hall` | Swap to the kit's knot-holes and perches where it has them; list the rest for the artists | open, M4 |
-| 15 | Hazards drawn by code read as debug boxes; building faces drawn solid are walked through (V, C) | courses | Each hazard drawn as the thing it is; faces behind the owl | M1: thorns, mist, falls and wires redrawn with no box of colour. The faces: open, M4 |
+| 13 | One place, two names: quest steps say "the great tree" and "the glass street", the signs say other names (V) | quests, signs, Menu | One name per place | M4: the quest screens show each place by the name the walked park's signs and Menu give it; the Menu's map says what Neon Roost is (the arcade). Left: one step that reads "at the park" for the arcade's leaf pile (its words are the play log's) |
+| 14 | Human objects where owl ones belong: a trapdoor with a ladder, a plank hut door, park-bench checkpoints, a door booth, a vending machine (V) | courses, `m3-hall` | Swap to the kit's knot-holes and perches where it has them; list the rest for the artists | left for the artists, with the list (see the log, M4): each is its realm kit's own slot, and the kit has no owl piece to stand in for any of them in all three courses alike |
+| 15 | Hazards drawn by code read as debug boxes; building faces drawn solid are walked through (V, C) | courses | Each hazard drawn as the thing it is; faces behind the owl | M1: thorns, mist, falls and wires redrawn with no box of colour. The faces: left alone, and why: see the log, M4 |
 | 16 | A jump and one flap reaches the wires; a full jump on the waterfall ledge reaches the falls (worked out) | `circuit-2`, `circuit-3`, `brush-2` | Check with the bots, then lift the hazards | left for now: the high wires are what stops a glide over the whole act, and the kid bots pass. Look again at the log's fall spots once there are runs to read |
 | 17 | Offline builds: thorns over safe floor do nothing, so a preview plays easier than the live park (C, confirmed) | previews | One fall rule for both | M1: a preview judges a fall and sends it back as the room server does |
 | 18 | The camera eases by the frame, not by time, so it trails further on a slow device; the backdrop shows under the walkway; goals crowd the screen's corners (C, V) | courses | Bigger change B2 | open |
-| 19 | A direction held through a doorway keeps walking the owl in the next room (V) | doorways | Wait for a fresh push after a doorway taken with Up | open, M4 |
-| 20 | The feather trail is faint; edge chips are arrows with no words; HUD words stay lit over the dark between rooms (V) | everywhere | Contrast, a word on each chip, dim with the room | open, M4 |
+| 19 | A direction held through a doorway keeps walking the owl in the next room (V) | doorways | Wait for a fresh push after a doorway taken with Up | M4: a direction held across a change of view (side to above, above to side) is not a walk until it is let go or points elsewhere |
+| 20 | The feather trail is faint; edge chips are arrows with no words; HUD words stay lit over the dark between rooms (V) | everywhere | Contrast, a word on each chip, dim with the room | M4: the trail's feathers are pale and edged dark; a course's chips say Next part, Back, Finish or where they lead; a course's strip and the actions fade with the room |
 | 21 | Words: a one-player game "to play with whoever is in the park"; three ways to word an ending; developer wording a player can meet; fallback emoji symbols (V, C) | arcade, Menu | One wording pass | M3 for the arcade's lines. Left: the puzzle's emoji faces (a fallback for art that ships), and lines in the ticket and friends screens |
 | 22 | Almost no sound: only the Menu's knock was found (C, partial) | everywhere | Bigger change B3 | open |
 | 23 | The HUD's screens do not share a style: seven corner sizes, five button heights, three golds (C) | HUD, Menu | Bigger change B4 | open |
@@ -129,18 +137,39 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   ticket: Moon Flap's difficulty (wants the day's scores, not one script's try), the score wall off
   screen from mid floor, the feather counter over the first cabinet's sign (PR 221 is open on those
   cabinets).
-- **M4. The Great Hollow and the ways through.** Items 11, 13, 14, 19, 20.
+- **M4. The Great Hollow and the ways through (OP-346, built).** Items 11, 13, 19, 20; 14 and the
+  faces of 15 looked at and left, with the reasons in the log. Done when: a key held through a doorway
+  between a side view and a view from above leaves the owl standing; the visitor's own owl shows behind
+  tall art; every doorway sign, Menu place and quest step names a place one way. Should move: visits
+  that end in the Great Hollow (15 of 19 at the baseline), and trips back through a doorway within five
+  seconds. What it changed, in short:
+  - The held key (`doors.ts`, `carriedIn`, `stillCarried`): the direction held as the owl comes in
+    across a change of view does not steer, and held up does not take a doorway, until it is let go or
+    turns more than 40 degrees. Between two rooms seen the same way nothing changes.
+  - See-through (`seeThrough.ts`, `seeThroughArt.ts`): in a room seen from above, standing art taller
+    than an owl fades to a third while the visitor's own owl is behind it.
+  - Signs (`DoorDef.labelAnchor`, `hollowHall.ts` `endSign`): a doorway in a room's side has its sign
+    beside it by the sign's near edge.
+  - Names (`npcs.ts` `placeWords`, `placeShown`): shown words name a place as the walked park does.
+  - Chips (`hints.ts` `sideChipWords`), the trail's colour, and the room's own HUD parts fading with it.
 - **M5. The phone pass.** Items 12, 24 and whatever the phone walk finds: the stick, Jump, Dash, the
   pad, every room at 844x390 and upright.
 
 ## Bigger changes, after the cleanup
 
-- **B1. A first quest where owls arrive.** Goal: an owl that has just come in is given something to
-  do within ten seconds. Why it beats what is there: 15 of 19 visits end in the Great Hollow and no
-  quest has been started since Nov 1, because every quest owl stands a doorway further on. Steps: a
-  quest owl at the arrival spot; a first quest whose steps are the game's moves (walk, hop a root,
-  glide, take a doorway, ring a first bell); the feather trail leads to the quest owl first. Done
-  when: the play log shows quests started and fewer visits ending in `m3-hall`.
+- **B1. A first flight where owls arrive.** Goal: an owl that has just come in has something to do
+  within ten seconds, and has jumped, flapped and glided before it meets a course. Why it beats what
+  is there: 15 of 20 visits end in the Great Hollow, half a minute after the owl comes in. The first
+  plan was a first quest given at the way in. The play log says who those visitors are: every one is a
+  guest (a spectator, OP-191), and quests are locked to guests by the room server, which is the ticket
+  rules' business and not this pass's. That is also why no quest has been started since Nov 1; it was
+  never that the quest owls stand a doorway further on. So the first thing to do has to be one a guest
+  may do: the hall's own root runs (OP-308), which nothing leads to and nothing explains. Steps: the
+  feather trail leads a new owl to the nearest root run before any doorway; tips stand at the first
+  root, the stump and the landing, as a course's do (M2); a line when the first glide lands, and the
+  trail goes on to a doorway. Done when: a new owl's first minute has a jump, a flap and a glide in it
+  (browser test), and the play log shows fewer visits ending in `m3-hall` in their first minute.
+  A first quest for ticket holders can follow once the log shows ticket holders.
 - **B2. The camera in side-view rooms.** Goal: the camera shows where the owl is going. Why: it eases
   by the frame, so it lags on slow devices; it has no look-ahead; it slides after a fall. Steps: ease
   by time; look ahead of the owl's flight; frame the goal when it is high; cut under the fall's fade.
@@ -191,3 +220,32 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
     place for every kind of thing, where the visitor is already looking.
   - Seen on the way and left for M5 (the phone pass): on a phone held sideways the thumbstick lies
     over the owl at a course's way in.
+- 2026-11-11: milestone 4 built (OP-346). Choices made on the way:
+  - The held key. Measured first: Up held out of a course walked the owl 1,000 px across the Great
+    Hollow in three seconds. The rule is by view, not by key: across a change of view a held direction
+    means nothing (a doorway on the hall's rim can face any way, a course always starts to the east),
+    so the owl stands until a fresh push; between two rooms seen the same way a held direction still
+    points where the owl was going, and it walks on as before. A thumbstick may waver 40 degrees and
+    still be the push it came in with; any walking key added or let go is a new push.
+  - See-through is for the visitor's own owl only. Other owls stay hidden behind things, which is what
+    says the thing stands in front of them.
+  - The end doorway's sign had been set half a long label in from its doorway (Nov 9) so that no word
+    slipped under the doorway's art; on a computer the short sign stood 340 px from its doorway, on the
+    idol's face. Standing the sign's own near edge at the art keeps what Nov 9 wanted at any length.
+  - Names. Quest text is worded once for every owl by the room server, and the play log records those
+    words, so they are left as they are: the quest screens put the walked park's names in as they show
+    them. One step still reads "at the park" (the arcade's leaf pile has no place name); naming it would
+    change a logged step's words, so it waits for the owner's word.
+  - Left alone, item 14 (human objects). The trapdoor and ladder (`kit-hatch-down`), the plank door
+    (`kit-clearing-hut-door-open`), the three checkpoint benches (`kit-*-checkpoint-bench`), the door
+    booth (`kit-neon-rooftop-door-open`) and the vending machine (`kit-neon-vending-machine`) are each
+    the realm kit's own slot, drawn from a stand-in. The kit has a perch for the canopy only, and
+    benches in one course and perches in the others would be less consistent, not more. For the
+    artists: a knot-hole in the floor for the way down, a woven door for the hut, a perch with a lantern
+    for a checkpoint, a roost door for the booth.
+  - Left alone, the faces (item 15). A ledge's body is drawn solid down to the ground and an owl on
+    the ground walks in front of it. Drawing it darker, or behind, changes the walkway that
+    `pnpm kit:check` measures on every screen of every kit room, and the ink rooms sit at the edge of
+    their bands already. It belongs with the art pass (a face texture per realm), not with a recolour.
+  - The trail's look is only brighter. Where it leads is bigger change B1's.
+
