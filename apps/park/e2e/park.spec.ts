@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { cameraView, dist, frames, openGround, openPark, settleCamera, state, tapRoomPoint, waitForArrival, walkToDoor } from './helpers';
+import { cameraView, dist, frames, openGround, openPark, settleCamera, state, tapRoomPoint, waitForArrival, walkAndStop, walkToDoor } from './helpers';
 
 /** A finger drawn down the screen from (x, y), `by` pixels, in a few steps, then lifted. */
 async function swipeDown(page: Page, x: number, y: number, by: number): Promise<void> {
@@ -482,6 +482,28 @@ test.describe('single visitor', () => {
     const spot = s.doors.find((d) => d.id === 'idol')!;
     await waitForArrival(page, spot.x, spot.y); // the tap sent the owl to the gathering spot
     await expect(page.getByText(/Voting opens/).first()).toBeVisible({ timeout: 10_000 });
+  });
+});
+
+test.describe('the prompt at the owl (OP-344)', () => {
+  test('what an owl can do where it stands shows at its own feet, with the key on a computer, and goes when it talks or walks off', async ({ page }) => {
+    await openPark(page);
+    const touch = await page.evaluate(() => matchMedia('(pointer: coarse)').matches);
+    // At the way in the owl stands in the moonbeam: the prompt says what Interact does there.
+    await expect.poll(async () => (await state(page)).promptShown, { timeout: 10_000 }).toBe(touch ? 'Bask in the moonbeam' : 'E: Bask in the moonbeam');
+    // Out on the open floor nothing is in reach: no prompt.
+    await walkAndStop(page, 2600, 880);
+    await expect.poll(async () => (await state(page)).promptShown, { timeout: 10_000 }).toBeNull();
+    // Beside Elder Bramble: what Interact does, in words, where the visitor is looking.
+    await walkAndStop(page, 2280, 760);
+    await expect.poll(async () => (await state(page)).promptShown, { timeout: 10_000 }).toBe(touch ? 'Talk to Elder Bramble' : 'E: Talk to Elder Bramble');
+    // Talking to him: the prompt is gone while the two talk.
+    expect(await page.evaluate(() => window.owlPark.talk('bramble'))).toBe(true);
+    await expect(page.locator('.dialogue[data-npc="bramble"]')).toBeVisible({ timeout: 15_000 });
+    await expect.poll(async () => (await state(page)).promptShown, { timeout: 10_000 }).toBeNull();
+    // Walked well away: nothing in reach, no prompt.
+    await walkAndStop(page, 2800, 900);
+    await expect.poll(async () => (await state(page)).promptShown, { timeout: 10_000 }).toBeNull();
   });
 });
 

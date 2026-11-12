@@ -108,6 +108,8 @@ export class Course {
   private thornArt: Phaser.GameObjects.Graphics[] = [];
   private readonly parts: ReturnType<typeof courseParts>;
   private closed = false;
+  /** When the run under way started, by this page's clock (the strip's clock, OP-344); null with no run. */
+  private runStartedAt: number | null = null;
   /** Falls and finishes this page has had answered, for the tests. */
   private falls = 0;
   private finishes = 0;
@@ -239,6 +241,8 @@ export class Course {
   private take(res: CourseReply): void {
     if (!res.ok) return;
     this.view = res.view;
+    // When the run started, by this page's clock: the room says how long it has been under way.
+    this.runStartedAt = res.view.run ? Date.now() - res.view.run.ms : null;
     this.showStrip();
     this.showPieces();
   }
@@ -258,7 +262,7 @@ export class Course {
   private showStrip(): void {
     const run = this.view?.run;
     const lost = this.view?.feathers.length ?? 0;
-    this.strip?.show(this.def.objective, this.parts.map((p) => p.id), new Set(run?.parts ?? []), lost);
+    this.strip?.show(this.def.objective, this.parts.map((p) => p.id), new Set(run?.parts ?? []), lost, run && this.runStartedAt !== null ? { startedAt: this.runStartedAt, goldMs: this.def.gold.ms } : null);
   }
 
   /** Each piece of this act, in plain shapes until a realm's course has art of its own: drawn by its place, so owls pass in front and behind. */

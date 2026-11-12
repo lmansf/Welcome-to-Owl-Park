@@ -166,7 +166,7 @@ export function courseRoomIds(def: CourseDef): string[] {
 }
 
 /** A course's rooms in act order (an act's way in first, then its other rooms as listed). */
-function roomsByAct(def: CourseDef, rooms: (id: string) => RoomDef | undefined): string[] {
+export function roomsByAct(def: CourseDef, rooms: (id: string) => RoomDef | undefined): string[] {
   const act = (id: string) => rooms(id)?.course?.act ?? Number.MAX_SAFE_INTEGER;
   return courseRoomIds(def)
     .map((id, i) => ({ id, i }))

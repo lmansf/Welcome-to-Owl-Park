@@ -66,6 +66,14 @@ export class DoorSigns {
     return this.signs.find((s) => s.id === this.focused)?.label ?? null;
   }
 
+  /** The box of the one sign showing now (room px), if any: what else lies on the floor keeps clear of it (the prompt at the owl's feet, OP-344). */
+  shownBox(): { left: number; right: number; top: number; bottom: number } | null {
+    const sign = this.signs.find((s) => s.id === this.focused);
+    if (!sign) return null;
+    const b = sign.text.getBounds();
+    return { left: b.left, right: b.right, top: b.top, bottom: b.bottom };
+  }
+
   /**
    * Whether this doorway's sign stands whole on screen now: then its words are there to read, and no
    * chip at the screen's edge repeats them (the Great Hollow on a phone held sideways, Nov 8).
