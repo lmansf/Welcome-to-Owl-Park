@@ -4,7 +4,7 @@
  * store's checkout at $0), and, for an owl new to the park, the box to type the code of the friend
  * who sent it. Shown with the park's REFERRALS on, or as a preview with ?friends=1.
  */
-import { REFERRAL_MEMBER_FEATHERS, REFERRAL_MONTHLY_CAP, type ReferralRefusal } from '@owl-park/shared';
+import { REFERRAL_MEMBER_FEATHERS, type ReferralRefusal } from '@owl-park/shared';
 import type { ReferralState } from '../net';
 
 /** Every word the card shows (for the owner's approval before REFERRALS goes on for everyone). */
@@ -12,8 +12,7 @@ export const REFERRAL_WORDS = {
   title: 'Bring a friend',
   yourCode: 'Tell a friend who is new to the park your friend code:',
   how: `When your friend comes through the front gate for the first time, you get a free Day Ticket. With an annual pass, you get ${REFERRAL_MEMBER_FEATHERS} feathers instead. Your friend gets a free Day Ticket too.`,
-  cap: `You can be thanked for ${REFERRAL_MONTHLY_CAP} friends a month.`,
-  left: (n: number) => (n === 1 ? 'One thank-you left this month.' : n === 0 ? 'No thank-yous left this month. Friends you bring still get their free ticket.' : `${n} thank-yous left this month.`),
+  once: 'There is no limit on friends. Each friend can take one free Day Ticket, with an email that has never had one.',
   thanked: (n: number) => (n === 1 ? 'One friend has come in with your code so far.' : `${n} friends have come in with your code so far.`),
   waiting: { friend: 'A free Day Ticket from your friend is waiting for you.', reward: 'A free Day Ticket is waiting for you: thanks for bringing a friend!' },
   get: 'Get my free ticket',
@@ -63,7 +62,7 @@ export function referralCard(state: ReferralState, actions: ReferralActions, sta
   const big = el('strong', undefined, state.code);
   big.style.cssText = 'display:block;font-size:26px;letter-spacing:.2em;color:#FFD36A';
   code.append(el('p', 'mnote', REFERRAL_WORDS.yourCode), big);
-  parts.push(code, el('p', 'mnote', REFERRAL_WORDS.how), el('p', 'mnote', `${REFERRAL_WORDS.cap} ${REFERRAL_WORDS.left(state.thanksLeft)}`));
+  parts.push(code, el('p', 'mnote', REFERRAL_WORDS.how), el('p', 'mnote', REFERRAL_WORDS.once));
   if (state.thanked > 0) parts.push(el('p', 'mnote', REFERRAL_WORDS.thanked(state.thanked)));
 
   for (const offer of state.offers) {

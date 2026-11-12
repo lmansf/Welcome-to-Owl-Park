@@ -290,6 +290,16 @@ describe('a free Day Ticket from bringing a friend (OP-056)', () => {
     expect(two.spent).toEqual([]);
   });
 
+  it('takes a thank-you ticket’s own code like the friend’s', async () => {
+    const { store, book, deps, spent } = freePark();
+    const token = await book.newCheckout('c_alice', T0);
+    store.codes = ['OWLTHANKS'];
+    store.attributes = [{ key: 'owl_checkout', value: token }];
+    const r = await storeWebhook('orders/paid', PAID, { ...deps, referralRewardCode: 'OWLTHANKS' });
+    expect(r).toMatchObject({ body: { tickets: 1, sent: true }, referral: 'spent' });
+    expect(spent).toEqual([[token, '1001']]);
+  });
+
   it('leaves orders without the code as they were', async () => {
     const { store, deps, spent } = freePark();
     store.codes = [];

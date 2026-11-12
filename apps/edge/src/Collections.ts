@@ -688,9 +688,9 @@ export class Collections extends DurableObject<Env> {
     return this.referrals.checkout(cid, tokenHash, Date.now());
   }
 
-  /** A paid order with the free Day Ticket's code: whether its checkout spends an offer still waiting. */
-  async referralSpend(tokenHash: string, order: string): Promise<boolean> {
-    return this.referrals.spend(tokenHash, order, Date.now());
+  /** A paid order with the free Day Ticket's code: whether its checkout spends an offer still waiting (a friend's only with an email, `emailHash`, that never had one). */
+  async referralSpend(tokenHash: string, order: string, emailHash: string | null): Promise<boolean> {
+    return this.referrals.spend(tokenHash, order, emailHash, Date.now());
   }
 
   /** The owl that brought this friend and waits to be thanked, or null. */

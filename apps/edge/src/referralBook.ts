@@ -8,13 +8,14 @@
  * - An invite names the friend once: a friend is brought by one owl, ever, and only while new.
  * - A free Day Ticket is an offer good for REFERRAL_OFFER_MS; a store checkout opened for it is kept
  *   by its token's hash, and the first paid order through any of them spends the offer.
- * - The friend's first time through the gate thanks the owl that brought them, once, within the cap.
+ * - A friend's free Day Ticket is tied to its order's email (kept as the accounts' keyed hash): an email
+ *   that has had one never spends another friend's offer. A thank-you ticket is the owl's own and has no
+ *   such limit (Logan, Nov 10: no cap on thank-yous, one free ticket per friend's email).
+ * - The friend's first time through the gate thanks the owl that brought them, once.
  */
 import {
-  REFERRAL_CAP_WINDOW_MS,
   REFERRAL_INVITES_PER_IP_PER_DAY,
   REFERRAL_MEMBER_FEATHERS,
-  REFERRAL_MONTHLY_CAP,
   REFERRAL_OFFER_MS,
   type ReferralOffer,
   type ReferralRefusal,
@@ -70,6 +71,8 @@ export class ReferralBook {
     );
     sql.exec('CREATE INDEX IF NOT EXISTS referral_offers_by_cid ON referral_offers (cid, expires)');
     sql.exec('CREATE TABLE IF NOT EXISTS referral_checkouts (hash TEXT PRIMARY KEY, offer_id TEXT NOT NULL, at INTEGER NOT NULL)');
+    // The emails (keyed hashes) that have had a friend's free Day Ticket, and the order that spent it.
+    sql.exec('CREATE TABLE IF NOT EXISTS referral_emails (email_hash TEXT PRIMARY KEY, order_id TEXT NOT NULL, at INTEGER NOT NULL)');
   }
 
   private rowOf(friend: string): Record<string, unknown> | undefined {
@@ -90,17 +93,11 @@ export class ReferralBook {
       .map((r) => ({ id: String(r['id']), kind: r['kind'] === 'reward' ? 'reward' : 'friend', expires: Number(r['expires']) }));
   }
 
-  /** Thank-yous the owl was given in the 30 days before now. */
-  private thanksIn(referrer: string, now: number): number {
-    const r = this.sql.exec("SELECT COUNT(*) AS n FROM referrals WHERE referrer_cid = ? AND state = 'rewarded' AND rewarded_at > ?", referrer, now - REFERRAL_CAP_WINDOW_MS).toArray()[0] as { n: number };
-    return Number(r.n);
-  }
-
   /** What the owl's Menu shows; `code` is its friend code and `hadTicket` whether the ticket book has had one on it. */
   view(cid: string, code: string, hadTicket: boolean, now: number): ReferralView {
     const invited = this.rowOf(cid) !== undefined;
     const thanked = Number((this.sql.exec("SELECT COUNT(*) AS n FROM referrals WHERE referrer_cid = ? AND state = 'rewarded'", cid).toArray()[0] as { n: number }).n);
-    return { code, invited, canEnterCode: !invited && !hadTicket, offers: this.offers(cid, now), thanked, thanksLeft: Math.max(0, REFERRAL_MONTHLY_CAP - this.thanksIn(cid, now)) };
+    return { code, invited, canEnterCode: !invited && !hadTicket, offers: this.offers(cid, now), thanked };
   }
 
   /**
@@ -131,16 +128,24 @@ export class ReferralBook {
 
   /**
    * A paid order with the free Day Ticket's code came through a checkout (its token's hash): whether
-   * that checkout was opened for an offer still waiting, which this order now spends. The same order
-   * again (the store repeats webhooks) is still yes; any other order through a spent offer is no.
+   * that checkout was opened for an offer still waiting, which this order now spends. A friend's offer
+   * is spent only by an order whose email (`emailHash`, null when the store will not say) has never had
+   * a friend's free Day Ticket. The same order again (the store repeats webhooks) is still yes; any
+   * other order through a spent offer is no.
    */
-  spend(tokenHash: string, order: string, now: number): boolean {
+  spend(tokenHash: string, order: string, emailHash: string | null, now: number): boolean {
     const c = this.sql.exec('SELECT offer_id FROM referral_checkouts WHERE hash = ?', tokenHash).toArray()[0] as { offer_id: string } | undefined;
     if (!c) return false;
-    const o = this.sql.exec('SELECT used_order, expires FROM referral_offers WHERE id = ?', c.offer_id).toArray()[0] as { used_order: string | null; expires: number } | undefined;
+    const o = this.sql.exec('SELECT kind, used_order, expires FROM referral_offers WHERE id = ?', c.offer_id).toArray()[0] as { kind: string; used_order: string | null; expires: number } | undefined;
     if (!o) return false;
     if (o.used_order !== null) return o.used_order === order;
     if (Number(o.expires) <= now) return false;
+    if (o.kind !== 'reward') {
+      if (emailHash === null) return false;
+      const had = this.sql.exec('SELECT order_id FROM referral_emails WHERE email_hash = ?', emailHash).toArray()[0] as { order_id: string } | undefined;
+      if (had && had.order_id !== order) return false;
+      if (!had) this.sql.exec('INSERT INTO referral_emails (email_hash, order_id, at) VALUES (?, ?, ?)', emailHash, order, now);
+    }
     this.sql.exec('UPDATE referral_offers SET used_order = ?, used_at = ? WHERE id = ?', order, now, c.offer_id);
     return true;
   }
@@ -154,8 +159,8 @@ export class ReferralBook {
   /**
    * The friend went through the gate for the first time: the owl that brought them is thanked, once.
    * `member` (it holds an annual pass) gets REFERRAL_MEMBER_FEATHERS by `addFeathers`; any other owl a
-   * free Day Ticket offer. Past the cap, the friend still counts as brought, unthanked. Two owls of one
-   * email (`sameEmail`, as the accounts say now) are never thanked. Null when there is nothing to give.
+   * free Day Ticket offer, however many friends it has brought. Two owls of one email (`sameEmail`, as
+   * the accounts say now) are never thanked. Null when there is nothing to give.
    */
   credit(friend: string, member: boolean, sameEmail: boolean, addFeathers: (cid: string, n: number) => void, now: number): Credited | null {
     const referrer = this.pending(friend);
@@ -163,10 +168,6 @@ export class ReferralBook {
     if (sameEmail) {
       this.sql.exec("UPDATE referrals SET state = 'refused' WHERE friend_cid = ?", friend);
       return null;
-    }
-    if (this.thanksIn(referrer, now) >= REFERRAL_MONTHLY_CAP) {
-      this.sql.exec("UPDATE referrals SET state = 'capped' WHERE friend_cid = ?", friend);
-      return { referrer, reward: 'capped' };
     }
     const reward: ReferralReward = member ? 'feathers' : 'ticket';
     this.sql.exec("UPDATE referrals SET state = 'rewarded', reward = ?, rewarded_at = ? WHERE friend_cid = ?", reward, now, friend);

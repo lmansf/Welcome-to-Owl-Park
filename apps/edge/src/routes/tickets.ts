@@ -3,7 +3,7 @@ import { hashForLog } from '@owl-park/shared';
 import { deviceClass } from '../collectLog';
 import { openingOn, passLinkReady, storeCatalogue } from '../opening';
 import { GUEST_PASS_TTL_S, mintPass, requireSecret } from '../pass';
-import { checkoutHash, referralCode, referralsOn, thankReferrer } from '../referrals';
+import { checkoutHash, referralCode, referralRewardCode, referralsOn, thankReferrer } from '../referrals';
 import { KINDS, passCartLink, ticketCartLink } from '../shopify';
 import { storeConfig } from '../storeApi';
 import { CORS, json, passFrom, readJson } from './http';
@@ -78,8 +78,11 @@ export async function tickets(c: RouteCtx): Promise<Response> {
     if (!store || !variant) return json({ error: 'not-set-up' }, 503);
     const r = await desk('/tickets/checkout', { device });
     if (r.status !== 200 || typeof r.body['token'] !== 'string') return reply(r);
-    if (code && !(await collections(env).referralCheckout(device, await checkoutHash(r.body['token'])))) return json({ error: 'no-offer' }, 409);
-    return json({ url: ticketCartLink(store.shop, variant, r.body['token'], code ?? undefined) });
+    const offer = code ? await collections(env).referralCheckout(device, await checkoutHash(r.body['token'])) : null;
+    if (code && !offer) return json({ error: 'no-offer' }, 409);
+    // A thank-you has its own code when set (the friend's is once per customer; thank-yous have no cap).
+    const use = offer?.kind === 'reward' ? (referralRewardCode(env) ?? code) : code;
+    return json({ url: ticketCartLink(store.shop, variant, r.body['token'], use ?? undefined) });
   }
   if (url.pathname === '/api/tickets/pass') {
     // Opening night's pass (C42, half price): the cart link, for an Opening Night Ticket on this owl that went through
