@@ -388,7 +388,7 @@ export class RoomScene extends Phaser.Scene {
   private parallax: Array<{ t: RoomTile; img: Phaser.GameObjects.Image }> = [];
   /** What a room of the tree drew to read at a glance (OP-173), for the debug state. */
   private treeDress: TreeDressing | null = null;
-  /** The point a tree room's camera follows: the own owl as drawn (OP-156). */
+  /** The point the camera follows in a room seen from the side: where the side camera looks (OP-351). */
   private readonly camAt = { x: 0, y: 0 };
   private conn: RoomConnection | null = null;
   /** The leaves in the room's updrafts, drawn (OP-226); none in a room without them. */
@@ -653,18 +653,13 @@ export class RoomScene extends Phaser.Scene {
   private opening: { at: number; cutAt: number | null; covered: CoveredEdges } | null = null;
   /** The thermal (OP-340, `?thermal=1`, thermal.ts in @owl-park/shared): an owl gliding in a room's thermal is lifted, and the camera draws back as it rises. */
   private readonly thermalOn = flagOn('thermal');
+  /** The park's sounds for what this visitor's own owl does (OP-350, sfx.ts), under the Settings switch "Sounds". */
+  private readonly sfx: Sfx = parkSfx(() => (this.registry?.get('settings') as SettingsStore | undefined)?.get().sound ?? true);
   /**
-   * The park's sounds for what this visitor's own owl does (OP-350, `?sfx=1`, sfx.ts): null without the
-   * flag, and then nothing below plays or reads anything.
+   * The side camera (OP-351, sideCamera.ts): in a room seen from the side the view leads the owl's
+   * travel, holds its height through a jump and eases by the clock. Where it looks now, null until the
+   * room's first frame and in a room seen from above, where the camera is on the owl itself.
    */
-  private readonly sfx: Sfx | null = flagOn('sounds') ? parkSfx(() => (this.registry?.get('settings') as SettingsStore | undefined)?.get().sound ?? true) : null;
-  /**
-   * The side camera (OP-351, `?cam=1`, sideCamera.ts): in a room seen from the side the view leads the
-   * owl's travel, holds its height through a jump and eases by the clock. Where it looks now, null
-   * until the room's first frame and wherever the flag is off or the room is seen from above; then the
-   * camera is on the owl itself, as ever.
-   */
-  private readonly sideCamOn = flagOn('sideCam');
   private sideCam: SideCam | null = null;
   /** For the side camera: when it last looked (ms), where the owl was then and how fast it was travelling along (px/s). */
   private sideCamSeen = { at: 0, x: 0, vx: 0 };
@@ -1008,8 +1003,9 @@ export class RoomScene extends Phaser.Scene {
   }
 
   /**
-   * What the camera follows: the owl's spot on the floor, or in a room of the tree (map 2, seen from the
-   * side) the owl as drawn, its height included, so the camera climbs with it and the layers' rates show.
+   * What the camera follows: the owl's spot on the floor, or in a room seen from the side (the tree,
+   * a course) where the side camera looks, the owl's height in it, so the camera climbs with the owl
+   * and the layers' rates show.
    */
   private followed(): { x: number; y: number } {
     if (!seenFromSide(this.room)) return this.me;
@@ -1019,23 +1015,14 @@ export class RoomScene extends Phaser.Scene {
     return this.camAt;
   }
 
-  /** Whether this room has the side camera (OP-351): the flag is on and the room is seen from the side. */
-  private sideCamera(): boolean {
-    return this.sideCamOn && seenFromSide(this.room);
-  }
-
-  /** How the engine's own follow eases: a share of the way each frame, or not at all where the side camera eases by the clock itself. */
+  /** How the engine's own follow eases: a share of the way each frame, or not at all in a room seen from the side, where the side camera eases by the clock itself. */
   private followEase(): number {
-    return this.sideCamera() ? 1 : 0.12;
+    return seenFromSide(this.room) ? 1 : 0.12;
   }
 
-  /** Where the camera looks this frame: the owl as drawn, or what the side camera makes of where it is going (sideCamera.ts). */
+  /** Where the camera looks this frame in a room seen from the side: what the side camera makes of where the owl is going (sideCamera.ts). */
   private aimCamera(now: number): void {
-    if (!this.sideCamera()) {
-      this.camAt.x = this.me.x;
-      this.camAt.y = this.me.y - this.flier.air.z;
-      return;
-    }
+    if (!seenFromSide(this.room)) return;
     const cam = this.cameras.main;
     const viewW = cam.width / cam.zoom;
     const seen = this.sideCamSeen;
@@ -1147,7 +1134,7 @@ export class RoomScene extends Phaser.Scene {
       awarded: () => void this.collection.refresh(),
       hudRoot: () => document.getElementById('hud'),
       calm: () => this.calm(),
-      sound: (cue: CueName) => this.sfx?.play(cue),
+      sound: (cue: CueName) => this.sfx.play(cue),
     });
     ({ hollow: this.hollow, doorway: this.doorway } = escapeFor(room, {
       scene: this,
@@ -1987,7 +1974,7 @@ export class RoomScene extends Phaser.Scene {
     triedDoors().add(this.room.id, FIRST_FLIGHT_MARK);
     triedDoors().add(this.room.id, ROOTS_SPOT);
     this.hud.toast(HALL_WORDS.flown, 4200);
-    this.sfx?.play('bench');
+    this.sfx.play('bench');
     this.layTrail();
   }
 
@@ -2466,14 +2453,14 @@ export class RoomScene extends Phaser.Scene {
     wind: { currents: number; rides: number };
     /** In a parkour course: the course as the room has it for this owl (OP-224). */
     course: ReturnType<Course['debug']>;
-    /** The sounds played for this owl on this page, the newest last (OP-350): none without the flag. */
+    /** The sounds played for this owl on this page, the newest last (OP-350). */
     sounds: string[];
-    /** The side camera (OP-351): its lead and the height it holds, and where it looks; null without the flag or in a room seen from above. */
+    /** The side camera (OP-351): its lead and the height it holds, and where it looks; null in a room seen from above. */
     sideCam: { lead: number; level: number; x: number; y: number } | null;
   } | null {
     if (!this.built) return null;
     return {
-      sounds: this.sfx?.heard().slice(-16) ?? [],
+      sounds: this.sfx.heard().slice(-16),
       sideCam: this.sideCam ? { lead: this.sideCam.lead, level: this.sideCam.level, x: this.sideCam.x, y: this.sideCam.y } : null,
       spectator: this.spectator,
       dash: { holds: this.flier.dash !== undefined, spent: this.flier.dash?.spent ?? false, dashes: this.dashes },
@@ -2936,7 +2923,7 @@ export class RoomScene extends Phaser.Scene {
           this.time.delayedCall(FLOP_LAND_MS + 150, () => {
             if (gen !== this.gen) return;
             featherFind(this, def.pos, () => ({ x: this.me.pos.x, y: this.me.pos.y - this.flier.air.z }), () => this.collection.setFeathers(res.total), def.top ?? 0);
-            this.sfx?.play('feather');
+            this.sfx.play('feather');
             this.hud.toast(n === 1 ? 'A feather was hiding in the leaves! +1 feather' : `Feathers were hiding in the leaves! +${n} feathers`, 3200, '#FFD36A');
           });
         }
@@ -2948,7 +2935,7 @@ export class RoomScene extends Phaser.Scene {
           this.time.delayedCall(300, () => {
             if (gen !== this.gen) return;
             featherFind(this, def.pos, () => ({ x: this.me.pos.x, y: this.me.pos.y - this.flier.air.z }), () => this.collection.setFeathers(res.total));
-            this.sfx?.play('feather');
+            this.sfx.play('feather');
             this.hud.toast(n === 1 ? 'A feather was tucked under it! +1 feather' : `Feathers were tucked under it! +${n} feathers`, 3200, '#FFD36A');
           });
         } else {
@@ -3150,7 +3137,7 @@ export class RoomScene extends Phaser.Scene {
     if (distance(to, this.me.pos) < 3) return false;
     this.flier = { ...this.flier, dash: spendDash(this.flier.dash, at) };
     this.dashes += 1;
-    this.sfx?.play('dash');
+    this.sfx.play('dash');
     this.walkGoal = null;
     this.wayTo = null;
     this.keyWalk = false;
@@ -3289,7 +3276,7 @@ export class RoomScene extends Phaser.Scene {
       this.flier = stepFlier(this.flier, { pressed, held }, groundAt(this.room.perches, place, this.flier.air.z), this.abilities, lift);
       const air = this.flier.air;
       // What the step did is heard (OP-350): a jump, a flap, the wings spread, a landing.
-      if (this.sfx) for (const c of airCues(before, air)) this.sfx.play(c.cue, c.strength);
+      for (const c of airCues(before, air)) this.sfx.play(c.cue, c.strength);
       // Taken up by a thermal: the camera draws back with the owl's height from here until it is down again (frameRise).
       if (warm !== null && air.s === LIFTED && !this.rise) this.rise = { from: air.z, top: warm, covered: this.hud.coveredEdges(), back: false };
       if (gust && air.s === LIFTED && air.h === gust.z) this.rideWind(gust, !wasLifted);
@@ -3911,7 +3898,7 @@ export class RoomScene extends Phaser.Scene {
   private async leaveRoom(fadeMs = LEAVE_FADE_MS): Promise<boolean> {
     if (this.leaving) return false;
     this.leaving = true;
-    this.sfx?.play('door');
+    this.sfx.play('door');
     this.hud.setHints([]);
     // What the HUD shows of this room (a course's strip, the actions) fades with it (OP-346).
     this.hud.setRoomDark(true);

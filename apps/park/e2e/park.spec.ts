@@ -647,8 +647,8 @@ test.describe('a first flight where owls arrive (OP-347)', () => {
 });
 
 test.describe('the park’s sounds for the visitor’s own owl (OP-350)', () => {
-  test('with the flag a jump, a flap, a glide and a landing are heard, and a doorway; the Sounds switch turns them off', async ({ page }) => {
-    await openPark(page, { room: 'hub', sfx: '1' });
+  test('a jump, a flap, a glide and a landing are heard, and a doorway; the Sounds switch turns them off', async ({ page }) => {
+    await openPark(page, { room: 'hub' });
     expect((await state(page)).sounds).toEqual([]);
     // A tap of Jump: off the ground, and down again.
     await page.keyboard.press('Space');
@@ -696,21 +696,13 @@ test.describe('the park’s sounds for the visitor’s own owl (OP-350)', () => 
     await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe('grove');
     expect((await state(page)).sounds[6]).toBe('door');
   });
-
-  test('without the flag nothing is played', async ({ page }) => {
-    await openPark(page, { room: 'hub' });
-    await page.keyboard.press('Space');
-    await expect.poll(async () => (await state(page)).flown.n, { timeout: 10_000 }).toBe(1);
-    await expect.poll(async () => (await state(page)).air.s, { timeout: 10_000 }).toBe(0);
-    expect((await state(page)).sounds).toEqual([]);
-  });
 });
 
 test.describe('the side camera (OP-351)', () => {
   test.describe.configure({ timeout: 90_000 });
 
-  test('with the flag the view leads the way the owl travels, swings round when it turns, and holds its height through a hop', async ({ page }) => {
-    await openPark(page, { room: 'canopy-1', cam: '1' });
+  test('the view leads the way the owl travels, swings round when it turns, and holds its height through a hop', async ({ page }) => {
+    await openPark(page, { room: 'canopy-1' });
     await page.waitForFunction(() => window.owlPark.state()?.sideCam != null);
     // Standing where it came in, facing into the course: the view looks a little that way.
     const rest = (await state(page)).sideCam!;
@@ -805,10 +797,10 @@ test.describe('the side camera (OP-351)', () => {
     expect(seen.hop.moved).toBeLessThan(1);
   });
 
-  test('with the flag the view is with the owl down a drop and up a gust (OP-352)', async ({ page }) => {
+  test('the view is with the owl down a drop and up a gust (OP-352)', async ({ page }) => {
     // Off the high bough of the fern floor (500) onto the twig under its end (120), as the course's own
     // test of that drop goes (air.spec.ts). Watched from inside the page, every frame.
-    await openPark(page, { room: 'canopy-1', spawn: 'on-l5', cam: '1' });
+    await openPark(page, { room: 'canopy-1', spawn: 'on-l5' });
     await page.waitForFunction(() => window.owlPark.state()?.sideCam != null);
     await expect.poll(async () => (await state(page)).air.z, { timeout: 10_000 }).toBe(500);
     const drop = await page.evaluate(
@@ -841,7 +833,7 @@ test.describe('the side camera (OP-351)', () => {
 
     // Off a twig into the first column of the trunk's third storey, up to its top (600), as the course's
     // own test of the gust goes.
-    await openPark(page, { room: 'canopy-3', spawn: 'on-c2', cam: '1' });
+    await openPark(page, { room: 'canopy-3', spawn: 'on-c2' });
     await page.waitForFunction(() => window.owlPark.state()?.sideCam != null);
     await expect.poll(async () => (await state(page)).air.z, { timeout: 10_000 }).toBe(160);
     const rise = await page.evaluate(
@@ -874,10 +866,8 @@ test.describe('the side camera (OP-351)', () => {
     expect(rise.over).toBeLessThan(70);
   });
 
-  test('without the flag, and in a room seen from above with it, the camera is on the owl as ever', async ({ page }) => {
-    await openPark(page, { room: 'canopy-1' });
-    expect((await state(page)).sideCam).toBeNull();
-    await openPark(page, { room: 'hub', cam: '1' });
+  test('in a room seen from above the camera is on the owl as ever', async ({ page }) => {
+    await openPark(page, { room: 'hub' });
     expect((await state(page)).sideCam).toBeNull();
   });
 });
