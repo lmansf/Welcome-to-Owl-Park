@@ -1,18 +1,19 @@
 # Owl Park cleanup and rebuild: the plan
 
-- Status: the pass is done; what is left waits on the owner. Ticket OP-342. Branch
-  `claude/determined-wozniak-3ljxrf`.
+- Status: the pass is done, and the owner's word of Nov 12 on what was waiting (the art is mine to
+  pick; everything else approved as it stood) is being carried out in three changes: the sounds and
+  the side camera on for every visitor (OP-355), the town view and the thermal on (OP-356), and the
+  courses' new paintings (OP-348). Ticket OP-342. Branch `claude/determined-wozniak-3ljxrf`.
 - Last updated: 2026-11-12. Merged and live for every visitor: the cleanup's five milestones (OP-343
   to OP-346, OP-349), the first flight (OP-347), the art pass's no-spend part (OP-348: the Great
-  Hollow, the courses' ground, the neon course's light) and the flight at any frame rate (OP-353).
-  Merged and live behind flags, for the owner to try: the sound set (OP-350, `?sfx=1`) and the side
-  camera (OP-351 and OP-352, `?cam=1`), and from before the cleanup the town view (`?town=1`) and
-  the thermal (`?thermal=1`). Last in: three small controls on a phone (OP-354). Looked at and
-  left, with why in the log: one HUD style (B4).
-- Waiting on the owner: his pick of the new paintings for the courses (OP-348, 2.16 of 10 dollars
-  spent on candidates, the fitted ones kept off the repository until he has picked); his marks on
-  the sounds; his feel for the camera; the word to switch any flag on; OP-335 and OP-341; the "at
-  the park" quest step.
+  Hollow, the courses' ground, the neon course's light), the flight at any frame rate (OP-353) and
+  three small controls on a phone (OP-354). On for every visitor with OP-355: the sound set
+  (OP-350) and the side camera (OP-351, OP-352). Still behind flags until OP-356: the town view
+  (`?town=1`) and the thermal (`?thermal=1`). Looked at and left, with why in the log: one HUD
+  style (B4).
+- Waiting on the owner: OP-335 and OP-341 (each needs a change under `.github/`, which his rules
+  keep his unless he says so of that change); the "at the park" quest step (naming the place
+  changes a logged step's words).
 - To pick up after a break: the play log has had no real visit since the cleanup went live (last
   read Nov 12). Read it first (the baseline below), then the punch list's items 14 and 16 and the
   log's last entries.
@@ -97,11 +98,11 @@ measurement; C = read in the code, to confirm.
 | 15 | Hazards drawn by code read as debug boxes; building faces drawn solid are walked through (V, C) | courses | Each hazard drawn as the thing it is; faces behind the owl | M1: thorns, mist, falls and wires redrawn with no box of colour. The faces: left alone, and why: see the log, M4 |
 | 16 | A jump and one flap reaches the wires; a full jump on the waterfall ledge reaches the falls (worked out) | `circuit-2`, `circuit-3`, `brush-2` | Check with the bots, then lift the hazards | left for now: the high wires are what stops a glide over the whole act, and the kid bots pass. Look again at the log's fall spots once there are runs to read |
 | 17 | Offline builds: thorns over safe floor do nothing, so a preview plays easier than the live park (C, confirmed) | previews | One fall rule for both | M1: a preview judges a fall and sends it back as the room server does |
-| 18 | The camera eases by the frame, not by time, so it trails further on a slow device; the backdrop shows under the walkway; goals crowd the screen's corners (C, V) | courses | Bigger change B2 | B2 (OP-351), behind `?cam=1` until the owner has played with it: the view eases by time, leads the owl's travel and holds through a jump. The backdrop's layers are as they were |
+| 18 | The camera eases by the frame, not by time, so it trails further on a slow device; the backdrop shows under the walkway; goals crowd the screen's corners (C, V) | courses | Bigger change B2 | B2 (OP-351, OP-352), on for every visitor since Nov 12 (OP-355): the view eases by time, leads the owl's travel, holds through a jump and keeps up with a fall. The backdrop's layers are as they were |
 | 19 | A direction held through a doorway keeps walking the owl in the next room (V) | doorways | Wait for a fresh push after a doorway taken with Up | M4: a direction held across a change of view (side to above, above to side) is not a walk until it is let go or points elsewhere |
 | 20 | The feather trail is faint; edge chips are arrows with no words; HUD words stay lit over the dark between rooms (V) | everywhere | Contrast, a word on each chip, dim with the room | M4: the trail's feathers are pale and edged dark; a course's chips say Next part, Back, Finish or where they lead; a course's strip and the actions fade with the room |
 | 21 | Words: a one-player game "to play with whoever is in the park"; three ways to word an ending; developer wording a player can meet; fallback emoji symbols (V, C) | arcade, Menu | One wording pass | M3 for the arcade's lines. Left: the puzzle's emoji faces (a fallback for art that ships), and lines in the ticket and friends screens |
-| 22 | Almost no sound: only the Menu's knock was found (C, partial) | everywhere | Bigger change B3 | B3 (OP-350), behind `?sfx=1` until the owner has listened: thirteen cues for the visitor's own owl |
+| 22 | Almost no sound: only the Menu's knock was found (C, partial) | everywhere | Bigger change B3 | B3 (OP-350), on for every visitor since Nov 12 (OP-355), under the Settings switch: thirteen cues for the visitor's own owl |
 | 23 | The HUD's screens do not share a style: seven corner sizes, five button heights, three golds (C) | HUD, Menu | Bigger change B4 | left: one style for the HUD's screens (B4) was counted and looked at again on Nov 12 and left, with why, in the log. The three controls under 44 px on a phone are 44 |
 | 24 | Home screen on a phone held upright sits in half the width; the free way in is the smallest button (V) | home | Full width; a 44 px target | M5: the free way in is 44 px tall. The upright home screen's width is as it was |
 
@@ -193,7 +194,7 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   trail goes on to a doorway. Done when: a new owl's first minute has a jump, a flap and a glide in it
   (browser test), and the play log shows fewer visits ending in `m3-hall` in their first minute.
   A first quest for ticket holders can follow once the log shows ticket holders.
-- **B2. The camera in side-view rooms (OP-351, in review, behind the `sideCam` flag: `?cam=1`).** Goal: the
+- **B2. The camera in side-view rooms (OP-351; on for every visitor since Nov 12, OP-355).** Goal: the
   camera shows where the owl is going. Why it beats what is there: a course is played by jumping at
   what comes next, and with the owl dead centre the next ledge or pit is half a screen away at best;
   the whole view rose and fell with every hop; and it eased by a share each frame, so at half the
@@ -203,13 +204,13 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   through a whole jump, climbs with a flap on top or rising air, and follows a fall down at once; and
   it eases by time. Rooms seen from above keep their camera. A fall already cuts to the owl
   (milestone 1). Not done: framing a goal that is high up. Done when: the rule tests and a browser
-  test pass, the flag check passes, and the owner has played with it. Should move, once on: course
-  runs that reach the first bench; falls per run.
+  test pass, the flag check passes, and the owner has played with it (it was behind `?cam=1` until
+  his word of Nov 12). Should move: course runs that reach the first bench; falls per run.
   It keeps up (OP-352, Nov 12, a PR of its own after PR 228): the view is carried along with the owl before it
   eases, so a walking owl has its whole lead on the screen at any frame rate, a falling owl stays 24
   px under the height held, and an owl in rising air 40 px over it. Measured in the park before and
   after, in the log.
-- **B3. A small sound set (OP-350, in review, behind the `sounds` flag: `?sfx=1`).** Goal: every move a
+- **B3. A small sound set (OP-350; on for every visitor since Nov 12, OP-355).** Goal: every move a
   player makes is heard, from one module, one switch. Why it beats what is there: the park is silent
   but for a knock as the Menu opens, so nothing a player presses is answered by anything but what they
   can see, and there is nothing to time a flap by. What it is: a table of thirteen cues
@@ -220,8 +221,8 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   course's moments (a part, a feather, a bench, a fall, a shortcut, the finish), a dash and a doorway
   add theirs. Only the visitor's own owl is heard. The Settings switch "Sounds" turns all of it off.
   Done when: the rule tests and a browser test pass, the flag check passes, and the owner has listened
-  (a sound board went to him in the session). Switching it on for everyone is a separate PR on his word.
-  Should move, once on: course runs that reach the first bench; visit length.
+  (a sound board went to him in the session; it was behind `?sfx=1` until his word of Nov 12).
+  Should move: course runs that reach the first bench; visit length.
 - **B4. One HUD style.** Goal: one set of sizes, corners and colours for the Menu, the cards, the
   shop and the arcade.
 - **B5. Movement that forgives (OP-353, in review).** Goal: the flight is the same game at any frame
@@ -451,3 +452,23 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
     Under it were three: the Say wheel's two buttons, the Settings screen's Close and the home
     screen's three links, all 40 px tall. They are 44 now. (The Settings switches are 34 px tall
     inside rows that are labels: the whole row is the target.)
+- 2026-11-12: the owner's word on what was waiting: the art is mine to pick, and everything else is
+  approved as it stood. Carried out as three changes, each through the gate: the sounds and the side
+  camera on for every visitor (OP-355), the town view and the thermal on (OP-356), and the courses'
+  new paintings (OP-348).
+  - OP-355. `flags.ts` loses `sounds` and `sideCam`. The room scene makes its sounds' player always,
+    and every room seen from the side is steered by `sideCamera.ts`: the old follow of those rooms
+    (the owl dead centre, eased by a share each frame) is gone, and rooms seen from above keep
+    theirs. The line under Sounds in Settings is the draft he approved. No rule of either changes:
+    this is what has been live behind the flags since PR 228 and PR 229.
+  - The browser tests of both now open plain addresses, and fail on `main`, where a plain address
+    plays nothing and has no side camera. The test that a plain address stays silent is gone: it is
+    no longer true.
+  - Looked at with the camera on, at 1440 by 900 and 1024 by 768: three storeys of the tree, the
+    street of nests, the arcade's lobby, the three ways into the hall's tree and a room of each
+    course. The owl is in frame in each and nothing is cut off; a room one screen wide is held by
+    its own walls, as before.
+  - To roll back: revert the change; the flags come back and both are hidden again.
+  - Not carried out, and why. OP-335 and OP-341 each need a change under `.github/`, which the
+    owner's rules keep his unless he says so of that change. The "at the park" quest step: naming
+    the place changes a logged step's words. Both are still his to say.

@@ -1,11 +1,11 @@
 import { JUMP_RISE, WALK_SPEED } from '@owl-park/shared';
 
 /**
- * The camera in a room seen from the side (OP-351, `?cam=1`): where it looks, worked out each frame from
+ * The camera in a room seen from the side (OP-351): where it looks, worked out each frame from
  * where the owl is and what it is doing. Rules only, nothing of the browser or the game engine in it.
  *
- * What it changes from the camera every room has (the owl dead centre, eased by a fixed share each
- * frame):
+ * What it changes from the camera a room seen from above has (the owl dead centre, eased by a fixed
+ * share each frame), which these rooms had too until Nov 12:
  * - It looks ahead. A course is played by jumping at what is next, and with the owl dead centre the next
  *   ledge or pit is half a screen away at best. The view leads the owl the way it is going, up to
  *   `LEAD_SHARE` of the screen, more of it the faster the owl travels, and swings round unhurried when
@@ -23,7 +23,8 @@ import { JUMP_RISE, WALK_SPEED } from '@owl-park/shared';
  *
  * TODO-DOCS (OP-351): docs/ARCHITECTURE.md's client rules, the camera: in a room seen from the side
  * the view leads the owl's travel, holds its height through a jump, is carried with the owl and eases
- * by time (sideCamera.ts), behind the `sideCam` flag (`?cam=1`) until the owner has played with it.
+ * by time (sideCamera.ts). On for every visitor since the owner's word of Nov 12 (it was behind a
+ * `?cam=1` flag until then).
  */
 
 /** What the camera follows and how it stands: the point looked at (room px), the lead it has now, and the height it holds (px above the ground line). */

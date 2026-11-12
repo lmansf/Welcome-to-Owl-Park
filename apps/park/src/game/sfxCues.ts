@@ -11,7 +11,8 @@ import { AIRBORNE, GLIDING, GROUNDED, LIFTED, type Air } from '@owl-park/shared'
  *
  * TODO-DOCS (OP-350): docs/ARCHITECTURE.md's client rules: the park's sounds are made in code from the
  * cue table in apps/park/src/game/sfxCues.ts and played by sfx.ts for the visitor's own owl only, under
- * the Settings switch "Sounds"; hidden behind the `sounds` flag (`?sfx=1`) until the owner has listened.
+ * the Settings switch "Sounds". On for every visitor since the owner's word of Nov 12 (they were
+ * behind a `?sfx=1` flag until then).
  */
 
 /** One part of a cue: a tone that may slide in pitch, or a breath of noise through a band that may slide. */
