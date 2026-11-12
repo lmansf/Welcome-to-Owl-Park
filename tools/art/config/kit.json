@@ -1248,7 +1248,8 @@
       "textures": {
         "neon-brick": "dark navy brick wall seen flat on, the mortar lines picked out faintly in cyan and pink neon reflection, even and tileable",
         "wet-pavement": "dark wet paving slabs seen from above, reflecting faint pink and cyan streaks and a few gold lantern glints, even and tileable",
-        "corrugated-tin": "sheets of dark corrugated metal roofing seen flat on, their ridges running straight down, rust in the seams, faint cyan highlight on each ridge, nothing else on them: no signs, no lamps, no windows, no building, no edge of a roof"
+        "corrugated-tin": "sheets of dark corrugated metal roofing seen flat on, their ridges running straight down, rust in the seams, faint cyan highlight on each ridge, nothing else on them: no signs, no lamps, no windows, no building, no edge of a roof",
+        "lit-wall": "sheets of corrugated metal on the wall of a city building at night, seen flat on, painted in mid-tone blues between dusk blue #2E4C7A and sky blue #6F9BC8 as if washed by the blue light of a sign: the ridges run straight down and stand close together all over the square, every ridge with a pale sky-blue highlight down one side and a dusk-blue shadowed groove down the other so the whole wall is finely striped light and dark, a few seams between sheets with rivets, a little chipped paint and a few rain streaks, a faint pink and a faint cyan reflection in one or two places, neither dark nor pale overall but about half way between black and white, even and tileable, nothing else on it: no windows, no doors, no signs, no lamps, no wires, no pipes"
       },
       "sheets": {
         "commons-a": {
@@ -2820,6 +2821,48 @@
             "name": "earth-path",
             "h": 120,
             "desc": "a level bank of earth with a worn path of packed earth along its top between tufts of grass, a rounded end at each side"
+          }
+        ]
+      },
+      "neon-deck": {
+        "area": "neon",
+        "ref": "@final:kit-neon-mid-b",
+        "rows": [
+          {
+            "name": "neon-deck",
+            "h": 120,
+            "desc": "the edge of a flat rooftop: a level parapet of pale concrete slabs on a darker steel beam, every slab the same light sky blue #6F9BC8 with paler worn edges, lit evenly along its whole length so that its left end, its middle and its right end are the same brightness and the same colour, with no moonlit patch, no shadow falling across it and no change of colour from end to end, clear dark gaps between the slabs, cracks, chips and rain streaks all along it, a row of dark rivets on the beam, no lamp and no neon tube on it, a plain squared left end and a plain squared right end, its top flat and clear"
+          },
+          {
+            "name": "neon-deck-thin",
+            "h": 60,
+            "desc": "a thin level steel catwalk half as deep, a grating on one dark beam in the same mid-tone blue-greys, lit evenly from end to end, no lamp and no neon tube on it, a plain squared end at each side"
+          },
+          {
+            "name": "neon-pipe",
+            "h": 120,
+            "desc": "a level run of fat round pipe painted dusk blue with a paler blue top along its whole length, lit evenly from end to end with no shadow falling across it, a bolted flange every so often, a closed round cap at the left end and at the right end, its top flat enough to stand on and clear"
+          }
+        ]
+      },
+      "ink-bank": {
+        "area": "ink",
+        "ref": "@final:kit-ink-mid-a",
+        "rows": [
+          {
+            "name": "ink-bank",
+            "h": 120,
+            "desc": "a long, low, level bank of rock, about ten times as long as it is deep, washed in mid-tone blue-grey ink, the same tone from its left end to its right end with no pale patch and no dark patch, its face brushed all along with darker ink cracks and lighter dry-brush strokes spread evenly, along its whole top one straight even band of bare cream paper, bright and clean, about a sixth as deep as the bank and of the same thickness all the way along, and where that band meets the rock one thin line of moss green #6E8B4E of the same thickness all the way along, a rounded brushed end at the left and at the right, its top flat and clear"
+          },
+          {
+            "name": "ink-bank-thin",
+            "h": 60,
+            "desc": "a thin level slab of slate half as deep and just as long, washed in the same mid-tone blue-grey ink from end to end, one even band of bare cream paper of the same thickness along its whole top with a thin line of moss green #6E8B4E under it, a rounded brushed end at each side"
+          },
+          {
+            "name": "ink-plank",
+            "h": 120,
+            "desc": "a level footbridge of weathered planks on two dark beams drawn in ink line and one grey-brown wash, the same colour along its whole length, a plain closed left end and a plain closed right end, its top flat and clear"
           }
         ]
       }

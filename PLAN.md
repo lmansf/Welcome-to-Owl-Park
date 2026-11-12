@@ -2,29 +2,31 @@
 
 - Status: the pass is done, and the owner's word of Nov 12 on what was waiting (the art is mine to
   pick; everything else approved as it stood) is carried out in three changes: the sounds and the
-  side camera on for every visitor (OP-355, merged), the town view and the thermal on (OP-356, this
-  change), and the courses' own art (OP-348, built and green, kept on the branch; it goes up
-  again only on the owner's word, see the next line but one). Ticket OP-342. Branch
+  side camera on for every visitor (OP-355, merged as PR 232), the town view and the thermal on
+  (OP-356, merged as PR 234), and the courses' own art (OP-348, this change: put up again on the
+  owner's second word of Nov 12, to make every change of the pass live). Ticket OP-342. Branch
   `claude/determined-wozniak-3ljxrf`.
 - Last updated: 2026-11-12. Live for every visitor: the cleanup's five milestones (OP-343 to
   OP-346, OP-349), the first flight (OP-347), the art pass's no-spend part (OP-348: the Great
   Hollow, the courses' ground, the neon course's light), the flight at any frame rate (OP-353),
-  three small controls on a phone (OP-354), the sound set (OP-350) and the side camera (OP-351,
-  OP-352). With this change the town view (OP-336) and the thermal (OP-340) are on too, and no
-  feature of the pass is behind a flag any more (`friends`, from before it, is the one flag
-  left). Looked at and left, with why in the log: one HUD style (B4).
-- Waiting on the owner: the art (OP-348). Its pull request, PR 233, was green, and the merge
-  sweep left it to him: it adds 119 KB to the art record (`tools/art/provenance.jsonl`), GitHub
-  will not show a change that size, and the sweep leaves what it cannot check to the owner. PR 233
-  was then closed to let OP-356 through this one branch. A closed pull request is not put up
-  again without his say, so the art needs two things from him: his word to put it up, and his
-  yes to merge it. The commit is kept on the branch. Also his: OP-335 and OP-341 (each needs a change under `.github/`,
-  which his rules keep his unless he says so of that change); the "at the park" quest step
-  (naming the place changes a logged step's words); OP-357 (the art tool's own tests are not part
-  of CI and three have gone stale).
+  three small controls on a phone (OP-354), the sound set (OP-350), the side camera (OP-351,
+  OP-352), the town view (OP-336) and the thermal (OP-340). No feature of the pass is behind a
+  flag any more (`friends`, from before it, is the one flag left). With this change the neon and
+  ink courses stand on art of their own realms (OP-348; 4.32 of the owner's 10 dollars spent), and
+  nothing the pass built is left off `main`. Looked at and left, with why in the log: one HUD
+  style (B4).
+- How this change is merged: the merge sweep leaves it to the owner, as it did PR 233 (it adds
+  119 KB to the art record, `tools/art/provenance.jsonl`; GitHub will not show a change that size,
+  and the sweep leaves what it cannot check to him). His word of Nov 12, to make every change
+  live, is that yes: the pull request is merged on it once every check is green, and the deploy
+  follows the merge as for any other.
+- Still the owner's to say: OP-335 and OP-341 (each needs a change under `.github/`, which his
+  rules keep his unless he says so of that change); the "at the park" quest step (naming the
+  place changes a logged step's words); OP-357 (the art tool's own tests are not part of CI and
+  three have gone stale).
 - To pick up after a break: the play log has had no real visit since the cleanup went live (last
-  read Nov 12). Read it first (the baseline below), then the punch list's items 14 and 16 and the
-  log's last entries.
+  read Nov 12 at 13:58 UTC, after the last switch-on). Read it first (the baseline below), then
+  the punch list's items 14 and 16 and the log's last entries.
 - Read first: `FABLE.md` (the owner's rules; it wins over this file).
 
 The owner's brief (Nov 11): a full cleanup pass of the game, end to end, as a player meets it. Two
@@ -502,3 +504,56 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   only afterwards: a pull request that was closed is the owner's to call back, so the art is not
   put up again without his word. Its commit is kept on the branch once OP-356 is in. Next time,
   with one branch and a change the sweep will hold, put the change that can merge up first.
+- 2026-11-12: the art pass, the courses' own paintings (OP-348, its second part). The owner gave
+  the pick to me. What this commit holds: a rooftop deck (seed 9917) and a wall of corrugated sheet
+  (seed 7719) for the neon course, and an ink-washed bank (seed 9922) for the ink course. The blue
+  that made borrowed stone pass as the street's (`NEON_LIGHT`) is gone with the stone.
+  - The first picks did not ship. At a thumbnail's size they looked right, and they passed the
+    style check. Laid in the rooms at full size the deck ran from white at one end to blue at the
+    other (a run is cut into ends and middles from different stretches, so a deck was a patchwork),
+    and the bank's pale top band changed thickness (hard steps where pieces met). Kept for next
+    time: look at a row butted in its room at full size before calling it picked.
+  - Levelling could not mend the first deck. The tool brings each column's average colour to the
+    row's, and a column of that deck is half pale slab and half dark beam, so the averages came
+    level while the slabs stayed white at one end and blue at the other. Tried and dropped:
+    levelling by the top face alone, with the lamp left out, and the slab and the beam each to its
+    own colour (that turned the blue end pastel). The fault was the paint, so it was painted again,
+    the prompt asking for the same light, tone and top edge from end to end and no lamp on a
+    walked row.
+  - The ink realm's rooms sit in a narrow place in the style check, and each round of banks met a
+    different rule by a hair. An even bank with a thin line of moss was 0.94 short of the
+    mountains' highlights on one screen. A bright cream band with no moss left the backdrop's own
+    pine trees as that screen's only moss, 0.16 over the palette's drift at 1 % of the screen. The
+    fourth round asked for the cream band and the moss line both, and holds all five rooms. In all
+    36 paintings (12 decks, 8 walls, 16 banks), 4.32 of the 10 dollars.
+  - The cave behind the falls keeps its fitted stone: the ink rock there takes the walkway's
+    contrast to 14.44 against the 14 allowed.
+  - Found and left. The style check paints a pit's water as a plain box of its colour, and the park
+    paints it with shade, a top line and streaks (`drawWater` in `kitView.ts`), so a river screen
+    measures about 1 lower in contrast in the check than a player sees. The bank that ships passes
+    as the check stands, so the check is not touched. And `pnpm art:test` is not part of CI and
+    fails three stale tests on `main` (OP-357); the two of its tests that count the kit's runs and
+    textures are brought up to date.
+  - Left for the artists: seams are fainter, not gone, and a ledge short enough to be two end
+    pieces shows its join. The thin rows, the pipe and the plank are in the kits and laid nowhere.
+- 2026-11-12: OP-356 merged (PR 234, `7c41c0e`) and is live: the deploy (run 305) ran on the merge
+  commit. Every feature of the pass is on for every visitor. The branch was started again from
+  `main` and holds two commits with no pull request open: the courses' own art (OP-348) and this
+  note. The play log, read again at 13:58 UTC, after the deploy: still no real visit since Nov 11.
+  - For the record, since both switch-on pull requests argued it and neither had run it: the tests
+    as merged, run against `main` as it stood before each. Before PR 234 (`0fad22f`), all six tests
+    of `e2e/townView.spec.ts` and `e2e/thermal.spec.ts` fail. Before PR 232 (`5cc6ad2`), the sounds
+    test and both side-camera tests of `e2e/park.spec.ts` fail; its fourth camera test, that a room
+    seen from above keeps its camera, passes, as it should.
+  - A mistake of mine on the Ticket Board, mended as far as it can be. I wrote four of my Activity
+    Log rows to row numbers I remembered, and the QA agent's run had filled those rows in between:
+    its lines for OP-304, OP-319, OP-320 and OP-324 (each accepted, staying Done) were written
+    over. Its verdicts are whole in those tickets' Notes, no status changed, and the log has a row
+    for each saying what happened. Kept for next time: the board is shared, so add to the log by
+    appending and never write to a row number from memory.
+- 2026-11-12: the owner's word on the report: make every change live. The one change not live
+  was the courses' own art, so it goes up again as a new pull request from the branch as it stood
+  (the art's commit and this plan, on top of `main`). The sweep will leave it to him as before;
+  his word is the yes it waits for, so it is merged on that word when its checks are green. Not
+  taken as said of them, and still his: the two changes under `.github/` (OP-335, OP-341), the
+  "at the park" quest step, OP-357, and the other sessions' open pull requests.

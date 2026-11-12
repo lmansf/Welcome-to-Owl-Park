@@ -430,7 +430,9 @@ describe('runs and columns of the recut kit (OP-251)', () => {
     // A realm's perch slots stand in with the earth path's pieces until their own art comes.
     expect(KIT_ART['kit-clearing-perch-mid']?.standIn).toBe('kit-cut-earth-path-mid-320');
     expect(rowOfPiece('kit-clearing-perch-mid')).toBe('kit-cut-earth-path');
-    expect(rowOfPiece('kit-ink-perch-end')).toBe('kit-cut-earth-path');
+    expect(rowOfPiece('kit-clearing-perch-end')).toBe('kit-cut-earth-path');
+    // The ink realm's perches stand in with its own painted row (OP-348).
+    expect(rowOfPiece('kit-ink-perch-end')).toBe('kit-cut-ink-bank');
     expect(rowOfPiece('kit-plank-mid')).toBeNull();
     expect(rowOfPiece('kit-cut-plank-to-stone')).toBeNull();
     expect(rowOfPiece('kit-tex-earth')).toBeNull();

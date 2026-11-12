@@ -135,12 +135,18 @@ export const KIT_RECUT_PROMPTS = {};
 export const KIT_RECUT_REFS = {};
 export const KIT_RECUT_PIECES = [];
 const recutRef = (target) => ({ ref: `@guide:${target}-ref`, role: 'the approved target screen: paint in its light, colour, brush and scale', optional: false });
+/**
+ * A run of a realm's own (OP-348: `area` in the run, a key of kit.areas) has no approved target screen:
+ * its reference is a painting of the realm that is already published (`ref` given whole, `@final:<key>`),
+ * and it is painted in the area's light, not the tree's moonlight.
+ */
+const realmRunRef = (ref) => ({ ref, role: 'a published painting of this realm: paint in its light, colour and brush, at the scale of a platform a small owl stands on', optional: false });
 for (const [material, run] of Object.entries(KIT_RECUT.runs ?? {})) {
   const key = `kit-sheet-cut-run-${material}`;
   const rows = run.rows.map((r, i) => `${i + 1}) ${r.desc}`);
   KIT_RECUT_RUN_KEYS.push(key);
-  KIT_RECUT_REFS[key] = [recutRef(run.ref)];
-  KIT_RECUT_PROMPTS[key] = `Three separate, continuous horizontal runs of game platform art stacked one above another on a flat, solid, uniform pure magenta ${KIT_KEY_COLOUR} backdrop, each run one long unbroken piece from near the left edge to near the right edge of the frame with clear flat magenta above and below it and between the runs, the runs not touching each other or the frame. From the top down: ${rows.join('; ')}. Every run is seen straight from the side as in a side-scrolling platform game, its top edge level and straight along its whole length, standing on nothing, with no ground, no cast shadow and no glow painted on the magenta. ${KIT_RECUT.light}. ${KIT_STYLE}`;
+  KIT_RECUT_REFS[key] = [run.ref.startsWith('@') ? realmRunRef(run.ref) : recutRef(run.ref)];
+  KIT_RECUT_PROMPTS[key] = `Three separate, continuous horizontal runs of game platform art stacked one above another on a flat, solid, uniform pure magenta ${KIT_KEY_COLOUR} backdrop, each run one long unbroken piece from near the left edge to near the right edge of the frame with clear flat magenta above and below it and between the runs, the runs not touching each other or the frame. From the top down: ${rows.join('; ')}. Every run is seen straight from the side as in a side-scrolling platform game, its top edge level and straight along its whole length, standing on nothing, with no ground, no cast shadow and no glow painted on the magenta. ${run.area ? `The light of this area: ${KIT_AREAS[run.area].light}` : KIT_RECUT.light}. ${KIT_STYLE}`;
   for (const r of run.rows) {
     for (const part of ['cap-left', 'cap-right', ...KIT_RECUT.lengths.map((l) => `mid-${l}`)]) {
       const w = part.startsWith('mid-') ? Number(part.slice(4)) : KIT_RECUT.cap;
