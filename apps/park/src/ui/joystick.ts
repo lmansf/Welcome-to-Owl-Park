@@ -70,12 +70,32 @@ export interface Joystick {
   detach(): void;
 }
 
+/**
+ * The stick goes quiet while the visitor's own owl is under it (OP-349). On a phone held sideways the
+ * stick lies over the west end of the room, and a course's way in is always there: a visitor started
+ * every course with the owl under their thumb. Quiet, the stick is drawn at this much of itself; a
+ * thumb on it brings it back at once.
+ */
+export const STICK_QUIET = 0.3;
+/** How far round the stick the owl counts as under it (CSS px): its body is wider than the point at its feet. */
+export const STICK_PAD = 26;
+/** How far over its feet an owl's middle is on the screen, about (CSS px). */
+export const OWL_MID_UP = 34;
+
+/** Whether an owl with its feet at `feet` on the screen (CSS px) is under the stick's box: its feet or its middle inside the box grown by STICK_PAD. */
+export function underStick(feet: { x: number; y: number }, box: { left: number; top: number; right: number; bottom: number }): boolean {
+  const inside = (x: number, y: number) => x >= box.left - STICK_PAD && x <= box.right + STICK_PAD && y >= box.top - STICK_PAD && y <= box.bottom + STICK_PAD;
+  return inside(feet.x, feet.y) || inside(feet.x, feet.y - OWL_MID_UP);
+}
+
 /** The HUD's own stick keeps its plain class (`stick`, as the settings and the tests know it); another screen's is `<prefix>-stick`. */
 const classOf = (prefix: string) => (prefix === 'hud' ? 'stick' : `${prefix}-stick`);
 
 const css = (prefix: string) => `
 #hud .${classOf(prefix)}{position:absolute;right:0;bottom:0;width:128px;height:128px;border-radius:50%;display:none;pointer-events:auto;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;background:rgba(12,30,54,.28);border:2px solid rgba(246,241,227,.32);box-shadow:inset 0 0 18px rgba(0,0,0,.25)}
 #hud .${classOf(prefix)} i{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;background:rgba(246,241,227,.4);border:2px solid rgba(246,241,227,.5);box-shadow:0 2px 8px rgba(0,0,0,.3);transition:transform .12s ease-out}
+#hud .${classOf(prefix)}{transition:opacity .2s ease-out}
+#hud .${classOf(prefix)}.quiet:not(.on){opacity:${STICK_QUIET}}
 #hud .${classOf(prefix)}.on{background:rgba(12,30,54,.38);border-color:rgba(255,211,106,.55)}
 #hud .${classOf(prefix)}.on i{transition:none;background:rgba(255,211,106,.5)}
 @media (pointer:coarse){

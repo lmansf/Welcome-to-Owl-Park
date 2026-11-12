@@ -202,7 +202,7 @@ function css(): string {
 #hud .home h1 .h-tag{display:block;margin-top:4px;font-size:clamp(14px,2.3vh,18px);font-weight:600;line-height:1.25;color:#F6F1E3}
 #hud .home .h-side button{width:100%}
 #hud .home .h-main{min-height:clamp(52px,8vh,64px);font-size:clamp(18px,2.8vh,22px)}
-#hud .home .h-small{min-height:40px;font-size:14px}
+#hud .home .h-small{min-height:44px;font-size:15px}
 /* Pressed: a press shows at once, on a phone too (data-pressed, as touch screens do not all show :active). */
 #hud .home .h-main:active,#hud .home .h-main[data-pressed]{transform:translateY(1px) scale(.985);box-shadow:0 1px 4px rgba(0,0,0,.35)}
 /* Opening the park: Play says so and pulses gently until the park answers; it takes no second press. */

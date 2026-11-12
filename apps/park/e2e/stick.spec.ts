@@ -167,3 +167,42 @@ test.describe('the thumbstick lets go (OP-242)', () => {
     expect((await state(page)).flown.n - before).toBe(1);
   });
 });
+
+test.describe('the phone held sideways (OP-349)', () => {
+  test.describe.configure({ timeout: 90_000 });
+
+  test('the stick goes quiet while the owl is under it at a course\'s way in, and comes back as the owl walks on or a thumb lands on it', async ({ page, isMobile }) => {
+    test.skip(!isMobile, 'the stick is for touch screens');
+    await page.setViewportSize({ width: 844, height: 390 });
+    await openPark(page, { room: 'canopy-1', spawn: 'from-gate', kit: '1' });
+    const stick = page.locator('#hud .stick');
+    // The way in is at the room's west end: the owl stands under the stick, which fades.
+    await expect(stick).toHaveClass(/quiet/, { timeout: 10_000 });
+    await expect.poll(async () => Number(await stick.evaluate((el) => getComputedStyle(el).opacity)), { timeout: 5_000 }).toBeLessThan(0.5);
+    // A thumb on it brings it back at once, quiet or not.
+    const cdp = await page.context().newCDPSession(page);
+    const at = await centreOf(page, '#hud .stick');
+    await touches(cdp, 'touchStart', [{ ...at, id: 0 }]);
+    await expect.poll(async () => Number(await stick.evaluate((el) => getComputedStyle(el).opacity)), { timeout: 5_000 }).toBeGreaterThan(0.9);
+    await touches(cdp, 'touchEnd', [{ ...at, id: 0 }]);
+    await expect(stick).toHaveClass(/quiet/, { timeout: 10_000 });
+    // Walked on along the bank (short of the first dip), the owl is out from under it: no longer quiet.
+    const y = (await state(page)).pos.y;
+    await page.evaluate((y) => window.owlPark.walkTo(560, y), y);
+    await expect.poll(async () => (await state(page)).pos.x, { timeout: 15_000 }).toBeGreaterThan(520);
+    await expect(stick).not.toHaveClass(/quiet/, { timeout: 10_000 });
+    await expect.poll(async () => Number(await stick.evaluate((el) => getComputedStyle(el).opacity)), { timeout: 5_000 }).toBeGreaterThan(0.9);
+  });
+
+  test('the pad\'s label is read whole: no word cut short where two lines hold it', async ({ page, isMobile }) => {
+    test.skip(!isMobile, 'the pad is for touch screens');
+    await openPark(page, { room: 'market' });
+    const label = page.locator('[data-pad-interact-label]');
+    await expect(label).toHaveText('Browse the stall', { timeout: 15_000 });
+    // Nothing clipped: the words' own box is no taller or wider than what shows.
+    const fits = await label.evaluate((el) => el.scrollHeight <= el.clientHeight + 1 && el.scrollWidth <= el.clientWidth + 1);
+    expect(fits).toBe(true);
+    const lines = await label.evaluate((el) => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight)));
+    expect(lines).toBeLessThanOrEqual(2);
+  });
+});

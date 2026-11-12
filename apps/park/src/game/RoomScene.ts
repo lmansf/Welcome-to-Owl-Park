@@ -575,6 +575,8 @@ export class RoomScene extends Phaser.Scene {
   /** Whether this room has the Great Hollow's root tips (hallTips.ts), and whether this device's owl has made its first glide off a root (OP-347). */
   private rootTips = false;
   private firstFlown = false;
+  /** When the HUD was last told where the owl is on the screen (the thumbstick's quiet, OP-349). */
+  private owlToldAt = 0;
   /** Where the room put the own owl when it last let it in (its welcome), until the room is caught up with the owl (OP-138). */
   private roomHas: Vec2 | null = null;
   /** Where the owl came into this room. */
@@ -1271,6 +1273,12 @@ export class RoomScene extends Phaser.Scene {
     if (finished && this.walkGoal && distance(this.walkGoal, this.me.pos) < 3) this.walkGoal = null;
     this.posOverlay?.frame(this.me.pos, now, this.room.id);
     this.seeThrough?.frame(this.me.pos, this.flier.air.z);
+    // On a touch screen the thumbstick goes quiet while the owl is under it (OP-349): told a few times a second.
+    if (TOUCH_SCREEN && now - this.owlToldAt > 180) {
+      this.owlToldAt = now;
+      const v = this.cameras.main.worldView;
+      this.hud.setOwlAt(v.width > 0 ? { x: ((this.me.x - v.x) / v.width) * window.innerWidth, y: ((this.me.y - this.me.flightHeight() - v.y) / v.height) * window.innerHeight } : null);
+    }
     // Where in the tree the owl is, on the computer's minimap (OP-213); none out of the tree.
     this.hud.setTreeSpot(this.sideView() ? { room: this.room.id, x: this.me.pos.x } : null);
     if (!this.leaving) {
