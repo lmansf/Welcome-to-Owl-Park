@@ -375,8 +375,14 @@ export interface KitRun {
    * and what lies here reads as below it: water, a thicket in a dip, the street between two roofs.
    */
   sunk?: number;
-  /** The colour a drop's texture is drawn in (a tint multiplied in): its shadow. */
+  /** The colour the run's texture is drawn in (a tint multiplied in): a drop's shadow, or a wall borrowed from another realm's kit in this realm's light (OP-348). */
   shade?: number;
+  /**
+   * The colour the pieces along the run's top are drawn in (a tint multiplied in, OP-348): a row
+   * borrowed from another realm's kit takes this realm's light until the realm has a row of its own.
+   * The texture under them has its own (`shade`).
+   */
+  tint?: number;
   /**
    * A flooded stretch of the ground line (OP-343), a course's pit of another kind: the run stays as it is
    * drawn, and the game paints still water over its top, from just over the walking line (KIT_FLOOD_OVER)

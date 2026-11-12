@@ -3,12 +3,13 @@ import { CollectionBook, MemoryCollectionStore } from '../src/book';
 import { SIGN_WARN_MS, litPerches, signEnding, signLit } from '../src/circuit';
 import { courseParts, coursePieces, courseProblems, holdsDash, inPit, inThorns, LOST_FEATHERS } from '../src/course';
 import { CourseBook, MemoryCourseStore } from '../src/coursebook';
-import { kitProblems } from '../src/kit';
+import { kitDrawPlan, kitProblems } from '../src/kit';
+import { KIT_ART } from '../src/kitArt';
 import { groundAt, perchTopLimit } from '../src/perches';
 import type { Polygon } from '../src/geometry';
 import { mapOf, spawnTop, type RoomDef } from '../src/room';
 import { perchTiers } from '../src/routes';
-import { CIRCUIT_COURSE, CIRCUIT_GROUND, CIRCUIT_ROOMS } from './neonCourse';
+import { CIRCUIT_COURSE, CIRCUIT_GROUND, CIRCUIT_ROOMS, NEON_LIGHT } from './neonCourse';
 import { COURSES, ROOMS, TREE_GROUND, TREE_REALMS } from './index';
 
 const rooms = (id: string) => ROOMS[id];
@@ -171,5 +172,38 @@ describe("the neon realm's course", () => {
     expect(courses.finish(cid, 'circuit-3', t + 50_000)).toMatchObject({ ok: false, reason: 'parts' });
     expect(courses.reach(cid, 'circuit-3', 'part', 'breaker-3', t + 51_000).ok).toBe(true);
     expect(courses.finish(cid, 'circuit-3', t + 52_000)).toMatchObject({ ok: true });
+  });
+});
+
+describe('the neon course’s borrowed pieces (OP-348)', () => {
+  /** A piece of another realm's kit standing in for one of the neon realm's slots: the tree's cut stone, the treetop's planks. */
+  const borrowed = (key: string) => {
+    const from = KIT_ART[key]?.standIn;
+    return from !== undefined && !from.startsWith('kit-neon-') && !from.startsWith('kit-tex-neon-');
+  };
+
+  it('are drawn in the street’s light, every one, and nothing of the realm’s own is', () => {
+    let lit = 0;
+    for (const id of ids) {
+      for (const d of kitDrawPlan(rooms(id)!)) {
+        if (d.role !== 'path' && d.role !== 'ledge') continue;
+        if (borrowed(d.key)) {
+          lit++;
+          expect(d.tint, `${id} ${d.id} ${d.key}`).toBe(NEON_LIGHT);
+        } else if (d.layer !== 'hazard') {
+          // The realm's own roofs, bridges, boards and tin are painted in its night already.
+          expect(d.tint, `${id} ${d.id} ${d.key}`).toBeUndefined();
+        }
+      }
+    }
+    expect(lit).toBeGreaterThan(20);
+  });
+
+  it('take a light on the palette’s sky blue: fuller than grey, lighter than the night', () => {
+    const [r, g, b] = [(NEON_LIGHT >> 16) & 255, (NEON_LIGHT >> 8) & 255, NEON_LIGHT & 255];
+    expect(b).toBe(255);
+    expect(b - r).toBeGreaterThan(90);
+    expect(g).toBeGreaterThan(r);
+    expect(r).toBeGreaterThan(120);
   });
 });

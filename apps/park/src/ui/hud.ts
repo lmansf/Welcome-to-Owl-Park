@@ -19,7 +19,7 @@ import { afterReward, createFeedbackCard, type FeedbackCard } from './feedbackRe
 import { coveredBy, type CoveredEdges } from '../game/hudInset';
 import { walkingMap } from '../game/walkingMap';
 import { createTreeMinimap } from './treeMinimap';
-import { createJoystick } from './joystick';
+import { createJoystick, underStick } from './joystick';
 import { eventTime } from './keyboard';
 import { createLeaveCard } from './leaveCard';
 import { createMenuShell } from './menuShell';
@@ -198,6 +198,8 @@ export interface Hud {
   /** The run is over: how it ended and what it paid. */
   arcadeResult(result: ArcadeResultView): void;
   closeArcade(): void;
+  /** Escape while an arcade game is open (OP-345): a run under way pauses (a paused one goes on) and this answers true; false when there is nothing to pause. */
+  escapeArcade(): boolean;
   /** The climb screen over everything while a climb is played; it owns its stick, button and keys. */
   openClimb(view: ClimbView, handlers: ClimbHandlers): void;
   /** The climb screen's held controls right now (`jumpPressed` once per press). */
@@ -255,6 +257,11 @@ export interface Hud {
   closePanels(): void;
   /** The off-screen hint chips; an empty list clears them. */
   setHints(hints: HudHint[]): void;
+  /**
+   * Where the visitor's own owl's feet are on the screen (CSS px), or null for nowhere (OP-349): the
+   * thumbstick goes quiet while the owl is under it (joystick.ts, underStick).
+   */
+  setOwlAt(feet: { x: number; y: number } | null): void;
   /**
    * The room is fading out, or the next is not in yet (OP-346): what the HUD shows of the room itself
    * (a course's strip, the actions where the owl stands) fades with it. The Menu and the counters stay.
@@ -433,7 +440,7 @@ const CSS = `
   #hud .emote-btn{display:none}
   #hud .pad-btn.interact.idle{opacity:0;pointer-events:none}
   #hud .pad-btn.interact .lbl{display:none}
-  #hud .pad-btn.interact.labelled{width:auto;min-width:56px;max-width:min(240px,calc(100vw - 232px));padding:0 14px 0 12px;gap:4px;justify-content:flex-start;border-radius:28px;background:rgba(12,30,54,.78)}
+  #hud .pad-btn.interact.labelled{width:max-content;min-width:56px;max-width:min(240px,calc(100vw - 232px));padding:0 14px 0 12px;gap:4px;justify-content:flex-start;border-radius:28px;background:rgba(12,30,54,.78)}
   #hud .pad-btn.interact.labelled svg{flex:none}
   #hud .pad-btn.interact.labelled .lbl{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;font-size:13px;font-weight:700;line-height:1.15;text-align:left;color:#F6F1E3}
   /* The first action is Interact's own, so its button in the row would say it twice. */
@@ -1268,6 +1275,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       arcade.result(r);
     },
     closeArcade: () => arcade.close(),
+    escapeArcade: () => arcade.isOpen() && arcade.escape(),
     openClimb(view, handlers) {
       if (!climb.isOpen()) makeRoom();
       root.classList.add('covered');
@@ -1352,6 +1360,12 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     },
     setRoomDark(on) {
       document.documentElement.classList.toggle('room-dark', on);
+    },
+    setOwlAt(feet) {
+      const el = root.querySelector<HTMLElement>('.stick');
+      if (!el) return;
+      const box = el.getBoundingClientRect();
+      el.classList.toggle('quiet', feet !== null && box.width > 0 && underStick(feet, box));
     },
     setHints(list) {
       const seen = new Set<string>();

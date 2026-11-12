@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { HALL_ROOM, HALL_W } from '../rooms/hollowHall';
 import { ROOMS } from '../rooms/index';
-import { EDGE_ART, HALL_RING, STRIP_OUT, bumpProfile, edgeArt, edgeDraws, edgePlaceholder, kitFrames, shapedEdge } from './edges';
+import { EDGE_ART, HALL_RING, SIDE_LEAST, STRIP_OUT, bumpProfile, edgeArt, edgeDraws, edgePlaceholder, kitFrames, shapedEdge } from './edges';
 import { pointInPolygon } from './geometry';
 import { INTERACTABLES } from './interactables';
 import { kitDrawPlan } from './kit';
@@ -121,6 +121,49 @@ describe("kit rooms' platform frames", () => {
     const flat = { key: 'kit-tex-inner-wood', x: 0, y: 700, w: 400, h: 200, role: 'path' as const, id: 'p' };
     const strips = kitFrames(flat, { w: 1600, h: 900 });
     expect(strips.map((s) => s.id)).toEqual(['p:right']);
+  });
+
+  it('frames a side only where it stands free: not where another body begins at it (OP-348)', () => {
+    const size = { w: 1600, h: 900 };
+    const walk = { key: 'kit-tex-earth', x: 100, y: 770, w: 600, h: 130, role: 'path' as const, id: 'walk' };
+    // A course's pit: the same earth, a step lower, from the walk's very end.
+    const pit = { key: 'kit-tex-earth', x: 700, y: 800, w: 400, h: 100, role: 'path' as const, id: 'pit' };
+    const far = { key: 'kit-tex-earth', x: 1100, y: 770, w: 300, h: 130, role: 'path' as const, id: 'far' };
+    const plan = [walk, pit, far];
+    // Alone, the walk has both its sides; beside the pit, only the one that stands free.
+    expect(kitFrames(walk, size).map((s) => s.id)).toEqual(['walk:left', 'walk:right']);
+    expect(kitFrames(walk, size, plan).map((s) => s.id)).toEqual(['walk:left']);
+    expect(kitFrames(pit, size, plan)).toEqual([]);
+    expect(kitFrames(far, size, plan).map((s) => s.id)).toEqual(['far:right']);
+    // A neighbour that begins well down the side leaves the side above it framed, down to it and no further.
+    const low = { ...pit, y: 850, h: 50 };
+    const right = kitFrames(walk, size, [walk, low]).find((s) => s.id === 'walk:right')!;
+    expect(right.y + right.h).toBe(850);
+    expect(right.h).toBeGreaterThanOrEqual(SIDE_LEAST);
+    // A body a gap away is no neighbour: the side stands free.
+    const apart = { ...pit, x: 760 };
+    expect(kitFrames(walk, size, [walk, apart]).map((s) => s.id)).toEqual(['walk:left', 'walk:right']);
+    // Nor is a cap, a prop or a backdrop piece at the side: only a body of earth is.
+    const cap = { key: 'kit-plank-mid', x: 700, y: 760, w: 300, h: 60, role: 'path' as const, id: 'cap' };
+    expect(kitFrames(walk, size, [walk, cap]).map((s) => s.id)).toEqual(['walk:left', 'walk:right']);
+  });
+
+  it('leaves no strip down the join of a walk and a pit in any course', () => {
+    let pits = 0;
+    for (const room of kitRooms.filter((r) => r.course)) {
+      const plan = kitDrawPlan(room);
+      const bodies = plan.filter((d) => (d.role === 'path' || d.role === 'ledge' || d.role === 'hill') && KIT_ART[d.key]?.kind === 'texture');
+      for (const d of bodies.filter((b) => b.layer === 'hazard')) {
+        pits++;
+        expect(kitFrames(d, room.size, plan).filter((s) => s.tile === 'y'), `${room.id} ${d.id}`).toEqual([]);
+        for (const o of bodies.filter((b) => b.id !== d.id && (Math.abs(b.x + b.w - d.x) <= 2 || Math.abs(b.x - (d.x + d.w)) <= 2))) {
+          const atJoin = kitFrames(o, room.size, plan).filter((s) => s.tile === 'y' && ((s.id.endsWith(':right') && Math.abs(o.x + o.w - d.x) <= 2) || (s.id.endsWith(':left') && Math.abs(o.x - (d.x + d.w)) <= 2)));
+          for (const s of atJoin) expect(s.y + s.h, `${room.id} ${s.id}`).toBeLessThanOrEqual(d.y);
+        }
+      }
+    }
+    // The canopy's and the neon course's drops (the ink course's pits are flooded walks, with no body of their own).
+    expect(pits).toBeGreaterThan(5);
   });
 });
 

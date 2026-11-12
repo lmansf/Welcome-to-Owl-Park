@@ -64,6 +64,12 @@ export interface KitDraw {
   alpha?: number;
   /** A colour it is drawn multiplied by (a surface's own tint, KitSurface.tint). */
   tint?: number;
+  /**
+   * The part of the piece shown, across (its own px, from `x`, `w` wide), for a piece drawn to its box
+   * and not mirrored: the rest of its box is left empty. An end piece on a run too short for both its
+   * ends shows only its outer part (OP-348).
+   */
+  crop?: { x: number; w: number };
   /** What it is drawn for, and that thing's id (the greybox shades by it, the tests count by it). */
   role: 'surface' | 'path' | 'ledge' | 'hill' | 'stair' | 'door' | 'barrier' | 'prop' | 'decal';
   id: string;
@@ -260,6 +266,44 @@ function artSpan(s: KitArtSpec): { left: number; right: number; w: number } {
  */
 export const KIT_FLOOD_OVER = 18;
 
+/** A piece cut from a painted row (OP-251): `<row>-cap-left`, `-cap-right` or `-mid-<length>`. */
+const ROW_PIECE = /^(kit-cut-.+)-(?:cap-left|cap-right|mid-\d+)$/;
+
+/** The painted row a piece was cut from (a realm slot's stand-in counts as the piece standing in), or null for any other piece. */
+export function rowOfPiece(key: string): string | null {
+  return ROW_PIECE.exec(KIT_ART[key]?.standIn ?? key)?.[1] ?? null;
+}
+
+const ROW_TOPS = new Map<string, number | null>();
+
+/**
+ * The one upper edge the pieces of a painted row share (OP-348), in a piece's own px; null for a row
+ * with no measured piece. A row's caps and middles are cut from one painting of one run, each at the
+ * row's height, so side by side in their boxes they are that painting again. Their measured tops are
+ * not one number, though: a top is the highest thing in the piece, and grass, moss and an end board
+ * stand a little higher in one piece than the next (the earth path's run from 14 to 37). Each piece
+ * laid by its own top put neighbours as much as 23 px apart, a step in the ground at every join.
+ * So a row is laid on one line: the middle one of its pieces' tops, which is where most of the run's
+ * upper edge is and moves the caps least.
+ */
+export function rowTop(row: string): number | null {
+  const known = ROW_TOPS.get(row);
+  if (known !== undefined) return known;
+  const tops = ['cap-left', 'cap-right', ...KIT_ROW_LENGTHS.map((l) => `mid-${l}`)]
+    .map((part) => KIT_ART[`${row}-${part}`]?.top)
+    .filter((t): t is number => typeof t === 'number')
+    .sort((a, b) => a - b);
+  const top = tops.length ? tops[Math.floor((tops.length - 1) / 2)]! : null;
+  ROW_TOPS.set(row, top);
+  return top;
+}
+
+/** A piece's upper edge as a run lays it: its row's shared one (rowTop), or its own. */
+function layTop(key: string, s: KitArtSpec): number {
+  const row = rowOfPiece(key);
+  return (row ? rowTop(row) : null) ?? artBand(s).top;
+}
+
 /**
  * How far into a run piece's art, below its upper edge, an owl's feet stand (its own px): the kit's
  * platforms are seen a little from above, so the walking line is a step into the top face, not on
@@ -285,11 +329,12 @@ function runDraws(given: KitRun, ground: number, depth: number, role: 'path' | '
     return {
       key,
       ...(repeats ? { x: x0, w: x1 - x0 } : { x: Math.round(x0 - (flip ? s.w - span.right : span.left) * k), w: Math.round(s.w * k) }),
-      y: Math.round(walk - (artBand(s).top + KIT_STAND_SINK) * k),
+      y: Math.round(walk - (layTop(key, s) + KIT_STAND_SINK) * k),
       h: Math.round(s.h * k),
       tile: repeats ? 'x' : 'none',
       layer: 'play',
       ...(flip ? { flip: true } : {}),
+      ...(run.tint !== undefined ? { tint: run.tint } : {}),
       role,
       id: run.id,
     };
@@ -322,9 +367,28 @@ function runDraws(given: KitRun, ground: number, depth: number, role: 'path' | '
     const single = c.tile === 'none' || (!run.left && !run.right && x1 - x0 < artSpan(c).w * 0.75);
     if (x1 > x0) pieces.push(single ? at(run.cap, run.x0, run.x1, (run.x1 - run.x0) / artSpan(c).w) : at(run.cap, x0, x1, 1, { repeats: true }));
   }
-  if (run.left) pieces.push(at(run.left, run.x0, run.x0 + lw, 1));
+  // A run shorter than one of its ends (OP-348: a stone step 120 across, each end 160): the ends were
+  // laid whole, one over the other, their art out past the run on both sides, so the step looked wider
+  // than it stands. Each now shows only its outer part, as much of the run as its length earns it, and
+  // the two meet between. A mirrored end is laid whole, as before; so are the ends of a run at least
+  // an end long, which stay inside it (one lies over the other's inner part: left as it is, since the
+  // one screen of such steps the style check holds closest, in `brush-falls`, has no room for the
+  // seam two half ends make; a short piece of the row's own is the artists').
+  const len = run.x1 - run.x0;
+  const fit = run.left && run.right && (lw > len || rw > len) ? len / (lw + rw) : 1;
+  if (run.left) {
+    const s = sizeOf(run.left);
+    const d = at(run.left, run.x0, run.x0 + lw, 1);
+    pieces.push(fit < 1 ? { ...d, crop: { x: 0, w: artSpan(s).left + lw * fit } } : d);
+  }
   // A realm's perch end (OP-275) is painted for the left end and mirrored for the right, once delivered.
-  if (run.right) pieces.push(at(run.right, run.x1 - rw, run.x1, 1, { flip: KIT_ART[run.right]?.slot === 'perch-end' && !KIT_ART[run.right]?.standIn }));
+  if (run.right) {
+    const s = sizeOf(run.right);
+    const flip = KIT_ART[run.right]?.slot === 'perch-end' && !KIT_ART[run.right]?.standIn;
+    const d = at(run.right, run.x1 - rw, run.x1, 1, { flip });
+    const from = artSpan(s).left + rw * (1 - fit);
+    pieces.push(fit < 1 && !flip ? { ...d, crop: { x: from, w: s.w - from } } : d);
+  }
   if (run.trim && pieces[0]) {
     const cap = pieces[0];
     const t = sizeOf(run.trim);
@@ -541,7 +605,7 @@ export function kitDrawPlan(room: Pick<RoomDef, 'kit' | 'doors' | 'size'>): KitD
 export function kitCells(d: KitDraw): KitCell[] {
   const s = sizeOf(d.key);
   const whole = { x: 0, y: 0, w: s.w, h: s.h };
-  if (d.tile === 'none') return [{ x: d.x, y: d.y, w: d.w, h: d.h, crop: whole }];
+  if (d.tile === 'none') return [{ x: d.x, y: d.y, w: d.w, h: d.h, crop: d.crop && !d.flip ? { x: d.crop.x, y: 0, w: d.crop.w, h: s.h } : whole }];
   if (d.tile === 'x' || d.tile === 'y') {
     // Copies meet art to art: each is laid one art width on from the last, its margins over its neighbours'.
     // Down a column (y) each copy is first scaled to the box's width, so the piece keeps its shape.

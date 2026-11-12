@@ -1,9 +1,10 @@
 # Owl Park cleanup and rebuild: the plan
 
 - Status: in progress. Ticket OP-342. Branch `claude/determined-wozniak-3ljxrf`.
-- Last updated: 2026-11-12. Milestones 1 and 2 are merged and live (OP-343, OP-344). The Great Hollow
-  milestone is in review (OP-346, with the first flight, OP-347, and the first part of the art pass,
-  OP-348). The arcade and the phone pass are built and go up next (OP-345, OP-349).
+- Last updated: 2026-11-12. Milestones 1, 2 and 4 are merged and live (OP-343, OP-344, OP-346), with the
+  first flight (OP-347) and the Great Hollow's art (OP-348, part one). In review: the arcade (OP-345),
+  the phone pass (OP-349) and the courses' ground and the neon course's light (OP-348). Built and
+  next, each behind its own flag: the sound set (OP-350) and the side camera (OP-351).
 - Read first: `FABLE.md` (the owner's rules; it wins over this file).
 
 The owner's brief (Nov 11): a full cleanup pass of the game, end to end, as a player meets it. Two
@@ -134,12 +135,12 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   - The clock (`objectiveStrip.ts`): the run's time, and the gold time while it can still be beaten.
   - The prompt (`reachPrompt.ts`): on the floor at the owl's feet, under a doorway's sign where one
     lies there. Not for a doorway seen from the side (its arrow says up) or for Decorate.
-- **M3. The arcade (OP-345, built).** Items 7, 8, 9, 21. Done when: a result card cannot be skipped by
+- **M3. The arcade (OP-345, in review).** Items 7, 8, 9, 21. Done when: a result card cannot be skipped by
   accident, a run can be paused, each game names its keys. Left for later, with the reason on the
   ticket: Moon Flap's difficulty (wants the day's scores, not one script's try), the score wall off
   screen from mid floor, the feather counter over the first cabinet's sign (PR 221 is open on those
   cabinets).
-- **M4. The Great Hollow and the ways through (OP-346, in review).** Items 11, 13, 19, 20; 14 and the
+- **M4. The Great Hollow and the ways through (OP-346, merged as PR 226 on Nov 12).** Items 11, 13, 19, 20; 14 and the
   faces of 15 looked at and left, with the reasons in the log. Done when: a key held through a doorway
   between a side view and a view from above leaves the owl standing; the visitor's own owl shows behind
   tall art; every doorway sign, Menu place and quest step names a place one way. Should move: visits
@@ -154,12 +155,21 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
     beside it by the sign's near edge.
   - Names (`npcs.ts` `placeWords`, `placeShown`): shown words name a place as the walked park does.
   - Chips (`hints.ts` `sideChipWords`), the trail's colour, and the room's own HUD parts fading with it.
-- **M5. The phone pass.** Items 12, 24 and whatever the phone walk finds: the stick, Jump, Dash, the
-  pad, every room at 844x390 and upright.
+- **M5. The phone pass (OP-349, in review).** Items 12, 24 and what the phone looks found. Eight rooms
+  looked at on a phone-sized touch screen, upright (390x844) and sideways (844x390). Done when: the
+  pad's label is read whole, the thumbstick does not hide the owl, and the free way in is a full-size
+  button. Should move: phone visits' length. What it changed, in short:
+  - The pad's Interact label takes the width its words need, up to the limit it had: "Browse the
+    stall", not "Browse the...".
+  - Held sideways the thumbstick lay over the owl at every course's way in. It fades to a third while
+    the visitor's own owl is under it and no thumb is on it (`joystick.ts` `underStick`).
+  - The home screen's free way in is 44 px tall (it was the smallest button, 40).
+  - Left as it is: a course held upright says "This part of the park plays with your phone on its
+    side.", which is by design.
 
 ## Bigger changes, after the cleanup
 
-- **B1. A first flight where owls arrive (OP-347, in review with M4).** Goal: an owl that has just come in has something to do
+- **B1. A first flight where owls arrive (OP-347, merged with M4 as PR 226 on Nov 12).** Goal: an owl that has just come in has something to do
   within ten seconds, and has jumped, flapped and glided before it meets a course. Why it beats what
   is there: 15 of 20 visits end in the Great Hollow, half a minute after the owl comes in. The first
   plan was a first quest given at the way in. The play log says who those visitors are: every one is a
@@ -279,4 +289,30 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
     not loosened, so the courses' ground waits for part two.
   - Part two is new paintings through `tools/art`: a neon wall, an ink ground, the canopy's trunk wall.
     It needs the owner's yes to spend (asked: a cap of 10 dollars) and his pick from contact sheets.
-
+- 2026-11-12: the art pass, the courses' ground (OP-348), with the art that exists and no spend. Looked
+  at closely, what made the ground clunky was three faults in how the kit lays its pieces, not the
+  pieces:
+  - The pieces of one painted row were each laid by their own highest pixel. In a row of grass that
+    is a different height in every piece (the earth path's from 14 to 37), so neighbours cut from one
+    painting sat as much as 23 px apart: a step in every mound of all three courses. A row is now laid
+    on one line (`rowTop` in `kit.ts`), its boxes side by side as they were painted.
+  - A platform body's side was framed with shade and a creeper even where another body begins at it.
+    Since milestone 1 drew pits as drops, that put a dark band and a vine down every pit's edge, a
+    slit in the ground. This one was milestone 1's own doing. A side is framed only where it stands
+    free (`kitFrames` in `edges.ts`).
+  - A run shorter than one of its ends had both ends laid whole, one over the other and out past the
+    run: the ink course's first stone step was drawn 200 px wide and stood 120. Each end now shows
+    only its outer part (`KitDraw.crop`).
+  - The neon course stood on the tree's cut stone, with walls of the treetop's silvered planks:
+    cream and bleached wood in a violet night. Both are stand-ins from another realm's kit. They are
+    now drawn multiplied by a blue (`NEON_LIGHT`, `KitRun.tint` and `shade`), a stone and a wall lit
+    by the street's own signs. This takes back the "tried and rolled back" of Nov 11: a tone does
+    pass, when it is aimed. The check measures how far a colour family's pixels lean off the
+    palette, so the blue has to be as full as the palette's sky blue (a greyer one drifts 13 to 19
+    against the 13 allowed) and light enough to keep the walkway's contrast over 7.5. Candidates were
+    put through the check itself until one held all eight screens: 0x96c0ff.
+  - Left, with the reason: a step at least an end long keeps its overlapped ends. Cut the same way,
+    one screen of `brush-falls` goes from 13.96 to 14.11 against the 14.0 the style check allows a
+    walkway's contrast, and the band is not loosened. Also left for paintings: the tone of the earth
+    path's middle pieces against its ends, the ink course's green mounds on its paper, the ink
+    pond's flat water, and a row and a wall of the neon realm's own.

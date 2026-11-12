@@ -308,11 +308,15 @@ export class KnockGame {
     return { vx: Math.cos(a) * speed, vy: -Math.sin(a) * speed };
   }
 
-  /** Aim by the pull itself: back and down from the slingshot sends the owl up and on. Hardly a pull at all is no shot. */
+  /**
+   * Aim by the pull itself: back and down from the slingshot sends the owl up and on. Hardly a pull at
+   * all is no shot, and neither is a pull forward, towards the targets (OP-345): a slingshot is pulled
+   * back, and a drag the other way used to be read as the lowest aim and fire the owl into the ground.
+   */
   aimByPull(dx: number, dy: number): void {
     if (this.phase !== 'aim') return;
     const len = Math.min(MAX_PULL, Math.hypot(dx, dy));
-    if (len < 4) {
+    if (len < 4 || dx >= 0) {
       this.power = 0;
       return;
     }
@@ -544,7 +548,8 @@ export class KnockGame {
   overLine(): string {
     const points = count(this.score, 'point', 'points');
     if (this.cleared === KNOCK_LEVELS) return `All three targets down! ${points}.`;
-    return `${this.cleared ? `${count(this.cleared, 'target', 'targets')} down` : 'No target down'}, ${points}.`;
+    // What was won first, as the other two games word it (OP-345): "No target down, 18 points." read as a loss.
+    return this.cleared ? `${count(this.cleared, 'target', 'targets')} down! ${points}.` : `${points}.`;
   }
 }
 
