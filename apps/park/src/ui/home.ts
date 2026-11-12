@@ -216,7 +216,7 @@ function css(): string {
 #hud .home .h-sub .h-presence{color:#FFD36A;opacity:.95}
 #hud .home .h-sub>span:not([hidden])~span:not([hidden])::before{content:" · ";color:#F6F1E3}
 /* Quiet links: I already have an owl under Play, and the footer's three. Still 40 px tall to tap. */
-#hud .home .h-side button.h-link{width:auto;min-height:40px;padding:8px 10px;background:none;border:0;box-shadow:none;color:#F6F1E3;
+#hud .home .h-side button.h-link{width:auto;min-height:44px;padding:8px 10px;background:none;border:0;box-shadow:none;color:#F6F1E3;
   font-size:13px;font-weight:600;opacity:.85;text-decoration:underline;text-decoration-color:rgba(246,241,227,.35);text-underline-offset:3px}
 #hud .home .h-side button.h-link:hover{opacity:1;text-decoration-color:currentColor}
 #hud .home .h-side button.h-link:focus-visible{opacity:1;outline:2px solid #FFD36A;outline-offset:2px;border-radius:8px}

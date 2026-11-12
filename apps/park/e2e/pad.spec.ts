@@ -253,3 +253,31 @@ test.describe('the pad (OP-082, OP-114)', () => {
     expect((await state(page)).actions[0]).toBe('npc:nova');
   });
 });
+
+test.describe('a thumb’s size (OP-354)', () => {
+  test('the Say wheel’s buttons, the Settings screen’s Close and the home screen’s links are 44 px tall, as every other control a phone shows', async ({ page, isMobile }) => {
+    test.skip(!isMobile, 'a thumb’s size is for touch screens (a computer’s window scales the HUD)');
+    /** The heights of what `sel` finds, each with its words: all of them, and at least `n`. */
+    const heights = async (sel: string, n: number) => {
+      const found = await page.locator(sel).evaluateAll((els) => els.filter((el) => (el as HTMLElement).offsetParent !== null).map((el) => ({ words: (el.getAttribute('aria-label') ?? el.textContent ?? '').trim(), h: Math.round(el.getBoundingClientRect().height) })));
+      expect(found.length, sel).toBeGreaterThanOrEqual(n);
+      return found;
+    };
+    // The home screen's three links under its two buttons.
+    await page.goto('/?transport=local');
+    await expect(page.locator('#hud .home .h-links button.h-link').first()).toBeVisible({ timeout: 20_000 });
+    for (const b of await heights('#hud .home .h-links button.h-link', 3)) expect(b.h, `home: ${b.words}`).toBeGreaterThanOrEqual(44);
+
+    // In the park: the Say wheel's own two buttons.
+    await openPark(page);
+    await page.evaluate(() => (window.owlPark.game.registry.get('hud') as { toggleSay(): void }).toggleSay());
+    await expect(page.locator('#hud .say [data-close]')).toBeVisible();
+    for (const b of await heights('#hud .say [data-close], #hud .say [data-swap]', 2)) expect(b.h, `Say: ${b.words}`).toBeGreaterThanOrEqual(44);
+    await page.evaluate(() => (window.owlPark.game.registry.get('hud') as { closePanels(): void }).closePanels());
+
+    // And the Settings screen's Close.
+    await page.evaluate(() => (window.owlPark.game.registry.get('hud') as { openSettings(opener: HTMLElement): void }).openSettings(document.body));
+    await expect(page.locator('#hud .modal.settings .x')).toBeVisible();
+    for (const b of await heights('#hud .modal.settings .x', 1)) expect(b.h, `Settings: ${b.words}`).toBeGreaterThanOrEqual(44);
+  });
+});
