@@ -68,14 +68,18 @@ const CSS = `
 #hud .which-owl .wo-pic{display:flex;align-items:center;justify-content:center;width:clamp(64px,12vh,${QUIZ_ART_SIZE}px);aspect-ratio:1;border:2px dashed rgba(246,241,227,.5);border-radius:12px;
   font-size:12px;font-weight:600;letter-spacing:.02em;color:rgba(246,241,227,.75);background:rgba(246,241,227,.05)}
 #hud .which-owl .wo-feather{width:clamp(48px,10vh,76px);height:clamp(48px,10vh,76px)}
-#hud .which-owl .wo-stage{width:min(320px,70vw);height:min(340px,38vh)}
+/* The owl is the reveal's centrepiece: it never gives up its room when the words run past a phone's
+   screen (a flex child shrinks by default, which left a thumb-sized owl), and on a phone it stands
+   about two fifths of the screen wide. */
+#hud .which-owl .wo-stage{flex:0 0 auto;width:min(380px,88vw);height:min(400px,46vh,96vw)}
 #hud .which-owl .wo-you{margin:0;font-size:15px;opacity:.85;letter-spacing:.04em;text-transform:uppercase}
 #hud .which-owl .wo-name{margin:0;font-size:clamp(28px,5vh,40px);color:#FFD36A;text-shadow:0 2px 12px rgba(0,0,0,.55)}
 #hud .which-owl .wo-fact{max-width:30em;margin:0;text-align:center;font-size:16px;line-height:1.4;opacity:.92}
 #hud .which-owl .wo-about{max-width:32em;margin:0;text-align:center;font-size:17px;line-height:1.45}
 #hud .which-owl .wo-enjoy{max-width:30em;margin:0;text-align:center;font-size:16px;line-height:1.4;color:#FFD36A}
 #hud .which-owl .wo-thinking{font-style:italic;opacity:.9}
-@media (max-height:720px){#hud .which-owl .wo-stage{height:min(240px,30vh)}#hud .which-owl .wo-about,#hud .which-owl .wo-fact,#hud .which-owl .wo-enjoy{font-size:15px}}
+@media (max-height:720px) and (min-aspect-ratio:1/1){#hud .which-owl .wo-stage{height:min(260px,34vh)}}
+@media (max-height:720px){#hud .which-owl .wo-about,#hud .which-owl .wo-fact,#hud .which-owl .wo-enjoy{font-size:15px}}
 /* The reveal's words come in one by one, after the owl has landed (OP-330). */
 @media (prefers-reduced-motion:no-preference){#hud .which-owl .wo-later{animation:wo-fade .5s ease-out both}}
 @keyframes wo-fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
