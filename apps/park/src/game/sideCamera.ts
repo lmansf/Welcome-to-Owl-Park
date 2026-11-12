@@ -15,7 +15,7 @@ import { JUMP_RISE, WALK_SPEED } from '@owl-park/shared';
  *   only with what goes higher: a flap on top of the jump, or rising air.
  * - It keeps up. The view is carried along with the owl before it eases to where it looks (OP-352), so
  *   what trails is only what is left over: a walking owl has its whole lead on the screen (an ease
- *   alone trails a walk by 40 px, more than half the lead on a phone held upright), a falling owl
+ *   alone trails a walk by 40 px, more than half the lead in a view as narrow as 442 px), a falling owl
  *   stays `BAND_DOWN` under the height held and no more (what is below is what matters then), and an
  *   owl in rising air `LIFT_BAND` over it.
  * - It eases by the clock. A share of the way each frame is half the camera at half the frames, so on a
