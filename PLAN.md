@@ -1,10 +1,11 @@
 # Owl Park cleanup and rebuild: the plan
 
 - Status: in progress. Ticket OP-342. Branch `claude/determined-wozniak-3ljxrf`.
-- Last updated: 2026-11-12. Milestones 1, 2 and 4 are merged and live (OP-343, OP-344, OP-346), with the
-  first flight (OP-347) and the Great Hollow's art (OP-348, part one). In review: the arcade (OP-345),
-  the phone pass (OP-349) and the courses' ground and the neon course's light (OP-348). Built and
-  next, each behind its own flag: the sound set (OP-350) and the side camera (OP-351).
+- Last updated: 2026-11-12. The cleanup's five milestones are merged and live (OP-343 to OP-346,
+  OP-349), with the first flight (OP-347) and the art pass's no-spend part (OP-348: the Great Hollow,
+  the courses' ground, the neon course's light). In review, each behind its own flag: the sound set
+  (OP-350, `?sfx=1`) and the side camera (OP-351, `?cam=1`). Next: new paintings for the courses, on
+  the owner's yes of Nov 12 (a cap of 10 dollars), his pick from contact sheets first.
 - Read first: `FABLE.md` (the owner's rules; it wins over this file).
 
 The owner's brief (Nov 11): a full cleanup pass of the game, end to end, as a player meets it. Two
@@ -135,7 +136,7 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   - The clock (`objectiveStrip.ts`): the run's time, and the gold time while it can still be beaten.
   - The prompt (`reachPrompt.ts`): on the floor at the owl's feet, under a doorway's sign where one
     lies there. Not for a doorway seen from the side (its arrow says up) or for Decorate.
-- **M3. The arcade (OP-345, in review).** Items 7, 8, 9, 21. Done when: a result card cannot be skipped by
+- **M3. The arcade (OP-345, merged as PR 227 on Nov 12).** Items 7, 8, 9, 21. Done when: a result card cannot be skipped by
   accident, a run can be paused, each game names its keys. Left for later, with the reason on the
   ticket: Moon Flap's difficulty (wants the day's scores, not one script's try), the score wall off
   screen from mid floor, the feather counter over the first cabinet's sign (PR 221 is open on those
@@ -155,7 +156,7 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
     beside it by the sign's near edge.
   - Names (`npcs.ts` `placeWords`, `placeShown`): shown words name a place as the walked park does.
   - Chips (`hints.ts` `sideChipWords`), the trail's colour, and the room's own HUD parts fading with it.
-- **M5. The phone pass (OP-349, in review).** Items 12, 24 and what the phone looks found. Eight rooms
+- **M5. The phone pass (OP-349, merged as PR 227 on Nov 12).** Items 12, 24 and what the phone looks found. Eight rooms
   looked at on a phone-sized touch screen, upright (390x844) and sideways (844x390). Done when: the
   pad's label is read whole, the thumbstick does not hide the owl, and the free way in is a full-size
   button. Should move: phone visits' length. What it changed, in short:
@@ -182,7 +183,7 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   trail goes on to a doorway. Done when: a new owl's first minute has a jump, a flap and a glide in it
   (browser test), and the play log shows fewer visits ending in `m3-hall` in their first minute.
   A first quest for ticket holders can follow once the log shows ticket holders.
-- **B2. The camera in side-view rooms (OP-351, built, behind the `sideCam` flag: `?cam=1`).** Goal: the
+- **B2. The camera in side-view rooms (OP-351, in review, behind the `sideCam` flag: `?cam=1`).** Goal: the
   camera shows where the owl is going. Why it beats what is there: a course is played by jumping at
   what comes next, and with the owl dead centre the next ledge or pit is half a screen away at best;
   the whole view rose and fell with every hop; and it eased by a share each frame, so at half the
@@ -194,7 +195,7 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   (milestone 1). Not done: framing a goal that is high up. Done when: the rule tests and a browser
   test pass, the flag check passes, and the owner has played with it. Should move, once on: course
   runs that reach the first bench; falls per run.
-- **B3. A small sound set (OP-350, built, behind the `sounds` flag: `?sfx=1`).** Goal: every move a
+- **B3. A small sound set (OP-350, in review, behind the `sounds` flag: `?sfx=1`).** Goal: every move a
   player makes is heard, from one module, one switch. Why it beats what is there: the park is silent
   but for a knock as the Menu opens, so nothing a player presses is answered by anything but what they
   can see, and there is nothing to time a flap by. What it is: a table of thirteen cues
