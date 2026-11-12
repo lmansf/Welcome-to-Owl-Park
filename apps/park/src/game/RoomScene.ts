@@ -643,16 +643,12 @@ export class RoomScene extends Phaser.Scene {
   private decorSpot: NestSpotId = 'f1';
   /** CSS pixels the Decorate sheet covers at the bottom of the screen. */
   private sheetPx = 0;
-  /** The town view (OP-336, `?town=1`, townView.ts): a wider camera in a room seen from above, and the opening look over the Great Hollow. */
-  private readonly town = flagOn('town');
   /**
-   * The opening look under way (townView.ts): when the room has faded in (its time is counted from
+   * The opening look under way (OP-336, townView.ts): when the room has faded in (its time is counted from
    * then), and when the player first moved, in that time (which brings it in early); null when there is
    * none. The camera is set each frame while it lasts.
    */
   private opening: { at: number; cutAt: number | null; covered: CoveredEdges } | null = null;
-  /** The thermal (OP-340, `?thermal=1`, thermal.ts in @owl-park/shared): an owl gliding in a room's thermal is lifted, and the camera draws back as it rises. */
-  private readonly thermalOn = flagOn('thermal');
   /** The park's sounds for what this visitor's own owl does (OP-350, sfx.ts), under the Settings switch "Sounds". */
   private readonly sfx: Sfx = parkSfx(() => (this.registry?.get('settings') as SettingsStore | undefined)?.get().sound ?? true);
   /**
@@ -3267,8 +3263,8 @@ export class RoomScene extends Phaser.Scene {
       // Else a wind current it glides into (wind.ts, OP-275) holds it at the current's height.
       const column = this.room.updrafts ? (liftAt(this.room.updrafts, place.x, this.flier.air.z, at + this.clockSkew())?.top ?? null) : null;
       const gust = column === null ? windAt(this.room.winds, place.x, this.flier.air.z) : undefined;
-      // Else, in a room seen from above, the thermal it glides in carries it up to its top (thermal.ts, OP-340, `?thermal=1`).
-      const warm = this.thermalOn && column === null && !gust ? (thermalAt(this.room.thermals, place, this.flier.air.z)?.top ?? null) : null;
+      // Else, in a room seen from above, the thermal it glides in carries it up to its top (thermal.ts, OP-340).
+      const warm = column === null && !gust ? (thermalAt(this.room.thermals, place, this.flier.air.z)?.top ?? null) : null;
       const lift = column ?? gust?.z ?? warm;
       const wasLifted = this.flier.air.s === LIFTED;
       const stoodAt = this.flier.air.z;
@@ -4342,9 +4338,9 @@ export class RoomScene extends Phaser.Scene {
     for (const { t, img } of this.parallax) this.placeParallax(t, img);
   }
 
-  /** Whether this room has the town view (OP-336): the flag is on and the room is seen from above. */
+  /** Whether this room has the town view (OP-336, townView.ts): every room seen from above. */
   private townViewed(): boolean {
-    return this.town && !seenFromSide(this.room);
+    return !seenFromSide(this.room);
   }
 
   /**
@@ -4365,8 +4361,8 @@ export class RoomScene extends Phaser.Scene {
   /**
    * The opening look (OP-336, townView.ts): through the turnstiles the Great Hollow opens on its whole
    * oval, holds long enough to be read and eases in on the owl. Only an oval read whole has one (a room
-   * with a bowl), and only for an owl that walked in through the gate, with the town view on. Its time
-   * is counted from when the room has faded in, so none of the look is spent under the fade.
+   * with a bowl), and only for an owl that walked in through the gate. Its time is counted from when
+   * the room has faded in, so none of the look is spent under the fade.
    */
   private startOpening(spawn: string | undefined): void {
     if (!this.townViewed() || !this.room.bowl || !walkedThroughGate(this.room.id, spawn)) return;
@@ -4429,7 +4425,6 @@ export class RoomScene extends Phaser.Scene {
    * the first time the owl stands in a thermal here, a line says what it is for.
    */
   private frameRise(): void {
-    if (!this.thermalOn) return;
     if (!this.thermalTold && this.flier.air.s === GROUNDED && thermalAt(this.room.thermals, this.me.pos, 0)) {
       this.thermalTold = true;
       this.hud.toast(THERMAL_WORDS, 4200, '#FFD36A');
