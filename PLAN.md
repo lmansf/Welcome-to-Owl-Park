@@ -13,11 +13,11 @@
   sound set (OP-350), the side camera (OP-351, OP-352), the town view (OP-336) and the thermal
   (OP-340). No feature of the pass is behind a flag (`friends`, from before it, is the one flag
   left). Looked at and left, with why in the log: one HUD style (B4).
-- In hand since the pass (Nov 12), both under the owner's standing brief and neither the larger
-  change he asked for: OP-358, the board's P1 from the QA walk (on a page whose room connection is
-  down, the Menu map forgot the turnstiles after one trip), fixed in the change this note came in
-  with; then OP-360, the ink course's first screen, planned under "After the pass" below from the
-  first phone runs since the pass went live (11 falls in two runs).
+- Since the pass (Nov 12), both under the owner's standing brief and neither the larger change he
+  asked for: OP-358, the board's P1 from the QA walk (on a page whose room connection is down, the
+  Menu map forgot the turnstiles after one trip), merged and live (PR 238); and OP-360, the ink
+  course's first screen laid for a newcomer's plays, under "After the pass" below, from the first
+  phone runs since the pass went live (11 falls in two runs).
 - What comes next is the owner's to choose: on Nov 12 he asked for one larger-than-life change
   that would make the park far more inviting to a new player or bring a player back. The one
   recommended, and why, is in the log (Nov 12, "one larger-than-life change") and in OP-359.
@@ -319,6 +319,34 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
 - Should move: falls per phone run in `brush-1` (5.5 on Nov 12) and runs that reach the first seal.
 - Not in it: the course's other screens and the other two courses. They get the same table, and a
   ticket each if it shows the same faults.
+- As built (Nov 12):
+  - The way across the pond is level at the first stone's height. Each bridge runs onto ground:
+    the first onto an island under the first paper cliff, the third onto an island under the
+    second, which steps down onto the far bank. Each stone starts where the walk before it ends.
+    The far bank begins under the second cliff, so the long glide and the upward stroke are over
+    dry ground. The benches stand at the cliffs' feet, on the way every owl takes.
+  - The cliffs are the high road. Rising air beside each carries a held Jump up (from the last
+    strides of the bridge before it), both flaps climb them as before, and a miss comes down on
+    the island. The column over the pond and its wind are gone; the first wind is the rain's.
+  - A stone paints when an owl lands on it or passes over it no higher than a jump with every flap
+    rises (`BRUSH_SWEEP`). The first stone reaches 40 px out over the water, so a jump from the
+    bank's last strides passes over it.
+  - The newcomer bot (`bots/sim/newcomer.ts`) plays the plain plays on the game's own flight:
+
+    | What a newcomer does | Before | Now |
+    | --- | --- | --- |
+    | walks east from the first stone, nothing pressed | falls at the end of the first bridge | crosses the pond |
+    | jumps once on the way across, anywhere, a tap to the whole flight | 0 of 315 plays cross | all 250 cross |
+    | adds a flap or two after the jump | not played before | all 360 cross |
+    | from the bank's floor, jumps in the last 220 px before the water | 3 of 55 come down on the first stone or its bridge | all 55 |
+    | off either cliff, walks off or jumps at its edge with any hold | 13 of 27 land off the first, 6 of 27 off the second | all 52 land |
+    | holds Jump from the last strides of the bridge before a cliff | glides under the cliff into the water | rises to the cliff, all 24 |
+
+  - What is given up: with no ink painted, the cliffs and the stones past the first could not be
+    reached at all; now an owl that glides well can reach them from the door. The seal still
+    cannot be reached without the upward stroke. A room test holds both.
+  - The kid sim is unchanged for the course (weakest hop 80%, in its third act; 0.2 falls on a
+    clear) and passes; the room's three screens are inside the style check's bands and palette.
 
 ## Log
 
@@ -696,3 +724,19 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   OP-360 above is built on. Kept for next time: the kid sim answers "can a kid who flies well make
   this hop"; it does not answer "what happens to the plays a newcomer makes first", and the second
   is what the log shows.
+- 2026-11-12: OP-358 merged through the sweep (PR 238, b95c86f) and live (deploy run 311 on the
+  merge commit). `main`'s own CI is green again on PR 236's merge commit.
+- 2026-11-12: OP-360 built, as "After the pass" says. Three things the building showed:
+  - A level way beats a stepped one. The first lay-out stepped down ten px from piece to piece so a
+    walker could not miss; walking back west each ten px step up was a lip nobody could see, and an
+    owl that walked into it fell under the island. Level, with each piece starting where the last
+    ends, a walker crosses both ways a bridge is painted.
+  - The sweep has to be as high as a jump with every flap. At a jump's own rise (180) a double flap
+    off an island still went over the next stone unpainted and came down past it (12 of 912 plays).
+  - One browser run failed with the page reloading under it. Not the test and not the park: a file
+    had changed under the dev server seconds before (it reloads the page it serves). Reproduced by
+    touching a file before a run; CI serves a still checkout.
+  Found on the way and left: the way back west across the pond is a flier's (a Jump held in each
+  column glides back over the stones, painting them; a walker meets water at the second island's
+  west end); on a phone the bench's tip and the "Checkpoint" toast overlap for a second; the second
+  bridge is drawn through the sleeping crane's rock, as the higher bridge was through its neck.

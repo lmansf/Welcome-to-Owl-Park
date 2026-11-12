@@ -1045,8 +1045,9 @@ describe('Room: the dash, in a parkour course (OP-224)', () => {
     room.join(a, 'a', hello());
     room.join(b, 'b', hello());
     const bench = ROOMS['brush-1']!.course!.benches!.find((p) => p.id === 'bench-1')!;
+    expect(bench.top).toBeGreaterThan(0);
     expect(room.place('a', bench.at, bench.top)).toBe(true);
-    expect(b.last('air')).toMatchObject({ id: 'a', air: { z: 360, s: GROUNDED } });
+    expect(b.last('air')).toMatchObject({ id: 'a', air: { z: bench.top, s: GROUNDED } });
     const frames = b.frames.length;
     // A height with no ledge under it is the floor, as a fall always was.
     expect(room.place('a', { x: 120, y: bench.at.y }, 360)).toBe(true);

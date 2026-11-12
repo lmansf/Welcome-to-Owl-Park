@@ -103,8 +103,11 @@ describe('the course book: runs and checkpoints', () => {
     expect(courses.start(CID, 'brush-1', MON).ok).toBe(true);
     // A bench on the ground: no height, as before.
     expect(courses.fall(CID, 'brush-1', MON + 1)).not.toHaveProperty('top');
+    // The ink course's first bench stands on the island at the foot of its cliff, over the water.
+    const bench = ROOMS['brush-1']!.course!.benches!.find((b) => b.id === 'bench-1')!;
+    expect(bench.top).toBeGreaterThan(0);
     courses.reach(CID, 'brush-1', 'bench', 'bench-1', MON + 2);
-    expect(courses.fall(CID, 'brush-1', MON + 3)).toMatchObject({ ok: true, at: { x: 1500 }, top: 360 });
+    expect(courses.fall(CID, 'brush-1', MON + 3)).toMatchObject({ ok: true, at: { x: bench.at.x }, top: bench.top });
   });
 
   it('sends a fall back the way the owl came into the room, not to its other end, and never onward (OP-343)', () => {

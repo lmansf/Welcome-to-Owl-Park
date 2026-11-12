@@ -65,6 +65,8 @@ const PLANK = { row: 'kit-cut-plank-thin' };
 const pillar = (top: number) => ({ cap: 'kit-ink-rock-pillar', mid: 'kit-tex-ink-ink-stone', depth: top });
 /** A terrace of planks, down to the ground line. */
 const terrace = (top: number) => ({ row: 'kit-cut-plank', mid: 'kit-tex-planks', depth: top });
+/** An island of the realm's washed rock standing in the water: the bank's own run, and ink stone down to the ground line. */
+const island = (top: number) => ({ row: 'kit-cut-ink-bank', mid: 'kit-tex-ink-ink-stone', depth: top });
 
 /** A brush stone: its ledge, and the stone itself (what it paints and for how long). */
 function stone(id: string, x: number, w: number, top: number, arrow: BrushArrow, ms?: number): { ledge: KitLedge; stone: BrushStone } {
@@ -159,19 +161,51 @@ const CAVE_ROCK = { row: 'kit-cut-stone' };
 
 // ---------- Act 1: the paper garden ----------
 
-const S1 = [stone('k1', 480, 140, 100, 'R'), stone('k2', 1700, 140, 140, 'R'), stone('k3', 2360, 140, 120, 'R'), stone('k4', 4100, 160, 100, 'U')];
+/** How high over the water the way across the pond runs: the first stone's top, and every piece after it. */
+const WAY = 100;
+/** Where the pond's water lies: from under k1's far end to the foot of the second cliff. */
+const POND = { x0: 580, x1: 3540 } as const;
+/**
+ * The first screen a visitor meets of the course, laid so the plays a newcomer makes first get across
+ * (OP-360; the play log, Nov 12: the only phone runs since the cleanup fell at every crossing, eleven
+ * times in two runs). Its beats are the plan's: a bridge, two bridges in a row, an upward stroke.
+ *
+ *  - The way across is level, each piece starting where the one before it ends, so an owl that only
+ *    walks east after its first jump crosses: k1's bridge runs onto an island, the island onto k2,
+ *    k2's bridge onto k3, k3's bridge onto a second island, and that one steps down onto the far
+ *    bank. (A step up over water is a fall for an owl that walks on under it, and a walk over a gap
+ *    of 40 px dropped under the stone beyond it. Level, there is no lip to miss on the way back.)
+ *  - Each paper cliff stands on its island, the bench at its foot. The cliffs are the high road: rising
+ *    air beside each (courseAir.ts) carries a held Jump up, both flaps climb them as before, and a
+ *    miss comes down on the island, not in the water.
+ *  - k1 reaches 40 px out over the water, so a jump from the bank's last stride still passes over it
+ *    (brush.ts: a pass over a stone paints it).
+ *  - The far bank begins under the second cliff: the long glide off it comes down on the bank
+ *    however short it is flown, and the upward stroke (k4) stands on dry ground.
+ *
+ * The newcomer bot holds it to that (bots/sim/newcomer.test.ts): the plays a visitor makes first, none
+ * of them a fall. What it gives up: with no ink painted the cliffs and the stones past the first can
+ * be reached from the door by an owl that glides well (they could not be reached at all), and the seal
+ * still cannot without the upward stroke (brushstrokeBridges.test.ts).
+ *
+ * TODO-DOCS (OP-360): docs/levels/brushstroke-bridges.md, section 3 (act 1): its drawing, its tables
+ * and its "what each mechanic is for", as the screen is laid here.
+ */
+const S1 = [stone('k1', 480, 140, WAY, 'R'), stone('k2', 1700, 140, WAY, 'R'), stone('k3', 2320, 180, WAY, 'R'), stone('k4', 4100, 160, 100, 'U')];
 
 const GARDEN: RoomKit = {
   ground: G,
   backdrops: inkAir(3),
-  paths: [bank('ground', 0, 700), river('pond', 700, 4300), bank('far-bank', 4300, 3 * ROOM_W)],
+  paths: [bank('ground', 0, POND.x0), river('pond', POND.x0, POND.x1), bank('far-bank', POND.x1, 3 * ROOM_W)],
   ledges: [
     ledge('g1', 300, 120, 70, ROCK),
     ...S1.map((s) => s.ledge),
     ledge('reed1', 1060, 80, 450, REED),
+    ledge('isle1', 1100, 600, WAY, island(WAY)),
     ledge('c1', 1360, 260, 360, CLIFF),
     ledge('crane-rock', 2050, 160, 40, ROCK),
-    ledge('reed2', 2000, 80, 250, REED),
+    ledge('reed2', 2000, 80, 220, REED),
+    ledge('isle2', 2980, 580, WAY, island(WAY)),
     ledge('c2', 3240, 300, 380, CLIFF),
     ledge('c3', 4540, 260, 540, PINE),
     ledge('t1', 4300, 500, 160, terrace(160)),
@@ -301,10 +335,11 @@ export const BRUSH_ROOMS: Record<string, RoomDef> = inRealmKit('ink', withCourse
     stones: S1.map((s) => s.stone),
     course: {
       act: 1,
-      pits: [floor(700, 4300)],
-      benches: [piece('bench-1', 1500, 360), piece('bench-1b', 3300, 380)],
+      pits: [floor(POND.x0, POND.x1)],
+      // Each bench at the foot of its cliff, on the way every owl takes (OP-360): up on the cliff it was past the climb a newcomer fell at.
+      benches: [piece('bench-1', 1500, WAY), piece('bench-1b', 3390, WAY)],
       parts: [piece('seal-1', 4670, 540)],
-      feathers: [piece('feather-1', 1100, 450), piece('feather-2', 2040, 250)],
+      feathers: [piece('feather-1', 1100, 450), piece('feather-2', 2040, 220)],
     },
   }),
   'brush-2': brushRoom('brush-2', 3, RIVER, {

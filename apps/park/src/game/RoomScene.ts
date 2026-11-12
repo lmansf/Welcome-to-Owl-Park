@@ -188,7 +188,7 @@ import { ESCAPE_WORDS, escapeFor, type EscapeDoorway, type EscapeHollow } from '
 import { TRIAL_BACKDROP_VEIL, trialBackdropVeiled } from './skinTrial';
 import { PUZZLE_ART_KEYS, artScale, drawnAsSizeBox, drawsSkinTrial, loadArt, opensSoft, prefetchRoomArt, releaseArt, roomArtCap, roomArtKeys, roomOpeningArt, sharpCopy, sharpenArt } from './art';
 import { SpeechBubbles } from './bubbles';
-import { backWaits, carriedIn, doorwayUnder, doorwaysOff, roomsAhead, stillCarried, takesDoorway, upCounts } from './doors';
+import { backWaits, carriedIn, doorwayUnder, doorwaysOff, heldAtFall, roomsAhead, stillCarried, stillHeldSinceFall, takesDoorway, upCounts, type HeldAtFall } from './doors';
 import { PLAY_SPOTS, ROOTS_SPOT, TriedDoors, doorSpot, leadsToPlay, playSpotsAt, trailTo, type PlaySpot } from './featherTrail';
 import { FIRST_FLIGHT_MARK, glidedOff, hallTipFor, hallTips } from './hallTips';
 import { HALL_WORDS } from '../ui/hallWords';
@@ -473,6 +473,8 @@ export class RoomScene extends Phaser.Scene {
   private restsThen = 0;
   /** The direction held as the owl came in across a change of view (doors.ts, carriedIn): not a walk until it is let go or points elsewhere. */
   private carried: Vec2 | null = null;
+  /** The push held as a course's fall put the owl back (doors.ts, heldAtFall): not a walk until it is let go or points elsewhere. */
+  private fallHeld: HeldAtFall | null = null;
   /** The room's tall standing art, each see-through while the visitor's own owl is behind it (seeThrough.ts); none in a room seen from the side. */
   private seeThrough: SeeThrough | null = null;
   /** How the owl came: by travel from the map, or (undefined) through a doorway, Play or the page's address. */
@@ -730,6 +732,7 @@ export class RoomScene extends Phaser.Scene {
     this.backWaiting = data.from !== undefined;
     this.restsThen = data.rests ?? this.keys?.rests() ?? 0;
     this.carried = carriedIn(data.side, this.sideView(), this.keys?.direction() ?? null, (this.keys?.rests() ?? 0) !== this.restsThen);
+    this.fallHeld = null;
     this.cameWith = data.ticket ?? null;
     this.lane = data.lane;
     this.via = data.via;
@@ -1741,9 +1744,19 @@ export class RoomScene extends Phaser.Scene {
     return this.sideView() ? alongTheFloor(held) : held;
   }
 
-  /** The direction held, as a push of the owl's: none while it is still the one the owl came in with across a change of view (OP-346; doors.ts, carriedIn). */
+  /**
+   * The direction held, as a push of the owl's: none while it is still the one the owl came in with
+   * across a change of view (OP-346; doors.ts, carriedIn), or the one held as a fall put it back
+   * (OP-360; heldAtFall).
+   */
   private heldNow(): Vec2 | null {
-    return this.carried ? null : (this.keys?.direction() ?? null);
+    if (this.carried) return null;
+    const held = this.keys?.direction() ?? null;
+    if (this.fallHeld) {
+      if (stillHeldSinceFall(this.fallHeld, held, this.keys?.rests() ?? 0)) return null;
+      this.fallHeld = null;
+    }
+    return held;
   }
 
   /** WASD and the arrow keys: walk while held (sliding along edges) and stop on letting go. */
@@ -3191,10 +3204,13 @@ export class RoomScene extends Phaser.Scene {
    * A fall in a course, shown (OP-343). The owl is back where the fall takes it at once, as ever; the
    * camera goes with it in the same frame, where it used to slide back across the room after an owl
    * that had silently moved, and the room blinks dark and comes back, so the player sees that something
-   * happened (the course says where the owl is). With calm motion on there is no blink.
+   * happened (the course says where the owl is). With calm motion on there is no blink. And it stays
+   * where it is put until its player pushes afresh (OP-360).
    */
   private fellTo(at: Vec2, top = 0): void {
     this.placeAt(at, top);
+    // A push held through the fall does not walk the owl off the ledge it is put on (doors.ts, heldAtFall).
+    this.fallHeld = heldAtFall(this.keys?.direction() ?? null, this.keys?.rests() ?? 0);
     const cam = this.cameras.main;
     if (!this.mirrorFrame && !this.decorating) cam.startFollow(this.followed(), true, this.followEase(), this.followEase());
     if (!this.calm()) cam.fadeIn(FALL_BLINK_MS, 12, 30, 54);

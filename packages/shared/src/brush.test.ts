@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { BRIDGE_LEN, BRIDGE_MS, RAIN_BRIDGE_MS, brushPerches, brushStrokes, inkLeft, livePerches, liveStrokes, stoneUnder, type BrushStone } from './brush';
+import { BRIDGE_LEN, BRIDGE_MS, BRUSH_SWEEP, NO_TOUCH, RAIN_BRIDGE_MS, brushPerches, brushStrokes, brushTouch, inkLeft, livePerches, liveStrokes, paintsStone, stoneUnder, type BrushStone } from './brush';
+import { FLAP_RISE, JUMP_RISE, MAX_FLAPS } from './flight';
 import { groundAt, MAX_PERCH_TOP } from './perches';
 
 const G = 770;
@@ -48,5 +49,56 @@ describe('brush stones (OP-235)', () => {
     expect(stoneUnder([across, up], 500, 100)?.id).toBe('k1');
     expect(stoneUnder([across, up], 500, 160)).toBeUndefined();
     expect(stoneUnder([across, up], 700, 100)).toBeUndefined();
+  });
+});
+
+describe('what paints a brush stone (OP-360)', () => {
+  const stones = [across, up];
+
+  it('an owl standing on a stone touches it, and one standing anywhere else touches none', () => {
+    expect(brushTouch(stones, 500, 100, true)).toEqual({ stone: 'k1', standing: true });
+    // On the floor under the stone, on a tread over one, and beside it on its own bridge.
+    expect(brushTouch(stones, 500, 0, true)).toBe(NO_TOUCH);
+    expect(brushTouch(stones, 4180, 230, true)).toBe(NO_TOUCH);
+    expect(brushTouch(stones, 700, 100, true)).toBe(NO_TOUCH);
+    expect(brushTouch(undefined, 500, 100, true)).toBe(NO_TOUCH);
+  });
+
+  it('an owl in the air touches the stone it is over, from its top up to the sweep and no higher', () => {
+    expect(brushTouch(stones, 500, 100, false)).toEqual({ stone: 'k1', standing: false });
+    expect(brushTouch(stones, 480, 100 + BRUSH_SWEEP, false)).toEqual({ stone: 'k1', standing: false });
+    expect(brushTouch(stones, 620, 180, false)).toEqual({ stone: 'k1', standing: false });
+    expect(brushTouch(stones, 500, 100 + BRUSH_SWEEP, false)).toEqual({ stone: 'k1', standing: false });
+    // A glide high overhead, a jump still coming up under the stone, and the air either side of it.
+    expect(brushTouch(stones, 500, 100 + BRUSH_SWEEP + 1, false)).toBe(NO_TOUCH);
+    expect(brushTouch(stones, 500, 99, false)).toBe(NO_TOUCH);
+    expect(brushTouch(stones, 479, 150, false)).toBe(NO_TOUCH);
+    expect(brushTouch(stones, 621, 150, false)).toBe(NO_TOUCH);
+  });
+
+  it('the sweep is as high as a jump with every flap rises, so no jump from the stone’s own height goes over it unpainted', () => {
+    expect(BRUSH_SWEEP).toBeGreaterThanOrEqual(JUMP_RISE + MAX_FLAPS * FLAP_RISE);
+    // And not the whole sky: an owl gliding in from the top of the room paints nothing under it.
+    expect(BRUSH_SWEEP).toBeLessThan(MAX_PERCH_TOP);
+  });
+
+  it('a landing paints, and so does coming over the stone in the air; staying on it or over it does not', () => {
+    const on = { stone: 'k1', standing: true };
+    const over = { stone: 'k1', standing: false };
+    // A landing: from the air beside it, from the air over it, and as a room starts with the owl on it.
+    expect(paintsStone(NO_TOUCH, on)).toBe(true);
+    expect(paintsStone(over, on)).toBe(true);
+    expect(paintsStone(undefined, on)).toBe(true);
+    // Coming over it in the air, from beside it or from another stone.
+    expect(paintsStone(NO_TOUCH, over)).toBe(true);
+    expect(paintsStone({ stone: 'k4', standing: true }, over)).toBe(true);
+    expect(paintsStone(undefined, over)).toBe(true);
+    // Still standing on it; a jump up off it; still over it.
+    expect(paintsStone(on, on)).toBe(false);
+    expect(paintsStone(on, over)).toBe(false);
+    expect(paintsStone(over, over)).toBe(false);
+    // Touching none paints none.
+    expect(paintsStone(on, NO_TOUCH)).toBe(false);
+    expect(paintsStone(undefined, NO_TOUCH)).toBe(false);
   });
 });

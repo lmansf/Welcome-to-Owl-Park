@@ -28,8 +28,13 @@ export const COURSE_AIR: Readonly<Record<string, { updrafts?: Updraft[]; winds?:
   // Every other drop in the act has a thorn curtain across it, which a current would carry an owl
   // straight into: the curtains and the cycled columns behind them are the act's own way on.
   'canopy-3': { updrafts: [up('crown-lift', 5120, 740)], winds: [wind('crown-wind', 5300, 5640, 660)] },
-  // Brushstroke Bridges, act 1: up beside the first cliff; then up over the pond and across to the second cliff on the wind.
-  'brush-1': { updrafts: [up('pond-lift', 2520, 470)], winds: [wind('pond-wind', 2600, 3120, 450)] },
+  // Brushstroke Bridges, act 1 (OP-360): rising air on the way up to each paper cliff, wide enough that
+  // an owl still walking east as it rises is carried over the cliff's edge. A Jump held from the end
+  // of the bridge before a cliff, or from the island at its foot, rises to it; let go too soon and the
+  // owl comes down on the island. The first tops out 20 under the reed's feather, a flap from its top.
+  // (The column over the pond and the wind from it to the second cliff are gone: the second column does
+  // their work where the climb is, and the first wind a visitor meets is the rain's, in act 2.)
+  'brush-1': { updrafts: [up('cliff-lift', 1100, 430, 260), up('far-cliff-lift', 2800, 450, 440)] },
   // Act 2: up beside the first rock; then on the wind toward the falls ledge.
   'brush-2': { updrafts: [up('river-lift', 1150, 450)], winds: [wind('rain-wind', 3460, 4060, 580)] },
   // Act 3a: up over the water to m2. (No current here: the cloud bank across the drop from m1 is a fall
