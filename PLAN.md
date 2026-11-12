@@ -2,18 +2,21 @@
 
 - Status: the pass is done, and the owner's word of Nov 12 on what was waiting (the art is mine to
   pick; everything else approved as it stood) is being carried out in three changes: the sounds and
-  the side camera on for every visitor (OP-355), the town view and the thermal on (OP-356), and the
-  courses' new paintings (OP-348). Ticket OP-342. Branch `claude/determined-wozniak-3ljxrf`.
+  the side camera on for every visitor (OP-355, merged), the courses' new paintings (OP-348, this
+  change), and the town view and the thermal on (OP-356, next). Ticket OP-342. Branch
+  `claude/determined-wozniak-3ljxrf`.
 - Last updated: 2026-11-12. Merged and live for every visitor: the cleanup's five milestones (OP-343
   to OP-346, OP-349), the first flight (OP-347), the art pass's no-spend part (OP-348: the Great
   Hollow, the courses' ground, the neon course's light), the flight at any frame rate (OP-353) and
-  three small controls on a phone (OP-354). On for every visitor with OP-355: the sound set
-  (OP-350) and the side camera (OP-351, OP-352). Still behind flags until OP-356: the town view
-  (`?town=1`) and the thermal (`?thermal=1`). Looked at and left, with why in the log: one HUD
-  style (B4).
+  three small controls on a phone (OP-354), and since OP-355 the sound set (OP-350) and the side
+  camera (OP-351, OP-352). With this change the neon and ink courses stand on art of their own
+  realms (OP-348; 4.32 of the owner's 10 dollars spent). Still behind flags until OP-356: the
+  town view (`?town=1`) and the thermal (`?thermal=1`). Looked at and left, with why in the log:
+  one HUD style (B4).
 - Waiting on the owner: OP-335 and OP-341 (each needs a change under `.github/`, which his rules
   keep his unless he says so of that change); the "at the park" quest step (naming the place
-  changes a logged step's words).
+  changes a logged step's words); OP-357 (the art tool's own tests are not part of CI and three
+  have gone stale).
 - To pick up after a break: the play log has had no real visit since the cleanup went live (last
   read Nov 12). Read it first (the baseline below), then the punch list's items 14 and 16 and the
   log's last entries.
@@ -472,3 +475,35 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   - Not carried out, and why. OP-335 and OP-341 each need a change under `.github/`, which the
     owner's rules keep his unless he says so of that change. The "at the park" quest step: naming
     the place changes a logged step's words. Both are still his to say.
+- 2026-11-12: the art pass, the courses' own paintings (OP-348, its second part). The owner gave
+  the pick to me. What ships: a rooftop deck (seed 9917) and a wall of corrugated sheet (seed 7719)
+  for the neon course, and an ink-washed bank (seed 9922) for the ink course. The blue that made
+  borrowed stone pass as the street's (`NEON_LIGHT`) is gone with the stone.
+  - The first picks did not ship. At a thumbnail's size they looked right, and they passed the
+    style check. Laid in the rooms at full size the deck ran from white at one end to blue at the
+    other (a run is cut into ends and middles from different stretches, so a deck was a patchwork),
+    and the bank's pale top band changed thickness (hard steps where pieces met). Kept for next
+    time: look at a row butted in its room at full size before calling it picked.
+  - Levelling could not mend the first deck. The tool brings each column's average colour to the
+    row's, and a column of that deck is half pale slab and half dark beam, so the averages came
+    level while the slabs stayed white at one end and blue at the other. Tried and dropped:
+    levelling by the top face alone, with the lamp left out, and the slab and the beam each to its
+    own colour (that turned the blue end pastel). The fault was the paint, so it was painted again,
+    the prompt asking for the same light, tone and top edge from end to end and no lamp on a
+    walked row.
+  - The ink realm's rooms sit in a narrow place in the style check, and each round of banks met a
+    different rule by a hair. An even bank with a thin line of moss was 0.94 short of the
+    mountains' highlights on one screen. A bright cream band with no moss left the backdrop's own
+    pine trees as that screen's only moss, 0.16 over the palette's drift at 1 % of the screen. The
+    fourth round asked for the cream band and the moss line both, and holds all five rooms. In all
+    36 paintings (12 decks, 8 walls, 16 banks), 4.32 of the 10 dollars.
+  - The cave behind the falls keeps its fitted stone: the ink rock there takes the walkway's
+    contrast to 14.44 against the 14 allowed.
+  - Found and left. The style check paints a pit's water as a plain box of its colour, and the park
+    paints it with shade, a top line and streaks (`drawWater` in `kitView.ts`), so a river screen
+    measures about 1 lower in contrast in the check than a player sees. The bank that ships passes
+    as the check stands, so the check is not touched. And `pnpm art:test` is not part of CI and
+    fails three stale tests on `main` (OP-357); the two of its tests that count the kit's runs and
+    textures are brought up to date.
+  - Left for the artists: seams are fainter, not gone, and a ledge short enough to be two end
+    pieces shows its join. The thin rows, the pipe and the plank are in the kits and laid nowhere.
