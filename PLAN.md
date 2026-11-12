@@ -3,8 +3,9 @@
 - Status: the pass is done, and the owner's word of Nov 12 on what was waiting (the art is mine to
   pick; everything else approved as it stood) is carried out in three changes: the sounds and the
   side camera on for every visitor (OP-355, merged), the town view and the thermal on (OP-356, this
-  change), and the courses' own art (OP-348, built and green; it goes up last, because the merge
-  sweep leaves it for the owner's yes). Ticket OP-342. Branch `claude/determined-wozniak-3ljxrf`.
+  change), and the courses' own art (OP-348, built and green, kept on the branch; it goes up
+  again only on the owner's word, see the next line but one). Ticket OP-342. Branch
+  `claude/determined-wozniak-3ljxrf`.
 - Last updated: 2026-11-12. Live for every visitor: the cleanup's five milestones (OP-343 to
   OP-346, OP-349), the first flight (OP-347), the art pass's no-spend part (OP-348: the Great
   Hollow, the courses' ground, the neon course's light), the flight at any frame rate (OP-353),
@@ -12,9 +13,12 @@
   OP-352). With this change the town view (OP-336) and the thermal (OP-340) are on too, and no
   feature of the pass is behind a flag any more (`friends`, from before it, is the one flag
   left). Looked at and left, with why in the log: one HUD style (B4).
-- Waiting on the owner: his yes on the art's pull request (it adds 119 KB to the art record,
-  `tools/art/provenance.jsonl`, GitHub will not show a change that size, and the merge sweep
-  leaves what it cannot check to him); OP-335 and OP-341 (each needs a change under `.github/`,
+- Waiting on the owner: the art (OP-348). Its pull request, PR 233, was green, and the merge
+  sweep left it to him: it adds 119 KB to the art record (`tools/art/provenance.jsonl`), GitHub
+  will not show a change that size, and the sweep leaves what it cannot check to the owner. PR 233
+  was then closed to let OP-356 through this one branch. A closed pull request is not put up
+  again without his say, so the art needs two things from him: his word to put it up, and his
+  yes to merge it. The commit is kept on the branch. Also his: OP-335 and OP-341 (each needs a change under `.github/`,
   which his rules keep his unless he says so of that change); the "at the park" quest step
   (naming the place changes a logged step's words); OP-357 (the art tool's own tests are not part
   of CI and three have gone stale).
@@ -494,5 +498,7 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   first, as PR 233, and its checks were green. The merge sweep did not merge it: it leaves to the
   owner any change GitHub cannot show, and the art record's 121 new lines are 119 KB. That is the
   sweep doing its job, so nothing was done to get round it. This branch is the only one the
-  session may push to, so PR 233 was closed, OP-356 went up in its place, and the art comes back
-  after it as its own pull request, to wait there for the owner's yes.
+  session may push to, so PR 233 was closed and OP-356 went up in its place. That had a cost seen
+  only afterwards: a pull request that was closed is the owner's to call back, so the art is not
+  put up again without his word. Its commit is kept on the branch once OP-356 is in. Next time,
+  with one branch and a change the sweep will hold, put the change that can merge up first.
