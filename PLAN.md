@@ -195,11 +195,10 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   (milestone 1). Not done: framing a goal that is high up. Done when: the rule tests and a browser
   test pass, the flag check passes, and the owner has played with it. Should move, once on: course
   runs that reach the first bench; falls per run.
-  Next for it (measured on Nov 12 while its browser test was mended, see the log): the view's own
-  ease trails a walking owl by 30 to 50 px, which on a phone held upright is half the lead and more;
-  the height is eased twice, so the view is behind a long fall; and in rising air the owl is a
-  jump's rise above the middle before the view climbs. Each is a rule to change in
-  `sideCamera.ts`, in a flag-hidden PR of its own after this one.
+  It keeps up (OP-352, Nov 12, a PR of its own after PR 228): the view is carried along with the owl before it
+  eases, so a walking owl has its whole lead on the screen at any frame rate, a falling owl stays 24
+  px under the height held, and an owl in rising air 40 px over it. Measured in the park before and
+  after, in the log.
 - **B3. A small sound set (OP-350, in review, behind the `sounds` flag: `?sfx=1`).** Goal: every move a
   player makes is heard, from one module, one switch. Why it beats what is there: the park is silent
   but for a knock as the Menu opens, so nothing a player presses is answered by anything but what they
@@ -370,3 +369,26 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   - Measuring the test's margins showed what the camera does on a phone held upright: of a 70 px
     lead, 30 to 50 px are eaten by the view's own ease trailing the walk (more at fewer frames a
     second). The test now checks what does not change with the frame rate; the rule is next to fix.
+- 2026-11-12: the side camera keeps up (OP-352), a PR of its own after PR 228. What was measured in
+  the park with `?cam=1` as PR 228 has it, and after:
+  - A walk: the view was ahead of the owl by 181 to 190 px of a 219 px lead at 1280 wide, and by 37 to
+    40 of 69 on a phone held upright (14 to 22 with the processor slowed six times). After: 223 of
+    225, and 68 of 69, slowed or not.
+  - The drop off the fern floor's high bough (380 px): the owl was 103 to 132 px under the height
+    the view held by the foot of it as the test runner draws it, 253 by the rules at sixty frames
+    a second (the height was eased, and the view eased to it again). After: 22 to 23, the band.
+  - The gust in the trunk's third storey: the owl was 220 to 237 px over the height held as it
+    rose, and on a phone held sideways it went up under the goals bar at the top of the screen.
+    After: 41 to 42, with the bough it is making for in the view beside it.
+  - How: "carried, then eased" (`carriedTo` in `sideCamera.ts`). The view first goes as far as the
+    owl went this step, then eases away what is left. What moves steadily is followed with nothing
+    trailing, and a start, a stop or a turn is still eased. The height is eased once, not twice.
+    In rising air the band over the owl is 40 px, not a whole jump's 161.
+  - The flight goes in steps of its own (120 a second), and a frame holds one more or one fewer of
+    them than the last: the camera is given the owl's height as its speed has carried it since the
+    last step, so the view moves every frame by the same.
+  - The camera's longest step is 250 ms, up from 100: at ten frames a second and under, the old
+    cap made the camera lose time every frame.
+  - Left for the owner's eye: the view meets the edge of its band at the owl's own speed (the
+    usual way of a camera window). If that reads as a kick at the start of a long fall, the edge
+    can be made soft.

@@ -788,19 +788,90 @@ test.describe('the side camera (OP-351)', () => {
     // Every step was reached, and the owl is still in the course.
     expect(seen.stage).toBe('landed');
     expect(seen.room).toBe('canopy-1');
-    // Walking, the lead is well past a still owl's, and the view is where the camera's rules put it, wherever
-    // the room's west wall does not hold it. How far ahead of the owl that is on the screen is the rules' own
-    // test (sideCamera.test.ts), frame by frame: at a slow runner's few frames a second the view's ease
-    // trails a walking owl by more than it does at sixty.
+    // Walking, the lead is well past a still owl's, and wherever the room's west wall does not hold it the
+    // view is where the camera's rules put it: ahead of the owl by the whole lead, at a slow runner's few
+    // frames a second as at sixty (OP-352: the view is carried with the owl, so its ease trails nothing).
     const walking = seen.walking!;
     expect(walking.lead).toBeGreaterThan(rest.lead * 1.4);
-    if (walking.viewX > 1) expect(Math.abs(walking.viewX + walking.viewW / 2 - walking.camX)).toBeLessThan(2);
+    if (walking.viewX > 1) {
+      expect(Math.abs(walking.viewX + walking.viewW / 2 - walking.camX)).toBeLessThan(2);
+      expect(walking.viewX + walking.viewW / 2 - walking.x).toBeGreaterThan(walking.lead - 6);
+    }
     // Turned round, the lead is on the other side, and it took the owl some way to bring it there (it swings in its own time).
     expect(seen.turned!.lead).toBeLessThan(-rest.lead);
     expect(walking.x - seen.turned!.x).toBeGreaterThan(40);
     // The hop: the owl went up and came down, and the height the view holds did not move.
     expect(seen.hop.peak).toBeGreaterThan(100);
     expect(seen.hop.moved).toBeLessThan(1);
+  });
+
+  test('with the flag the view is with the owl down a drop and up a gust (OP-352)', async ({ page }) => {
+    // Off the high bough of the fern floor (500) onto the twig under its end (120), as the course's own
+    // test of that drop goes (air.spec.ts). Watched from inside the page, every frame.
+    await openPark(page, { room: 'canopy-1', spawn: 'on-l5', cam: '1' });
+    await page.waitForFunction(() => window.owlPark.state()?.sideCam != null);
+    await expect.poll(async () => (await state(page)).air.z, { timeout: 10_000 }).toBe(500);
+    const drop = await page.evaluate(
+      () =>
+        new Promise<{ under: number; fell: number; landed: number }>((resolve) => {
+          const t0 = performance.now();
+          const from = window.owlPark.state()!.air.z;
+          let under = 0;
+          let low = from;
+          let flew = false;
+          window.owlPark.walkTo(2660, window.owlPark.state()!.pos.y);
+          const tick = () => {
+            const s = window.owlPark.state();
+            if (!s?.sideCam || performance.now() - t0 > 20_000) return resolve({ under, fell: from - low, landed: s?.air.z ?? -1 });
+            low = Math.min(low, s.air.z);
+            if (s.air.s !== 0) {
+              flew = true;
+              under = Math.max(under, s.sideCam.level - s.air.z);
+            } else if (flew && !s.walking) return resolve({ under, fell: from - low, landed: s.air.z });
+            requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        }),
+    );
+    expect(drop.fell).toBe(380);
+    expect(drop.landed).toBe(120);
+    // The owl was never more than the view's band (24 px) and a frame's rounding under the height the view
+    // held: eased alone, the view was 100 to 250 px behind it by the foot of this drop.
+    expect(drop.under).toBeLessThan(40);
+
+    // Off a twig into the first column of the trunk's third storey, up to its top (600), as the course's
+    // own test of the gust goes.
+    await openPark(page, { room: 'canopy-3', spawn: 'on-c2', cam: '1' });
+    await page.waitForFunction(() => window.owlPark.state()?.sideCam != null);
+    await expect.poll(async () => (await state(page)).air.z, { timeout: 10_000 }).toBe(160);
+    const rise = await page.evaluate(
+      () =>
+        new Promise<{ lifted: boolean; top: number; over: number }>((resolve) => {
+          const space = (type: 'keydown' | 'keyup') => window.dispatchEvent(new KeyboardEvent(type, { code: 'Space', key: ' ', bubbles: true }));
+          const t0 = performance.now();
+          let lifted = false;
+          const end = () => {
+            const s = window.owlPark.state();
+            space('keyup');
+            resolve({ lifted, top: s?.air.z ?? -1, over: s?.sideCam ? s.air.z - s.sideCam.level : -1 });
+          };
+          space('keydown');
+          window.owlPark.walkTo(1220, window.owlPark.state()!.pos.y);
+          const tick = () => {
+            const s = window.owlPark.state();
+            if (!s?.sideCam || performance.now() - t0 > 20_000) return end();
+            lifted ||= s.air.s === 3;
+            if (s.air.s === 3 && s.air.z >= 599) return end();
+            requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        }),
+    );
+    expect(rise.lifted).toBe(true);
+    expect(rise.top).toBeGreaterThanOrEqual(599);
+    // At the top of the column the view has come up with the owl: it is a little over the height held
+    // (40 px in rising air), not a whole jump's band and the ease's lag over it (220 px and more).
+    expect(rise.over).toBeLessThan(70);
   });
 
   test('without the flag, and in a room seen from above with it, the camera is on the owl as ever', async ({ page }) => {
