@@ -5,7 +5,7 @@ import { CANOPY_COURSE } from '../rooms/updraftCanopy';
 import { PLAY_FEATHERS_PER_DAY } from './activities';
 import { CollectionBook, MemoryCollectionStore } from './book';
 import { GOLDEN_MOUSE } from './collectibles';
-import { COURSE_FIRST_FEATHERS, COURSE_REPEAT_FEATHERS, COURSE_RUN_MAX_MS, LOST_FEATHERS, courseParts, courseProblems, holdsDash, inPit, inThorns, mouseCourses, openerAt, shutShortcuts, type CourseDef } from './course';
+import { COURSE_FIRST_FEATHERS, COURSE_REPEAT_FEATHERS, COURSE_RUN_MAX_MS, LOST_FEATHERS, courseParts, courseProblems, holdsDash, inPit, inThorns, mouseCourses, openerAt, shutShortcuts, thornsBetween, type CourseDef } from './course';
 import { CourseBook, MemoryCourseStore } from './coursebook';
 import { nextParkDayAt } from './parktime';
 
@@ -155,6 +155,33 @@ describe('the course book: runs and checkpoints', () => {
     expect(inThorns(act, 1990, 250)).toBe(false);
     expect(inThorns(act, 2030, 300)).toBe(false);
     expect(inThorns({}, 1990, 300)).toBe(false);
+  });
+
+  it('reads a move through thorns as a fall, however long the move is: no hazard is stepped over (OP-353)', () => {
+    const act = { course: { id: 'x', act: 1, thorns: [{ id: 'stalk', x0: 650, x1: 680, z0: 0, z1: 450 }, { id: 'hanging', x0: 960, x1: 990, z0: 280, z1: 940 }] } };
+    const at = (x: number, z: number) => ({ x, z });
+    // A dash at ten frames a second is 90 px a frame: from before the hanging thorns to past them.
+    expect(inThorns(act, 942, 600)).toBe(false);
+    expect(inThorns(act, 1032, 600)).toBe(false);
+    expect(thornsBetween(act, at(942, 600), at(1032, 600))).toBe(true);
+    expect(thornsBetween(act, at(1032, 600), at(942, 600))).toBe(true);
+    // Under the hanging thorns the same move is clear, and so is one that stops short of them or starts past them.
+    expect(thornsBetween(act, at(942, 200), at(1032, 200))).toBe(false);
+    expect(thornsBetween(act, at(860, 600), at(950, 600))).toBe(false);
+    expect(thornsBetween(act, at(1000, 600), at(1090, 600))).toBe(false);
+    // A fall straight down beside them, and one that drops into the stalk's top from above it.
+    expect(thornsBetween(act, at(700, 600), at(700, 100))).toBe(false);
+    expect(thornsBetween(act, at(665, 600), at(665, 440))).toBe(true);
+    // A glide down across the corner of the stalk: over its top at the near side, in it by the far side.
+    expect(thornsBetween(act, at(640, 470), at(690, 420))).toBe(true);
+    // And one that clears the corner.
+    expect(thornsBetween(act, at(640, 520), at(690, 470))).toBe(false);
+    // Standing still is where the owl is: the same as the look at a point, the edges included.
+    for (const [x, z] of [[665, 100], [650, 0], [680, 450], [649, 100], [665, 451], [975, 280], [975, 279]] as const) {
+      expect(thornsBetween(act, at(x, z), at(x, z)), `${x}, ${z}`).toBe(inThorns(act, x, z));
+    }
+    expect(thornsBetween({}, at(0, 0), at(5000, 900))).toBe(false);
+    expect(thornsBetween(undefined, at(0, 0), at(5000, 900))).toBe(false);
   });
 
   it('reads a pit as a fall, a shut shortcut as floor no owl crosses, and its opener from the far side', () => {

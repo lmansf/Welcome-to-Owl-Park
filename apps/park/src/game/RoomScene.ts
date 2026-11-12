@@ -1980,9 +1980,9 @@ export class RoomScene extends Phaser.Scene {
    * this device. The roots' tips have done their work and show no more, a line says so, and the trail
    * leads on to a doorway.
    */
-  private landedFromFlight(): void {
+  private landedFromFlight(at: Vec2): void {
     if (!this.rootTips || this.firstFlown || !this.flown.glided) return;
-    if (!glidedOff(this.flownOff.pos, this.flownOff.z, this.me.pos)) return;
+    if (!glidedOff(this.flownOff.pos, this.flownOff.z, at)) return;
     this.firstFlown = true;
     triedDoors().add(this.room.id, FIRST_FLIGHT_MARK);
     triedDoors().add(this.room.id, ROOTS_SPOT);
@@ -3271,17 +3271,22 @@ export class RoomScene extends Phaser.Scene {
       if (pressed) this.jumpTaken = down;
       const held = down > 0 && down <= at && (this.jumpIsDown || this.jumpUpAt > at);
       const grounded = this.flier.air.s === GROUNDED;
+      // Where the owl is at this step, along its walk (OP-353), not where the last frame drew it. A frame
+      // holds many steps, and a frame's walk is 4 px at sixty frames a second and 26 at ten: read a frame
+      // behind, the near edge of a ledge was not under an owl coming down onto it, so the same hop
+      // landed on a quick device and fell short on a slow one.
+      const place = this.me.placeAt(at);
       // The room's gusts keep the room server's time (updraft.ts): the column this owl is in, while it is on.
       // Else a wind current it glides into (wind.ts, OP-275) holds it at the current's height.
-      const column = this.room.updrafts ? (liftAt(this.room.updrafts, this.me.pos.x, this.flier.air.z, at + this.clockSkew())?.top ?? null) : null;
-      const gust = column === null ? windAt(this.room.winds, this.me.pos.x, this.flier.air.z) : undefined;
+      const column = this.room.updrafts ? (liftAt(this.room.updrafts, place.x, this.flier.air.z, at + this.clockSkew())?.top ?? null) : null;
+      const gust = column === null ? windAt(this.room.winds, place.x, this.flier.air.z) : undefined;
       // Else, in a room seen from above, the thermal it glides in carries it up to its top (thermal.ts, OP-340, `?thermal=1`).
-      const warm = this.thermalOn && column === null && !gust ? (thermalAt(this.room.thermals, this.me.pos, this.flier.air.z)?.top ?? null) : null;
+      const warm = this.thermalOn && column === null && !gust ? (thermalAt(this.room.thermals, place, this.flier.air.z)?.top ?? null) : null;
       const lift = column ?? gust?.z ?? warm;
       const wasLifted = this.flier.air.s === LIFTED;
       const stoodAt = this.flier.air.z;
       const before = this.flier.air;
-      this.flier = stepFlier(this.flier, { pressed, held }, groundAt(this.room.perches, this.me.pos, this.flier.air.z), this.abilities, lift);
+      this.flier = stepFlier(this.flier, { pressed, held }, groundAt(this.room.perches, place, this.flier.air.z), this.abilities, lift);
       const air = this.flier.air;
       // What the step did is heard (OP-350): a jump, a flap, the wings spread, a landing.
       if (this.sfx) for (const c of airCues(before, air)) this.sfx.play(c.cue, c.strength);
@@ -3297,13 +3302,13 @@ export class RoomScene extends Phaser.Scene {
         if (grounded) {
           this.flown = { n: this.flown.n + 1, peak: 0, glided: false, ms: 0 };
           this.flownFrom = at;
-          this.flownOff = { pos: { x: this.me.pos.x, y: this.me.pos.y }, z: stoodAt };
+          this.flownOff = { pos: { x: place.x, y: place.y }, z: stoodAt };
         }
         this.flown.peak = Math.max(this.flown.peak, air.z);
         if (air.s === GLIDING || air.s === LIFTED) this.flown.glided = true;
       } else if (!grounded) {
         this.flown.ms = at - this.flownFrom;
-        this.landedFromFlight();
+        this.landedFromFlight(place);
       }
       this.drawnAir = fall(this.drawnAir, FLIGHT_STEP_MS);
       if (airChanged(this.drawnAir, air)) {

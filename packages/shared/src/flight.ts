@@ -18,7 +18,7 @@
  * the owl's own page knows what was under it.
  */
 import { landDash, type DashCharge } from './dash';
-import { COYOTE_MS, DOUBLE_JUMP_IMPULSE, GRAVITY, JUMP_BUFFER_MS, JUMP_CUT_SPEED, JUMP_IMPULSE, JUMP_STEP_MS, MAX_FALL } from './jump';
+import { DOUBLE_JUMP_IMPULSE, GRAVITY, JUMP_BUFFER_MS, JUMP_CUT_SPEED, JUMP_IMPULSE, JUMP_STEP_MS, MAX_FALL } from './jump';
 import { SLOPE_CATCH, TALL_PERCH_TOP, type Standing } from './perches';
 import { UPDRAFT_RISE } from './updraft';
 import { WALK_SPEED } from './walk';
@@ -78,13 +78,26 @@ export interface Flier {
   air: Air;
   /** A press of Jump this recent is still honoured (ms): pressed a moment before landing, it jumps on landing. */
   bufferMs: number;
-  /** Ground this recent still counts for a jump (ms): a step off an edge. */
+  /** Ground this recent still counts for a jump (ms, EDGE_GRACE_MS at most): a step off an edge. */
   coyoteMs: number;
   /** Rising from a press still held: let go and the rise is cut short. */
   rising: boolean;
   /** The dash, in a course (OP-224, dash.ts): flight brings it back as the owl lands. Absent where the owl does not hold it. */
   dash?: DashCharge;
 }
+
+/**
+ * Ground this recent still counts for a jump in the tree (ms): a step off a ledge's end, 31 px of walk.
+ * Longer than the climb's (COYOTE_MS, 90): until OP-353 the page read where its owl stood a frame late,
+ * so an owl was held on a ledge one frame past its end and then had the 90, which came to 107 ms at
+ * sixty frames a second and 123 at thirty. The page now reads the owl's place at each step, and this
+ * keeps the grace a usual phone had, the same on every device.
+ *
+ * TODO-DOCS (OP-353): docs/ARCHITECTURE.md's flight rules: the page asks where its owl is at each of
+ * the flight's steps (Owl.placeAt), the tree's edge grace is EDGE_GRACE_MS (120) and the climb's
+ * COYOTE_MS (90), and a course looks for thorns along the owl's move (course.ts, thornsBetween).
+ */
+export const EDGE_GRACE_MS = 120;
 
 export const newFlier = (): Flier => ({ air: ON_GROUND, bufferMs: 0, coyoteMs: 0, rising: false });
 
@@ -138,7 +151,7 @@ export function stepFlier(fl: Flier, input: FlightInput, ground = 0, can: Readon
     s = AIRBORNE;
     f = flapsOf(can);
   }
-  coyoteMs = s === GROUNDED ? COYOTE_MS : Math.max(0, coyoteMs - FLIGHT_STEP_MS);
+  coyoteMs = s === GROUNDED ? EDGE_GRACE_MS : Math.max(0, coyoteMs - FLIGHT_STEP_MS);
   bufferMs = input.pressed ? JUMP_BUFFER_MS : Math.max(0, bufferMs - FLIGHT_STEP_MS);
   if (bufferMs > 0 && can.jump && (s === GROUNDED || coyoteMs > 0)) {
     // Off the ground (or just after it): the climb's jump.
