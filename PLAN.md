@@ -3,27 +3,27 @@
 - Status: the pass is done, and the owner's word of Nov 12 on what was waiting (the art is mine to
   pick; everything else approved as it stood) is carried out in three changes: the sounds and the
   side camera on for every visitor (OP-355, merged as PR 232), the town view and the thermal on
-  (OP-356, merged as PR 234), and the courses' own art (OP-348: built and green, its commit on the
-  branch with no pull request open; it goes up again only on the owner's word, see the next line
-  but one). Ticket OP-342. Branch `claude/determined-wozniak-3ljxrf`.
+  (OP-356, merged as PR 234), and the courses' own art (OP-348, this change: put up again on the
+  owner's second word of Nov 12, to make every change of the pass live). Ticket OP-342. Branch
+  `claude/determined-wozniak-3ljxrf`.
 - Last updated: 2026-11-12. Live for every visitor: the cleanup's five milestones (OP-343 to
   OP-346, OP-349), the first flight (OP-347), the art pass's no-spend part (OP-348: the Great
   Hollow, the courses' ground, the neon course's light), the flight at any frame rate (OP-353),
   three small controls on a phone (OP-354), the sound set (OP-350), the side camera (OP-351,
   OP-352), the town view (OP-336) and the thermal (OP-340). No feature of the pass is behind a
-  flag any more (`friends`, from before it, is the one flag left). Not on `main` until the owner
-  says: the neon and ink courses on art of their own realms (OP-348, on the branch; 4.32 of his 10
-  dollars spent). Looked at and left, with why in the log: one HUD style (B4).
-- Waiting on the owner: the art (OP-348). Its pull request, PR 233, was green, and the merge
-  sweep left it to him: it adds 119 KB to the art record (`tools/art/provenance.jsonl`), GitHub
-  will not show a change that size, and the sweep leaves what it cannot check to the owner. PR 233
-  was then closed to let OP-356 through this one branch. A closed pull request is not put up
-  again without his say, so the art needs two things from him: his word to put it up, and his
-  yes to merge it. The branch holds its commit and this plan's last note on top of `main`, with
-  no pull request open; on his word a pull request is opened from the branch as it stands. Also
-  his: OP-335 and OP-341 (each needs a change under `.github/`, which his rules keep his unless he
-  says so of that change); the "at the park" quest step (naming the place changes a logged step's
-  words); OP-357 (the art tool's own tests are not part of CI and three have gone stale).
+  flag any more (`friends`, from before it, is the one flag left). With this change the neon and
+  ink courses stand on art of their own realms (OP-348; 4.32 of the owner's 10 dollars spent), and
+  nothing the pass built is left off `main`. Looked at and left, with why in the log: one HUD
+  style (B4).
+- How this change is merged: the merge sweep leaves it to the owner, as it did PR 233 (it adds
+  119 KB to the art record, `tools/art/provenance.jsonl`; GitHub will not show a change that size,
+  and the sweep leaves what it cannot check to him). His word of Nov 12, to make every change
+  live, is that yes: the pull request is merged on it once every check is green, and the deploy
+  follows the merge as for any other.
+- Still the owner's to say: OP-335 and OP-341 (each needs a change under `.github/`, which his
+  rules keep his unless he says so of that change); the "at the park" quest step (naming the
+  place changes a logged step's words); OP-357 (the art tool's own tests are not part of CI and
+  three have gone stale).
 - To pick up after a break: the play log has had no real visit since the cleanup went live (last
   read Nov 12 at 13:58 UTC, after the last switch-on). Read it first (the baseline below), then
   the punch list's items 14 and 16 and the log's last entries.
@@ -551,3 +551,9 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
     over. Its verdicts are whole in those tickets' Notes, no status changed, and the log has a row
     for each saying what happened. Kept for next time: the board is shared, so add to the log by
     appending and never write to a row number from memory.
+- 2026-11-12: the owner's word on the report: make every change live. The one change not live
+  was the courses' own art, so it goes up again as a new pull request from the branch as it stood
+  (the art's commit and this plan, on top of `main`). The sweep will leave it to him as before;
+  his word is the yes it waits for, so it is merged on that word when its checks are green. Not
+  taken as said of them, and still his: the two changes under `.github/` (OP-335, OP-341), the
+  "at the park" quest step, OP-357, and the other sessions' open pull requests.
