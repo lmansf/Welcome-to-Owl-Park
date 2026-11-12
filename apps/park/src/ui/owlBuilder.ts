@@ -30,6 +30,8 @@ export interface PreviewFrame {
   y: number;
   w: number;
   h: number;
+  /** The quiz's reveal (OP-330): the owl glides in to this frame, once. */
+  arrive?: boolean;
 }
 
 export interface OwlBuilderActions {

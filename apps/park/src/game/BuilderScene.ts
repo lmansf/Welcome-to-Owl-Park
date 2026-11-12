@@ -3,6 +3,7 @@ import type { OwlLook } from '@owl-park/shared';
 import type { ParkConfig } from '../config';
 import { ensureFxTextures } from './ambience';
 import { Owl } from './Owl';
+import type { SettingsStore } from '../settings';
 
 /** Where the owl builder leaves room for the owl, in CSS pixels. */
 export interface PreviewRect {
@@ -10,6 +11,8 @@ export interface PreviewRect {
   y: number;
   w: number;
   h: number;
+  /** The quiz's reveal (OP-330): the owl glides in to its spot, flaps and turns its head, once per reveal. */
+  arrive?: boolean;
 }
 
 /** What the preview keeps in view around the owl's feet: a tall hat above, the pet trotting behind. */
@@ -30,6 +33,8 @@ export class BuilderScene extends Phaser.Scene {
   private backdrop: Phaser.GameObjects.Rectangle | null = null;
   /** Whether the plain dusk backdrop fills the screen (the builder), or the scene beneath shows (the home screen). */
   private plain = true;
+  /** A reveal's glide asked for before the owl was made: it runs once the owl is there. */
+  private pendingArrive = false;
 
   constructor() {
     super({ key: 'builder' });
@@ -55,6 +60,10 @@ export class BuilderScene extends Phaser.Scene {
       this.backdrop = null;
     });
     this.layout();
+    if (this.pendingArrive) {
+      this.pendingArrive = false;
+      this.arrive();
+    }
   }
 
   /** The frame for the owl (the builder opened, or its layout changed); `plain` false lets the scene beneath show around it. */
@@ -62,6 +71,42 @@ export class BuilderScene extends Phaser.Scene {
     this.rect = rect;
     this.plain = plain;
     if (this.owl) this.layout();
+    if (rect.arrive) {
+      if (this.owl) this.arrive();
+      else this.pendingArrive = true;
+    }
+  }
+
+  /**
+   * The reveal (OP-330): the owl glides down along an arc into its spot, lands with a flap, then
+   * turns its head all the way round, the way owls look about. Calm (reduced motion) shows it standing.
+   */
+  private arrive(): void {
+    const owl = this.owl;
+    if (!owl) return;
+    const pose = owl.pose;
+    this.tweens.killTweensOf(pose);
+    pose.setPosition(0, 0).setScale(1, 1).setAlpha(1);
+    if ((this.registry.get('settings') as SettingsStore | undefined)?.get().calm) return;
+    pose.setPosition(-150, -140).setScale(0.8, 0.8).setAlpha(0);
+    // Across steadily, and down slow then fast: a glide that ends on the perch.
+    this.tweens.add({ targets: pose, x: 0, duration: 900, ease: 'Sine.easeOut' });
+    this.tweens.add({
+      targets: pose,
+      y: 0,
+      alpha: 1,
+      scaleX: 1,
+      scaleY: 1,
+      duration: 900,
+      ease: 'Quad.easeIn',
+      onComplete: () => {
+        if (this.owl !== owl) return;
+        owl.playEmote('flap');
+        this.time.delayedCall(700, () => {
+          if (this.owl === owl) owl.playEmote('spin');
+        });
+      },
+    });
   }
 
   private layout(): void {
