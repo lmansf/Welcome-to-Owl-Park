@@ -28,6 +28,7 @@ import { COURSE_WORDS, clearLine } from '../ui/courseWords';
 import type { Hud } from '../ui/hud';
 import { createObjectiveStrip, type ObjectiveStrip } from '../ui/objectiveStrip';
 import { SPECTATOR_WORDS } from '../ui/spectator';
+import type { CueName } from './sfxCues';
 
 /**
  * A parkour course in one of its acts (OP-224, course.ts in @owl-park/shared), on the page: its
@@ -58,6 +59,8 @@ export interface CourseHost {
   hudRoot(): HTMLElement | null;
   /** Whether calm motion is on (a setting): nothing the course draws flickers then. */
   calm?(): boolean;
+  /** A moment of the course is heard (OP-350, sfxCues.ts): nothing where the park's sounds are not on. */
+  sound?(cue: CueName): void;
 }
 
 /** How long before a piece the room said was out of reach is asked again (the room has the owl a moment behind). */
@@ -168,6 +171,7 @@ export class Course {
         if (res.at) {
           this.host.fell(res.at, res.top ?? 0);
           this.host.hud.toast(COURSE_WORDS.fell, 1500);
+          this.host.sound?.('fall');
         }
         this.falls += 1;
       });
@@ -177,19 +181,19 @@ export class Course {
     const run = view.run;
     for (const b of c.benches ?? []) {
       if (!at(b) || !run || run.bench === b.id) continue;
-      this.ask(keyOf('bench', b.id), now, () => link.reach('bench', b.id), (res) => res.first && this.host.hud.toast(COURSE_WORDS.bench, 1400));
+      this.ask(keyOf('bench', b.id), now, () => link.reach('bench', b.id), (res) => res.first && this.told(COURSE_WORDS.bench, 1400, 'bench'));
     }
     for (const p of c.parts ?? []) {
       if (!at(p) || run?.parts.includes(p.id)) continue;
       if (!run) this.say(keyOf('idle', p.id), now, COURSE_WORDS.idle);
-      else this.ask(keyOf('part', p.id), now, () => link.reach('part', p.id), (res) => res.first && this.host.hud.toast(COURSE_WORDS.partDone[this.def.objective], 1600));
+      else this.ask(keyOf('part', p.id), now, () => link.reach('part', p.id), (res) => res.first && this.told(COURSE_WORDS.partDone[this.def.objective], 1600, 'part'));
     }
     for (const f of c.feathers ?? []) {
       if (!at(f) || view.feathers.includes(f.id)) continue;
-      this.ask(keyOf('feather', f.id), now, () => link.reach('feather', f.id), (res) => res.first && this.host.hud.toast(`${COURSE_WORDS.featherFound} (${res.view.feathers.length}/${LOST_FEATHERS})`, 1600));
+      this.ask(keyOf('feather', f.id), now, () => link.reach('feather', f.id), (res) => res.first && this.told(`${COURSE_WORDS.featherFound} (${res.view.feathers.length}/${LOST_FEATHERS})`, 1600, 'feather'));
     }
     const cut = openerAt(this.room, me.pos, new Set(view.shortcuts));
-    if (cut) this.ask(keyOf('shortcut', cut.id), now, () => link.open(cut.id), (res) => res.first && this.host.hud.toast(COURSE_WORDS.shortcut, 1600));
+    if (cut) this.ask(keyOf('shortcut', cut.id), now, () => link.open(cut.id), (res) => res.first && this.told(COURSE_WORDS.shortcut, 1600, 'open'));
     const shrine = c.shrine;
     if (shrine && at(shrine)) {
       if (!run) this.say('shrine-idle', now, COURSE_WORDS.idle);
@@ -231,6 +235,12 @@ export class Course {
     });
   }
 
+  /** A moment of the run, said and heard (OP-350). */
+  private told(words: string, ms: number, cue: CueName): void {
+    this.host.hud.toast(words, ms);
+    this.host.sound?.(cue);
+  }
+
   /** A line said at most once every few seconds for `key`, while the owl stays at what it is about. */
   private say(key: string, now: number, words: string): void {
     if (now < (this.waitUntil.get(key) ?? 0)) return;
@@ -252,6 +262,7 @@ export class Course {
     if (!paid) return;
     this.finishes += 1;
     this.host.hud.toast(clearLine(paid, SPECTATOR_WORDS.keep), 4000);
+    this.host.sound?.('clear');
     if (paid.gold) this.host.hud.toast(COURSE_WORDS.gold, 3500);
     if (paid.emote) this.host.hud.toast(COURSE_WORDS.emote, 3500);
     if (paid.mouse) this.host.hud.toast(COURSE_WORDS.mouse, 5000);

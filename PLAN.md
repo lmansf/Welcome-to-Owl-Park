@@ -186,8 +186,19 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   by the frame, so it lags on slow devices; it has no look-ahead; it slides after a fall. Steps: ease
   by time; look ahead of the owl's flight; frame the goal when it is high; cut under the fall's fade.
   Behind a flag first.
-- **B3. A small sound set.** Goal: every move a player makes is heard, from one module, one switch.
-  Behind a flag first; the owner listens before it is on.
+- **B3. A small sound set (OP-350, built, behind the `sounds` flag: `?sfx=1`).** Goal: every move a
+  player makes is heard, from one module, one switch. Why it beats what is there: the park is silent
+  but for a knock as the Menu opens, so nothing a player presses is answered by anything but what they
+  can see, and there is nothing to time a flap by. What it is: a table of thirteen cues
+  (`apps/park/src/game/sfxCues.ts`), each a few short tones or breaths of noise made on the spot, and
+  one player (`sfx.ts`). The moves' cues are read off the owl's own flight as it changes (`airCues`:
+  left the ground rising, a flap spent, wings spread, caught by rising air, landed as hard as it fell),
+  so the keys, the buttons and a tap all sound the same and a press that did nothing is silent. A
+  course's moments (a part, a feather, a bench, a fall, a shortcut, the finish), a dash and a doorway
+  add theirs. Only the visitor's own owl is heard. The Settings switch "Sounds" turns all of it off.
+  Done when: the rule tests and a browser test pass, the flag check passes, and the owner has listened
+  (a sound board went to him in the session). Switching it on for everyone is a separate PR on his word.
+  Should move, once on: course runs that reach the first bench; visit length.
 - **B4. One HUD style.** Goal: one set of sizes, corners and colours for the Menu, the cards, the
   shop and the arcade.
 - **B5. Movement that forgives.** Goal: the walk runs inside the flight's fixed step so it does not
@@ -316,3 +327,14 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
     walkway's contrast, and the band is not loosened. Also left for paintings: the tone of the earth
     path's middle pieces against its ends, the ink course's green mounds on its paper, the ink
     pond's flat water, and a row and a wall of the neon realm's own.
+- 2026-11-11: B3 built (OP-350), hidden behind `?sfx=1`. Choices made on the way:
+  - No sound files: every cue is made in code, as the Menu's knock and the loader's hoot already are.
+    They are stand-ins. A sound designer replaces one by giving its name a recording.
+  - The gains were set by measurement, not by ear (this session has no ears): each cue was rendered
+    in a browser and its loudest 50 ms compared with the Menu's knock. What sounds at every jump sits
+    level with the knock, a glide 6 dB under it, a course's moments 1 to 3 dB over it. The owner's ear
+    decides: the sound board lets him mark each one keep, change or drop.
+  - Nothing rests on a tone under 200 Hz, which a phone does not play: a landing has a knock of noise.
+  - Each cue has its own shortest gap, so a held key or five feathers at once is one sound.
+  - Not done: other owls' sounds (80 owls jumping would be a din; a quiet, near-only version can
+    follow), music, a volume slider, the arcade's games (PR 221 is open on its cabinets).

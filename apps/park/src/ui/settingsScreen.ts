@@ -1,3 +1,4 @@
+import { flagOn } from '../flags';
 import type { Settings, SettingsStore } from '../settings';
 import { createModal, modalHeader } from './modal';
 
@@ -126,7 +127,7 @@ export function settingsRows(store: SettingsStore, redraw: () => void, feedback:
       toggle('bubbles', 'Show what owls say', ''),
       toggle('trail', 'Feather trail', 'Feathers lead to a doorway you haven’t been through yet.'),
       h('Sound'),
-      toggle('sound', 'Sounds', 'A soft knock as the Menu opens.'),
+      toggle('sound', 'Sounds', flagOn('sounds') ? 'Your owl’s wings and landings, bells, feathers and doorways.' : 'A soft knock as the Menu opens.'),
       h('Motion'),
       toggle('calm', 'Calm motion', 'No drifting fireflies, gold dust or neon rain.'),
     );

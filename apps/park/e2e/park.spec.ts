@@ -645,3 +645,43 @@ test.describe('a first flight where owls arrive (OP-347)', () => {
     expect((await state(page)).tipShown).toBeNull();
   });
 });
+
+test.describe('the park’s sounds for the visitor’s own owl (OP-350)', () => {
+  test('with the flag a jump, a flap, a glide and a landing are heard, and a doorway; the Sounds switch turns them off', async ({ page }) => {
+    await openPark(page, { room: 'hub', sfx: '1' });
+    expect((await state(page)).sounds).toEqual([]);
+    // A tap of Jump: off the ground, and down again.
+    await page.keyboard.press('Space');
+    await expect.poll(async () => (await state(page)).sounds, { timeout: 10_000 }).toEqual(['jump', 'land']);
+
+    // Jump, again in the air (a flap), and held on the way down (the wings spread): each heard once, in order.
+    await page.keyboard.press('Space');
+    await page.waitForTimeout(260);
+    await page.keyboard.down('Space');
+    await expect.poll(async () => (await state(page)).air.s, { timeout: 10_000, intervals: [50] }).toBe(2);
+    await page.keyboard.up('Space');
+    await expect.poll(async () => (await state(page)).air.s, { timeout: 10_000 }).toBe(0);
+    expect((await state(page)).sounds).toEqual(['jump', 'land', 'jump', 'flap', 'glide', 'land']);
+
+    // The Sounds switch (Settings) turns every one of them off, and on again.
+    await page.evaluate(() => (window.owlPark.game.registry.get('settings') as { set(p: { sound: boolean }): void }).set({ sound: false }));
+    await page.keyboard.press('Space');
+    await expect.poll(async () => (await state(page)).flown.n, { timeout: 10_000 }).toBe(3);
+    await expect.poll(async () => (await state(page)).air.s, { timeout: 10_000 }).toBe(0);
+    expect((await state(page)).sounds).toHaveLength(6);
+    await page.evaluate(() => (window.owlPark.game.registry.get('settings') as { set(p: { sound: boolean }): void }).set({ sound: true }));
+
+    // Through a doorway: heard as the room is left, and kept by the page into the next room.
+    await walkToDoor(page, 'to-grove');
+    await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe('grove');
+    expect((await state(page)).sounds[6]).toBe('door');
+  });
+
+  test('without the flag nothing is played', async ({ page }) => {
+    await openPark(page, { room: 'hub' });
+    await page.keyboard.press('Space');
+    await expect.poll(async () => (await state(page)).flown.n, { timeout: 10_000 }).toBe(1);
+    await expect.poll(async () => (await state(page)).air.s, { timeout: 10_000 }).toBe(0);
+    expect((await state(page)).sounds).toEqual([]);
+  });
+});

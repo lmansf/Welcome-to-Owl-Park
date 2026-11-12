@@ -59,6 +59,8 @@ export interface ParkState {
   promptShown: string | null;
   /** The tall art gone see-through because the visitor's own owl is behind it (OP-346), by its art's key. */
   seeThrough: string[];
+  /** The sounds played for the visitor's own owl on this page, the newest last (OP-350, `?sfx=1`): none without the flag. */
+  sounds: string[];
   trail: { feathers: Array<{ x: number; y: number }>; glints: string[]; on: boolean } | null;
   floorShown: boolean;
   /** How many pieces shaping the room's edges seen from above were drawn (edges.ts). */

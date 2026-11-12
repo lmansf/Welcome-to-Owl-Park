@@ -218,6 +218,8 @@ import { courseTips, tipFor } from './courseTips';
 import { DoorSigns } from './doorSigns';
 import { ReachPrompt, promptPlace, promptWords } from './reachPrompt';
 import { SeeThrough } from './seeThroughArt';
+import { parkSfx, type Sfx } from './sfx';
+import { airCues, type CueName } from './sfxCues';
 import { sideEdges } from './sideEdges';
 import { drawWalkFloor } from './walkFloor';
 import { BOWL_BEYOND, BOWL_SHADOW, drawBowl } from './bowlView';
@@ -650,6 +652,11 @@ export class RoomScene extends Phaser.Scene {
   private opening: { at: number; cutAt: number | null; covered: CoveredEdges } | null = null;
   /** The thermal (OP-340, `?thermal=1`, thermal.ts in @owl-park/shared): an owl gliding in a room's thermal is lifted, and the camera draws back as it rises. */
   private readonly thermalOn = flagOn('thermal');
+  /**
+   * The park's sounds for what this visitor's own owl does (OP-350, `?sfx=1`, sfx.ts): null without the
+   * flag, and then nothing below plays or reads anything.
+   */
+  private readonly sfx: Sfx | null = flagOn('sounds') ? parkSfx(() => (this.registry?.get('settings') as SettingsStore | undefined)?.get().sound ?? true) : null;
   /**
    * The owl's ride on a thermal, from the moment it was lifted until it is down again: the height it
    * was taken at, the thermal's top, what the HUD covered, and whether the camera has been drawn back
@@ -1086,6 +1093,7 @@ export class RoomScene extends Phaser.Scene {
       awarded: () => void this.collection.refresh(),
       hudRoot: () => document.getElementById('hud'),
       calm: () => this.calm(),
+      sound: (cue: CueName) => this.sfx?.play(cue),
     });
     ({ hollow: this.hollow, doorway: this.doorway } = escapeFor(room, {
       scene: this,
@@ -1926,6 +1934,7 @@ export class RoomScene extends Phaser.Scene {
     triedDoors().add(this.room.id, FIRST_FLIGHT_MARK);
     triedDoors().add(this.room.id, ROOTS_SPOT);
     this.hud.toast(HALL_WORDS.flown, 4200);
+    this.sfx?.play('bench');
     this.layTrail();
   }
 
@@ -2404,9 +2413,12 @@ export class RoomScene extends Phaser.Scene {
     wind: { currents: number; rides: number };
     /** In a parkour course: the course as the room has it for this owl (OP-224). */
     course: ReturnType<Course['debug']>;
+    /** The sounds played for this owl on this page, the newest last (OP-350): none without the flag. */
+    sounds: readonly string[];
   } | null {
     if (!this.built) return null;
     return {
+      sounds: this.sfx?.heard().slice(-16) ?? [],
       spectator: this.spectator,
       dash: { holds: this.flier.dash !== undefined, spent: this.flier.dash?.spent ?? false, dashes: this.dashes },
       wind: { currents: this.room.winds?.length ?? 0, rides: this.windRides },
@@ -2868,6 +2880,7 @@ export class RoomScene extends Phaser.Scene {
           this.time.delayedCall(FLOP_LAND_MS + 150, () => {
             if (gen !== this.gen) return;
             featherFind(this, def.pos, () => ({ x: this.me.pos.x, y: this.me.pos.y - this.flier.air.z }), () => this.collection.setFeathers(res.total), def.top ?? 0);
+            this.sfx?.play('feather');
             this.hud.toast(n === 1 ? 'A feather was hiding in the leaves! +1 feather' : `Feathers were hiding in the leaves! +${n} feathers`, 3200, '#FFD36A');
           });
         }
@@ -2879,6 +2892,7 @@ export class RoomScene extends Phaser.Scene {
           this.time.delayedCall(300, () => {
             if (gen !== this.gen) return;
             featherFind(this, def.pos, () => ({ x: this.me.pos.x, y: this.me.pos.y - this.flier.air.z }), () => this.collection.setFeathers(res.total));
+            this.sfx?.play('feather');
             this.hud.toast(n === 1 ? 'A feather was tucked under it! +1 feather' : `Feathers were tucked under it! +${n} feathers`, 3200, '#FFD36A');
           });
         } else {
@@ -3080,6 +3094,7 @@ export class RoomScene extends Phaser.Scene {
     if (distance(to, this.me.pos) < 3) return false;
     this.flier = { ...this.flier, dash: spendDash(this.flier.dash, at) };
     this.dashes += 1;
+    this.sfx?.play('dash');
     this.walkGoal = null;
     this.wayTo = null;
     this.keyWalk = false;
@@ -3209,8 +3224,11 @@ export class RoomScene extends Phaser.Scene {
       const lift = column ?? gust?.z ?? warm;
       const wasLifted = this.flier.air.s === LIFTED;
       const stoodAt = this.flier.air.z;
+      const before = this.flier.air;
       this.flier = stepFlier(this.flier, { pressed, held }, groundAt(this.room.perches, this.me.pos, this.flier.air.z), this.abilities, lift);
       const air = this.flier.air;
+      // What the step did is heard (OP-350): a jump, a flap, the wings spread, a landing.
+      if (this.sfx) for (const c of airCues(before, air)) this.sfx.play(c.cue, c.strength);
       // Taken up by a thermal: the camera draws back with the owl's height from here until it is down again (frameRise).
       if (warm !== null && air.s === LIFTED && !this.rise) this.rise = { from: air.z, top: warm, covered: this.hud.coveredEdges(), back: false };
       if (gust && air.s === LIFTED && air.h === gust.z) this.rideWind(gust, !wasLifted);
@@ -3832,6 +3850,7 @@ export class RoomScene extends Phaser.Scene {
   private async leaveRoom(fadeMs = LEAVE_FADE_MS): Promise<boolean> {
     if (this.leaving) return false;
     this.leaving = true;
+    this.sfx?.play('door');
     this.hud.setHints([]);
     // What the HUD shows of this room (a course's strip, the actions) fades with it (OP-346).
     this.hud.setRoomDark(true);
