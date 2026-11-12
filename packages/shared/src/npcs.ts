@@ -100,7 +100,7 @@ export const NPCS: readonly NpcDef[] = [
     pos: { x: 2210, y: 700 },
     facing: 1,
     look: { body: '#5C4033', belly: '#E8D8B8', accent: '#C9A227', wear: { head: 'mortarboard~0', face: 'half-moon-specs~0', neck: 'moon-pendant~0' } },
-    greetings: ['Welcome, little one. The tree has room for everyone.', 'Every leaf in this hollow has a story. Some are even true.', 'Mind the moonbeam. It likes to be looked at.'],
+    greetings: ['Welcome in. The tree has room for everyone.', 'Every leaf in this hollow has a story. Some are even true.', 'Mind the moonbeam. It likes to be looked at.'],
     idle: ['nod', 'hoot'],
   },
   {

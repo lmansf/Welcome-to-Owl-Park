@@ -49,6 +49,10 @@ async function expectOwlShown(page: Page): Promise<void> {
   });
   expect(solid).toEqual([]);
   const box = (await stage.boundingBox())!;
+  // The owl is the reveal's centrepiece, a phone's included: its frame keeps its room however long the words run.
+  const view = page.viewportSize()!;
+  if (view.width < view.height) expect(Math.min(box.width, box.height), 'the owl\'s frame on a phone').toBeGreaterThanOrEqual(view.width * 0.75);
+  else expect(box.height, 'the owl\'s frame').toBeGreaterThanOrEqual(160);
   await expect
     .poll(
       () =>

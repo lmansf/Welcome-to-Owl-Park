@@ -13,10 +13,14 @@ export interface PreviewRect {
   h: number;
   /** The quiz's reveal (OP-330): the owl glides in to its spot, flaps and turns its head, once per reveal. */
   arrive?: boolean;
+  /** The quiz's reveal: a closer view, the owl itself filling the frame rather than room kept for a tall hat and a pet. */
+  close?: boolean;
 }
 
 /** What the preview keeps in view around the owl's feet: a tall hat above, the pet trotting behind. */
 const VIEW = { left: -112, right: 92, top: -196, bottom: 26 };
+/** The reveal's closer view: a hat or pet may reach past the frame, over the words, which stay readable on top. */
+const CLOSE_VIEW = { left: -80, right: 80, top: -170, bottom: 22 };
 /** Device pixels per room pixel at most: past this the owl's 2x layers would blur. */
 const MAX_ZOOM = 5;
 
@@ -115,11 +119,12 @@ export class BuilderScene extends Phaser.Scene {
     cam.setViewport(0, 0, width, height);
     const k = (this.registry.get('config') as ParkConfig | undefined)?.pixelRatio ?? 1;
     const r = this.rect;
-    const zoom = Math.max(0.1, Math.min((r.w * k) / (VIEW.right - VIEW.left), (r.h * k) / (VIEW.bottom - VIEW.top), MAX_ZOOM));
+    const v = r.close ? CLOSE_VIEW : VIEW;
+    const zoom = Math.max(0.1, Math.min((r.w * k) / (v.right - v.left), (r.h * k) / (v.bottom - v.top), MAX_ZOOM));
     cam.setZoom(zoom);
     // The view's middle goes to the frame's middle; the backdrop fills the screen around it.
-    const x = (VIEW.left + VIEW.right) / 2 + (width / 2 - (r.x + r.w / 2) * k) / zoom;
-    const y = (VIEW.top + VIEW.bottom) / 2 + (height / 2 - (r.y + r.h / 2) * k) / zoom;
+    const x = (v.left + v.right) / 2 + (width / 2 - (r.x + r.w / 2) * k) / zoom;
+    const y = (v.top + v.bottom) / 2 + (height / 2 - (r.y + r.h / 2) * k) / zoom;
     cam.centerOn(x, y);
     this.backdrop?.setPosition(x, y).setSize(width / zoom + 64, height / zoom + 64).setVisible(this.plain);
   }

@@ -42,6 +42,10 @@ describe('one name per place (OP-346)', () => {
     }
   });
 
+  it('calls no player by a pet name: the park speaks to everyone the same', () => {
+    for (const w of NPCS.flatMap((n) => n.greetings)) expect(w.toLowerCase(), w).not.toMatch(/little one|grown.?ups?|kiddo|sweetie/);
+  });
+
   it('leaves no old name in any quest step, offer or thanks, or any owl\'s title, as the new map shows them', () => {
     const old = Object.keys(NEW_MAP_PLACE_NAMES).map((room) => PLACE_NAMES[room]!);
     const words = [...QUESTS.flatMap((q) => [...stepTexts(q), q.offer, q.thanks, q.title]), ...NPCS.flatMap((n) => [n.role, ...n.greetings])];
