@@ -25,6 +25,8 @@ test.describe('the feather trail (OP-307)', () => {
   });
 
   test('through the turnstiles the feathers lead a new owl to the Great Hollow’s roots, then on to the arcade’s hatch, a place to play, and no sign names the way back until the owl has stepped away (OP-337, OP-347)', async ({ page }) => {
+    // Two rooms, three walks across the hall and the trail laid twice: more than the suite's 45 s on a slow phone.
+    test.setTimeout(100_000);
     await openPark(page, { room: 'lobby', keeper: '1', newmap: '1' });
     await page.evaluate(() => window.owlPark.walkTo(2595, 800));
     await expect.poll(async () => (await state(page)).walking, { timeout: 15_000 }).toBe(false);
