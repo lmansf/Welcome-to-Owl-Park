@@ -3,10 +3,9 @@ import { expect, test } from './fixtures';
 import { cameraView, openPark, settleCamera, state } from './helpers';
 
 /**
- * The thermal at the Great Hollow's heart (OP-340, flag-hidden behind `?thermal=1`): an owl that jumps
- * and keeps holding Jump in the heart's moonbeam is carried up on warm air, the camera drawing back to
- * the whole oval as it rises, and a glide held from the top carries it to the rim. On an address
- * without the flag a jump at the heart is only a jump.
+ * The thermal at the Great Hollow's heart (OP-340, on for every visitor since OP-356): an owl that
+ * jumps and keeps holding Jump in the heart's moonbeam is carried up on warm air, the camera drawing
+ * back to the whole oval as it rises, and a glide held from the top carries it to the rim.
  */
 /** Walks the owl to the heart's moonbeam, where the thermal rises, and says where that is and how wide the room. */
 async function toTheHeart(page: Page): Promise<{ heart: { x: number; y: number }; hallW: number }> {
@@ -24,7 +23,7 @@ async function toTheHeart(page: Page): Promise<{ heart: { x: number; y: number }
 test.describe('the thermal at the heart of the Great Hollow (OP-340)', () => {
   test('Jump held in the heart’s moonbeam carries an owl up to the top, the whole oval in view, and a held glide from there reaches the rim', async ({ page }) => {
     test.slow(); // a rise of four seconds and a glide of eleven
-    await openPark(page, { room: 'm3-hall', newmap: '1', thermal: '1' });
+    await openPark(page, { room: 'm3-hall', newmap: '1' });
     const near = await settleCamera(page);
     const { heart, hallW } = await toTheHeart(page);
     // What the thermal is for, said once as the owl first stands in it.
@@ -69,7 +68,7 @@ test.describe('the thermal at the heart of the Great Hollow (OP-340)', () => {
   });
 
   test('let go on the way up, the owl comes down where it is, and the camera comes back in', async ({ page }) => {
-    await openPark(page, { room: 'm3-hall', newmap: '1', thermal: '1' });
+    await openPark(page, { room: 'm3-hall', newmap: '1' });
     const near = await settleCamera(page);
     const { heart } = await toTheHeart(page);
     await page.keyboard.down('Space');
@@ -79,20 +78,5 @@ test.describe('the thermal at the heart of the Great Hollow (OP-340)', () => {
     const s = await state(page);
     expect(Math.hypot(s.pos.x - heart.x, s.pos.y - heart.y)).toBeLessThan(40);
     expect((await settleCamera(page)).viewW).toBeCloseTo(near.viewW, 0);
-  });
-
-  test('without the flag a jump at the heart is only a jump', async ({ page }) => {
-    await openPark(page, { room: 'm3-hall', newmap: '1' });
-    const near = await settleCamera(page);
-    await toTheHeart(page);
-    await page.keyboard.down('Space');
-    await page.waitForTimeout(1200);
-    const up = await state(page);
-    // A jump and a held glide down: never lifted, never higher than a jump and its flaps.
-    expect(up.air.s).not.toBe(3);
-    expect(up.flown.peak).toBeLessThan(400);
-    expect((await cameraView(page)).viewW).toBeCloseTo(near.viewW, 0);
-    await page.keyboard.up('Space');
-    await expect(page.locator('[data-toasts]')).not.toContainText('Warm air rises here');
   });
 });

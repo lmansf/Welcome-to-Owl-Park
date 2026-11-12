@@ -1,19 +1,23 @@
 # Owl Park cleanup and rebuild: the plan
 
 - Status: the pass is done, and the owner's word of Nov 12 on what was waiting (the art is mine to
-  pick; everything else approved as it stood) is being carried out in three changes: the sounds and
-  the side camera on for every visitor (OP-355), the town view and the thermal on (OP-356), and the
-  courses' new paintings (OP-348). Ticket OP-342. Branch `claude/determined-wozniak-3ljxrf`.
-- Last updated: 2026-11-12. Merged and live for every visitor: the cleanup's five milestones (OP-343
-  to OP-346, OP-349), the first flight (OP-347), the art pass's no-spend part (OP-348: the Great
-  Hollow, the courses' ground, the neon course's light), the flight at any frame rate (OP-353) and
-  three small controls on a phone (OP-354). On for every visitor with OP-355: the sound set
-  (OP-350) and the side camera (OP-351, OP-352). Still behind flags until OP-356: the town view
-  (`?town=1`) and the thermal (`?thermal=1`). Looked at and left, with why in the log: one HUD
-  style (B4).
-- Waiting on the owner: OP-335 and OP-341 (each needs a change under `.github/`, which his rules
-  keep his unless he says so of that change); the "at the park" quest step (naming the place
-  changes a logged step's words).
+  pick; everything else approved as it stood) is carried out in three changes: the sounds and the
+  side camera on for every visitor (OP-355, merged), the town view and the thermal on (OP-356, this
+  change), and the courses' own art (OP-348, built and green; it goes up last, because the merge
+  sweep leaves it for the owner's yes). Ticket OP-342. Branch `claude/determined-wozniak-3ljxrf`.
+- Last updated: 2026-11-12. Live for every visitor: the cleanup's five milestones (OP-343 to
+  OP-346, OP-349), the first flight (OP-347), the art pass's no-spend part (OP-348: the Great
+  Hollow, the courses' ground, the neon course's light), the flight at any frame rate (OP-353),
+  three small controls on a phone (OP-354), the sound set (OP-350) and the side camera (OP-351,
+  OP-352). With this change the town view (OP-336) and the thermal (OP-340) are on too, and no
+  feature of the pass is behind a flag any more (`friends`, from before it, is the one flag
+  left). Looked at and left, with why in the log: one HUD style (B4).
+- Waiting on the owner: his yes on the art's pull request (it adds 119 KB to the art record,
+  `tools/art/provenance.jsonl`, GitHub will not show a change that size, and the merge sweep
+  leaves what it cannot check to him); OP-335 and OP-341 (each needs a change under `.github/`,
+  which his rules keep his unless he says so of that change); the "at the park" quest step
+  (naming the place changes a logged step's words); OP-357 (the art tool's own tests are not part
+  of CI and three have gone stale).
 - To pick up after a break: the play log has had no real visit since the cleanup went live (last
   read Nov 12). Read it first (the baseline below), then the punch list's items 14 and 16 and the
   log's last entries.
@@ -472,3 +476,23 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   - Not carried out, and why. OP-335 and OP-341 each need a change under `.github/`, which the
     owner's rules keep his unless he says so of that change. The "at the park" quest step: naming
     the place changes a logged step's words. Both are still his to say.
+- 2026-11-12: OP-356, the town view and the thermal on for every visitor. `flags.ts` loses `town`
+  and `thermal`. Every room seen from above has the town view's zoom and edges, the Great Hollow
+  its opening look, and its thermal lifts an owl gliding in the moonbeam at its heart. The room
+  server has known the thermal since OP-340, so nothing of it changes.
+  - The browser tests of both open plain addresses now and fail on `main`. The two that held a
+    plain address to the old view and to a plain jump are gone: they are no longer true.
+  - Looked at with the town view on, at 1440 by 900 and 1024 by 768: the twelve rooms seen from
+    above. Each fills the screen from its back wall down, with nothing past its edges.
+  - Run with both on before it went up, since the wider view is in every room seen from above: on
+    a computer the town view, thermal, park, lobby, trail, way back, travel, activities, arcade,
+    collection, chat, leave, sleep, which-owl, sizes, skin, mirror, nests, escape, party, home,
+    loader and realm-start tests (121 passed); on the phone project the town view, thermal, park,
+    zoom, stick, lobby and pad tests (54 passed).
+  - To roll back: revert the change; the flags come back and both are hidden again.
+- 2026-11-12: the order of the last two changes, and why. The courses' own art (OP-348) went up
+  first, as PR 233, and its checks were green. The merge sweep did not merge it: it leaves to the
+  owner any change GitHub cannot show, and the art record's 121 new lines are 119 KB. That is the
+  sweep doing its job, so nothing was done to get round it. This branch is the only one the
+  session may push to, so PR 233 was closed, OP-356 went up in its place, and the art comes back
+  after it as its own pull request, to wait there for the owner's yes.

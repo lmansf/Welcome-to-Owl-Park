@@ -1,11 +1,10 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { cameraView, openPark, settleCamera, state } from './helpers';
+import { openPark, settleCamera, state } from './helpers';
 
 /**
- * The town view (OP-336, flag-hidden behind `?town=1`): a room seen from above shows more of itself,
- * and through the turnstiles the Great Hollow opens on its whole oval and eases in on the owl. On an
- * address without the flag every screen shows what it always has.
+ * The town view (OP-336, on for every visitor since OP-356): a room seen from above shows more of
+ * itself, and through the turnstiles the Great Hollow opens on its whole oval and eases in on the owl.
  */
 /**
  * How wide the Great Hollow is, from the page: the knothole up stands at the middle of its back wall
@@ -60,15 +59,11 @@ async function throughTheTurnstiles(page: Page): Promise<void> {
 }
 
 test.describe('the town view (OP-336)', () => {
-  test('with the flag a screen shows more of the Great Hollow, its owls no smaller than a phone held sideways draws them; without it, a screen deep as ever', async ({ page }) => {
+  test('a screen shows well over one screen of the Great Hollow’s depth, its owls no smaller than a phone held sideways drew them', async ({ page }) => {
     await openPark(page, { room: 'm3-hall', newmap: '1' });
-    const plain = await settleCamera(page);
-    expect(plain.viewH).toBeCloseTo(900, 0);
-
-    await openPark(page, { room: 'm3-hall', newmap: '1', town: '1' });
     const town = await settleCamera(page);
-    expect(town.viewW).toBeGreaterThan(plain.viewW * 1.4);
-    expect(town.viewH).toBeGreaterThan(plain.viewH * 1.4);
+    // Before the town view every screen showed 900 px of a room's depth, and as much across as its shape gave it.
+    expect(town.viewH).toBeGreaterThan(900 * 1.4);
     expect(town.zoom / town.dpr).toBeGreaterThanOrEqual(0.42 - 1e-6);
     // Nothing past the room's sides or its back wall, and the owl is in view.
     expect(town.viewX).toBeGreaterThanOrEqual(-0.5);
@@ -82,7 +77,7 @@ test.describe('the town view (OP-336)', () => {
   });
 
   test('a room whose whole depth fits the screen fills it from its back wall down', async ({ page }) => {
-    await openPark(page, { room: 'lobby', newmap: '1', town: '1' });
+    await openPark(page, { room: 'lobby', newmap: '1' });
     const town = await settleCamera(page);
     // The Treetop Commons is 1,350 deep: all of it on a computer, and on a phone held upright too.
     expect(town.viewH).toBeCloseTo(1350, 0);
@@ -90,7 +85,7 @@ test.describe('the town view (OP-336)', () => {
   });
 
   test('through the turnstiles the Great Hollow opens on its whole oval, then eases in on the owl', async ({ page }) => {
-    await openPark(page, { room: 'lobby', keeper: '1', newmap: '1', town: '1' });
+    await openPark(page, { room: 'lobby', keeper: '1', newmap: '1' });
     await watchHall(page);
     await throughTheTurnstiles(page);
     // Up is still held, as it was through the turnstiles: that is no move, and the look runs its course.
@@ -112,7 +107,7 @@ test.describe('the town view (OP-336)', () => {
   });
 
   test("the player's first move sets the owl walking at once, and brings the camera in once the whole oval has shown", async ({ page }) => {
-    await openPark(page, { room: 'lobby', keeper: '1', newmap: '1', town: '1' });
+    await openPark(page, { room: 'lobby', keeper: '1', newmap: '1' });
     // A tap out on the floor the moment the room is in.
     await watchHall(page, true);
     await throughTheTurnstiles(page);
@@ -127,15 +122,5 @@ test.describe('the town view (OP-336)', () => {
     // was in well before the look would have drawn in left to itself (close on four seconds).
     expect(seen.drewIn! - seen.first!).toBeGreaterThan(1300);
     expect(seen.drewIn! - seen.first!).toBeLessThan(3000);
-  });
-
-  test('without the flag the Great Hollow opens as it always has: on the owl, a screen deep', async ({ page }) => {
-    await openPark(page, { room: 'lobby', keeper: '1', newmap: '1' });
-    await watchHall(page);
-    await throughTheTurnstiles(page);
-    await page.keyboard.up('ArrowUp');
-    const settled = await settleCamera(page);
-    expect(settled.viewH).toBeCloseTo(900, 0);
-    expect((await hallSeen(page)).widest).toBeCloseTo((await cameraView(page)).viewW, 0);
   });
 });

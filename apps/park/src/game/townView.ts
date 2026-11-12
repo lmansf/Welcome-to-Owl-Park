@@ -1,25 +1,28 @@
 /**
- * The town view (OP-336, flag-hidden behind `?town=1`): how much of a room seen from above a screen
- * shows. The owner's rule is that those rooms "feel big, like a town center, rather than a room.
- * somewhere that 80 people could gather", and the Great Hollow is laid out to be read whole, its ways
- * all round the rim. Without the town view every screen shows one screen's depth of a room (ROOM_H),
- * its owls as big as in a room one screen deep: a computer sees an eighth of the Great Hollow's floor
- * and a phone held upright 416 of its 6,400 px across.
+ * The town view (OP-336): how much of a room seen from above a screen shows. The owner's rule is that
+ * those rooms "feel big, like a town center, rather than a room. somewhere that 80 people could
+ * gather", and the Great Hollow is laid out to be read whole, its ways all round the rim. Before the
+ * town view every screen showed one screen's depth of a room (ROOM_H), its owls as big as in a room
+ * one screen deep: a computer saw an eighth of the Great Hollow's floor and a phone held upright 416
+ * of its 6,400 px across.
  *
  * The town view draws back, by three rules:
  *
  * - a screen shows up to TOWN_VIEW.depth of a room's depth, the whole depth of most rooms;
  * - a phone held upright shows up to TOWN_VIEW.across of the room across, where the room is deep
  *   enough to fill the screen at that size;
- * - an owl is never drawn smaller than TOWN_VIEW.minCss (what a phone held sideways draws today), and
- *   no screen ever shows less than it does without the town view.
+ * - an owl is never drawn smaller than TOWN_VIEW.minCss (what a phone held sideways drew before it),
+ *   and no screen ever shows less than it did without the town view.
  *
  * Coming through the turnstiles the Great Hollow opens on the whole oval for a moment and eases in on
  * the owl (the opening look). Rooms seen from the side keep their camera. Pure, so it is unit-tested;
  * the room scene sets its camera by it.
  *
- * TODO-DOCS (OP-336): README.md's list of addresses gains `?town=1`; docs/ARCHITECTURE.md's camera notes
- * gain the town view's three rules and the opening look, once it is switched on for everyone.
+ * On for every visitor since the owner's word of Nov 12 (OP-356; it was behind a `?town=1` flag until
+ * then).
+ *
+ * TODO-DOCS (OP-336): docs/ARCHITECTURE.md's camera notes gain the town view's three rules and the
+ * opening look.
  */
 import { ROOM_H } from '@owl-park/shared';
 
@@ -37,7 +40,7 @@ export interface Size {
   h: number;
 }
 
-/** The zoom every room has without the town view: the room covers the screen across, and a screen of it down. */
+/** The zoom of a room seen from the side, and of every room before the town view: the room covers the screen across, and a screen of it down. */
 export function screenZoom(room: Size, screen: Size): number {
   return Math.max(screen.w / room.w, screen.h / Math.min(room.h, ROOM_H));
 }
