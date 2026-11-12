@@ -13,16 +13,23 @@
   sound set (OP-350), the side camera (OP-351, OP-352), the town view (OP-336) and the thermal
   (OP-340). No feature of the pass is behind a flag (`friends`, from before it, is the one flag
   left). Looked at and left, with why in the log: one HUD style (B4).
+- In hand since the pass (Nov 12), both under the owner's standing brief and neither the larger
+  change he asked for: OP-358, the board's P1 from the QA walk (on a page whose room connection is
+  down, the Menu map forgot the turnstiles after one trip), fixed in the change this note came in
+  with; then OP-360, the ink course's first screen, planned under "After the pass" below from the
+  first phone runs since the pass went live (11 falls in two runs).
 - What comes next is the owner's to choose: on Nov 12 he asked for one larger-than-life change
   that would make the park far more inviting to a new player or bring a player back. The one
-  recommended, and why, is the log's last entry. Nothing of it is built.
+  recommended, and why, is in the log (Nov 12, "one larger-than-life change") and in OP-359.
+  Nothing of it is built.
 - Still the owner's to say: OP-335 and OP-341 (each needs a change under `.github/`, which his
   rules keep his unless he says so of that change); the "at the park" quest step (naming the
   place changes a logged step's words); OP-357 (the art tool's own tests are not part of CI and
   three have gone stale).
 - To pick up after a break: no outside visitor has come since the cleanup went live (last read
-  Nov 12). Read the play log first, owl by owl (the correction under Baseline says why), then the
-  punch list's items 14 and 16 and the log's last entries.
+  Nov 12, 14:10 Eastern); the one owl that has played since is a keeper's phone. Read the play log
+  first, owl by owl (the correction under Baseline says why), then "After the pass" and the log's
+  last entries.
 - Read first: `FABLE.md` (the owner's rules; it wins over this file).
 
 The owner's brief (Nov 11): a full cleanup pass of the game, end to end, as a player meets it. Two
@@ -264,6 +271,54 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   now the same on every device. Done when: the two browser tests on a driven clock pass (they fail
   on what is live at ten frames a second), the rule tests, `pnpm check`, the bots. Should move:
   falls per course run on phones toward the computers' rate; runs that reach the first bench.
+
+## After the pass
+
+### OP-360: the ink course's first screen forgives a first-timer
+
+- Goal: a visitor who holds the stick toward the goal and presses Jump near an edge gets across
+  `brush-1`, and a fall costs a moment, not the screen.
+- What the play log says (Nov 12, the only phone runs of the ink course since the pass went live;
+  a keeper's phone, so a player who knows the game): two runs of `brush-1`, 11 falls. The first run
+  fell four times in thirty seconds, each time back at the door, and left. The second fell seven
+  times in two minutes: three within four seconds, two within one second. Every crossing of the
+  screen took at least one fall. One outside visitor has tried the course on a phone (Nov 10): one
+  fall, no bench reached.
+- What a first-timer does there, played on the game's own flight rules (the bots' owl, the stick
+  held east, Jump pressed 60 px before an edge to 20 px after it, held for a tap up to the whole
+  flight; no steering back in the air):
+
+  | Crossing | Plain plays that land | What happens |
+  | --- | --- | --- |
+  | the first bridge's end up to the cliff `c1` | 0 of 25 without a flap; 84 of 160 with one or two | the cliff is 260 px up over a 260 px gap: Jump and both flaps, timed |
+  | `c1` down to the stone `k2` | 13 of 27 | walking off lands; a Jump at the very edge overshoots the stone by 35 to 70 px |
+  | the second bridge's end to the stone `k3` | 16 of 27 | walking the 40 px gap drops the owl under the stone; a late Jump overshoots |
+  | the third bridge's end up to the cliff `c2` | 0 of 25 without a flap | as the first cliff |
+  | `c2` down to the far bank | 6 of 27 | only a Jump held all the way (a glide) gets across |
+
+  The kid sim rates the screen 100%, because its kid picks the best take-off spot, steers back over
+  the ledge in the air and lets go of Jump over it. That is a player who already flies well.
+- And after a fall: the owl is put on its bench, a step from a ledge's end, and a thumbstick still
+  held walks it off again (the falls one and two seconds apart).
+- What changes, and why it beats what is there:
+  1. After a fall a held push waits until it is let go or pushed another way, the rule a doorway
+     already has (`carried`, OP-346). A fall then ends where the owl is put.
+  2. A brush stone paints when an owl lands on it or passes low over it. An overshoot lands on
+     the bridge it has just painted, where today it lands in the water beside a stone it cleared.
+  3. The first screen is laid again around its three beats (a bridge, two bridges in a row, a
+     glide): solid rock at each cliff's foot, so the bridge ends on ground and a missed climb is a
+     second try, not a fall; rising air beside each cliff, so a held Jump rises to it (the tip for
+     rising air then stands at the first cliff, where it is first needed); the third stone reaches
+     back to the bridge before it; dry ground under the long glide.
+  4. The table above becomes a test beside the kid sim: every crossing of a course's first screen,
+     played the plain ways.
+- Steps: (1), then (2) with the page, the bots and the rule tests; (3) with the style check and the
+  looks; (4); the browser tests on a held clock; the walk on a computer and a phone.
+- Done when: every crossing of `brush-1` lands for the plain plays (the table, before and after, in
+  the pull request), the kid sim, `pnpm check` and the browser suite pass, and it is live.
+- Should move: falls per phone run in `brush-1` (5.5 on Nov 12) and runs that reach the first seal.
+- Not in it: the course's other screens and the other two courses. They get the same table, and a
+  ticket each if it shows the same faults.
 
 ## Log
 
@@ -621,3 +676,23 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
     45 arrivals on the room server, and the second owl still stands apart from the first every time.
   - Kept for next time: a red test on code a change did not touch is a finding until shown
     otherwise; "it passed on the last run" was true of both of these for weeks.
+- 2026-11-12: PR 236 merged through the sweep (e48c5a2) and live (deploy run 310 on the merge
+  commit). `main` had moved while its CI waited (PR 237), so `pnpm check` was run on the two merged
+  before the merge, and `main`'s tree after it was that tree.
+- 2026-11-12: OP-358, the board's P1 from the QA walk: through the turnstiles the Menu map
+  travelled once, and in the next room every place inside asked for the turnstiles again. The cause
+  is not in the gate's rules. On a network that lets the page through and not the room's socket
+  (the QA walk's remote browser), the page still asks the Worker for the owl's map as it comes into
+  each room. The Worker has seen that owl walk into no room, so it answers "not through the gate",
+  and the page took its word over what it knew. In the Great Hollow the room and its way in say
+  "through the gate" again, which is why the first trip worked. The page now takes the room
+  server's word once a room has let its owl in (`takeKeptTravel`), and keeps its own map until
+  then, as a browser with no room server does. A room server that has the owl still turns a travel
+  away when the gate was left on another screen. The browser test walks through the turnstiles with
+  every room's socket closed and travels three times; on `main` it fails in the first room
+  travelled to. With the room connected the map already worked, and that test now makes three trips
+  in a row too.
+- 2026-11-12: the first phone runs since the pass went live, read from the play log, are what
+  OP-360 above is built on. Kept for next time: the kid sim answers "can a kid who flies well make
+  this hop"; it does not answer "what happens to the plays a newcomer makes first", and the second
+  is what the log shows.
