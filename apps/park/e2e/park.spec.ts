@@ -645,3 +645,169 @@ test.describe('a first flight where owls arrive (OP-347)', () => {
     expect((await state(page)).tipShown).toBeNull();
   });
 });
+
+test.describe('the park’s sounds for the visitor’s own owl (OP-350)', () => {
+  test('with the flag a jump, a flap, a glide and a landing are heard, and a doorway; the Sounds switch turns them off', async ({ page }) => {
+    await openPark(page, { room: 'hub', sfx: '1' });
+    expect((await state(page)).sounds).toEqual([]);
+    // A tap of Jump: off the ground, and down again.
+    await page.keyboard.press('Space');
+    await expect.poll(async () => (await state(page)).sounds, { timeout: 10_000 }).toEqual(['jump', 'land']);
+
+    // Jump, again in the air (a flap), and held on the way down (the wings spread): each heard once, in order.
+    // The second press is made when the owl is up, by its own flight and not by the clock: on a slow
+    // runner a press timed from outside the page comes after the hop has landed, and is a second jump.
+    const flight = await page.evaluate(
+      () =>
+        new Promise<string>((resolve) => {
+          const space = (type: 'keydown' | 'keyup') => window.dispatchEvent(new KeyboardEvent(type, { code: 'Space', key: ' ', bubbles: true }));
+          const t0 = performance.now();
+          let step = 0;
+          space('keydown');
+          const tick = () => {
+            const s = window.owlPark.state();
+            if (!s || performance.now() - t0 > 12_000) return resolve(`stopped at step ${step}`);
+            if (step === 0 && s.air.s === 1 && s.air.z > 60) {
+              space('keyup');
+              space('keydown');
+              step = 1;
+            } else if (step === 1 && s.air.s === 2) {
+              space('keyup');
+              step = 2;
+            } else if (step === 2 && s.air.s === 0) return resolve('down');
+            requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        }),
+    );
+    expect(flight).toBe('down');
+    expect((await state(page)).sounds).toEqual(['jump', 'land', 'jump', 'flap', 'glide', 'land']);
+
+    // The Sounds switch (Settings) turns every one of them off, and on again.
+    await page.evaluate(() => (window.owlPark.game.registry.get('settings') as { set(p: { sound: boolean }): void }).set({ sound: false }));
+    await page.keyboard.press('Space');
+    await expect.poll(async () => (await state(page)).flown.n, { timeout: 10_000 }).toBe(3);
+    await expect.poll(async () => (await state(page)).air.s, { timeout: 10_000 }).toBe(0);
+    expect((await state(page)).sounds).toHaveLength(6);
+    await page.evaluate(() => (window.owlPark.game.registry.get('settings') as { set(p: { sound: boolean }): void }).set({ sound: true }));
+
+    // Through a doorway: heard as the room is left, and kept by the page into the next room.
+    await walkToDoor(page, 'to-grove');
+    await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe('grove');
+    expect((await state(page)).sounds[6]).toBe('door');
+  });
+
+  test('without the flag nothing is played', async ({ page }) => {
+    await openPark(page, { room: 'hub' });
+    await page.keyboard.press('Space');
+    await expect.poll(async () => (await state(page)).flown.n, { timeout: 10_000 }).toBe(1);
+    await expect.poll(async () => (await state(page)).air.s, { timeout: 10_000 }).toBe(0);
+    expect((await state(page)).sounds).toEqual([]);
+  });
+});
+
+test.describe('the side camera (OP-351)', () => {
+  test.describe.configure({ timeout: 90_000 });
+
+  test('with the flag the view leads the way the owl travels, swings round when it turns, and holds its height through a hop', async ({ page }) => {
+    await openPark(page, { room: 'canopy-1', cam: '1' });
+    await page.waitForFunction(() => window.owlPark.state()?.sideCam != null);
+    // Standing where it came in, facing into the course: the view looks a little that way.
+    const rest = (await state(page)).sideCam!;
+    expect(rest.lead).toBeGreaterThan(10);
+    expect(rest.level).toBe(0);
+
+    // Walked, turned and hopped from inside the page, each key let go on the frame that shows what it was
+    // held for. A key timed from outside the page comes late on a slow runner, and a late one here walks
+    // the owl out again by the doorway it came in by (it stands 80 px from it: the room is left and
+    // nothing jumps), or on into the course's first pit (at 700).
+    const seen = await page.evaluate(
+      ({ restLead, turnAt, hopAt }) =>
+        new Promise<{
+          stage: string;
+          room: string | null;
+          walking: { lead: number; x: number; camX: number; viewX: number; viewW: number } | null;
+          turned: { lead: number; x: number } | null;
+          hop: { peak: number; moved: number };
+        }>((resolve) => {
+          const key = (type: 'keydown' | 'keyup', code: string) => window.dispatchEvent(new KeyboardEvent(type, { code, key: code === 'Space' ? ' ' : code, bubbles: true }));
+          const t0 = performance.now();
+          let stage: 'right' | 'left' | 'stop' | 'up' | 'down' | 'landed' = 'right';
+          let walking: { lead: number; x: number; camX: number; viewX: number; viewW: number } | null = null;
+          let turned: { lead: number; x: number } | null = null;
+          let from = 0;
+          const hop = { peak: 0, moved: 0 };
+          const end = () => {
+            for (const code of ['ArrowRight', 'ArrowLeft', 'Space']) key('keyup', code);
+            resolve({ stage, room: window.owlPark.state()?.room ?? null, walking, turned, hop });
+          };
+          key('keydown', 'ArrowRight');
+          const tick = () => {
+            const s = window.owlPark.state();
+            const cam = window.owlPark.camera();
+            if (!s?.sideCam || !cam || performance.now() - t0 > 30_000) return end();
+            if (stage === 'right' && s.sideCam.lead > restLead * 1.4 && s.pos.x >= turnAt) {
+              // Walking into the course: the lead has grown to well past what a still owl has.
+              walking = { lead: s.sideCam.lead, x: s.pos.x, camX: s.sideCam.x, viewX: cam.viewX, viewW: cam.viewW };
+              key('keyup', 'ArrowRight');
+              key('keydown', 'ArrowLeft');
+              stage = 'left';
+            } else if (stage === 'left') {
+              // Turned round: the lead has swung to the other side.
+              if (!turned && s.sideCam.lead < -restLead) turned = { lead: s.sideCam.lead, x: s.pos.x };
+              // And on to where the hop is made.
+              if (turned && s.pos.x <= hopAt) {
+                key('keyup', 'ArrowLeft');
+                stage = 'stop';
+              }
+            } else if (stage === 'stop' && !s.walking) {
+              // A jump on the spot, let go at the top so the owl comes straight down and does not glide off.
+              from = s.sideCam.level;
+              key('keydown', 'Space');
+              stage = 'up';
+            } else if (stage === 'up' || stage === 'down') {
+              hop.peak = Math.max(hop.peak, s.air.z);
+              hop.moved = Math.max(hop.moved, Math.abs(s.sideCam.level - from));
+              if (stage === 'up' && s.air.s !== 0 && s.air.vz <= 0) {
+                key('keyup', 'Space');
+                stage = 'down';
+              } else if (stage === 'down' && s.air.s === 0) {
+                stage = 'landed';
+                return end();
+              }
+            }
+            requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        }),
+      // The owl turns at 560, far enough in for the view to be clear of the room's west wall, and hops at 260,
+      // on floor with no ledge in a jump's reach over it (the first step is over 300 to 460): what a hop
+      // lands on is where the view goes, so a hop under a ledge would be a climb.
+      { restLead: rest.lead, turnAt: 560, hopAt: 260 },
+    );
+    // Every step was reached, and the owl is still in the course.
+    expect(seen.stage).toBe('landed');
+    expect(seen.room).toBe('canopy-1');
+    // Walking, the lead is well past a still owl's, and the view is where the camera's rules put it, wherever
+    // the room's west wall does not hold it. How far ahead of the owl that is on the screen is the rules' own
+    // test (sideCamera.test.ts), frame by frame: at a slow runner's few frames a second the view's ease
+    // trails a walking owl by more than it does at sixty.
+    const walking = seen.walking!;
+    expect(walking.lead).toBeGreaterThan(rest.lead * 1.4);
+    if (walking.viewX > 1) expect(Math.abs(walking.viewX + walking.viewW / 2 - walking.camX)).toBeLessThan(2);
+    // Turned round, the lead is on the other side, and it took the owl some way to bring it there (it swings in its own time).
+    expect(seen.turned!.lead).toBeLessThan(-rest.lead);
+    expect(walking.x - seen.turned!.x).toBeGreaterThan(40);
+    // The hop: the owl went up and came down, and the height the view holds did not move.
+    expect(seen.hop.peak).toBeGreaterThan(100);
+    expect(seen.hop.moved).toBeLessThan(1);
+  });
+
+  test('without the flag, and in a room seen from above with it, the camera is on the owl as ever', async ({ page }) => {
+    await openPark(page, { room: 'canopy-1' });
+    expect((await state(page)).sideCam).toBeNull();
+    await openPark(page, { room: 'hub', cam: '1' });
+    expect((await state(page)).sideCam).toBeNull();
+  });
+});
+

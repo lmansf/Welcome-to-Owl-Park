@@ -1,10 +1,11 @@
 # Owl Park cleanup and rebuild: the plan
 
 - Status: in progress. Ticket OP-342. Branch `claude/determined-wozniak-3ljxrf`.
-- Last updated: 2026-11-12. Milestones 1, 2 and 4 are merged and live (OP-343, OP-344, OP-346), with the
-  first flight (OP-347) and the Great Hollow's art (OP-348, part one). In review: the arcade (OP-345),
-  the phone pass (OP-349) and the courses' ground and the neon course's light (OP-348). Built and
-  next, each behind its own flag: the sound set (OP-350) and the side camera (OP-351).
+- Last updated: 2026-11-12. The cleanup's five milestones are merged and live (OP-343 to OP-346,
+  OP-349), with the first flight (OP-347) and the art pass's no-spend part (OP-348: the Great Hollow,
+  the courses' ground, the neon course's light). In review, each behind its own flag: the sound set
+  (OP-350, `?sfx=1`) and the side camera (OP-351, `?cam=1`). Next: new paintings for the courses, on
+  the owner's yes of Nov 12 (a cap of 10 dollars), his pick from contact sheets first.
 - Read first: `FABLE.md` (the owner's rules; it wins over this file).
 
 The owner's brief (Nov 11): a full cleanup pass of the game, end to end, as a player meets it. Two
@@ -69,7 +70,7 @@ measurement; C = read in the code, to confirm.
 
 | # | What a player meets | Where | Fix planned | State |
 | --- | --- | --- | --- | --- |
-| 1 | Nothing says what to do on arrival: no quest owl or first quest where owls arrive; every quest owl stands in a realm room (V) | `lobby`, `m3-hall` | A first thing to do where owls arrive, with the feather trail leading to it (bigger change B1; a guest may take no quest, so it is the hall's root runs) | open |
+| 1 | Nothing says what to do on arrival: no quest owl or first quest where owls arrive; every quest owl stands in a realm room (V) | `lobby`, `m3-hall` | A first thing to do where owls arrive, with the feather trail leading to it (bigger change B1; a guest may take no quest, so it is the hall's root runs) | B1 (OP-347): the feather trail leads a new owl to the Great Hollow's roots, tips say how to hop up and glide, the first glide is marked. A first quest stays locked to guests by the ticket rules, which are not this pass's |
 | 2 | A course never says how it is played: no goal, no controls (hold Jump to glide, flap, dash), no clock though the gold prize is timed (V at arrival) | all three courses | A start card, first-time prompts at the first gust, stone, sign and bench, the run's clock in the strip | M2: tips in the room at the first of each thing (the goal and the moves at the way in), and the clock with the gold time in the strip |
 | 3 | A quick tap of Jump is a tiny hop (a short press rose 52 px, a hold 145; the first step of each course is 90 to 120) (V) | everywhere | Raise the least height a jump reaches so a tap clears a first step | M1: a tap now rises 83 to 128 px, a tapped flap is nearly a whole one |
 | 4 | Falls look like floor: pits and water are drawn as the same ground as safe floor, hazards faint (V) | all three courses | Draw every pit as a pit, the same way in each course | M1: the walk ends at a bank; a bramble dip or the street lies a step below it, and in the ink course the walk is flooded with still water; a rule test refuses a pit drawn as a walk |
@@ -80,19 +81,19 @@ measurement; C = read in the code, to confirm.
 | 9 | Unclear rules: "Tap to flap" on a computer; a drag toward the target fires into the ground (V) | arcade | Name the keys; a forward drag is no shot | M3: Space to flap; the arrows named for Talon Toss; a pull forward is no shot |
 | 10 | The prompt for anything is a pill in the far bottom corner; nothing shows at the thing (V) | everywhere | A prompt over the thing in reach as well | M2: a prompt on the floor at the owl's own feet, with the key on a computer |
 | 11 | A statue 500 px tall on the near rim hides the player's owl and wears a doorway's sign (V) | `m3-hall` | Tall art fades while the player's owl is behind it; the sign moves onto its doorway | M4: tall standing art goes see-through while the visitor's own owl is behind it; a doorway at the hall's end has its sign beside it, by the sign's own edge |
-| 12 | The pad's label is cut off on a phone: "Look in t..." (V) | phone | A label that fits | open, M5 |
+| 12 | The pad's label is cut off on a phone: "Look in t..." (V) | phone | A label that fits | M5: the label takes the width its words need |
 | 13 | One place, two names: quest steps say "the great tree" and "the glass street", the signs say other names (V) | quests, signs, Menu | One name per place | M4: the quest screens show each place by the name the walked park's signs and Menu give it; the Menu's map says what Neon Roost is (the arcade). Left: one step that reads "at the park" for the arcade's leaf pile (its words are the play log's) |
 | 14 | Human objects where owl ones belong: a trapdoor with a ladder, a plank hut door, park-bench checkpoints, a door booth, a vending machine (V) | courses, `m3-hall` | Swap to the kit's knot-holes and perches where it has them; list the rest for the artists | left for the artists, with the list (see the log, M4): each is its realm kit's own slot, and the kit has no owl piece to stand in for any of them in all three courses alike |
 | 15 | Hazards drawn by code read as debug boxes; building faces drawn solid are walked through (V, C) | courses | Each hazard drawn as the thing it is; faces behind the owl | M1: thorns, mist, falls and wires redrawn with no box of colour. The faces: left alone, and why: see the log, M4 |
 | 16 | A jump and one flap reaches the wires; a full jump on the waterfall ledge reaches the falls (worked out) | `circuit-2`, `circuit-3`, `brush-2` | Check with the bots, then lift the hazards | left for now: the high wires are what stops a glide over the whole act, and the kid bots pass. Look again at the log's fall spots once there are runs to read |
 | 17 | Offline builds: thorns over safe floor do nothing, so a preview plays easier than the live park (C, confirmed) | previews | One fall rule for both | M1: a preview judges a fall and sends it back as the room server does |
-| 18 | The camera eases by the frame, not by time, so it trails further on a slow device; the backdrop shows under the walkway; goals crowd the screen's corners (C, V) | courses | Bigger change B2 | open |
+| 18 | The camera eases by the frame, not by time, so it trails further on a slow device; the backdrop shows under the walkway; goals crowd the screen's corners (C, V) | courses | Bigger change B2 | B2 (OP-351), behind `?cam=1` until the owner has played with it: the view eases by time, leads the owl's travel and holds through a jump. The backdrop's layers are as they were |
 | 19 | A direction held through a doorway keeps walking the owl in the next room (V) | doorways | Wait for a fresh push after a doorway taken with Up | M4: a direction held across a change of view (side to above, above to side) is not a walk until it is let go or points elsewhere |
 | 20 | The feather trail is faint; edge chips are arrows with no words; HUD words stay lit over the dark between rooms (V) | everywhere | Contrast, a word on each chip, dim with the room | M4: the trail's feathers are pale and edged dark; a course's chips say Next part, Back, Finish or where they lead; a course's strip and the actions fade with the room |
 | 21 | Words: a one-player game "to play with whoever is in the park"; three ways to word an ending; developer wording a player can meet; fallback emoji symbols (V, C) | arcade, Menu | One wording pass | M3 for the arcade's lines. Left: the puzzle's emoji faces (a fallback for art that ships), and lines in the ticket and friends screens |
-| 22 | Almost no sound: only the Menu's knock was found (C, partial) | everywhere | Bigger change B3 | open |
-| 23 | The HUD's screens do not share a style: seven corner sizes, five button heights, three golds (C) | HUD, Menu | Bigger change B4 | open |
-| 24 | Home screen on a phone held upright sits in half the width; the free way in is the smallest button (V) | home | Full width; a 44 px target | open, M5 |
+| 22 | Almost no sound: only the Menu's knock was found (C, partial) | everywhere | Bigger change B3 | B3 (OP-350), behind `?sfx=1` until the owner has listened: thirteen cues for the visitor's own owl |
+| 23 | The HUD's screens do not share a style: seven corner sizes, five button heights, three golds (C) | HUD, Menu | Bigger change B4 | left: one style for the HUD's screens (B4) was not started; the screens are consistent enough to play, and the rooms came first |
+| 24 | Home screen on a phone held upright sits in half the width; the free way in is the smallest button (V) | home | Full width; a 44 px target | M5: the free way in is 44 px tall. The upright home screen's width is as it was |
 
 Left alone, and why:
 
@@ -135,7 +136,7 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   - The clock (`objectiveStrip.ts`): the run's time, and the gold time while it can still be beaten.
   - The prompt (`reachPrompt.ts`): on the floor at the owl's feet, under a doorway's sign where one
     lies there. Not for a doorway seen from the side (its arrow says up) or for Decorate.
-- **M3. The arcade (OP-345, in review).** Items 7, 8, 9, 21. Done when: a result card cannot be skipped by
+- **M3. The arcade (OP-345, merged as PR 227 on Nov 12).** Items 7, 8, 9, 21. Done when: a result card cannot be skipped by
   accident, a run can be paused, each game names its keys. Left for later, with the reason on the
   ticket: Moon Flap's difficulty (wants the day's scores, not one script's try), the score wall off
   screen from mid floor, the feather counter over the first cabinet's sign (PR 221 is open on those
@@ -155,7 +156,7 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
     beside it by the sign's near edge.
   - Names (`npcs.ts` `placeWords`, `placeShown`): shown words name a place as the walked park does.
   - Chips (`hints.ts` `sideChipWords`), the trail's colour, and the room's own HUD parts fading with it.
-- **M5. The phone pass (OP-349, in review).** Items 12, 24 and what the phone looks found. Eight rooms
+- **M5. The phone pass (OP-349, merged as PR 227 on Nov 12).** Items 12, 24 and what the phone looks found. Eight rooms
   looked at on a phone-sized touch screen, upright (390x844) and sideways (844x390). Done when: the
   pad's label is read whole, the thumbstick does not hide the owl, and the free way in is a full-size
   button. Should move: phone visits' length. What it changed, in short:
@@ -182,12 +183,36 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   trail goes on to a doorway. Done when: a new owl's first minute has a jump, a flap and a glide in it
   (browser test), and the play log shows fewer visits ending in `m3-hall` in their first minute.
   A first quest for ticket holders can follow once the log shows ticket holders.
-- **B2. The camera in side-view rooms.** Goal: the camera shows where the owl is going. Why: it eases
-  by the frame, so it lags on slow devices; it has no look-ahead; it slides after a fall. Steps: ease
-  by time; look ahead of the owl's flight; frame the goal when it is high; cut under the fall's fade.
-  Behind a flag first.
-- **B3. A small sound set.** Goal: every move a player makes is heard, from one module, one switch.
-  Behind a flag first; the owner listens before it is on.
+- **B2. The camera in side-view rooms (OP-351, in review, behind the `sideCam` flag: `?cam=1`).** Goal: the
+  camera shows where the owl is going. Why it beats what is there: a course is played by jumping at
+  what comes next, and with the owl dead centre the next ledge or pit is half a screen away at best;
+  the whole view rose and fell with every hop; and it eased by a share each frame, so at half the
+  frames (a slow phone) it trailed the owl. What it is (`apps/park/src/game/sideCamera.ts`, rules only,
+  tested): the view leads the way the owl travels, up to a sixth of the screen, more the faster, and
+  swings round in about half a second when it turns; it holds the height the owl last stood at
+  through a whole jump, climbs with a flap on top or rising air, and follows a fall down at once; and
+  it eases by time. Rooms seen from above keep their camera. A fall already cuts to the owl
+  (milestone 1). Not done: framing a goal that is high up. Done when: the rule tests and a browser
+  test pass, the flag check passes, and the owner has played with it. Should move, once on: course
+  runs that reach the first bench; falls per run.
+  Next for it (measured on Nov 12 while its browser test was mended, see the log): the view's own
+  ease trails a walking owl by 30 to 50 px, which on a phone held upright is half the lead and more;
+  the height is eased twice, so the view is behind a long fall; and in rising air the owl is a
+  jump's rise above the middle before the view climbs. Each is a rule to change in
+  `sideCamera.ts`, in a flag-hidden PR of its own after this one.
+- **B3. A small sound set (OP-350, in review, behind the `sounds` flag: `?sfx=1`).** Goal: every move a
+  player makes is heard, from one module, one switch. Why it beats what is there: the park is silent
+  but for a knock as the Menu opens, so nothing a player presses is answered by anything but what they
+  can see, and there is nothing to time a flap by. What it is: a table of thirteen cues
+  (`apps/park/src/game/sfxCues.ts`), each a few short tones or breaths of noise made on the spot, and
+  one player (`sfx.ts`). The moves' cues are read off the owl's own flight as it changes (`airCues`:
+  left the ground rising, a flap spent, wings spread, caught by rising air, landed as hard as it fell),
+  so the keys, the buttons and a tap all sound the same and a press that did nothing is silent. A
+  course's moments (a part, a feather, a bench, a fall, a shortcut, the finish), a dash and a doorway
+  add theirs. Only the visitor's own owl is heard. The Settings switch "Sounds" turns all of it off.
+  Done when: the rule tests and a browser test pass, the flag check passes, and the owner has listened
+  (a sound board went to him in the session). Switching it on for everyone is a separate PR on his word.
+  Should move, once on: course runs that reach the first bench; visit length.
 - **B4. One HUD style.** Goal: one set of sizes, corners and colours for the Menu, the cards, the
   shop and the arcade.
 - **B5. Movement that forgives.** Goal: the walk runs inside the flight's fixed step so it does not
@@ -316,3 +341,32 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
     walkway's contrast, and the band is not loosened. Also left for paintings: the tone of the earth
     path's middle pieces against its ends, the ink course's green mounds on its paper, the ink
     pond's flat water, and a row and a wall of the neon realm's own.
+- 2026-11-11: B3 built (OP-350), hidden behind `?sfx=1`. Choices made on the way:
+  - No sound files: every cue is made in code, as the Menu's knock and the loader's hoot already are.
+    They are stand-ins. A sound designer replaces one by giving its name a recording.
+  - The gains were set by measurement, not by ear (this session has no ears): each cue was rendered
+    in a browser and its loudest 50 ms compared with the Menu's knock. What sounds at every jump sits
+    level with the knock, a glide 6 dB under it, a course's moments 1 to 3 dB over it. The owner's ear
+    decides: the sound board lets him mark each one keep, change or drop.
+  - Nothing rests on a tone under 200 Hz, which a phone does not play: a landing has a knock of noise.
+  - Each cue has its own shortest gap, so a held key or five feathers at once is one sound.
+  - Not done: other owls' sounds (80 owls jumping would be a din; a quiet, near-only version can
+    follow), music, a volume slider, the arcade's games (PR 221 is open on its cabinets).
+- 2026-11-11: B2 built (OP-351), hidden behind `?cam=1`. Choices made on the way:
+  - The band a jump may rise in before the view climbs is a whole jump and a little (161 px): at 120
+    a plain jump still nudged the view. A flap on top of a jump takes the owl out of it, which is
+    when what is above matters.
+  - On a phone held upright a course is 442 room px across, so a sixth of it is a lead of 70 px:
+    small, and right for that width.
+  - The lead follows travel, not facing: a glide carried backwards by a wind leads backwards.
+  - It goes up in one flag-hidden PR with the sound set, each behind its own flag.
+- 2026-11-12: PR 228's browser suite was red, then mended. Both new browser tests timed their keys
+  from outside the page, and a slow runner made them test something else:
+  - The sound test's second Space (the flap) came after the hop had landed: a second jump, no flap.
+    The page now makes that press itself, on the frame the owl is up.
+  - The camera test walked the owl back to within reach of the doorway it came in by, and a key let
+    go late walked it out of the room. It now turns and hops well clear of the door, the first pit
+    and the first step (a hop under a ledge lands on it, and the view rightly climbs).
+  - Measuring the test's margins showed what the camera does on a phone held upright: of a 70 px
+    lead, 30 to 50 px are eaten by the view's own ease trailing the walk (more at fewer frames a
+    second). The test now checks what does not change with the frame rate; the rule is next to fix.
