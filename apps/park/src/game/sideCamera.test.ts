@@ -3,8 +3,12 @@ import { FLAP_RISE, GRAVITY, JUMP_RISE, MAX_FALL } from '@owl-park/shared';
 import { BAND_DOWN, BAND_UP, EASE_MS, LEAD_AT_REST, LEAD_FULL_SPEED, LEAD_MS, LEAD_SHARE, LEVEL_MS, LIFT_BAND, SPEED_MS, STEP_MOST_MS, eased, leadFor, levelFor, sideCamAt, sideCamStep, speedAlong, type CamOwl, type SideCam } from './sideCamera';
 
 const VIEW = 1440;
-/** A phone held upright: a course is this many room px across on it. */
-const PHONE = 442;
+/**
+ * A narrow view: a small window on a computer, and the browser tests' phone project; a tablet held
+ * upright is a little wider (625). A phone itself plays these rooms on its side, where the view is
+ * wide (1948): held upright it is asked to turn (turnPhone.ts).
+ */
+const NARROW = 442;
 const MOST = LEAD_SHARE * VIEW;
 const GROUND = 770;
 const owl = (over: Partial<CamOwl> = {}): CamOwl => ({ x: 1000, y: GROUND, z: 0, grounded: true, vx: 0, vz: 0, lifted: false, facing: 1, ...over });
@@ -125,17 +129,17 @@ describe('the camera, stepped', () => {
     expect(cam.x - walking(4000).x).toBeLessThanOrEqual(MOST + 1e-6);
   });
 
-  it('leads it by the same at ten frames a second as at a hundred and forty-four, and on a phone held upright', () => {
+  it('leads it by the same at ten frames a second as at a hundred and forty-four, and in a narrow view', () => {
     const speed = LEAD_FULL_SPEED;
     const walking = (t: number) => owl({ x: 1000 + (speed * t) / 1000, vx: speed });
-    for (const view of [VIEW, PHONE]) {
+    for (const view of [VIEW, NARROW]) {
       for (const fps of [10, 30, 60, 144]) {
         const cam = run(sideCamAt(owl(), view), walking, 4000, fps, view);
-        // An ease alone trails a walk by its speed for the ease's own time, 39 px: over half a phone's 71 px of lead.
+        // An ease alone trails a walk by its speed for the ease's own time, 39 px: over half a narrow view's 71 px of lead.
         expect(Math.abs(cam.x - walking(4000).x - LEAD_SHARE * view), `${view} px wide at ${fps} frames a second`).toBeLessThan(1.5);
       }
     }
-    expect((speed * EASE_MS) / 1000).toBeGreaterThan((LEAD_SHARE * PHONE) / 2);
+    expect((speed * EASE_MS) / 1000).toBeGreaterThan((LEAD_SHARE * NARROW) / 2);
   });
 
   it('eases a start and a stop: the view neither jumps off with the owl nor stops dead with it', () => {

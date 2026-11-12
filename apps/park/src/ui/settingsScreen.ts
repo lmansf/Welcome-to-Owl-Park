@@ -9,6 +9,7 @@ export interface SettingsScreen {
 }
 
 const CSS = `
+#hud .modal.settings .x{min-height:44px}
 #hud .settings h3{margin:4px 0 0;font-size:12px;letter-spacing:.06em;text-transform:uppercase;opacity:.7}
 #hud .settings .opt{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:14px;background:rgba(246,241,227,.06);border:1px solid rgba(246,241,227,.12)}
 #hud .settings .opt > span{flex:1;display:flex;flex-direction:column;gap:2px;font-size:15px;font-weight:700}

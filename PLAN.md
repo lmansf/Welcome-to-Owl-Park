@@ -1,12 +1,21 @@
 # Owl Park cleanup and rebuild: the plan
 
-- Status: in progress. Ticket OP-342. Branch `claude/determined-wozniak-3ljxrf`.
-- Last updated: 2026-11-12. The cleanup's five milestones are merged and live (OP-343 to OP-346,
-  OP-349), with the first flight (OP-347) and the art pass's no-spend part (OP-348: the Great Hollow,
-  the courses' ground, the neon course's light). Merged and live behind flags, for the owner to try:
-  the sound set (OP-350, `?sfx=1`) and the side camera (OP-351, `?cam=1`). In review: the side camera
-  keeps up (OP-352) and the flight is the same at any frame rate (OP-353). Waiting on the owner: his
-  pick of the new paintings for the courses (OP-348, 2.16 of 10 dollars spent on candidates).
+- Status: the pass is done; what is left waits on the owner. Ticket OP-342. Branch
+  `claude/determined-wozniak-3ljxrf`.
+- Last updated: 2026-11-12. Merged and live for every visitor: the cleanup's five milestones (OP-343
+  to OP-346, OP-349), the first flight (OP-347), the art pass's no-spend part (OP-348: the Great
+  Hollow, the courses' ground, the neon course's light) and the flight at any frame rate (OP-353).
+  Merged and live behind flags, for the owner to try: the sound set (OP-350, `?sfx=1`) and the side
+  camera (OP-351 and OP-352, `?cam=1`), and from before the cleanup the town view (`?town=1`) and
+  the thermal (`?thermal=1`). Last in: three small controls on a phone (OP-354). Looked at and
+  left, with why in the log: one HUD style (B4).
+- Waiting on the owner: his pick of the new paintings for the courses (OP-348, 2.16 of 10 dollars
+  spent on candidates, the fitted ones kept off the repository until he has picked); his marks on
+  the sounds; his feel for the camera; the word to switch any flag on; OP-335 and OP-341; the "at
+  the park" quest step.
+- To pick up after a break: the play log has had no real visit since the cleanup went live (last
+  read Nov 12). Read it first (the baseline below), then the punch list's items 14 and 16 and the
+  log's last entries.
 - Read first: `FABLE.md` (the owner's rules; it wins over this file).
 
 The owner's brief (Nov 11): a full cleanup pass of the game, end to end, as a player meets it. Two
@@ -93,7 +102,7 @@ measurement; C = read in the code, to confirm.
 | 20 | The feather trail is faint; edge chips are arrows with no words; HUD words stay lit over the dark between rooms (V) | everywhere | Contrast, a word on each chip, dim with the room | M4: the trail's feathers are pale and edged dark; a course's chips say Next part, Back, Finish or where they lead; a course's strip and the actions fade with the room |
 | 21 | Words: a one-player game "to play with whoever is in the park"; three ways to word an ending; developer wording a player can meet; fallback emoji symbols (V, C) | arcade, Menu | One wording pass | M3 for the arcade's lines. Left: the puzzle's emoji faces (a fallback for art that ships), and lines in the ticket and friends screens |
 | 22 | Almost no sound: only the Menu's knock was found (C, partial) | everywhere | Bigger change B3 | B3 (OP-350), behind `?sfx=1` until the owner has listened: thirteen cues for the visitor's own owl |
-| 23 | The HUD's screens do not share a style: seven corner sizes, five button heights, three golds (C) | HUD, Menu | Bigger change B4 | left: one style for the HUD's screens (B4) was not started; the screens are consistent enough to play, and the rooms came first |
+| 23 | The HUD's screens do not share a style: seven corner sizes, five button heights, three golds (C) | HUD, Menu | Bigger change B4 | left: one style for the HUD's screens (B4) was counted and looked at again on Nov 12 and left, with why, in the log. The three controls under 44 px on a phone are 44 |
 | 24 | Home screen on a phone held upright sits in half the width; the free way in is the smallest button (V) | home | Full width; a 44 px target | M5: the free way in is 44 px tall. The upright home screen's width is as it was |
 
 Left alone, and why:
@@ -366,7 +375,7 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   - The band a jump may rise in before the view climbs is a whole jump and a little (161 px): at 120
     a plain jump still nudged the view. A flap on top of a jump takes the owl out of it, which is
     when what is above matters.
-  - On a phone held upright a course is 442 room px across, so a sixth of it is a lead of 70 px:
+  - In a view 442 px across (a narrow window; see the correction below) a sixth is a lead of 70 px:
     small, and right for that width.
   - The lead follows travel, not facing: a glide carried backwards by a wind leads backwards.
   - It goes up in one flag-hidden PR with the sound set, each behind its own flag.
@@ -377,13 +386,13 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   - The camera test walked the owl back to within reach of the doorway it came in by, and a key let
     go late walked it out of the room. It now turns and hops well clear of the door, the first pit
     and the first step (a hop under a ledge lands on it, and the view rightly climbs).
-  - Measuring the test's margins showed what the camera does on a phone held upright: of a 70 px
+  - Measuring the test's margins showed what the camera does in a narrow view (442 px): of a 70 px
     lead, 30 to 50 px are eaten by the view's own ease trailing the walk (more at fewer frames a
     second). The test now checks what does not change with the frame rate; the rule is next to fix.
 - 2026-11-12: the side camera keeps up (OP-352), a PR of its own after PR 228. What was measured in
   the park with `?cam=1` as PR 228 has it, and after:
   - A walk: the view was ahead of the owl by 181 to 190 px of a 219 px lead at 1280 wide, and by 37 to
-    40 of 69 on a phone held upright (14 to 22 with the processor slowed six times). After: 223 of
+    40 of 69 in a view 442 px wide (14 to 22 with the processor slowed six times). After: 223 of
     225, and 68 of 69, slowed or not.
   - The drop off the fern floor's high bough (380 px): the owl was 103 to 132 px under the height
     the view held by the foot of it as the test runner draws it, 253 by the rules at sixty frames
@@ -421,3 +430,24 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
     is not read as through it. A longer frame is a stall: only where the owl is counts.
   - Not done: a ledge's end is still its end (no reaching past it to land), and pits are looked for
     where the owl stands, which no frame steps over.
+- 2026-11-12, a correction to the camera's notes (OP-351, OP-352). They called the 442 px view "a
+  phone held upright" and "the phone most players hold". A phone held upright does not play a room
+  seen from the side: it is asked to turn (`turnPhone.ts`, and milestone 5's own note above). On its
+  side its view is 1948 px wide (measured at 844 by 390), where the ease trailed a walk by the same
+  39 px of a 302 px lead: a small gain. The 442 px numbers are a narrow window on a computer and the
+  browser tests' phone project. A tablet held upright is not asked to turn and is between the two:
+  625 px wide at 820 by 1180, a lead of 101 px, of which an ease alone left 62. What a phone player
+  gets from OP-352 is the drop and the gust; a tablet player held upright, the walk's lead as well.
+  The notes here, the code's comments, PR 229's description and the board now say so.
+- 2026-11-12: one HUD style (B4), looked at again and left. Counted: 23 corner values (13 of them
+  plain sizes from 3 to 28 px), two golds besides the Menu's amber (#ffd36a 71 times, #c9a227 21), and
+  control heights from 28 to 64 px. Looked at side by side on a computer and a phone: the play
+  screen's chips are one family (navy, gold line, pill), the Menu is its own sheet of wood by
+  design (OP-108, with its own tokens and tests), and nothing reads as two styles colliding. Moving
+  44 files onto one token set would change no screen a player could tell apart, and would need a
+  look at every screen at three sizes to be sure of that. Not worth its risk; left, with the count
+  here for whoever restyles the HUD with the artists.
+  - What the look did find: on a phone every play screen's controls are 44 px or more either way.
+    Under it were three: the Say wheel's two buttons, the Settings screen's Close and the home
+    screen's three links, all 40 px tall. They are 44 now. (The Settings switches are 34 px tall
+    inside rows that are labels: the whole row is the target.)
