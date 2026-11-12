@@ -5,6 +5,7 @@ import {
   courseOfRoom,
   courseParts,
   distance,
+  doorWaitsOn,
   fellInPit,
   inThorns,
   openerAt,
@@ -44,14 +45,19 @@ export interface CourseHost {
   me(): { pos: Vec2; grounded: boolean; ground: number; z: number };
   /** The spawn the owl came in at. */
   spawn(): string | undefined;
-  /** Back to where a fall takes it: placed there, standing (up on a bench's ledge `top` high, else on the floor). */
-  place(at: Vec2, top?: number): void;
+  /**
+   * It fell: back to where the fall takes it, placed there standing (up on a ledge `top` high, else on
+   * the floor), and shown to the player (the room blinks, the camera is on the owl, a line says where it is).
+   */
+  fell(at: Vec2, top?: number): void;
   /** The feather balance changed. */
   feathers(total: number): void;
   /** Something was granted: the collection should be read again. */
   awarded(): void;
   /** The HUD's root, for the objective strip. */
   hudRoot(): HTMLElement | null;
+  /** Whether calm motion is on (a setting): nothing the course draws flickers then. */
+  calm?(): boolean;
 }
 
 /** How long before a piece the room said was out of reach is asked again (the room has the owl a moment behind). */
@@ -59,7 +65,7 @@ const FAR_RETRY_MS = 300;
 /** How long before a refusal is asked again, or said again. */
 const REFUSED_RETRY_MS = 4000;
 
-const C = { sky: 0x1b2640, floor: 0x3f5b46, edge: 0x6f8f6a, pit: 0x080b14, door: 0xc9a46a, bench: 0x8a5a33, bell: 0xffd36a, bellDone: 0x6d6a5e, feather: 0xf6f1e3, shrine: 0xb8d8ff, gate: 0xd9673e, opener: 0xffd36a, crate: 0x7a5534, crateTop: 0xa8794a, thorn: 0x2c3b1f, thornShade: 0x101a10, mist: 0xd9dde3, mistLight: 0xf3f4f6, falls: 0x9fb4c8, fallsLight: 0xe6eef5, wire: 0x1a1d2b, spark: 0x7ff6ff, sparkHot: 0xff5fd2, breaker: 0x3a3f55, breakerFace: 0xd9673e, breakerOn: 0x5ee08a };
+const C = { sky: 0x1b2640, floor: 0x3f5b46, edge: 0x6f8f6a, pit: 0x080b14, door: 0xc9a46a, bench: 0x8a5a33, bell: 0xffd36a, bellDone: 0x6d6a5e, feather: 0xf6f1e3, shrine: 0xb8d8ff, gate: 0xd9673e, opener: 0xffd36a, crate: 0x7a5534, crateTop: 0xa8794a, thorn: 0x5a3626, thornLight: 0x8a6442, thornTip: 0xf0e2b8, thornEdge: 0x1c100b, mist: 0xd9dde3, mistLight: 0xf3f4f6, falls: 0x9fb4c8, fallsLight: 0xe6eef5, wire: 0x1a1d2b, spark: 0x7ff6ff, sparkHot: 0xff5fd2, breaker: 0x3a3f55, breakerFace: 0xd9673e, breakerOn: 0x5ee08a };
 
 /** A room drawn in plain shapes (`drawn`, the test course): the sky, the floor, the pits and the doorways. */
 export function drawPlaceholderRoom(scene: Phaser.Scene, room: RoomDef): Phaser.GameObjects.Graphics {
@@ -98,8 +104,8 @@ export class Course {
   private readonly strip: ObjectiveStrip | null;
   private readonly marks = new Map<string, Phaser.GameObjects.GameObject>();
   private readonly gates = new Map<string, Phaser.GameObjects.GameObject>();
-  /** The thorns the course draws in the air (a room seen from the side). */
-  private thornArt: Phaser.GameObjects.Graphics | null = null;
+  /** The hazards the course draws in the air (a room seen from the side), and the live wires' sparks over them. */
+  private thornArt: Phaser.GameObjects.Graphics[] = [];
   private readonly parts: ReturnType<typeof courseParts>;
   private closed = false;
   /** Falls and finishes this page has had answered, for the tests. */
@@ -129,6 +135,17 @@ export class Course {
     if (first && (this.host.spawn() === this.def.gate.spawn || !this.view?.run)) this.take(await link.start());
   }
 
+  /**
+   * Why the doorway into `toRoom` does not take the owl yet, or null when it does (OP-343). The way
+   * into the room where the course only ends (the canopy's hut: the finish, and no way back) waits for
+   * a run's every part, and says how many are done: an owl a bell short stays where it can go and ring it.
+   * An owl with no run goes through as ever: it has nothing to lose there.
+   */
+  holds(toRoom: string): string | null {
+    const waits = doorWaitsOn(this.def, toRoom, (id) => ROOMS[id], this.view?.run?.parts ?? null);
+    return waits ? COURSE_WORDS.doorWaits[this.def.objective](waits.done, waits.of) : null;
+  }
+
   /** The floor the owl cannot cross for now: the gates of the shortcuts it has not opened. */
   shut(): Polygon[] {
     return shutShortcuts(this.room, new Set(this.view?.shortcuts ?? []));
@@ -146,7 +163,10 @@ export class Course {
     // one, nor is the step off a ledge's end: the owl is still at the ledge's height then, and drops.
     if (fellInPit(this.room, me.pos, me.grounded, me.z) || inThorns(this.room, me.pos.x, me.z)) {
       this.ask('fall', now, () => link.fall(), (res) => {
-        if (res.at) this.host.place(res.at, res.top ?? 0);
+        if (res.at) {
+          this.host.fell(res.at, res.top ?? 0);
+          this.host.hud.toast(COURSE_WORDS.fell, 1500);
+        }
         this.falls += 1;
       });
       return;
@@ -186,7 +206,7 @@ export class Course {
   destroy(): void {
     this.closed = true;
     this.strip?.destroy();
-    this.thornArt?.destroy();
+    for (const g of this.thornArt) g.destroy();
     this.host.link()?.close();
   }
 
@@ -272,11 +292,16 @@ export class Course {
     for (const p of c.parts ?? []) mark('part', p, kitImage(art?.part, p) ?? plainPart(p));
     for (const f of c.feathers ?? []) mark('feather', f, kitImage(art?.feather, f) ?? add.ellipse(f.at.x, f.at.y - 18 - (f.top ?? 0), 12, 26, C.feather));
     if (c.shrine) mark('shrine', c.shrine, kitImage(art?.shrine, c.shrine) ?? add.rectangle(c.shrine.at.x, c.shrine.at.y - 50, 54, 100, C.shrine).setStrokeStyle(3, 0x0c1e36));
-    // Thorns in the air of a course seen from the side (OP-226): the game draws them, a dark stem with barbs down its length.
+    // The hazards in the air of a course seen from the side (OP-226): the game draws each as the thing it is.
     if (c.thorns?.length) {
       const g = add.graphics().setDepth(this.room.size.h + 40);
-      for (const t of c.thorns) drawThorns(g, t, groundOf(this.room));
-      this.thornArt = g;
+      // Live wires' bolts and sparks on their own layer, flickering (still with calm motion on): what says the wires are live.
+      const sparks = add.graphics().setDepth(this.room.size.h + 40);
+      for (const t of c.thorns) drawThorns(g, t, groundOf(this.room), sparks);
+      this.thornArt = [g, sparks];
+      if (c.thorns.some((t) => t.look === 'wires') && !this.host.calm?.()) {
+        this.host.scene.tweens.add({ targets: sparks, alpha: { from: 1, to: 0.35 }, duration: 140, yoyo: true, repeat: -1, repeatDelay: 220 });
+      }
     }
     for (const s of c.shortcuts ?? []) {
       const xs = s.gate.map((v) => v.x);
@@ -314,50 +339,80 @@ export class Course {
 }
 
 /**
- * A hazard in the air over the ground line `ground`, as it looks: thorns hanging (or grown up), a stem
- * down the middle of their box, barbs either side, a darker shade behind; a bank of cloud mist (the
- * ink-wash course, OP-235), soft billows filling its box; the water of a falls, pale streaks down it;
- * or live wires (the neon realm's course), sagging cables with sparks along them.
+ * A hazard in the air over the ground line `ground`, as it looks, in plain shapes until a realm has art
+ * for it (the realm kit's hazard slot). Each is drawn as the thing it is, never as a box of colour
+ * (OP-343: a see-through box read as a test overlay): thorns, a vine hanging (or grown up) with a thorn
+ * every few px either side and a tip where it ends; a bank of cloud mist (the ink-wash course, OP-235),
+ * billows packed edge to edge; the water of a falls, streaks down it under a soft sheet; or live wires
+ * (the neon realm's course), sagging cables with a bolt jumping along each. `sparks`, when given, takes
+ * the wires' bolts and sparks apart from the cables, so the caller can make them flicker.
  */
-export function drawThorns(g: Phaser.GameObjects.Graphics, t: CourseThorns, ground: number): void {
+export function drawThorns(g: Phaser.GameObjects.Graphics, t: CourseThorns, ground: number, sparks: Phaser.GameObjects.Graphics = g): void {
   const y0 = Math.max(0, ground - t.z1);
   const y1 = ground - t.z0;
   const w = t.x1 - t.x0;
   const mid = t.x0 + w / 2;
   if (t.look === 'mist') {
-    g.fillStyle(C.mist, 0.42).fillRect(t.x0, y0, w, y1 - y0);
-    // Billows along its edges and through it, so it reads as cloud and not a wall; its foot shows how low it reaches.
-    for (let y = y0 + 40, i = 0; y < y1; y += 70, i++) {
-      for (let x = t.x0 + ((i % 2) * 40 + 30); x < t.x1; x += 80) g.fillStyle(C.mistLight, 0.5).fillCircle(x, y, 34);
+    // Billows packed over the whole box in one flat tone (so no circle shows through another), paler ones inside: a bank of cloud with a soft, scalloped rim.
+    const r = Math.min(46, w / 3);
+    const inX = (x: number) => Math.max(t.x0 + r * 0.5, Math.min(t.x1 - r * 0.5, x));
+    for (let y = y0 + r * 0.6, i = 0; y < y1 + r * 0.2; y += r * 0.9, i++) {
+      for (let x = t.x0 + r * 0.5 + (i % 2) * r * 0.6; x < t.x1 + r * 0.2; x += r * 1.1) g.fillStyle(C.mist, 0.94).fillCircle(inX(x), Math.min(y1 - r * 0.5, y), r);
     }
-    for (let x = t.x0 + 20; x < t.x1; x += 60) g.fillStyle(C.mistLight, 0.7).fillCircle(x, y1 - 10, 28);
+    for (let y = y0 + r * 1.2, i = 0; y < y1 - r * 0.8; y += r * 1.5, i++) {
+      for (let x = t.x0 + r * 1.2 + (i % 2) * r * 0.8, k = i; x < t.x1 - r * 1.1; x += r * 1.7, k++) g.fillStyle(C.mistLight, 0.5).fillEllipse(x + ((k * 37) % 20) - 10, y, r * (1.3 + (k % 3) * 0.3), r * 0.7);
+    }
     return;
   }
   if (t.look === 'wires') {
-    // Live wires (the neon realm's course): dark cables sagging across the box, sparks of cyan and pink along them.
-    g.fillStyle(C.wire, 0.25).fillRect(t.x0, y0, w, y1 - y0);
+    // Live wires (the neon realm's course): dark cables sagging across, and along each a bolt in bright zigzags with a spark at every turn.
+    const sag = (x: number, i: number) => Math.sin((x - t.x0) / 70 + i) * 14;
     for (let y = y0 + 30, i = 0; y < y1; y += 60, i++) {
-      g.lineStyle(4, C.wire, 0.9).beginPath().moveTo(t.x0, y);
-      for (let x = t.x0; x <= t.x1; x += 40) g.lineTo(x, y + Math.sin((x - t.x0) / 70 + i) * 14);
+      g.lineStyle(5, C.wire, 0.95).beginPath().moveTo(t.x0, y + sag(t.x0, i));
+      for (let x = t.x0; x <= t.x1; x += 40) g.lineTo(x, y + sag(x, i));
       g.strokePath();
-      for (let x = t.x0 + ((i * 37) % 90) + 20; x < t.x1; x += 90) g.fillStyle(i % 2 ? C.sparkHot : C.spark, 0.85).fillCircle(x, y + Math.sin((x - t.x0) / 70 + i) * 14, 5);
+      for (let x = t.x0 + ((i * 53) % 150) + 30; x < t.x1 - 70; x += 210) {
+        const pts = [0, 14, 28, 44, 60].map((dx, k) => ({ x: x + dx, y: y + sag(x + dx, i) + (k % 2 ? -11 : 9) }));
+        sparks.lineStyle(4, i % 2 ? C.sparkHot : C.spark, 1).strokePoints(pts);
+        sparks.lineStyle(2, 0xffffff, 0.9).strokePoints(pts);
+        for (const p of [pts[0]!, pts[pts.length - 1]!]) {
+          sparks.fillStyle(0xffffff, 0.95).fillCircle(p.x, p.y, 4);
+          sparks.lineStyle(2, i % 2 ? C.sparkHot : C.spark, 0.9).lineBetween(p.x - 9, p.y, p.x + 9, p.y).lineBetween(p.x, p.y - 9, p.x, p.y + 9);
+        }
+      }
     }
     return;
   }
   if (t.look === 'falls') {
-    g.fillStyle(C.falls, 0.35).fillRect(t.x0, y0, w, y1 - y0);
-    for (let x = t.x0 + 12; x < t.x1; x += 24) g.lineStyle(3, C.fallsLight, 0.55).lineBetween(x, y0, x, y1);
+    // Falling water: a soft sheet, paler down its middle, and streaks of different lengths down it.
+    for (const [inset, alpha] of [[0, 0.16], [w * 0.12, 0.16], [w * 0.28, 0.14]] as const) g.fillStyle(C.falls, alpha).fillRect(t.x0 + inset, y0, w - 2 * inset, y1 - y0);
+    for (let x = t.x0 + 10, i = 0; x < t.x1 - 4; x += 18, i++) {
+      for (let y = y0 + ((i * 47) % 90); y < y1; y += 150 + ((i * 31) % 60)) g.lineStyle(3, C.fallsLight, 0.6).lineBetween(x, y, x, Math.min(y1, y + 90 + ((i * 17) % 50)));
+    }
     return;
   }
-  g.fillStyle(C.thornShade, 0.55).fillRect(t.x0, y0, w, y1 - y0);
-  g.lineStyle(Math.max(4, Math.min(10, w / 5)), C.thorn, 1).lineBetween(mid, y0, mid, y1);
-  g.fillStyle(C.thorn, 1);
-  for (let y = y0 + 14, side = 1; y < y1 - 6; y += 26, side = -side) {
-    const x = mid + side * (w / 2);
-    g.fillTriangle(mid, y - 6, mid, y + 6, x, y - 2);
-  }
+  // Thorns: a vine winding down the middle of its box, dark-edged so it stands out from bark and leaves, thorns either side of it, and a tip where it ends in the air.
+  const sway = Math.min(10, w / 5);
+  const at = (y: number) => mid + Math.sin((y - y0) / 38) * sway;
+  const pts: { x: number; y: number }[] = [];
+  for (let y = y0; y <= y1; y += 12) pts.push({ x: at(y), y });
+  pts.push({ x: at(y1), y: y1 });
+  const thick = Math.max(9, Math.min(16, w / 3));
+  const reach = Math.max(14, w / 2);
+  const thorn = (y: number, side: number, grow: number, color: number) => {
+    const x = at(y);
+    g.fillStyle(color, 1).fillTriangle(x, y - 7 - grow, x, y + 7 + grow, x + side * (reach + grow * 1.5), y - 3);
+  };
+  for (let y = y0 + 12, side = 1; y < y1 - 8; y += 22, side = -side) thorn(y, side, 3, C.thornEdge);
+  g.lineStyle(thick + 6, C.thornEdge, 1).strokePoints(pts);
+  for (let y = y0 + 12, side = 1; y < y1 - 8; y += 22, side = -side) thorn(y, side, 0, C.thornTip);
+  g.lineStyle(thick, C.thorn, 1).strokePoints(pts);
+  g.lineStyle(3, C.thornLight, 0.9).strokePoints(pts.map((p) => ({ x: p.x - thick / 5, y: p.y })));
   // A tip where they end in the air, so a visitor sees how low they reach.
-  if (t.z0 > 0) g.fillTriangle(mid - 6, y1 - 4, mid + 6, y1 - 4, mid, y1 + 12);
+  if (t.z0 > 0) {
+    g.fillStyle(C.thornEdge, 1).fillTriangle(at(y1) - 11, y1 - 6, at(y1) + 11, y1 - 6, at(y1), y1 + 20);
+    g.fillStyle(C.thornTip, 1).fillTriangle(at(y1) - 7, y1 - 4, at(y1) + 7, y1 - 4, at(y1), y1 + 14);
+  }
 }
 
 /** The course in a room that is one of its acts; null in any other room. */

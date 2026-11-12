@@ -40,13 +40,15 @@ const tiersFrom = (id: string, dark: readonly string[] = []) => {
 const signIds = (id: string) => (ROOMS[id]!.neonSigns ?? []).map((s) => s.id);
 
 describe("the neon realm's course", () => {
-  it('is a course with nothing wrong with it: three acts, three breakers, four benches, five lost feathers and the shrine on the tallest roof', () => {
+  it('is a course with nothing wrong with it: three acts, three breakers, five benches, five lost feathers and the shrine on the tallest roof', () => {
     expect(COURSES[CIRCUIT_COURSE.id]).toBe(CIRCUIT_COURSE);
     expect(courseProblems(CIRCUIT_COURSE, rooms)).toEqual([]);
     expect(Object.keys(CIRCUIT_ROOMS).sort()).toEqual([...ids].sort());
     expect(CIRCUIT_COURSE.objective).toBe('breakers');
     expect(courseParts(CIRCUIT_COURSE, rooms).map((p) => p.id)).toEqual(['breaker-1', 'breaker-2', 'breaker-3']);
-    expect(coursePieces(CIRCUIT_COURSE, rooms, 'bench')).toHaveLength(4);
+    expect(coursePieces(CIRCUIT_COURSE, rooms, 'bench')).toHaveLength(5);
+    // The last act's long climb has a bench up on its first roof (OP-343): a fall from the signs beyond comes back there.
+    expect(ROOMS['circuit-3']!.course!.benches).toContainEqual({ id: 'bench-5', at: { x: 840, y: CIRCUIT_GROUND }, top: 380 });
     expect(coursePieces(CIRCUIT_COURSE, rooms, 'feather')).toHaveLength(LOST_FEATHERS);
     expect(ROOMS['circuit-3']!.course!.shrine).toBeDefined();
   });

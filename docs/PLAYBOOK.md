@@ -128,7 +128,8 @@ zooms the page (OP-104: `touch-action` in `apps/park/index.html`, and the viewpo
 **Jump and flight** (OP-084, `packages/shared/src/flight.ts`, `perches.ts`): every owl in every
 room can fly. Tap Jump (the space bar on a keyboard) to jump; tap it again in the air for a second
 flap; hold it on the way down to glide, the fall held to the walk's pace over `GLIDE_SLOPE` (one
-down for three along). Let go on the way up and the rise is cut short (`JUMP_CUT_SPEED`). An owl
+down for three along). Let go on the way up and the rise is cut (`JUMP_CUT_SPEED`), but a tap is
+still a jump: it rises about two thirds of a held one, enough for a first step (OP-343). An owl
 jumps onto a perch (a root, a beam, a stump, a shelf) and stands on it; it walks off the perch's
 edge to come down. A thing up on a perch (a quest spot, a leaf pile) is reached only from that
 perch. Everyone in the room sees the same arc. Nothing about flight is logged.

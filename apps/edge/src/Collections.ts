@@ -482,9 +482,12 @@ export class Collections extends DurableObject<Env> {
     return this.course.open(cid, room, id, Date.now());
   }
 
-  /** A fall: where the owl goes back to. `pos`: where it fell, for the log's fail spots (OP-304). */
-  async courseFall(cid: string, room: string, pos?: { x: number; y: number }): Promise<FallAnswer> {
-    const res = this.course.fall(cid, room, Date.now());
+  /**
+   * A fall: where the owl goes back to. `pos`: where it fell, for the log's fail spots (OP-304) and for
+   * choosing between its bench and `entry`, the way the room saw it come in (OP-343).
+   */
+  async courseFall(cid: string, room: string, pos?: { x: number; y: number }, entry?: string): Promise<FallAnswer> {
+    const res = this.course.fall(cid, room, Date.now(), { ...(entry !== undefined ? { entry } : {}), ...(pos ? { pos } : {}) });
     if (res.ok) {
       const run = this.runStart(cid, room);
       const course = roomDef(room)?.course?.id;

@@ -1190,7 +1190,7 @@ export class RoomObject extends DurableObject<Env> {
           const slack = LIMITS.reachSlackPx;
           const thorny = !!pos && [-slack, 0, slack].some((dx) => [-slack, 0, slack].some((dz) => inThorns(def, pos.x + dx, room.heightOf(att.id) + dz)));
           if (!pit && !thorny) return no('far');
-          const res = await stub.courseFall(cid, att.room, { x: pos!.x, y: pos!.y });
+          const res = await stub.courseFall(cid, att.room, { x: pos!.x, y: pos!.y }, room.cameInBy(att.id));
           if (!res.ok) return no(res.reason);
           room.place(att.id, res.at, res.top);
           return this.send(ws, { t: 'course', r, a, ok: true, view: res.view, at: res.at, ...(res.top ? { top: res.top } : {}) });

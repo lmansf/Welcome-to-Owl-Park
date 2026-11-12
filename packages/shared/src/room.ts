@@ -365,6 +365,21 @@ export interface KitRun {
   mids?: string[];
   /** Pieces set into the run (a transition, a corner), each with its art's left edge at x; the middles fill around them. */
   joins?: { x: number; piece: string }[];
+  /**
+   * A drop (OP-343): a stretch of the ground line no owl stands on, a course's pit. It has no top
+   * piece, and its texture begins this far below the walking line, so the path beside it visibly ends
+   * and what lies here reads as below it: water, a thicket in a dip, the street between two roofs.
+   */
+  sunk?: number;
+  /** The colour a drop's texture is drawn in (a tint multiplied in): its shadow. */
+  shade?: number;
+  /**
+   * A flooded stretch of the ground line (OP-343), a course's pit of another kind: the run stays as it is
+   * drawn, and the game paints still water over its top, from just over the walking line (KIT_FLOOD_OVER)
+   * to `depth` below it in `color` (kitView.ts), until the realm's hazard art (the realm kit's hazard slot) arrives.
+   * What stands in it stands in the water; nothing of the run shows through.
+   */
+  flood?: { depth: number; color: number };
 }
 
 export interface KitLedge extends KitRun {
@@ -447,6 +462,8 @@ export interface KitDecal {
   flip?: boolean;
   alpha?: number;
   front?: boolean;
+  /** The danger itself (a course's bramble, its live tubes): drawn in the hazard layer, in the drop, under what an owl stands on (OP-343). */
+  hazard?: boolean;
 }
 
 export interface KitBackdrop {
