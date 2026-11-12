@@ -1,12 +1,21 @@
 # Owl Park cleanup and rebuild: the plan
 
-- Status: in progress. Ticket OP-342. Branch `claude/determined-wozniak-3ljxrf`.
-- Last updated: 2026-11-12. The cleanup's five milestones are merged and live (OP-343 to OP-346,
-  OP-349), with the first flight (OP-347) and the art pass's no-spend part (OP-348: the Great Hollow,
-  the courses' ground, the neon course's light). Merged and live behind flags, for the owner to try:
-  the sound set (OP-350, `?sfx=1`) and the side camera (OP-351, `?cam=1`). In review: the side camera
-  keeps up (OP-352) and the flight is the same at any frame rate (OP-353). Waiting on the owner: his
-  pick of the new paintings for the courses (OP-348, 2.16 of 10 dollars spent on candidates).
+- Status: the pass is done; what is left waits on the owner. Ticket OP-342. Branch
+  `claude/determined-wozniak-3ljxrf`.
+- Last updated: 2026-11-12. Merged and live for every visitor: the cleanup's five milestones (OP-343
+  to OP-346, OP-349), the first flight (OP-347), the art pass's no-spend part (OP-348: the Great
+  Hollow, the courses' ground, the neon course's light) and the flight at any frame rate (OP-353).
+  Merged and live behind flags, for the owner to try: the sound set (OP-350, `?sfx=1`) and the side
+  camera (OP-351 and OP-352, `?cam=1`), and from before the cleanup the town view (`?town=1`) and
+  the thermal (`?thermal=1`). Last in: three small controls on a phone (OP-354). Looked at and
+  left, with why in the log: one HUD style (B4).
+- Waiting on the owner: his pick of the new paintings for the courses (OP-348, 2.16 of 10 dollars
+  spent on candidates, the fitted ones kept off the repository until he has picked); his marks on
+  the sounds; his feel for the camera; the word to switch any flag on; OP-335 and OP-341; the "at
+  the park" quest step.
+- To pick up after a break: the play log has had no real visit since the cleanup went live (last
+  read Nov 12). Read it first (the baseline below), then the punch list's items 14 and 16 and the
+  log's last entries.
 - Read first: `FABLE.md` (the owner's rules; it wins over this file).
 
 The owner's brief (Nov 11): a full cleanup pass of the game, end to end, as a player meets it. Two
