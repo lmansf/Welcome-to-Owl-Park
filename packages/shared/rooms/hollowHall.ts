@@ -427,6 +427,14 @@ export const ROOT_PERCHES: readonly Perch[] = ROOT_RUNS.flatMap((run) =>
   }),
 );
 
+/**
+ * The Great Hollow's light (OP-348): warm, as its painted heartwood floor is lit. The roots are the
+ * arcade's art, painted for a cold cave (frost on the fallen root, pale edges on the knot), and the
+ * idols are each painted for their own realm; multiplied by the room's light they stand in the same
+ * room as the floor under them. The idols take less of it: each keeps its realm's own colours.
+ */
+export const HALL_LIGHT = { roots: 0xffd9a6, idols: 0xffecd2 } as const;
+
 const ROOT_PIECES: RoomPiece[] = ROOT_RUNS.flatMap((run) =>
   run.steps.map(
     ([kind, x]): RoomPiece => ({
@@ -435,6 +443,7 @@ const ROOT_PIECES: RoomPiece[] = ROOT_RUNS.flatMap((run) =>
       x,
       y: RUN_Y - RUN_HALF,
       ...(run.flip ? { flip: true as const } : {}),
+      tint: HALL_LIGHT.roots,
     }),
   ),
 );
@@ -442,7 +451,7 @@ const ROOT_PIECES: RoomPiece[] = ROOT_RUNS.flatMap((run) =>
 /** Each plaza's worn ring round its moonbeam, and the heart's (edges.ts: walked across, drawn on the floor). */
 export const HALL_EDGES: readonly EdgePlacement[] = HALL_MOONBEAMS.map((m) => ({
   id: `ring-${m.id.replace('moonbeam-', '')}`,
-  key: 'edge-hollow-plaza-ring',
+  key: 'edge-hall-plaza-ring',
   x: m.pos.x - 380,
   y: m.pos.y - 190,
 }));
@@ -466,6 +475,7 @@ export const HALL_BOWL: RoomBowl = {
     { ...HALL_HEART, r: sized(1100), color: 0xffe2a8 },
   ],
   gaps: HALL_WAYS.filter((id) => atFront(id) && id !== 'down' && !HALL_GROWN.includes(id)).map((id) => ({ ...wayAt(id), w: 220 })),
+  light: HALL_LIGHT.idols,
 };
 
 /** Whether a point is clear of every root's art (and a little round it), where a visitor can see it. */

@@ -102,8 +102,33 @@ export function drawFloorEdges(scene: Phaser.Scene, room: RoomDef, depth: number
   for (const poly of room.walkable) g.strokePoints(poly, true, true);
   const solid = rgba(look.solidEdge);
   g.lineStyle(look.edgePx, solid.color, solid.alpha);
-  for (const p of (room.perches ?? []).filter((x) => x.solid)) g.strokePoints(p.area, true, true);
+  for (const p of (room.perches ?? []).filter((x) => x.solid)) {
+    // A perch its own art stands on (a root of the Great Hollow) is shown by that art and the shadow
+    // at its foot: an amber box drawn round its strip of floor read as a mark left in by mistake (OP-348).
+    if (standsOwnArt(room, p.id)) footprint(g, p.area);
+    else g.strokePoints(p.area, true, true);
+  }
   return g;
+}
+
+/** The floor under a perch that has its own art: darkened a little, so what cannot be walked through is still there to see. */
+export const FOOTPRINT = { color: 0x140a04, alpha: 0.2 } as const;
+
+/** A perch's strip of floor as a soft shadow: its box with rounded ends, and a smaller one inside it, darker. */
+function footprint(g: Phaser.GameObjects.Graphics, area: Polygon): void {
+  const xs = area.map((q) => q.x);
+  const ys = area.map((q) => q.y);
+  const x = Math.min(...xs);
+  const y = Math.min(...ys);
+  const w = Math.max(...xs) - x;
+  const h = Math.max(...ys) - y;
+  g.fillStyle(FOOTPRINT.color, FOOTPRINT.alpha).fillRoundedRect(x - 6, y - 2, w + 12, h + 6, Math.min(h / 2 + 3, (w + 12) / 2));
+  g.fillStyle(FOOTPRINT.color, FOOTPRINT.alpha * 0.7).fillRoundedRect(x + 8, y + 4, Math.max(0, w - 16), Math.max(0, h - 6), Math.max(0, Math.min((h - 6) / 2, (w - 16) / 2)));
+}
+
+/** Whether a perch has a piece of the room's own standing on it (the same id): its art is what shows it. */
+export function standsOwnArt(room: Pick<RoomDef, 'pieces'>, perchId: string): boolean {
+  return (room.pieces ?? []).some((p) => p.id === perchId);
 }
 
 /**

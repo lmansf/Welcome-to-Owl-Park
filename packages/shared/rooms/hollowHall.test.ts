@@ -18,6 +18,7 @@ import {
   HALL_CY,
   HALL_GROWN,
   HALL_ID,
+  HALL_LIGHT,
   HEART_THERMAL,
   HALL_MIDDLE,
   HALL_ROOM,
@@ -458,5 +459,26 @@ describe('the Great Hollow’s root runs (OP-308)', () => {
     ];
     for (const b of boxes)
       for (const t of things) expect(t.x > b.x0 - 40 && t.x < b.x1 + 40 && t.y > b.y0 && t.y < b.y1, `${t.id} behind ${b.id}`).toBe(false);
+  });
+});
+
+describe('what stands in the Great Hollow takes its light (OP-348)', () => {
+  it('multiplies every root by the room\'s light, and its idols by a paler one', () => {
+    const roots = hall.pieces!.filter((p) => p.id.startsWith('root-') && p.id !== 'root-hatch');
+    expect(roots).toHaveLength(ROOT_RUNS.length * 3);
+    for (const r of roots) expect(r.tint, r.id).toBe(HALL_LIGHT.roots);
+    expect(HALL_BOWL.light).toBe(HALL_LIGHT.idols);
+    // A doorway keeps its realm's own colours: it is the way into another light.
+    for (const p of hall.pieces!.filter((q) => q.id.endsWith('-door'))) expect(p.tint, p.id).toBeUndefined();
+  });
+
+  it('is a warm light, and takes less from an idol than from a root', () => {
+    const rgb = (c: number) => [(c >> 16) & 255, (c >> 8) & 255, c & 255] as const;
+    for (const c of [HALL_LIGHT.roots, HALL_LIGHT.idols]) {
+      const [r, g, b] = rgb(c);
+      expect(r).toBeGreaterThanOrEqual(g);
+      expect(g).toBeGreaterThan(b);
+    }
+    expect(rgb(HALL_LIGHT.idols)[2]).toBeGreaterThan(rgb(HALL_LIGHT.roots)[2]);
   });
 });

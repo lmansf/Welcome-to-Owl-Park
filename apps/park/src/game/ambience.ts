@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { KIT_ART, ROOM_W, WAY_OUT_DOOR, idolRealms, kitFilesOf, seenFromSide, type RoomDef } from '@owl-park/shared';
 import { ANCHORS } from '../rooms';
 import { ART, blockadeKey } from './art';
+import { FOOT_SHADOW_DEPTH, footShadow } from './bowlView';
+import { tintImage } from './canvasTint';
 import { footOrigin, hitArea } from './fit';
 import { IDOL_FLARE } from './idolFlare';
 
@@ -166,7 +168,12 @@ export function addSetPieces(
     img.setInteractive(hugging(img, img.texture.key));
     img.on(Phaser.Input.Events.GAMEOBJECT_POINTER_UP, (pointer: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => onIdolTap?.(pointer, event, realm));
   };
+  // In a room with a light of its own (the Great Hollow, OP-348) each idol, painted for its realm, takes
+  // that light, and a shadow lies at its foot: it stands in the room and is not laid over it.
+  const idolShadows = room.bowl ? scene.add.graphics().setDepth(FOOT_SHADOW_DEPTH) : null;
   const stood = (realm: string, idol: Idol) => {
+    if (room.bowl?.light !== undefined) tintImage(scene, idol.image, idol.image.texture.key, room.bowl.light);
+    if (idolShadows) footShadow(idolShadows, idol.image.x, idol.image.y, idol.image.displayWidth * 0.62);
     standing.push(idol.image);
     pieces.idol ??= idol;
     if (!room.idols) return;
@@ -175,14 +182,15 @@ export function addSetPieces(
   };
   if (realms.includes('grove') && anchors['guardian']) {
     const a = anchors['guardian'];
-    const glow = scene.add.image(a.x, a.y - 300, 'fx-glow').setTint(0xffd27a).setAlpha(0.3).setScale(5, 4).setDepth(a.y - 1).setBlendMode(Phaser.BlendModes.ADD);
     const k = fitBelowTop('guardian', a.y, tallest);
+    // Its glow is the idol's size: an idol drawn smaller (a bowl room) lights that much less of the room round it (OP-348).
+    const glow = scene.add.image(a.x, a.y - 300 * k, 'fx-glow').setTint(0xffd27a).setAlpha(0.3).setScale(5 * k, 4 * k).setDepth(a.y - 1).setBlendMode(Phaser.BlendModes.ADD);
     const guardian = piece(scene, a.x, a.y, 'guardian').setDepth(a.y);
     const sx = guardian.scaleX * k;
     const sy = guardian.scaleY * k;
     guardian.setScale(sx, sy);
     scene.tweens.add({ targets: guardian, scaleY: sy * 1.015, scaleX: sx * 0.995, duration: 4200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-    scene.tweens.add({ targets: glow, alpha: 0.48, scaleX: 5.4, duration: 3600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    scene.tweens.add({ targets: glow, alpha: 0.48, scaleX: 5.4 * k, duration: 3600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     tappable(guardian, 'grove');
     stood('grove', {
       image: guardian,
@@ -208,9 +216,9 @@ export function addSetPieces(
   }
   if (realms.includes('market') && anchors['robot']) {
     const a = anchors['robot'];
-    const glow = scene.add.image(a.x, a.y - 420, 'fx-glow').setTint(0xff2aa1).setAlpha(0.22).setScale(5, 5).setDepth(a.y - 1).setBlendMode(Phaser.BlendModes.ADD);
-    const robot = piece(scene, a.x, a.y, 'robot-owl').setDepth(a.y);
     const kr = fitBelowTop('robot-owl', a.y, tallest);
+    const glow = scene.add.image(a.x, a.y - 420 * kr, 'fx-glow').setTint(0xff2aa1).setAlpha(0.22).setScale(5 * kr, 5 * kr).setDepth(a.y - 1).setBlendMode(Phaser.BlendModes.ADD);
+    const robot = piece(scene, a.x, a.y, 'robot-owl').setDepth(a.y);
     robot.setScale(robot.scaleX * kr, robot.scaleY * kr);
     tappable(robot, 'market');
     stood('market', {
@@ -238,9 +246,9 @@ export function addSetPieces(
   if (realms.includes('glass') && anchors['idol'] && scene.textures.exists(GLASS_IDOL)) {
     // The stained-glass owl on its plinth: lit from within, it brightens when a visitor pledges.
     const a = anchors['idol'];
-    const glow = scene.add.image(a.x, a.y - 230, 'fx-glow').setTint(0x9fd0ff).setAlpha(0.24).setScale(4, 3.2).setDepth(a.y - 1).setBlendMode(Phaser.BlendModes.ADD);
-    const idol = piece(scene, a.x, a.y, GLASS_IDOL).setDepth(a.y);
     const ki = fitBelowTop(GLASS_IDOL, a.y, tallest);
+    const glow = scene.add.image(a.x, a.y - 230 * ki, 'fx-glow').setTint(0x9fd0ff).setAlpha(0.24).setScale(4 * ki, 3.2 * ki).setDepth(a.y - 1).setBlendMode(Phaser.BlendModes.ADD);
+    const idol = piece(scene, a.x, a.y, GLASS_IDOL).setDepth(a.y);
     idol.setScale(idol.scaleX * ki, idol.scaleY * ki);
     tappable(idol, 'glass');
     stood('glass', {
@@ -270,6 +278,7 @@ export function addSetPieces(
     if (!scene.textures.exists(p.key)) continue;
     const img = piece(scene, p.x, p.y, p.key).setDepth(p.y).setFlipX(!!p.flip);
     if (p.scale) img.setDisplaySize(img.displayWidth * p.scale, img.displayHeight * p.scale);
+    if (p.tint !== undefined) tintImage(scene, img, p.key, p.tint);
     standing.push(img);
   }
   for (const door of room.doors) {

@@ -31,6 +31,8 @@ export interface RoomBowl {
   pools?: ReadonlyArray<{ x: number; y: number; r: number; color: number }>;
   /** Openings in the near wall where a way goes out at the front: a point on the rim and how wide. */
   gaps?: ReadonlyArray<{ x: number; y: number; w: number }>;
+  /** The colour of the room's light (OP-348): the idols that stand in it, each painted for its own realm, are multiplied by it. */
+  light?: number;
 }
 
 export interface RoomDef {
@@ -249,6 +251,8 @@ export interface RoomPiece {
   flip?: true;
   /** Drawn this much its art's size (1 when left out): a doorway in the near wall seen from almost straight above. */
   scale?: number;
+  /** A colour its art is multiplied by (OP-348): the room's own light on a piece painted in another, so it sits in the room. */
+  tint?: number;
 }
 
 export interface RoomKit {
