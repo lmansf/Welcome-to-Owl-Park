@@ -120,7 +120,8 @@ function drawPiece(scene: Phaser.Scene, d: KitDraw, depth: number, tint: number 
       .setOrigin(0)
       .setDisplaySize(c.w + (across ? 1 : 0), c.h + (down ? 1 : 0))
       .setDepth(depth);
-    if (d.tile !== 'none') img.setCrop(c.crop.x * sx, c.crop.y * sy, c.crop.w * sx, c.crop.h * sy);
+    // A texture's cell shows its part of the box; so does an end piece on a run too short for it (KitDraw.crop).
+    if (d.tile !== 'none' || (d.crop && !d.flip)) img.setCrop(c.crop.x * sx, c.crop.y * sy, c.crop.w * sx, c.crop.h * sy);
     if (d.flip) img.setFlipX(true);
     if (d.alpha !== undefined) img.setAlpha(d.alpha);
     if (tint !== undefined) img.setTint(tint);

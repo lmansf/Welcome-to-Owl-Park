@@ -190,7 +190,16 @@ def draw_cell(out, c, cam_x, k):
         sub = im.crop((round(cr['x']), round(cr['y']), round(cr['x'] + cr['w']), round(cr['y'] + cr['h'])))
         paste(out, sub, c['x'] + cr['x'] - cam_x, c['y'] + cr['y'], cr['w'], cr['h'], k, c['flip'], c['alpha'], c.get('tint'))
     else:
-        paste(out, im, c['x'] - cam_x, c['y'], c['w'], c['h'], k, c['flip'], c['alpha'], c.get('tint'))
+        # A piece drawn to its box shows all of itself, but for an end piece on a run too short for both
+        # its ends (KitDraw.crop, OP-348): that one shows only its part across, where that part lies.
+        scale = c['h'] / cr['h'] if cr['h'] else 1
+        piece_w = c['w'] / scale if scale else c['w']
+        if not c['flip'] and (cr['x'] > 0.5 or cr['w'] < piece_w - 0.5):
+            fx = im.width / piece_w
+            sub = im.crop((round(cr['x'] * fx), 0, round((cr['x'] + cr['w']) * fx), im.height))
+            paste(out, sub, c['x'] + cr['x'] * scale - cam_x, c['y'], cr['w'] * scale, c['h'], k, False, c['alpha'], c.get('tint'))
+        else:
+            paste(out, im, c['x'] - cam_x, c['y'], c['w'], c['h'], k, c['flip'], c['alpha'], c.get('tint'))
 
 
 def draw_floods(out, p, cam_x, k):

@@ -279,4 +279,21 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
     not loosened, so the courses' ground waits for part two.
   - Part two is new paintings through `tools/art`: a neon wall, an ink ground, the canopy's trunk wall.
     It needs the owner's yes to spend (asked: a cap of 10 dollars) and his pick from contact sheets.
-
+- 2026-11-12: the art pass, the courses' ground (OP-348), with the art that exists and no spend. Looked
+  at closely, what made the ground clunky was three faults in how the kit lays its pieces, not the
+  pieces:
+  - The pieces of one painted row were each laid by their own highest pixel. In a row of grass that
+    is a different height in every piece (the earth path's from 14 to 37), so neighbours cut from one
+    painting sat as much as 23 px apart: a step in every mound of all three courses. A row is now laid
+    on one line (`rowTop` in `kit.ts`), its boxes side by side as they were painted.
+  - A platform body's side was framed with shade and a creeper even where another body begins at it.
+    Since milestone 1 drew pits as drops, that put a dark band and a vine down every pit's edge, a
+    slit in the ground. This one was milestone 1's own doing. A side is framed only where it stands
+    free (`kitFrames` in `edges.ts`).
+  - A run shorter than one of its ends had both ends laid whole, one over the other and out past the
+    run: the ink course's first stone step was drawn 200 px wide and stood 120. Each end now shows
+    only its outer part (`KitDraw.crop`).
+  - Left, with the reason: a step at least an end long keeps its overlapped ends. Cut the same way,
+    one screen of `brush-falls` goes from 13.96 to 14.11 against the 14.0 the style check allows a
+    walkway's contrast, and the band is not loosened. Also left for paintings: the tone of the earth
+    path's middle pieces against its ends, the neon course's pale stone, the ink pond's flat water.

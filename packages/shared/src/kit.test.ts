@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { KIT_DEMOS, KIT_PREVIEWS } from '../rooms/kit';
 import { ROOMS } from '../rooms/index';
-import { KIT_FLOOD_OVER, KIT_MID_STRETCH, KIT_SCENE_SPAN, KIT_STAND_SINK, kitArtKeys, kitCells, kitCost, kitDrawPlan, kitPerches, kitProblems, kitRoom, kitSceneProblems, kitSceneSpans, kitTiles, midFill, walkedAt, withRow, type KitDraw } from './kit';
+import { KIT_FLOOD_OVER, KIT_MID_STRETCH, KIT_SCENE_SPAN, KIT_STAND_SINK, kitArtKeys, kitCells, kitCost, kitDrawPlan, kitPerches, kitProblems, kitRoom, kitSceneProblems, kitSceneSpans, kitTiles, midFill, rowOfPiece, rowTop, walkedAt, withRow, type KitDraw } from './kit';
 import { KIT_ART, KIT_KEY, KIT_PALETTE, drawOps, kitGroup, kitMotifs, kitPlaceholder, periodShifts, shiftOp, type KitOp } from './kitArt';
 import { KIT_CATALOG } from './kitCatalog';
 import { raster } from './raster';
@@ -400,13 +400,106 @@ describe('runs and columns of the recut kit (OP-251)', () => {
     }
   });
 
-  it('draws a row run as its left cap, its middles and its right cap, each top at the walking line', () => {
+  it('draws a row run as its left cap, its middles and its right cap, all on the row’s one line at the walking line', () => {
     const draws = plan({ paths: [{ id: 'walk', x0: 0, x1: 2 * ROOM_W, top: 0, row: ROW }] }).filter((d) => d.id === 'walk');
     const keys = draws.map((d) => d.key);
     expect(keys).toContain(`${ROW}-cap-left`);
     expect(keys).toContain(`${ROW}-cap-right`);
     expect(keys.filter((k) => k.includes('-mid-')).length).toBeGreaterThan(3);
-    for (const d of draws) expect(d.y + ((KIT_ART[d.key]!.top ?? 0) + KIT_STAND_SINK) * (d.h / KIT_ART[d.key]!.h)).toBeCloseTo(770, 0);
+    for (const d of draws) expect(d.y + rowTop(ROW)! + KIT_STAND_SINK).toBe(770);
+  });
+
+  it('lays the pieces of one painted row in boxes that line up, top and foot, whatever stands tallest in each (OP-348)', () => {
+    // The earth path: grass stands 23 px higher in one middle than in another, and the caps lie between.
+    const EARTH = 'kit-cut-earth-path';
+    const parts = ['cap-left', 'cap-right', 'mid-320', 'mid-480', 'mid-640'].map((part) => `${EARTH}-${part}`);
+    const tops = parts.map((k) => KIT_ART[k]!.top!);
+    expect(Math.max(...tops) - Math.min(...tops)).toBeGreaterThan(15);
+    expect(rowTop(EARTH)).toBe([...tops].sort((a, b) => a - b)[2]);
+    const draws = plan({ paths: [{ id: 'walk', x0: 0, x1: 2 * ROOM_W, top: 0, row: EARTH }] }).filter((d) => d.id === 'walk');
+    expect(new Set(draws.map((d) => d.key)).size).toBeGreaterThan(3);
+    expect(new Set(draws.map((d) => d.y)).size).toBe(1);
+    expect(new Set(draws.map((d) => d.y + d.h)).size).toBe(1);
+    // The walking line stays where the row's own line puts it, a step into the art.
+    expect(draws[0]!.y + rowTop(EARTH)! + KIT_STAND_SINK).toBe(770);
+  });
+
+  it('knows the row a piece was cut from, a realm slot’s stand-in included, and lays any other piece by its own top', () => {
+    expect(rowOfPiece('kit-cut-earth-path-mid-320')).toBe('kit-cut-earth-path');
+    expect(rowOfPiece('kit-cut-plank-thin-cap-right')).toBe('kit-cut-plank-thin');
+    // A realm's perch slots stand in with the earth path's pieces until their own art comes.
+    expect(KIT_ART['kit-clearing-perch-mid']?.standIn).toBe('kit-cut-earth-path-mid-320');
+    expect(rowOfPiece('kit-clearing-perch-mid')).toBe('kit-cut-earth-path');
+    expect(rowOfPiece('kit-ink-perch-end')).toBe('kit-cut-earth-path');
+    expect(rowOfPiece('kit-plank-mid')).toBeNull();
+    expect(rowOfPiece('kit-cut-plank-to-stone')).toBeNull();
+    expect(rowOfPiece('kit-tex-earth')).toBeNull();
+    expect(rowTop('kit-cut-no-such-row')).toBeNull();
+    // A single platform is no row's piece: its own top is at the walking line, as ever.
+    const r = plan({ ledges: [{ id: 'low', x0: 700, x1: 940, top: 60, cap: 'kit-high-mist-platform' }] });
+    const d = r.find((x) => x.id === 'low')!;
+    const art = KIT_ART[d.key]!;
+    expect(d.y + (art.top! + KIT_STAND_SINK) * (d.h / art.h)).toBeCloseTo(770 - 60, 0);
+  });
+
+  it('shows only the outer part of each end on a run shorter than an end, the two meeting between (OP-348)', () => {
+    const STONE = 'kit-cut-stone';
+    const [left, right] = [`${STONE}-cap-left`, `${STONE}-cap-right`];
+    const lw = KIT_ART[left]!.right! - KIT_ART[left]!.left!;
+    const rw = KIT_ART[right]!.right! - KIT_ART[right]!.left!;
+    // A step 120 across, each end 160: laid whole they lay one over the other, 40 out past the step each side.
+    const short = plan({ ledges: [{ id: 'step', x0: 300, x1: 420, top: 60, row: STONE }] }).filter((d) => d.id === 'step' && d.tile === 'none');
+    expect(short.map((d) => d.key)).toEqual([left, right]);
+    const shown = short.map((d) => ({ from: d.x + d.crop!.x, to: d.x + d.crop!.x + d.crop!.w }));
+    expect(shown[0]!.from).toBeCloseTo(300 - (KIT_ART[left]!.left ?? 0), 6);
+    expect(shown[0]!.to).toBeCloseTo(300 + (120 * lw) / (lw + rw), 0);
+    expect(shown[1]!.from).toBeCloseTo(shown[0]!.to, 0);
+    expect(shown[1]!.to).toBeGreaterThanOrEqual(420);
+    expect(shown[1]!.to).toBeLessThanOrEqual(420 + (KIT_ART[right]!.w - KIT_ART[right]!.right!) + 1);
+    // Each image shows that part and no more.
+    for (const d of short) expect(kitCells(d)).toEqual([{ x: d.x, y: d.y, w: d.w, h: d.h, crop: { x: d.crop!.x, y: 0, w: d.crop!.w, h: KIT_ART[d.key]!.h } }]);
+    // A run with room for both ends and more is laid as ever: whole ends, middles between.
+    const long = plan({ ledges: [{ id: 'walk', x0: 300, x1: 1300, top: 60, row: STONE }] }).filter((d) => d.id === 'walk' && d.tile === 'none');
+    expect(long.every((d) => d.crop === undefined)).toBe(true);
+    expect(long.length).toBeGreaterThan(2);
+    // So is one at least an end long: its ends stay inside it, whole.
+    const one = plan({ ledges: [{ id: 'shelf', x0: 300, x1: 300 + Math.max(lw, rw), top: 60, row: STONE }] }).filter((d) => d.id === 'shelf' && d.tile === 'none');
+    expect(one.map((d) => d.crop)).toEqual([undefined, undefined]);
+    expect(Math.min(...one.map((d) => d.x + (KIT_ART[d.key]!.left ?? 0)))).toBeGreaterThanOrEqual(300);
+    expect(Math.max(...one.map((d) => d.x + (KIT_ART[d.key]!.right ?? d.w)))).toBeLessThanOrEqual(300 + Math.max(lw, rw));
+  });
+
+  it('draws no course ledge’s ends out past the ledge an owl stands on (OP-348)', () => {
+    let ends = 0;
+    for (const r of KIT_ROOMS.filter((x) => x.course)) {
+      const runs = new Map([...(r.kit!.paths ?? []), ...(r.kit!.ledges ?? [])].map((run) => [run.id, run]));
+      for (const d of kitDrawPlan(r)) {
+        const run = runs.get(d.id);
+        if (!run || d.tile !== 'none' || d.flip || !/-cap-(left|right)$/.test(KIT_ART[d.key]?.standIn ?? d.key)) continue;
+        ends++;
+        const art = KIT_ART[d.key]!;
+        const from = d.x + Math.max(d.crop?.x ?? 0, art.left ?? 0);
+        const to = d.x + Math.min((d.crop?.x ?? 0) + (d.crop?.w ?? art.w), art.right ?? art.w);
+        expect(from, `${r.id} ${d.id} ${d.key}`).toBeGreaterThanOrEqual(run.x0 - 2);
+        expect(to, `${r.id} ${d.id} ${d.key}`).toBeLessThanOrEqual(run.x1 + 2);
+      }
+    }
+    expect(ends).toBeGreaterThan(40);
+  });
+
+  it('lays every course’s ground, drawn with a realm’s stand-in pieces, with no step between neighbours (OP-348)', () => {
+    let joins = 0;
+    for (const r of KIT_ROOMS.filter((x) => x.course)) {
+      const byRun = new Map<string, KitDraw[]>();
+      for (const d of kitDrawPlan(r)) if (rowOfPiece(d.key)) byRun.set(d.id, [...(byRun.get(d.id) ?? []), d]);
+      for (const [id, pieces] of byRun) {
+        const rows = new Set(pieces.map((d) => rowOfPiece(d.key)));
+        if (rows.size !== 1) continue;
+        joins += pieces.length - 1;
+        expect(new Set(pieces.map((d) => d.y)).size, `${r.id} ${id}`).toBe(1);
+      }
+    }
+    expect(joins).toBeGreaterThan(20);
   });
 
   it('sets a join into a run with its art from its x, the middles filling around it', () => {
