@@ -65,7 +65,7 @@ describe("the realm kit's slots (OP-275)", () => {
     const unslot = (v: unknown): unknown =>
       typeof v === 'string' ? (KIT_ART[v]?.standIn ?? v) : Array.isArray(v) ? v.map(unslot) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, unslot(x)])) : v;
     const act = unslot(ROOMS['brush-1']!) as RoomDef;
-    const room: RoomDef = { ...act, kit: { ...act.kit!, ledges: [...(act.kit!.ledges ?? []), { id: 'row-test', x0: 4000, x1: 4700, top: 300, row: 'kit-cut-stone' }] } };
+    const room: RoomDef = { ...act, kit: { ...act.kit!, ledges: [...(act.kit!.ledges ?? []), { id: 'row-test', x0: 4000, x1: 4700, top: 300, row: 'kit-cut-ink-bank' }] } };
     expect([...kitKeys(room)].some((k) => k.includes('--'))).toBe(false);
     // A decal's id is its piece's key and place in the list; the rest is where and how it is drawn.
     const box = (plan: ReturnType<typeof kitDrawPlan>) => plan.map(({ key, id, ...rest }) => ({ ...rest, key: kitFilesOf(key), id: rest.role === 'decal' ? kitFilesOf(id.replace(/-\d+$/, '')) : id }));

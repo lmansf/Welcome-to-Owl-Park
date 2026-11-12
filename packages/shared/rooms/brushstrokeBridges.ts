@@ -50,9 +50,9 @@ function ledge(id: string, x: number, w: number, top: number, look: Omit<KitLedg
 
 /** The looks of the course's ledges, from the ink-wash kit. */
 const STONE = { cap: 'kit-ink-brush-stone' };
-/** A dry stone: a plain stone where a brush stone would be, its ink long gone. */
-const DRY = { row: 'kit-cut-stone' };
-const ROCK = { row: 'kit-cut-stone' };
+/** A dry stone: a plain rock where a brush stone would be, its ink long gone. Both are the ink realm's own washed rock (OP-348). */
+const DRY = { row: 'kit-cut-ink-bank' };
+const ROCK = { row: 'kit-cut-ink-bank' };
 const CLIFF = { cap: 'kit-ink-paper-cliff' };
 const REED = { cap: 'kit-ink-reed-tuft' };
 const PINE = { cap: 'kit-ink-pine-bough' };
@@ -137,18 +137,25 @@ function brushRoom(
 }
 
 /**
- * The ground line's walk, drawn: a bank of path over ink-washed stone wherever an owl may stand, and
- * water wherever it may not. Up the mountain (act 3) the path is mossy stone.
+ * The ground line's walk, drawn: a bank of the ink realm's own washed rock (OP-348) over ink-washed
+ * stone wherever an owl may stand, and water wherever it may not. Up the mountain (act 3) it is the
+ * same rock.
  */
-const bank = (id: string, x0: number, x1: number, row = 'kit-cut-earth-path') => ({ id, x0, x1, top: 0, row, mid: 'kit-tex-ink-ink-stone' });
+const bank = (id: string, x0: number, x1: number, row = 'kit-cut-ink-bank') => ({ id, x0, x1, top: 0, row, mid: 'kit-tex-ink-ink-stone' });
 /**
  * The water between the banks, the course's pit (OP-343): the walk flooded, still water lying in it
  * from its line down, with nothing on it that looks stood on (no lily pad, no rim of stones). The game
  * paints the water; the realm kit's hazard slot has no art for the ink realm yet, and its strip takes
  * over when it does. Its ends are plain lengths of the walk, not caps: the banks either side end in theirs.
  */
-const river = (id: string, x0: number, x1: number): KitRun => ({ id, x0, x1, top: 0, row: 'kit-cut-earth-path', left: 'kit-cut-earth-path-mid-320', right: 'kit-cut-earth-path-mid-320', mid: 'kit-tex-ink-ink-stone', flood: { depth: WATER_DEEP, color: WATER } });
-const MOUNTAIN_PATH = 'kit-cut-stone-mossy';
+const river = (id: string, x0: number, x1: number): KitRun => ({ id, x0, x1, top: 0, row: 'kit-cut-ink-bank', left: 'kit-cut-ink-bank-mid-320', right: 'kit-cut-ink-bank-mid-320', mid: 'kit-tex-ink-ink-stone', flood: { depth: WATER_DEEP, color: WATER } });
+/**
+ * Inside the cave behind the falls the floor and the shelves are fitted stone, as they were: the room
+ * is one screen of wall, and the ink rock there takes the walkway's contrast over what the style
+ * check allows (14.44 against 14), where the stone holds it at 13.96.
+ */
+const CAVE_PATH = 'kit-cut-stone-mossy';
+const CAVE_ROCK = { row: 'kit-cut-stone' };
 
 // ---------- Act 1: the paper garden ----------
 
@@ -240,8 +247,8 @@ const FALLS_CAVE: RoomKit = {
   ground: G,
   backdrops: [layer('kit-ink-sky-b', 1, [0, 0])],
   surfaces: [{ id: 'cave', texture: 'kit-tex-ink-ink-stone', rect: { x: 0, y: 0, w: ROOM_W, h: G } }],
-  paths: [bank('ground', 0, ROOM_W, MOUNTAIN_PATH)],
-  ledges: [ledge('seal-shelf', 700, 200, 200, ROCK), ledge('high-shelf', 1150, 160, 380, ROCK)],
+  paths: [bank('ground', 0, ROOM_W, CAVE_PATH)],
+  ledges: [ledge('seal-shelf', 700, 200, 200, CAVE_ROCK), ledge('high-shelf', 1150, 160, 380, CAVE_ROCK)],
   doors: [{ door: 'out', piece: 'kit-ink-waterfall-curtain', scale: 0.5 }],
   props: [{ id: 'tower-scroll', piece: 'kit-landmark-scroll-tower', x: 1000, top: 0, scale: 0.6 }],
   scenes: [{ id: 'scroll', story: 'Hung on the cave wall, dry behind the falls, a scroll shows a tall tower of coloured glass, painted in ink.', props: ['tower-scroll'] }],
@@ -254,7 +261,7 @@ const S3A = [stone('k11', 420, 120, 100, 'R'), stone('k12', 1060, 120, 150, 'L')
 const PANEL_1: RoomKit = {
   ground: G,
   backdrops: inkAir(2),
-  paths: [bank('ground', 0, 400, MOUNTAIN_PATH), river('tarn', 400, 2 * ROOM_W)],
+  paths: [bank('ground', 0, 400), river('tarn', 400, 2 * ROOM_W)],
   ledges: [
     ...S3A.map((s) => s.ledge),
     ledge('pine', 40, 100, 540, PINE),
@@ -276,7 +283,7 @@ const S3B = [stone('k16', 360, 160, 110, 'U'), stone('k18', 1000, 120, 60, 'R')]
 const PANEL_2: RoomKit = {
   ground: G,
   backdrops: inkAir(2),
-  paths: [bank('ground', 0, 300, MOUNTAIN_PATH), river('tarn', 300, 2 * ROOM_W)],
+  paths: [bank('ground', 0, 300), river('tarn', 300, 2 * ROOM_W)],
   ledges: [...S3B.map((s) => s.ledge), ledge('n1', 620, 200, 520, ROCK), ledge('n2', 1700, 160, 260, DRY), ledge('n3', 2360, 200, 540, CLIFF), ledge('n4', 2610, 590, 540, terrace(540))],
   doors: [
     { door: 'back', piece: 'kit-ink-door-paper-open', scale: 0.7 },
