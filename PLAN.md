@@ -1,7 +1,9 @@
 # Owl Park cleanup and rebuild: the plan
 
 - Status: in progress. Ticket OP-342. Branch `claude/determined-wozniak-3ljxrf`.
-- Last updated: 2026-11-11, milestone 1 in review (OP-343), milestones 2 and 3 built (OP-344, OP-345).
+- Last updated: 2026-11-12. Milestones 1 and 2 are merged and live (OP-343, OP-344). The Great Hollow
+  milestone is in review (OP-346, with the first flight, OP-347, and the first part of the art pass,
+  OP-348). The arcade and the phone pass are built and go up next (OP-345, OP-349).
 - Read first: `FABLE.md` (the owner's rules; it wins over this file).
 
 The owner's brief (Nov 11): a full cleanup pass of the game, end to end, as a player meets it. Two
@@ -122,7 +124,7 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
     came in. The room server remembers the way in for as long as it holds the owl (in memory only).
   - The hut (`course.ts`, `endsCourse`, `doorWaitsOn`): a doorway into a room where a course only
     ends waits for every part.
-- **M2. Say what to do (OP-344, in review).** Items 2, 10. Done when: each course opens with its goal and
+- **M2. Say what to do (OP-344, merged as PR 225 on Nov 12).** Items 2, 10. Done when: each course opens with its goal and
   its moves, tips name the key or button, the strip shows the clock, and a prompt says what Interact
   does where the owl stands. Should move: course runs that reach the first bench, and course clears.
   What it changed, in short:
@@ -137,7 +139,7 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   ticket: Moon Flap's difficulty (wants the day's scores, not one script's try), the score wall off
   screen from mid floor, the feather counter over the first cabinet's sign (PR 221 is open on those
   cabinets).
-- **M4. The Great Hollow and the ways through (OP-346, built).** Items 11, 13, 19, 20; 14 and the
+- **M4. The Great Hollow and the ways through (OP-346, in review).** Items 11, 13, 19, 20; 14 and the
   faces of 15 looked at and left, with the reasons in the log. Done when: a key held through a doorway
   between a side view and a view from above leaves the owl standing; the visitor's own owl shows behind
   tall art; every doorway sign, Menu place and quest step names a place one way. Should move: visits
@@ -157,7 +159,7 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
 
 ## Bigger changes, after the cleanup
 
-- **B1. A first flight where owls arrive (OP-347, built).** Goal: an owl that has just come in has something to do
+- **B1. A first flight where owls arrive (OP-347, in review with M4).** Goal: an owl that has just come in has something to do
   within ten seconds, and has jumped, flapped and glided before it meets a course. Why it beats what
   is there: 15 of 20 visits end in the Great Hollow, half a minute after the owl comes in. The first
   plan was a first quest given at the way in. The play log says who those visitors are: every one is a
