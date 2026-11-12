@@ -91,11 +91,23 @@ async function answerCards(page: Page, pick: number, isMobile: boolean): Promise
   const ids: string[] = [];
   for (let i = 1; i <= 8; i++) {
     await expect(page.locator('.which-owl .wo-count')).toHaveText(`${i} of 8`);
-    const card = page.locator('[data-wo-card]');
-    const id = (await card.getAttribute('data-wo-card'))!;
+    // One look at the card (its id, each answer's size and picture box, its words): one round trip, so
+    // the runs that ask two whole quizzes stay well inside their time on a slow machine.
+    const seen = await page.locator('[data-wo-card]').evaluate((el) => {
+      const answers = [...el.querySelectorAll('[data-wo-answer]')];
+      return {
+        id: el.getAttribute('data-wo-card') ?? '',
+        sizes: answers.map((a) => {
+          const r = a.getBoundingClientRect();
+          return Math.min(r.width, r.height);
+        }),
+        art: answers.map((a) => a.querySelector('[data-wo-art]')?.textContent ?? ''),
+        text: (el as HTMLElement).innerText,
+      };
+    });
+    const { id } = seen;
     ids.push(id);
-    const answers = card.locator('[data-wo-answer]');
-    const count = await answers.count();
+    const count = seen.sizes.length;
     // A quick either/or opens and closes the run; the middle cards have two to four answers (OP-330).
     if (i === 1 || i === 8) {
       expect(count).toBe(2);
@@ -105,13 +117,10 @@ async function answerCards(page: Page, pick: number, isMobile: boolean): Promise
       expect(count).toBeLessThanOrEqual(4);
     }
     // Every answer is a big enough target for a thumb, its picture a box with its size until it is painted (OP-326).
-    for (let n = 0; n < count; n++) {
-      const box = (await answers.nth(n).boundingBox())!;
-      expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
-      await expect(answers.nth(n).locator('[data-wo-art]')).toHaveText('96 × 96');
-    }
+    for (const size of seen.sizes) expect(size).toBeGreaterThanOrEqual(44);
+    expect(seen.art).toEqual(Array<string>(count).fill('96 × 96'));
     // No emoji anywhere on the card.
-    expect(await card.innerText()).not.toMatch(/\p{Extended_Pictographic}/u);
+    expect(seen.text).not.toMatch(/\p{Extended_Pictographic}/u);
     await tap(page, `[data-wo-answer="${Math.min(pick, count - 1)}"]`, isMobile);
   }
   return ids;
@@ -170,6 +179,8 @@ test.describe('which owl are you (OP-076)', () => {
   });
 
   test('Not me? Try again draws a fresh set, and Make it yours opens the builder on the result', async ({ page, isMobile }) => {
+    // Two whole quizzes in one test: the slow allowance, as the park's other long walks have.
+    test.slow();
     await openHome(page);
     const first = await startQuiz(page, isMobile, 2);
     await tap(page, '[data-wo-colours="natural"]', isMobile);
@@ -192,6 +203,8 @@ test.describe('which owl are you (OP-076)', () => {
   });
 
   test('Retake the quiz in Settings: a new kind and colours on the same owl, and a close leaves it as it was', async ({ page, isMobile }) => {
+    // Two whole quizzes in one test: the slow allowance, as the park's other long walks have.
+    test.slow();
     await openHome(page);
     await tap(page, '[data-home-btn="login"]', isMobile);
     await tap(page, '[data-wo-skip]', isMobile);
