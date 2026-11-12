@@ -487,6 +487,8 @@ export class RoomScene extends Phaser.Scene {
   /** Bumped on every (re)start so a join that resolves for a previous room is discarded. */
   private gen = 0;
   private lastStatus: ConnectionStatus | null = null;
+  /** What the room server said of the owl's map as this room was come into, until a room has the owl (takeKeptTravel, OP-358). */
+  private travelKept: { state: TravelState; room: string; spawn: string | undefined } | null = null;
   private collection!: CollectionState;
   private quests!: QuestState;
   private link: QuestLink | null = null;
@@ -755,6 +757,7 @@ export class RoomScene extends Phaser.Scene {
     this.gen += 1;
     this.soft = new Set();
     this.lastStatus = null;
+    this.travelKept = null;
     this.collection = this.registry.get('collection') as CollectionState;
     this.quests = this.registry.get('quests') as QuestState;
     this.link = null;
@@ -1565,6 +1568,8 @@ export class RoomScene extends Phaser.Scene {
       void this.climb?.reconnected();
     }
     this.lastStatus = s;
+    // The room has the owl now: what the room server said of its map, if it answered first, counts (OP-358).
+    if (s === 'online') this.takeKeptTravel();
     // The quest board says it isn't answering instead of loading for ever (OP-280); a board clears it.
     if (wentOffline) this.quests.setOffline(true);
     if (wentOffline && !this.leaving) this.hud.toast('You are wandering alone for now: the park could not connect.', 4000);
@@ -2039,15 +2044,37 @@ export class RoomScene extends Phaser.Scene {
 
   /**
    * In a room (OP-130): the map has this room on top of what the page had, at once, and then on top of
-   * what the collection keeps (the room server's, or this browser's), once that answers.
+   * what the collection keeps (the room server's, or this browser's), once that answers and a room has
+   * this owl (takeKeptTravel).
    */
   private async refreshTravel(spawn: string | undefined): Promise<void> {
     const gen = this.gen;
     const room = this.room.id;
+    this.travelKept = null;
     this.setTravel(travelAfter(this.travelNow(), room, spawn));
     const kept = await this.collection.service.travel().catch(() => null);
     if (gen !== this.gen || !kept) return;
-    this.setTravel(travelAfter(kept, room, spawn));
+    this.travelKept = { state: kept, room, spawn };
+    this.takeKeptTravel();
+  }
+
+  /**
+   * The room server's word on the map counts once a room has let this owl in (OP-358). On a network that
+   * lets the page through and not the room's socket, the Worker still answers, but it has seen the owl
+   * walk into no room: its map says "not through the gate" of an owl this page walked through the
+   * turnstiles, and taken at its word every place inside asked for the turnstiles again after the first
+   * trip. So what it said waits here until the room is online, and a page no room ever has keeps its
+   * own map, as a browser with no room server does. A room server that does have the owl still turns a
+   * travel away when the gate was left on another screen (notThroughGate).
+   *
+   * TODO-DOCS (OP-358): docs/ARCHITECTURE.md, v13 (travel from the map): the page takes the travel
+   * book's answer (`GET /api/travel`) only once the room it is in has let its owl in.
+   */
+  private takeKeptTravel(): void {
+    const kept = this.travelKept;
+    if (!kept || (this.transport.kind === 'edge' && this.lastStatus !== 'online')) return;
+    this.travelKept = null;
+    this.setTravel(travelAfter(kept.state, kept.room, kept.spawn));
   }
 
   /**
