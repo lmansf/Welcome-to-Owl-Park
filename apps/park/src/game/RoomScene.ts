@@ -219,7 +219,7 @@ import { DoorSigns } from './doorSigns';
 import { ReachPrompt, promptPlace, promptWords } from './reachPrompt';
 import { SeeThrough } from './seeThroughArt';
 import { parkSfx, type Sfx } from './sfx';
-import { sideCamAt, sideCamStep, speedAlong, type SideCam } from './sideCamera';
+import { STEP_MOST_MS, sideCamAt, sideCamStep, speedAlong, type SideCam } from './sideCamera';
 import { airCues, type CueName } from './sfxCues';
 import { sideEdges } from './sideEdges';
 import { drawWalkFloor } from './walkFloor';
@@ -1039,15 +1039,21 @@ export class RoomScene extends Phaser.Scene {
     const cam = this.cameras.main;
     const viewW = cam.width / cam.zoom;
     const seen = this.sideCamSeen;
-    const owl = { x: this.me.x, y: this.me.y, z: this.flier.air.z, grounded: this.flier.air.s === GROUNDED, vx: 0, facing: this.me.facing() };
+    const air = this.flier.air;
+    const grounded = air.s === GROUNDED;
+    // The flight goes in steps of its own (fly): between two of them the owl is where its speed has taken it
+    // since the last, so the view moves every frame and not by a step more in one frame and a step less in the next.
+    const z = grounded || !this.flightClock ? air.z : air.z + (air.vz * Math.min(FLIGHT_STEP_MS, Math.max(0, now - this.flightClock))) / 1000;
+    const owl = { x: this.me.x, y: this.me.y, z, grounded, vx: 0, vz: grounded ? 0 : air.vz, lifted: air.s === LIFTED, facing: this.me.facing() };
     if (!this.sideCam) {
       this.sideCam = sideCamAt(owl, viewW);
       this.sideCamSeen = { at: now, x: owl.x, vx: 0 };
     } else {
-      // A frame that took long (a tab asleep) is one step of a tenth of a second, not a lurch.
-      const dt = Math.min(100, Math.max(0, now - seen.at));
-      const vx = speedAlong(seen.vx, owl.x - seen.x, dt);
-      this.sideCam = sideCamStep(this.sideCam, { ...owl, vx }, viewW, dt);
+      // The owl's speed is read over the time that passed; the camera's own step is never longer than its
+      // most, so a page that stalled is eased over the frames after it and not jumped.
+      const passed = Math.max(0, now - seen.at);
+      const vx = speedAlong(seen.vx, owl.x - seen.x, passed);
+      this.sideCam = sideCamStep(this.sideCam, { ...owl, vx }, viewW, Math.min(STEP_MOST_MS, passed));
       this.sideCamSeen = { at: now, x: owl.x, vx };
     }
     this.camAt.x = this.sideCam.x;

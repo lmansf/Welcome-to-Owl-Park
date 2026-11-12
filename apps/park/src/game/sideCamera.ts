@@ -11,15 +11,19 @@ import { JUMP_RISE, WALK_SPEED } from '@owl-park/shared';
  *   `LEAD_SHARE` of the screen, more of it the faster the owl travels, and swings round unhurried when
  *   the owl turns.
  * - It does not bob. A hop on the spot rose and fell the whole view with it. The view holds the height
- *   the owl last stood at through a whole jump (`BAND_UP` is a jump's rise and a little), climbs only
- *   with what goes higher (a flap on top of the jump, a glide into rising air), and goes down with a
- *   fall at once (what is below is what matters then).
+ *   the owl last stood at through a whole jump (`BAND_UP` is a jump's rise and a little), and climbs
+ *   only with what goes higher: a flap on top of the jump, or rising air.
+ * - It keeps up. The view is carried along with the owl before it eases to where it looks (OP-352), so
+ *   what trails is only what is left over: a walking owl has its whole lead on the screen (an ease
+ *   alone trails a walk by 40 px, more than half the lead on a phone held upright), a falling owl
+ *   stays `BAND_DOWN` under the height held and no more (what is below is what matters then), and an
+ *   owl in rising air `LIFT_BAND` over it.
  * - It eases by the clock. A share of the way each frame is half the camera at half the frames, so on a
  *   slow phone the view trailed the owl. The same time gives the same ease at any frame rate.
  *
  * TODO-DOCS (OP-351): docs/ARCHITECTURE.md's client rules, the camera: in a room seen from the side
- * the view leads the owl's travel, holds its height through a jump and eases by time (sideCamera.ts),
- * behind the `sideCam` flag (`?cam=1`) until the owner has played with it.
+ * the view leads the owl's travel, holds its height through a jump, is carried with the owl and eases
+ * by time (sideCamera.ts), behind the `sideCam` flag (`?cam=1`) until the owner has played with it.
  */
 
 /** What the camera follows and how it stands: the point looked at (room px), the lead it has now, and the height it holds (px above the ground line). */
@@ -38,8 +42,11 @@ export interface CamOwl {
   /** How high it is over that (px), and whether it stands on something. */
   z: number;
   grounded: boolean;
-  /** How fast it travels along (px/s, to the right is positive). */
+  /** How fast it travels along (px/s, to the right is positive; the scene's `speedAlong`), and up (px/s, a fall is negative). */
   vx: number;
+  vz: number;
+  /** Whether rising air has it: a gust's column, a wind. */
+  lifted: boolean;
   /** The way it faces. */
   facing: 1 | -1;
 }
@@ -53,17 +60,34 @@ export const LEAD_FULL_SPEED = WALK_SPEED;
 export const LEAD_STILL_SPEED = 30;
 /** How long the lead takes to come most of the way round (ms): unhurried, so a quick turn does not throw the view. */
 export const LEAD_MS = 520;
-/** How long the view takes to come most of the way to where it looks (ms), across and down. */
+/** How long the view takes to come most of the way to where it looks (ms), across and down, and up (slower: a climb is read, not chased). */
 export const EASE_MS = 150;
 export const LEVEL_MS = 240;
-/** How far over the height it holds a jump may rise before the view climbs with it (a whole jump and a little), and how far under before it follows down (px). */
+/**
+ * How far over the height it holds an owl may be before the view climbs with it: a whole jump and a
+ * little, or in rising air a little only (the air is taking it up, and what is above is where it is going).
+ * And how far under before the view follows it down (px).
+ */
 export const BAND_UP = Math.ceil(JUMP_RISE) + 12;
+export const LIFT_BAND = 40;
 export const BAND_DOWN = 24;
+/** The longest step the camera takes at once (ms): a frame that took longer (a page that stalled) is eased over the frames after it, not jumped. */
+export const STEP_MOST_MS = 250;
 
 /** The share of the way covered in `dtMs` by an ease that covers about two thirds of it in `ms` (1 for no time constant). */
 export function eased(dtMs: number, ms: number): number {
   if (ms <= 0) return 1;
   return 1 - Math.exp(-Math.max(0, dtMs) / ms);
+}
+
+/**
+ * Carried, then eased: something `from` its mark by `off` is first taken along with what it follows
+ * (`carried`, how far that went this step), and what is left of `off` is eased away. So what moves
+ * steadily is followed with nothing trailing, at any frame rate, and only a start, a stop or a jump of
+ * the mark is eased.
+ */
+function carriedTo(mark: number, was: number, carried: number, dtMs: number, ms: number): number {
+  return mark + (was + carried - mark) * (1 - eased(dtMs, ms));
 }
 
 /** The lead the view is making for: the way the owl travels, more of it the faster; the way it faces, a little, when it is still. */
@@ -76,27 +100,44 @@ export function leadFor(owl: Pick<CamOwl, 'vx' | 'facing'>, viewW: number): numb
 }
 
 /** The height the view is making for: where the owl stands; in the air, the height held unless the owl is out of its band. */
-export function levelFor(level: number, owl: Pick<CamOwl, 'z' | 'grounded'>): number {
+export function levelFor(level: number, owl: Pick<CamOwl, 'z' | 'grounded' | 'lifted'>): number {
   if (owl.grounded) return owl.z;
-  if (owl.z > level + BAND_UP) return owl.z - BAND_UP;
+  const up = owl.lifted ? LIFT_BAND : BAND_UP;
+  if (owl.z > level + up) return owl.z - up;
   if (owl.z < level - BAND_DOWN) return owl.z + BAND_DOWN;
   return level;
 }
 
+/**
+ * The height held, `dtMs` on. Where the owl stands, it is eased to (up slower than down). Under its
+ * band (a fall, a glide down) and in rising air the owl is taking the band's edge with it: the height
+ * is carried by how far the owl went, never past the edge, so the view is with a fall from the frame
+ * it leaves the band and not a moment behind it. A flap over a jump is short, and is eased up to.
+ */
+function levelStep(level: number, owl: CamOwl, dtMs: number): number {
+  const to = levelFor(level, owl);
+  if (to === level) return level;
+  const went = (owl.vz * dtMs) / 1000;
+  if (!owl.grounded && to < level) return Math.max(to, carriedTo(to, level, Math.min(0, went), dtMs, EASE_MS));
+  if (!owl.grounded && owl.lifted) return Math.min(to, carriedTo(to, level, Math.max(0, went), dtMs, LEVEL_MS));
+  return level + (to - level) * eased(dtMs, to < level ? EASE_MS : LEVEL_MS);
+}
+
 /** The camera as a room starts or the owl is put somewhere (a fall): on the owl, at its height, looking the way it faces. */
-export function sideCamAt(owl: CamOwl, viewW: number): SideCam {
+export function sideCamAt(owl: Pick<CamOwl, 'x' | 'y' | 'z' | 'facing'>, viewW: number): SideCam {
   const lead = leadFor({ vx: 0, facing: owl.facing }, viewW);
   return { x: owl.x + lead, y: owl.y - owl.z, lead, level: owl.z };
 }
 
-/** The camera `dtMs` on: its lead and its height eased toward what the owl is doing, and the view toward the two. */
+/**
+ * The camera `dtMs` on: its lead and its height brought toward what the owl is doing, and the view
+ * carried along with the owl (its travel this step, and the height's own change) and eased to the two.
+ */
 export function sideCamStep(cam: SideCam, owl: CamOwl, viewW: number, dtMs: number): SideCam {
   const lead = cam.lead + (leadFor(owl, viewW) - cam.lead) * eased(dtMs, LEAD_MS);
-  // Down with a fall at once, up with a climb in its own time.
-  const toLevel = levelFor(cam.level, owl);
-  const level = cam.level + (toLevel - cam.level) * eased(dtMs, toLevel < cam.level ? EASE_MS : LEVEL_MS);
-  const x = cam.x + (owl.x + lead - cam.x) * eased(dtMs, EASE_MS);
-  const y = cam.y + (owl.y - level - cam.y) * eased(dtMs, EASE_MS);
+  const level = levelStep(cam.level, owl, dtMs);
+  const x = carriedTo(owl.x + lead, cam.x, (owl.vx * dtMs) / 1000, dtMs, EASE_MS);
+  const y = carriedTo(owl.y - level, cam.y, cam.level - level, dtMs, EASE_MS);
   return { x, y, lead, level };
 }
 
