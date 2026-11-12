@@ -69,9 +69,9 @@ const CSS = `
   font-size:12px;font-weight:600;letter-spacing:.02em;color:rgba(246,241,227,.75);background:rgba(246,241,227,.05)}
 #hud .which-owl .wo-feather{width:clamp(48px,10vh,76px);height:clamp(48px,10vh,76px)}
 /* The owl is the reveal's centrepiece: it never gives up its room when the words run past a phone's
-   screen (a flex child shrinks by default, which left a thumb-sized owl), and on a phone it stands
-   about two fifths of the screen wide. */
-#hud .which-owl .wo-stage{flex:0 0 auto;width:min(380px,88vw);height:min(400px,46vh,96vw)}
+   screen (a flex child shrinks by default, which left a thumb-sized owl), and on a phone the owl
+   itself stands about a third of the screen wide. */
+#hud .which-owl .wo-stage{flex:0 0 auto;width:min(380px,88vw);height:min(400px,50vh,100vw)}
 #hud .which-owl .wo-you{margin:0;font-size:15px;opacity:.85;letter-spacing:.04em;text-transform:uppercase}
 #hud .which-owl .wo-name{margin:0;font-size:clamp(28px,5vh,40px);color:#FFD36A;text-shadow:0 2px 12px rgba(0,0,0,.55)}
 #hud .which-owl .wo-fact{max-width:30em;margin:0;text-align:center;font-size:16px;line-height:1.4;opacity:.92}
@@ -282,7 +282,7 @@ export function createWhichOwlScreen(root: HTMLElement): WhichOwlScreen {
   const frame = () => {
     if (!stage || !modal.isOpen() || !run) return;
     const r = stage.getBoundingClientRect();
-    run.preview({ x: r.left, y: r.top, w: r.width, h: r.height, ...(arriving ? { arrive: true } : {}) });
+    run.preview({ x: r.left, y: r.top, w: r.width, h: r.height, close: true, ...(arriving ? { arrive: true } : {}) });
     arriving = false;
   };
   window.addEventListener('resize', frame);

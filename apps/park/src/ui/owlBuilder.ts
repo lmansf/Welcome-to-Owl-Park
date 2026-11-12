@@ -31,7 +31,8 @@ export interface PreviewFrame {
   w: number;
   h: number;
   /** The quiz's reveal (OP-330): the owl glides in to this frame, once. */
-  arrive?: boolean;
+  arrive?: boolean;  /** The quiz's reveal: a closer view, so the owl itself fills the frame. */
+  close?: boolean;
 }
 
 export interface OwlBuilderActions {
