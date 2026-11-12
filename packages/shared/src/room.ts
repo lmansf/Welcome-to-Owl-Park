@@ -31,6 +31,8 @@ export interface RoomBowl {
   pools?: ReadonlyArray<{ x: number; y: number; r: number; color: number }>;
   /** Openings in the near wall where a way goes out at the front: a point on the rim and how wide. */
   gaps?: ReadonlyArray<{ x: number; y: number; w: number }>;
+  /** The colour of the room's light (OP-348): the idols that stand in it, each painted for its own realm, are multiplied by it. */
+  light?: number;
 }
 
 export interface RoomDef {
@@ -249,6 +251,8 @@ export interface RoomPiece {
   flip?: true;
   /** Drawn this much its art's size (1 when left out): a doorway in the near wall seen from almost straight above. */
   scale?: number;
+  /** A colour its art is multiplied by (OP-348): the room's own light on a piece painted in another, so it sits in the room. */
+  tint?: number;
 }
 
 export interface RoomKit {
@@ -589,6 +593,12 @@ export interface DoorDef {
   labelNew?: string;
   /** Where the doorway's sign stands (room pixels, its top middle); the marker when not given. */
   labelAt?: Vec2;
+  /**
+   * Which part of the sign stands at `labelAt`, across (OP-346): its middle (0.5) when not given. A
+   * doorway in a room's east side gives 1, the sign's right edge, and one in its west side 0, its left:
+   * the words then lie on the floor beside the doorway whatever their length, none under its art.
+   */
+  labelAnchor?: 0 | 0.5 | 1;
   /** Where to place a visual hint (sign, glow) for the door. */
   marker?: Vec2;
 }

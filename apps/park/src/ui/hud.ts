@@ -255,6 +255,11 @@ export interface Hud {
   closePanels(): void;
   /** The off-screen hint chips; an empty list clears them. */
   setHints(hints: HudHint[]): void;
+  /**
+   * The room is fading out, or the next is not in yet (OP-346): what the HUD shows of the room itself
+   * (a course's strip, the actions where the owl stands) fades with it. The Menu and the counters stay.
+   */
+  setRoomDark(on: boolean): void;
   /** The gated realms the keepers have opened (the realms switch): the Menu map draws their arches as doorways. */
   setOpenRealms(open: readonly string[]): void;
   onHint(cb: (id: string) => void): void;
@@ -333,6 +338,8 @@ const CSS = `
 #hud kbd{display:none;margin-left:8px;padding:0 6px;border:1px solid currentColor;border-radius:5px;font:700 11px/1.5 system-ui,sans-serif;opacity:.7;vertical-align:1px}
 @media (hover:hover) and (pointer:fine){#hud kbd{display:inline-block}}
 #hud .actions{display:flex;gap:8px;align-items:flex-end}
+#hud .actions,#objective-strip{transition:opacity .2s ease-out}
+.room-dark #hud .actions,.room-dark #objective-strip{opacity:0}
 #hud .left{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
 #hud .feathers{display:none;font-size:14px;font-weight:700}
 #hud .feathers.show{display:flex}
@@ -1342,6 +1349,9 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     },
     setOpenRealms(open) {
       openRealms = [...open];
+    },
+    setRoomDark(on) {
+      document.documentElement.classList.toggle('room-dark', on);
     },
     setHints(list) {
       const seen = new Set<string>();

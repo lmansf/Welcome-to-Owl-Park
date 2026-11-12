@@ -6,14 +6,18 @@ import { type SymbolName, symbolTexture } from './symbols';
 
 /** A feather this near the owl has done its work and fades (room px). */
 export const TRAIL_PASSED_PX = 70;
-/** Gold, like the doorway chips at the screen's edge: it reads on a pale floor and a dark one alike. */
-const FEATHER_TINT = 0xffd36a;
-const FEATHER_ALPHA = 0.85;
+/**
+ * Pale gold, the colour of the doorway chips at the screen's edge with most of the yellow taken out
+ * (OP-346): the chips' own gold lay on the Great Hollow's amber floor at nearly the floor's own
+ * brightness, and the trail that leads a new owl to its first game could be walked past unseen.
+ */
+const FEATHER_TINT = 0xfff3c4;
+const FEATHER_ALPHA = 1;
 /** A feather about as long as an owl's foot to its knee: big enough to spot on a phone (the symbol is 32 px). */
-const FEATHER_SCALE = 1.5;
-/** A dark edge under each feather and glint, so gold still reads on a pale floor (a flat bright shape vanishes there). */
+const FEATHER_SCALE = 1.7;
+/** A dark edge under each feather and glint, so a pale shape still reads on a pale floor (a flat bright shape vanishes there). */
 const EDGE_TINT = 0x2b1d08;
-const EDGE_ALPHA = 0.55;
+const EDGE_ALPHA = 0.8;
 /** The glint: a four-pointed sparkle over the doorway, gold like the feathers (the symbol is 32 px). */
 const GLINT_TINT = 0xffe08a;
 const GLINT_SCALE = 1.4;

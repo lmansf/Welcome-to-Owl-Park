@@ -135,7 +135,9 @@ describe('the trail leads to a room’s own games first (OP-338)', () => {
   const spot = (room: string, id: string) => PLAY_SPOTS[room]!.find((s) => s.id === id)!;
 
   it('knows each room’s games by the floor an owl plays them from', () => {
-    expect(Object.keys(PLAY_SPOTS).sort()).toEqual(['grove', 'hub', 'market']);
+    expect(Object.keys(PLAY_SPOTS).sort()).toEqual(['grove', 'hub', 'm3-hall', 'market']);
+    // The Great Hollow's roots (OP-347): the floor before each inner run's first root, one find between the two.
+    expect(PLAY_SPOTS['m3-hall']!.map((s) => s.id)).toEqual(['play-roots', 'play-roots']);
     expect(PLAY_SPOTS['hub']!.map((s) => s.id)).toEqual(['play-lanterns', 'play-quiz']);
     expect(PLAY_SPOTS['grove']!.map((s) => s.id)).toEqual(['play-fishing']);
     expect(PLAY_SPOTS['market']!.map((s) => s.id)).toEqual(['play-copy']);
@@ -143,6 +145,22 @@ describe('the trail leads to a room’s own games first (OP-338)', () => {
     for (const [room, spots] of Object.entries(PLAY_SPOTS)) for (const s of spots) expect(isWalkable(mid(s.rect), ROOMS[room]!.walkable), `${room} ${s.id}`).toBe(true);
     // No id could be a doorway's: they are kept among the doorways tried.
     for (const [room, spots] of Object.entries(PLAY_SPOTS)) for (const s of spots) expect(ROOMS[room]!.doors.some((d) => d.id === s.id), s.id).toBe(false);
+  });
+
+  it('leads a new owl in the Great Hollow to its roots before any doorway, and on to a doorway once it has stood there (OP-347)', () => {
+    const hall = ROOMS['m3-hall']!;
+    const from = hall.spawns['from-lobby']!;
+    const doors = hall.doors.filter((d) => d.to);
+    const spots = PLAY_SPOTS['m3-hall']!;
+    const to = trailTo(from, spots, doors, () => true);
+    expect(to && 'id' in to ? to.id : null).toBe('play-roots');
+    // Found (one mark for both runs), the trail leads to a doorway.
+    const tried = new TriedDoors(null);
+    tried.add('m3-hall', 'play-roots');
+    const left = spots.filter((s) => !tried.has('m3-hall', s.id));
+    expect(left).toEqual([]);
+    const next = trailTo(from, left, doors, () => true);
+    expect(next && 'id' in next ? hall.doors.some((d) => d.id === next.id) : false).toBe(true);
   });
 
   it('puts each spot where its game is played: under the beam, on an answer, in reach of the fishing spot, before the robot owl', () => {

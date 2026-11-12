@@ -192,6 +192,8 @@ function hollowFloor(): Polygon {
 /** How far in from the rim a way's arrivals stand, and its marker. */
 const ARRIVE = 190;
 const MARK = 24;
+/** How far in from the rim (out, so under zero) the foot of a doorway's art stands at the back and the two ends. */
+const END_ART_OUT = -6;
 
 /** The art standing at each way: its realm's doorway, the knothole, the trunk's door, the hatch. */
 function wayArt(id: HallWay): string | null {
@@ -211,14 +213,30 @@ function wayArt(id: HallWay): string | null {
  */
 export const FRONT_ART = 0.6;
 
-/** How wide a way's doorway art is drawn (room px). */
-function artWide(id: HallWay): number {
+/** How far in from an end doorway's art its sign's near edge stands, and how far over the doorway's middle its top (room px). */
+export const END_SIGN_GAP = 16;
+export const END_SIGN_UP = 30;
+
+/** Half the width of what a way's doorway art draws (its measured box where the kit has one), in room px. */
+function artHalf(id: HallWay): number {
   const art = wayArt(id);
-  return (art ? (KIT_ART[art]?.w ?? 240) : 240) * (atFront(id) ? FRONT_ART : 1);
+  const a = art ? KIT_ART[art] : undefined;
+  const wide = a?.left !== undefined && a.right !== undefined ? a.right - a.left : (a?.w ?? 240);
+  return (wide * (atFront(id) ? FRONT_ART : 1)) / 2;
 }
 
-/** How far past an end doorway's inner edge its sign's middle stands (room px). */
-export const END_SIGN_CLEAR = 240;
+/**
+ * An end way's sign (OP-346): beside its doorway and level with it, the sign's near edge just in from
+ * the doorway's art (DoorDef.labelAnchor). Its words lie on the floor an owl walks up over whatever
+ * their length, and none slips under the art (the neon street read "The neon stre", Nov 9). Before, the
+ * sign's middle stood half a long label further in along the leaning rim: a short sign on a computer
+ * stood 340 px from its doorway and 240 over it, across the face of the idol between the Commons' ways.
+ */
+function endSign(id: HallWay): Pick<DoorDef, 'labelAt' | 'labelAnchor'> {
+  const out = Math.sign(rimNormal(angleAt(wayS(id))).x);
+  const art = wayAt(id, END_ART_OUT);
+  return { labelAt: { x: Math.round(art.x - out * (artHalf(id) + END_SIGN_GAP)), y: wayAt(id).y - END_SIGN_UP }, labelAnchor: out > 0 ? 1 : 0 };
+}
 
 /** How tall a way's doorway art is drawn (room px). */
 function artTall(id: HallWay): number {
@@ -232,10 +250,7 @@ function artTall(id: HallWay): number {
  */
 export function signInset(id: HallWay): number {
   if (id === 'down') return 200;
-  // At an end the doorway's art stands beside the floor: its sign stands clear of it, half a long
-  // label (a phone held sideways draws one up to about 440 room px wide) past the art's inner edge.
-  // The rim leans there, so the step in is lengthened until it is that far across.
-  if (atEnd(id)) return Math.round((artWide(id) / 2 + END_SIGN_CLEAR) / Math.abs(rimNormal(angleAt(wayS(id))).x));
+  // At an end the doorway's art stands beside the floor, and its sign beside the art (endSign).
   if (!atFront(id)) return 150;
   return Math.min(300, artTall(id) + 20);
 }
@@ -258,7 +273,7 @@ function rimDoor(id: HallWay, to: NonNullable<DoorDef['to']>, label?: string): D
     rect: { x: p.x - w / 2, y: p.y - h / 2, w, h },
     to,
     marker: rimAt(s, MARK),
-    ...(label ? { label, labelAt: rimAt(s, signInset(id)) } : {}),
+    ...(label ? { label, ...(atEnd(id) ? endSign(id) : { labelAt: rimAt(s, signInset(id)) }) } : {}),
   };
 }
 
@@ -305,7 +320,7 @@ const PIECES: RoomPiece[] = HALL_WAYS.flatMap((id): RoomPiece[] => {
     const at = wayAt('down', HATCH_IN);
     return [{ id: 'root-hatch', key, x: at.x, y: at.y + 50 }];
   }
-  const foot = wayAt(id, atFront(id) ? -40 : -6);
+  const foot = wayAt(id, atFront(id) ? -40 : END_ART_OUT);
   const p = wayAt(id);
   // Course gates face their realm's doorway along the rim.
   return [
@@ -412,6 +427,14 @@ export const ROOT_PERCHES: readonly Perch[] = ROOT_RUNS.flatMap((run) =>
   }),
 );
 
+/**
+ * The Great Hollow's light (OP-348): warm, as its painted heartwood floor is lit. The roots are the
+ * arcade's art, painted for a cold cave (frost on the fallen root, pale edges on the knot), and the
+ * idols are each painted for their own realm; multiplied by the room's light they stand in the same
+ * room as the floor under them. The idols take less of it: each keeps its realm's own colours.
+ */
+export const HALL_LIGHT = { roots: 0xffd9a6, idols: 0xffecd2 } as const;
+
 const ROOT_PIECES: RoomPiece[] = ROOT_RUNS.flatMap((run) =>
   run.steps.map(
     ([kind, x]): RoomPiece => ({
@@ -420,6 +443,7 @@ const ROOT_PIECES: RoomPiece[] = ROOT_RUNS.flatMap((run) =>
       x,
       y: RUN_Y - RUN_HALF,
       ...(run.flip ? { flip: true as const } : {}),
+      tint: HALL_LIGHT.roots,
     }),
   ),
 );
@@ -427,7 +451,7 @@ const ROOT_PIECES: RoomPiece[] = ROOT_RUNS.flatMap((run) =>
 /** Each plaza's worn ring round its moonbeam, and the heart's (edges.ts: walked across, drawn on the floor). */
 export const HALL_EDGES: readonly EdgePlacement[] = HALL_MOONBEAMS.map((m) => ({
   id: `ring-${m.id.replace('moonbeam-', '')}`,
-  key: 'edge-hollow-plaza-ring',
+  key: 'edge-hall-plaza-ring',
   x: m.pos.x - 380,
   y: m.pos.y - 190,
 }));
@@ -451,6 +475,7 @@ export const HALL_BOWL: RoomBowl = {
     { ...HALL_HEART, r: sized(1100), color: 0xffe2a8 },
   ],
   gaps: HALL_WAYS.filter((id) => atFront(id) && id !== 'down' && !HALL_GROWN.includes(id)).map((id) => ({ ...wayAt(id), w: 220 })),
+  light: HALL_LIGHT.idols,
 };
 
 /** Whether a point is clear of every root's art (and a little round it), where a visitor can see it. */
@@ -490,8 +515,13 @@ const SPOTS: Vec2[] = [
 ];
 
 /** Where owls arrive in the hollow: the middle of the floor, and in front of each way that leads somewhere. */
+/** The stump of the inner west run: where the browser test of the first flight stands to glide (e2e/park.spec.ts, OP-347). */
+const STUMP_SPAWN = 'on-stump';
+const WEST_STUMP = ROOT_PERCHES.find((p) => p.id === rootId('ink', 'stump'))!;
+
 const SPAWNS: Record<string, Vec2> = {
   default: { x: HALL_CX, y: HALL_CY + sized(260) },
+  [STUMP_SPAWN]: { x: Math.round((Math.min(...WEST_STUMP.area.map((p) => p.x)) + Math.max(...WEST_STUMP.area.map((p) => p.x))) / 2), y: RUN_Y },
   'from-lobby': wayAt('up', ARRIVE),
   'from-party': wayAt('to-party', arriveAt('to-party')),
   'from-under': wayAt('down', 330),
@@ -526,6 +556,7 @@ export const HALL_ROOM: RoomDef = {
   mood: 'hub',
   walkable: [hollowFloor()],
   spawns: SPAWNS,
+  spawnTops: { [STUMP_SPAWN]: WEST_STUMP.top },
   doors: DOORS,
   pieces: [...PIECES, ...ROOT_PIECES],
   perches: [...ROOT_PERCHES],

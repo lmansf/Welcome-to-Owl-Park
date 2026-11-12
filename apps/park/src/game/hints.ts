@@ -24,6 +24,23 @@ export function signedDoors(
   });
 }
 
+/** What a chip says for a doorway along a course: the way on, the way back, and the way to the finish (OP-346). */
+export const CHIP_WORDS = { on: 'Next part', back: 'Back', finish: 'Finish' } as const;
+
+/**
+ * The words on the chip for a doorway seen from the side, which has no sign of its own (OP-346). A
+ * course's chips were arrows with nothing said: the way on, the way back out and a side room all looked
+ * the same at the screen's edge. Where the doorway leads, when that place has a name (`toName`, null
+ * for none); in a course (`course`, null out of one) the finish, or which way along it the doorway
+ * goes (DoorDef.way); nothing for a side room, whose arrow says only that it is there.
+ */
+export function sideChipWords(door: Pick<DoorDef, 'way'>, toName: string | null, course: { finish: boolean } | null): string | undefined {
+  if (toName) return `To ${toName}`;
+  if (!course) return undefined;
+  if (course.finish) return CHIP_WORDS.finish;
+  return door.way === 'up' ? CHIP_WORDS.on : door.way === 'down' ? CHIP_WORDS.back : undefined;
+}
+
 /** Something worth pointing at, in room pixels. */
 export interface HintTarget {
   id: string;

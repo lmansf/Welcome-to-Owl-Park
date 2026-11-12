@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { HALL_ROOM, HALL_W } from '../rooms/hollowHall';
 import { ROOMS } from '../rooms/index';
-import { EDGE_ART, STRIP_OUT, bumpProfile, edgeArt, edgeDraws, edgePlaceholder, kitFrames, shapedEdge } from './edges';
+import { EDGE_ART, HALL_RING, STRIP_OUT, bumpProfile, edgeArt, edgeDraws, edgePlaceholder, kitFrames, shapedEdge } from './edges';
 import { pointInPolygon } from './geometry';
 import { INTERACTABLES } from './interactables';
 import { kitDrawPlan } from './kit';
@@ -130,5 +130,36 @@ describe("the arcade's edge stand-ins", () => {
     const keys = Object.keys(EDGE_ART).filter((k) => k.startsWith('edge-arcade-'));
     expect(keys.length).toBeGreaterThan(0);
     for (const key of keys) for (const op of edgePlaceholder(key) ?? []) expect(tree.has(op.c), key).toBe(false);
+  });
+});
+
+describe('the Great Hollow\'s plaza rings sit in its painting (OP-348)', () => {
+  const ring = edgePlaceholder('edge-hall-plaza-ring')!;
+  const mossy = edgePlaceholder('edge-hollow-plaza-ring')!;
+
+  it('rings each of the hall\'s plazas with the hall\'s own ring, not the mossy one', () => {
+    const rings = (HALL_ROOM.edges ?? []).filter((e) => EDGE_ART[e.key]?.kind === 'ring');
+    expect(rings.length).toBeGreaterThan(0);
+    for (const r of rings) expect(r.key).toBe('edge-hall-plaza-ring');
+    expect(EDGE_ART['edge-hall-plaza-ring']).toEqual(EDGE_ART['edge-hollow-plaza-ring']);
+  });
+
+  it('is a pool of light and a ring of stones with their shadows: none of the moss that lay on the painting as a green film', () => {
+    const ellipses = (ops: typeof ring) => ops.flatMap((o) => (o.op === 'ellipse' ? [o] : []));
+    const all = ellipses(ring);
+    expect(all).toHaveLength(ring.length);
+    const colours = new Set(all.map((o) => o.c));
+    expect([...colours].sort()).toEqual([HALL_RING.light, HALL_RING.shadow, HALL_RING.stone, HALL_RING.stoneDark].sort());
+    for (const o of ellipses(mossy)) if (o.rx > 100) expect(colours.has(o.c)).toBe(false);
+    // The pool: steps of light, each inside the last, none strong enough to lie on the floor as a disc.
+    const pool = all.filter((o) => o.c === HALL_RING.light && o.rx > 60);
+    expect(pool.length).toBeGreaterThanOrEqual(4);
+    for (let i = 1; i < pool.length; i++) expect(pool[i]!.rx).toBeLessThan(pool[i - 1]!.rx);
+    for (const o of pool) expect(o.a ?? 1).toBeLessThanOrEqual(0.1);
+    // Each stone lies over its own shadow.
+    const stones = all.filter((o) => o.c === HALL_RING.stone || o.c === HALL_RING.stoneDark);
+    const shadows = all.filter((o) => o.c === HALL_RING.shadow);
+    expect(stones.length).toBe(22);
+    expect(shadows.length).toBe(stones.length);
   });
 });

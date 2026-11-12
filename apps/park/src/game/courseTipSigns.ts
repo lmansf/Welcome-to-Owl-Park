@@ -5,7 +5,15 @@
  * the screen, clear of the bars at its top and foot.
  */
 import Phaser from 'phaser';
-import { tipFor, type CourseTip } from './courseTips';
+import type { Vec2 } from '@owl-park/shared';
+
+/** A tip as the signs draw it: a course's (courseTips.ts) or the Great Hollow's (hallTips.ts). */
+export interface TipSign {
+  id: string;
+  /** Where its words stand: the middle of their foot (room px). */
+  at: Vec2;
+  words: string;
+}
 
 /** Room pixels per screen pixel now: what keeps a tip the same size on any screen. */
 type Scale = () => number;
@@ -21,16 +29,16 @@ const FOOT_PX = 96;
 const SIDE_PX = 12;
 
 export class CourseTipSigns {
-  private readonly signs: Array<{ tip: CourseTip; text: Phaser.GameObjects.Text }> = [];
+  private readonly signs: Array<{ tip: TipSign; text: Phaser.GameObjects.Text }> = [];
   private scaleNow = 0;
   private focused: string | null = null;
 
   constructor(
     private readonly scene: Phaser.Scene,
-    private readonly tips: readonly CourseTip[],
+    tips: readonly TipSign[],
     private readonly scale: Scale,
-    /** Where the owl is across the room, and how high it is over the ground line. */
-    private readonly owl: () => { x: number; z: number },
+    /** The id of the tip that speaks to the owl where it is now, or null for none (courseTips.ts tipFor, hallTips.ts hallTipFor). */
+    private readonly pick: () => string | null,
     depth: number,
   ) {
     for (const tip of tips) {
@@ -67,8 +75,7 @@ export class CourseTipSigns {
       // Drawn at twice the size and scaled down by half, so the words stay sharp when the camera zooms in.
       for (const { text } of this.signs) text.setScale(s / 2);
     }
-    const owl = this.owl();
-    const next = tipFor(this.tips, owl.x, owl.z)?.id ?? null;
+    const next = this.pick();
     if (next !== this.focused) {
       this.focused = next;
       for (const { tip, text } of this.signs) {

@@ -1,6 +1,6 @@
 import { roomFor } from '../rooms';
 import { describe, expect, it } from 'vitest';
-import { floorLook, paintFloor, rgba } from './walkFloor';
+import { FOOTPRINT, floorLook, paintFloor, rgba, standsOwnArt } from './walkFloor';
 
 function recorder() {
   const calls: Array<{ op: string; args: unknown[] }> = [];
@@ -68,5 +68,25 @@ describe('the walkable floor, seen from above', () => {
     paintFloor(ctx, room as never, true);
     const strokes = calls.filter((c) => c.op === 'strokeStyle=').map((c) => c.args[0]);
     expect(strokes).toContain(floorLook(true).solidEdge);
+  });
+});
+
+describe('a perch its own art stands on (OP-348)', () => {
+  it('is every root of the Great Hollow: shown by its art and the shadow at its foot, with no amber box round its strip', () => {
+    const hall = roomFor('m3-hall')!;
+    const solid = (hall.perches ?? []).filter((p) => p.solid);
+    expect(solid.length).toBeGreaterThan(0);
+    for (const p of solid) expect(standsOwnArt(hall, p.id), p.id).toBe(true);
+  });
+
+  it('is not a perch that is part of a room\'s painting: that one keeps its amber edge', () => {
+    expect(standsOwnArt({ pieces: [] }, 'stump')).toBe(false);
+    expect(standsOwnArt({}, 'stump')).toBe(false);
+    expect(standsOwnArt({ pieces: [{ id: 'other', key: 'kit-under-root-knot', x: 0, y: 0 }] }, 'stump')).toBe(false);
+  });
+
+  it('darkens the floor under such a perch only a little', () => {
+    expect(FOOTPRINT.alpha).toBeGreaterThan(0.1);
+    expect(FOOTPRINT.alpha).toBeLessThan(0.35);
   });
 });

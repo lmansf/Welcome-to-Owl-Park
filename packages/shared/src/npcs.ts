@@ -52,6 +52,45 @@ export function placeName(room: string): string {
   return PLACE_NAMES[room] ?? 'the park';
 }
 
+/**
+ * The names the new map (3) gives places, where they are not the names quest text uses (OP-346). On
+ * the new map the room `hub` is the Party Grove at the tree's foot, and a step read "Visit the great
+ * tree" where the doorway's sign and the Menu's map both said the Party Grove. Quest text is worded
+ * once for every owl with PLACE_NAMES, whichever park the owl walks, and the play log records those
+ * words; a screen puts the walked park's own names in as it shows them (placeWords).
+ */
+export const NEW_MAP_PLACE_NAMES: Readonly<Record<string, string>> = {
+  hub: 'the Party Grove',
+  glass: 'the glass realm',
+  'm3-hall': 'the Great Hollow',
+};
+
+/**
+ * A place's name as an owl walking `map` is shown it: the new map's own where it has one. A room of the
+ * new map alone (its id says so, `m3-`) has that name whichever park the owl walks: a course's way out
+ * leads into the Great Hollow on any of them.
+ */
+export function placeShown(room: string, map: number): string {
+  return (map === 3 || room.startsWith('m3-') ? NEW_MAP_PLACE_NAMES[room] : undefined) ?? placeName(room);
+}
+
+const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/**
+ * `text` with each place named as the park the owl walks names it (`map`): quest steps and offers, an
+ * owl's title, what a quest owl says. Today's park and the tree read as they are written.
+ */
+export function placeWords(text: string, map: number): string {
+  if (map !== 3) return text;
+  let out = text;
+  for (const [room, name] of Object.entries(NEW_MAP_PLACE_NAMES)) {
+    const old = PLACE_NAMES[room];
+    if (!old || old === name) continue;
+    out = out.split(old).join(name).split(capital(old)).join(capital(name));
+  }
+  return out;
+}
+
 export const NPCS: readonly NpcDef[] = [
   {
     id: 'bramble',

@@ -95,6 +95,8 @@ export const EDGE_ART: Readonly<Record<string, EdgeArt>> = {
   'edge-hollow-litter': { w: 380, h: 300, kind: 'litter' },
   // The worn ring in the middle of each Commons' plaza, round the moonbeam where owls gather.
   'edge-hollow-plaza-ring': { w: 760, h: 380, kind: 'ring' },
+  // The Great Hollow's own plaza ring (OP-348): on its painted heartwood floor, a pool of the moonbeam's light ringed with stones.
+  'edge-hall-plaza-ring': { w: 760, h: 380, kind: 'ring' },
   // The ragged rim of the hollow along the top of its wall, one a screen.
   'edge-hollow-rim': { w: 1600, h: 150, kind: 'rim' },
   // The Treetop Commons' plaza (the lobby, grown to hold a crowd, Nov 8): a worn ring round its moonbeam,
@@ -400,8 +402,38 @@ function litterOps(key: string, a: EdgeArt): KitOp[] {
   return ops;
 }
 
+/**
+ * The Great Hollow's plaza ring (OP-348). Its floor is a painting of amber heartwood, and the mossy
+ * ring lay over it as a green film with nothing of the room's light in it. This one is made of what
+ * the painting has: the moonbeam's light pooled on the wood, brightest at its middle, and a ring of
+ * flat stones round it, each with its shadow, so they sit on the floor.
+ */
+export const HALL_RING = { light: 0xffe9b8, stone: 0x9a7a55, stoneDark: 0x6b5238, shadow: 0x2a1708 } as const;
+
+function hallRingOps(key: string, a: EdgeArt): KitOp[] {
+  const rnd = seeded(`${key}:paint`);
+  const cx = a.w / 2;
+  const cy = a.h / 2;
+  // The pool: soft steps of light, each inside the last.
+  const ops: KitOp[] = [0.96, 0.8, 0.62, 0.44, 0.26].map((k) => ell(cx, cy, Math.round(cx * k), Math.round(cy * k), HALL_RING.light, 0.07));
+  const n = 22;
+  for (let i = 0; i < n; i++) {
+    const t = (i / n) * Math.PI * 2 + rnd() * 0.12;
+    const r = 0.87 + rnd() * 0.06;
+    const x = Math.round(cx + Math.cos(t) * cx * r);
+    const y = Math.round(cy + Math.sin(t) * cy * r);
+    const rx = 14 + Math.round(rnd() * 8);
+    const ry = 8 + Math.round(rnd() * 4);
+    ops.push(ell(x + 2, y + 4, rx + 2, ry + 1, HALL_RING.shadow, 0.35));
+    ops.push(ell(x, y, rx, ry, i % 4 ? HALL_RING.stone : HALL_RING.stoneDark, 0.95));
+    ops.push(ell(x - 2, y - 2, Math.round(rx * 0.55), Math.round(ry * 0.45), HALL_RING.light, 0.25));
+  }
+  return ops;
+}
+
 /** A plaza's ring: a worn, paler band of moss round a mossy middle, set with flat stones, flat on the floor. */
 function ringOps(key: string, a: EdgeArt): KitOp[] {
+  if (key.startsWith('edge-hall-')) return hallRingOps(key, a);
   const rnd = seeded(`${key}:paint`);
   const cx = a.w / 2;
   const cy = a.h / 2;

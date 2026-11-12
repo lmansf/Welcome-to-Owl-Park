@@ -9,7 +9,7 @@ import { GLIDE_SLOPE, MAX_AIR_Z } from '../src/flight';
 import { hopTier, perchTiers } from '../src/routes';
 import { inThermal, thermalProblems } from '../src/thermal';
 import { WALK_SPEED } from '../src/walk';
-import { idolRealms, mapOf, voteRealmAt } from '../src/room';
+import { idolRealms, mapOf, spawnTop, voteRealmAt } from '../src/room';
 import {
   GROWN_ART,
   HALL_BOWL,
@@ -18,6 +18,7 @@ import {
   HALL_CY,
   HALL_GROWN,
   HALL_ID,
+  HALL_LIGHT,
   HEART_THERMAL,
   HALL_MIDDLE,
   HALL_ROOM,
@@ -226,9 +227,26 @@ describe('the Great Hollow (Nov 7; an oval, Nov 8)', () => {
       const art = hall.pieces!.find((p) => Math.hypot(p.x - middle(d.id).x, p.y - middle(d.id).y) < 120);
       if (art && atFront(d.id as (typeof HALL_WAYS)[number]) && d.id !== 'down')
         expect(d.labelAt!.y, d.id).toBeLessThan(art.y - KIT_ART[art.key]!.h * (art.scale ?? 1));
-      // At an end the art stands beside the floor: half a long label fits between it and the sign's
-      // middle, so no word slips under the doorway (the neon street read "The neon stre", Nov 9).
-      if (art && d.rect.h > d.rect.w) expect(Math.abs(d.labelAt!.x - art.x), d.id).toBeGreaterThanOrEqual(KIT_ART[art.key]!.w / 2 + 220);
+      // At an end the art stands beside the floor, and the sign beside the art, level with the doorway:
+      // the sign's own near edge stands at its spot (labelAnchor), just in from the art, so no word slips
+      // under the doorway whatever the label's length (the neon street read "The neon stre", Nov 9).
+      if (art && d.rect.h > d.rect.w) {
+        const east = art.x > HALL_MIDDLE;
+        expect(d.labelAnchor, d.id).toBe(east ? 1 : 0);
+        const a = KIT_ART[art.key]!;
+        const half = (a.left !== undefined && a.right !== undefined ? a.right - a.left : a.w) / 2;
+        const gap = east ? art.x - half - d.labelAt!.x : d.labelAt!.x - (art.x + half);
+        expect(gap, d.id).toBeGreaterThan(0);
+        expect(gap, d.id).toBeLessThan(40);
+        expect(Math.abs(d.labelAt!.y - middle(d.id).y), d.id).toBeLessThan(60);
+        // And clear of the idol that stands between the Commons' two ways (OP-346): a short sign stood across its face.
+        for (const c of HALL_COMMONS) {
+          if (!c.votesFor) continue;
+          const idol = middle(voteDoor(c.level));
+          const clear = Math.abs(d.labelAt!.x - idol.x) > 200 || d.labelAt!.y > idol.y || d.labelAt!.y < idol.y - 560;
+          expect(clear, `${d.id} and the idol of ${c.level}`).toBe(true);
+        }
+      } else expect(d.labelAnchor, d.id).toBeUndefined();
     }
   });
 
@@ -436,10 +454,40 @@ describe('the Great Hollow’s root runs (OP-308)', () => {
       // A moonbeam is a ring of light across its whole plaza: a root at its rim hides none of it.
       ...INTERACTABLES.filter((i) => i.room === HALL_ID && i.kind !== 'moonbeam').map((i) => ({ id: i.id, ...i.pos })),
       ...(hall.spots ?? []).map((s, i) => ({ id: `spot-${i}`, ...s })),
-      ...Object.entries(hall.spawns).map(([id, p]) => ({ id, ...p })),
+      // A spawn up on a root's own top (the stump the first flight's test glides from, OP-347) stands on the art, not behind it.
+      ...Object.entries(hall.spawns)
+        .filter(([id]) => spawnTop(hall, id) === 0)
+        .map(([id, p]) => ({ id, ...p })),
       ...hall.doors.map((d) => ({ id: d.id, ...middle(d.id) })),
     ];
+    // The one spawn up on a root is on that root's own strip, at its top.
+    const up = Object.keys(hall.spawns).filter((id) => spawnTop(hall, id) > 0);
+    expect(up).toEqual(['on-stump']);
+    const stump = hall.perches!.find((p) => p.id === rootId('ink', 'stump'))!;
+    expect(pointInPolygon(hall.spawns['on-stump']!, stump.area)).toBe(true);
+    expect(spawnTop(hall, 'on-stump')).toBe(stump.top);
     for (const b of boxes)
       for (const t of things) expect(t.x > b.x0 - 40 && t.x < b.x1 + 40 && t.y > b.y0 && t.y < b.y1, `${t.id} behind ${b.id}`).toBe(false);
+  });
+});
+
+describe('what stands in the Great Hollow takes its light (OP-348)', () => {
+  it('multiplies every root by the room\'s light, and its idols by a paler one', () => {
+    const roots = hall.pieces!.filter((p) => p.id.startsWith('root-') && p.id !== 'root-hatch');
+    expect(roots).toHaveLength(ROOT_RUNS.length * 3);
+    for (const r of roots) expect(r.tint, r.id).toBe(HALL_LIGHT.roots);
+    expect(HALL_BOWL.light).toBe(HALL_LIGHT.idols);
+    // A doorway keeps its realm's own colours: it is the way into another light.
+    for (const p of hall.pieces!.filter((q) => q.id.endsWith('-door'))) expect(p.tint, p.id).toBeUndefined();
+  });
+
+  it('is a warm light, and takes less from an idol than from a root', () => {
+    const rgb = (c: number) => [(c >> 16) & 255, (c >> 8) & 255, c & 255] as const;
+    for (const c of [HALL_LIGHT.roots, HALL_LIGHT.idols]) {
+      const [r, g, b] = rgb(c);
+      expect(r).toBeGreaterThanOrEqual(g);
+      expect(g).toBeGreaterThan(b);
+    }
+    expect(rgb(HALL_LIGHT.idols)[2]).toBeGreaterThan(rgb(HALL_LIGHT.roots)[2]);
   });
 });

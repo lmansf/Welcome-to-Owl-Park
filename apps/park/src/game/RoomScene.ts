@@ -111,6 +111,8 @@ import {
   dashRefusal,
   holdsDash,
   courseOfRoom,
+  endsCourse,
+  placeShown,
   airOut,
   liftAt,
   thermalAt,
@@ -186,15 +188,17 @@ import { ESCAPE_WORDS, escapeFor, type EscapeDoorway, type EscapeHollow } from '
 import { TRIAL_BACKDROP_VEIL, trialBackdropVeiled } from './skinTrial';
 import { PUZZLE_ART_KEYS, artScale, drawnAsSizeBox, drawsSkinTrial, loadArt, opensSoft, prefetchRoomArt, releaseArt, roomArtCap, roomArtKeys, roomOpeningArt, sharpCopy, sharpenArt } from './art';
 import { SpeechBubbles } from './bubbles';
-import { backWaits, doorwayUnder, doorwaysOff, roomsAhead, takesDoorway, upCounts } from './doors';
-import { PLAY_SPOTS, TriedDoors, doorSpot, leadsToPlay, playSpotsAt, trailTo, type PlaySpot } from './featherTrail';
+import { backWaits, carriedIn, doorwayUnder, doorwaysOff, roomsAhead, stillCarried, takesDoorway, upCounts } from './doors';
+import { PLAY_SPOTS, ROOTS_SPOT, TriedDoors, doorSpot, leadsToPlay, playSpotsAt, trailTo, type PlaySpot } from './featherTrail';
+import { FIRST_FLIGHT_MARK, glidedOff, hallTipFor, hallTips } from './hallTips';
+import { HALL_WORDS } from '../ui/hallWords';
 import { FeatherTrail } from './featherTrailView';
 import { admitTarget } from './gateAdmit';
 import { enteredRoom, walkingMap } from './walkingMap';
 import { storedKeeper } from '../net/keeper';
 import { FitOverlay } from './fitOverlay';
 import type { LedgePainter, PaintDebug } from './ledgePainter';
-import { doorHintTarget, nearTargets, placeHints, signFocus, signWaits, touchBottom } from './hints';
+import { doorHintTarget, nearTargets, placeHints, sideChipWords, signFocus, signWaits, touchBottom } from './hints';
 import { itemScale } from './items';
 import { FLOOR_KINDS, FloorThing } from './FloorThing';
 import { LeafPile, featherFind } from './LeafPile';
@@ -210,9 +214,10 @@ import { cameraBounds, followLead, type CoveredEdges } from './hudInset';
 import { RISE_HEAD, lookBetween, openingAt, restAt, riseBack, screenZoom, townZoom, wholeLook, wholeZoom, type Look } from './townView';
 import { SizeLabels } from './sizeLabels';
 import { CourseTipSigns } from './courseTipSigns';
-import { courseTips } from './courseTips';
+import { courseTips, tipFor } from './courseTips';
 import { DoorSigns } from './doorSigns';
 import { ReachPrompt, promptPlace, promptWords } from './reachPrompt';
+import { SeeThrough } from './seeThroughArt';
 import { sideEdges } from './sideEdges';
 import { drawWalkFloor } from './walkFloor';
 import { BOWL_BEYOND, BOWL_SHADOW, drawBowl } from './bowlView';
@@ -230,6 +235,8 @@ export interface RoomStart {
   lane?: Lane | undefined;
   /** How many times the walking keys had been let go as the owl left the last room (Keys.rests): the way back waits on one more (doors.ts, backWaits). */
   rests?: number | undefined;
+  /** Whether the room the owl left was seen from the side: a direction held across a change of view is not a walk (OP-346; doors.ts, carriedIn). */
+  side?: boolean | undefined;
   /** Come by travel from the Menu's map (OP-130): into the park, the room server lets it in only once it has walked through the gate. */
   via?: 'travel' | undefined;
   /**
@@ -461,6 +468,10 @@ export class RoomScene extends Phaser.Scene {
   private backWaiting = false;
   /** How many times the walking keys had been let go as the owl took the doorway here (Keys.rests). */
   private restsThen = 0;
+  /** The direction held as the owl came in across a change of view (doors.ts, carriedIn): not a walk until it is let go or points elsewhere. */
+  private carried: Vec2 | null = null;
+  /** The room's tall standing art, each see-through while the visitor's own owl is behind it (seeThrough.ts); none in a room seen from the side. */
+  private seeThrough: SeeThrough | null = null;
   /** How the owl came: by travel from the map, or (undefined) through a doorway, Play or the page's address. */
   private via: RoomStart['via'];
   private lane: Lane | undefined;
@@ -559,6 +570,11 @@ export class RoomScene extends Phaser.Scene {
   /** The owl's take-offs as its flight steps them (for tests): how many on this page, and the last one's top, whether it glided and how long it was up. */
   private flown = { n: 0, peak: 0, glided: false, ms: 0 };
   private flownFrom = 0;
+  /** Where the flight under way left the ground, and how high that was (a perch's top, 0 on the floor). */
+  private flownOff: { pos: Vec2; z: number } = { pos: { x: 0, y: 0 }, z: 0 };
+  /** Whether this room has the Great Hollow's root tips (hallTips.ts), and whether this device's owl has made its first glide off a root (OP-347). */
+  private rootTips = false;
+  private firstFlown = false;
   /** Where the room put the own owl when it last let it in (its welcome), until the room is caught up with the owl (OP-138). */
   private roomHas: Vec2 | null = null;
   /** Where the owl came into this room. */
@@ -692,12 +708,14 @@ export class RoomScene extends Phaser.Scene {
     this.voting = false;
     this.pendingVote = false;
     this.pieces = {};
+    this.seeThrough = null;
     this.opening = null;
     this.rise = null;
     this.thermalTold = false;
     this.cameFrom = data.from;
     this.backWaiting = data.from !== undefined;
     this.restsThen = data.rests ?? this.keys?.rests() ?? 0;
+    this.carried = carriedIn(data.side, this.sideView(), this.keys?.direction() ?? null, (this.keys?.rests() ?? 0) !== this.restsThen);
     this.cameWith = data.ticket ?? null;
     this.lane = data.lane;
     this.via = data.via;
@@ -1023,6 +1041,8 @@ export class RoomScene extends Phaser.Scene {
     setVignette(true);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => setVignette(false));
     this.pieces = addSetPieces(this, room, (pointer, event, realm) => this.onIdolTap(pointer, event, realm));
+    // Seen from above, tall art an owl can stand behind goes see-through while the visitor's own owl is behind it (OP-346).
+    this.seeThrough = this.sideView() ? null : new SeeThrough(this, this.pieces.standing ?? []);
     this.setRealms(this.transport.kind === 'edge' ? this.realms : { open: [...GATED_ROOMS], portal: true, night: null });
     this.arcade = arcadeFor(room, {
       scene: this,
@@ -1091,7 +1111,14 @@ export class RoomScene extends Phaser.Scene {
       () => this.cfg.pixelRatio / this.cameras.main.zoom,
       () => promptPlace({ x: this.me.x, y: this.me.y - this.me.flightHeight() }, this.doorSigns?.shownBox() ?? null, this.cfg.pixelRatio / this.cameras.main.zoom),
     );
-    this.tips = tips.length ? new CourseTipSigns(this, tips, () => this.cfg.pixelRatio / this.cameras.main.zoom, () => ({ x: this.me.pos.x, z: this.flier.air.z }), room.size.h + 130) : null;
+    // The Great Hollow's own tips (OP-347): how to hop up its roots and glide off them, until this device's owl has done it once.
+    const hall = courseDef ? [] : hallTips(room, TOUCH_SCREEN);
+    this.rootTips = hall.length > 0;
+    this.firstFlown = this.rootTips && triedDoors().has(room.id, FIRST_FLIGHT_MARK);
+    const pick = tips.length
+      ? () => tipFor(tips, this.me.pos.x, this.flier.air.z)?.id ?? null
+      : () => (this.firstFlown ? null : (hallTipFor(hall, this.me.pos, this.flier.air.z)?.id ?? null));
+    this.tips = tips.length || hall.length ? new CourseTipSigns(this, tips.length ? tips : hall, () => this.cfg.pixelRatio / this.cameras.main.zoom, pick, room.size.h + 130) : null;
     const settings = this.registry.get('settings') as SettingsStore | undefined;
     if (settings) {
       ambience.setCalm(settings.get().calm);
@@ -1207,6 +1234,7 @@ export class RoomScene extends Phaser.Scene {
     this.showBoard(this.quests.board);
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());
+    this.hud.setRoomDark(false);
     this.cameras.main.fadeIn(ROOM_FADE_IN_MS, 12, 30, 54);
     this.built = true;
     this.startOpening(this.registry.get('spawnName') as string | undefined);
@@ -1242,12 +1270,16 @@ export class RoomScene extends Phaser.Scene {
     // At what a tap asked for: nothing left for a jump to carry on to (OP-084).
     if (finished && this.walkGoal && distance(this.walkGoal, this.me.pos) < 3) this.walkGoal = null;
     this.posOverlay?.frame(this.me.pos, now, this.room.id);
+    this.seeThrough?.frame(this.me.pos, this.flier.air.z);
     // Where in the tree the owl is, on the computer's minimap (OP-213); none out of the tree.
     this.hud.setTreeSpot(this.sideView() ? { room: this.room.id, x: this.me.pos.x } : null);
     if (!this.leaving) {
       // Let go of since the owl took the doorway here, the keys open the way back (doors.ts, backWaits).
       const rested = (this.keys?.rests() ?? 0) !== this.restsThen;
-      this.backWaiting = backWaits(this.backWaiting, (this.keys?.direction() ?? null) !== null, this.hud.isBlocking(), rested);
+      const heldNow = this.keys?.direction() ?? null;
+      this.backWaiting = backWaits(this.backWaiting, heldNow !== null, this.hud.isBlocking(), rested);
+      // The same letting go, or a push another way, frees a direction held across a change of view (doors.ts, carriedIn).
+      this.carried = rested ? null : stillCarried(this.carried, heldNow);
       this.steer();
       this.checkDoors(finished);
       this.checkItems(now);
@@ -1648,8 +1680,13 @@ export class RoomScene extends Phaser.Scene {
 
   /** Where the held keys or the thumbstick walk the owl: seen from the side (the tree), along the floor only, up going through doorways there (OP-212). */
   private heldWay(): Vec2 | null {
-    const held = this.keys?.direction() ?? null;
+    const held = this.heldNow();
     return this.sideView() ? alongTheFloor(held) : held;
+  }
+
+  /** The direction held, as a push of the owl's: none while it is still the one the owl came in with across a change of view (OP-346; doors.ts, carriedIn). */
+  private heldNow(): Vec2 | null {
+    return this.carried ? null : (this.keys?.direction() ?? null);
   }
 
   /** WASD and the arrow keys: walk while held (sliding along edges) and stop on letting go. */
@@ -1751,7 +1788,8 @@ export class RoomScene extends Phaser.Scene {
       places.map((p) => {
         const door = this.room.doors.find((d) => d.id === p.id)!;
         const spot = this.interactions[p.id];
-        const named = door.to ? doorLabel(door, this.walking()) : undefined;
+        // Its sign's words, or seen from the side (no signs there) where it leads or which way along the course it goes.
+        const named = door.to ? (doorLabel(door, this.walking()) ?? (ground !== null ? this.sideChip(door) : undefined)) : undefined;
         return {
           ...p,
           tint: door.to ? (DOOR_TINTS[this.doorTo(door)?.room ?? door.to.room] ?? '#C9A227') : '#FFD36A',
@@ -1770,6 +1808,15 @@ export class RoomScene extends Phaser.Scene {
         };
       }),
     );
+  }
+
+  /** The words on the chip for a doorway of this room seen from the side (hints.ts, sideChipWords). */
+  private sideChip(door: DoorDef): string | undefined {
+    const to = this.doorTo(door);
+    if (!to) return undefined;
+    const name = placeShown(to.room, this.walking());
+    const course = courseOfRoom(this.room, COURSES);
+    return sideChipWords(door, name === 'the park' ? null : name, course ? { finish: endsCourse(course, to.room, (id) => ROOMS[id]) } : null);
   }
 
   /** A hint chip was tapped: head for that doorway or spot. */
@@ -1857,6 +1904,21 @@ export class RoomScene extends Phaser.Scene {
       const to = this.doorTo(d);
       return to !== undefined && !this.realmClosed(to.room) && !tried.has(this.room.id, d.id);
     });
+  }
+
+  /**
+   * Down from a flight (OP-347): the first glide off one of the Great Hollow's roots is marked, once on
+   * this device. The roots' tips have done their work and show no more, a line says so, and the trail
+   * leads on to a doorway.
+   */
+  private landedFromFlight(): void {
+    if (!this.rootTips || this.firstFlown || !this.flown.glided) return;
+    if (!glidedOff(this.flownOff.pos, this.flownOff.z, this.me.pos)) return;
+    this.firstFlown = true;
+    triedDoors().add(this.room.id, FIRST_FLIGHT_MARK);
+    triedDoors().add(this.room.id, ROOTS_SPOT);
+    this.hud.toast(HALL_WORDS.flown, 4200);
+    this.layTrail();
   }
 
   /** The games of this room's own that the owl has not stood at yet (OP-338, featherTrail.ts PLAY_SPOTS). */
@@ -2300,10 +2362,16 @@ export class RoomScene extends Phaser.Scene {
     doorSigns: string[];
     /** Seen from above, the words on the one doorway sign showing now (OP-309). */
     signShown: string | null;
+    /** Where that sign's words stand (room px), if one shows. */
+    signBox: { left: number; right: number; top: number; bottom: number } | null;
     /** The words of the course's tip showing now (OP-344), if any. */
     tipShown: string | null;
+    /** Whether this device's owl has glided off one of the Great Hollow's roots (OP-347). */
+    firstFlight: boolean;
     /** The words of the prompt over the visitor's own owl (OP-344), if any. */
     promptShown: string | null;
+    /** The tall art gone see-through because the visitor's own owl is behind it (OP-346), by its art's key. */
+    seeThrough: string[];
     /** The feather trail (OP-307): the feathers out now (room px) and the doorways that glint; null in a course. */
     trail: { feathers: Vec2[]; glints: string[]; on: boolean } | null;
     floorShown: boolean;
@@ -2376,8 +2444,11 @@ export class RoomScene extends Phaser.Scene {
       sizeLabels: this.sizeLabels?.keys() ?? [],
       doorSigns: this.doorSigns?.labels() ?? [],
       signShown: this.doorSigns?.shown() ?? null,
+      signBox: this.doorSigns?.shownBox() ?? null,
       tipShown: this.tips?.shown() ?? null,
+      firstFlight: this.firstFlown,
       promptShown: this.reach?.shown() ?? null,
+      seeThrough: this.seeThrough?.faded() ?? [],
       trail: this.trail ? { ...this.trail.debug(), on: this.trailOn } : null,
       floorShown: this.floorShown,
       edges: this.edgesDrawn,
@@ -3129,6 +3200,7 @@ export class RoomScene extends Phaser.Scene {
       const warm = this.thermalOn && column === null && !gust ? (thermalAt(this.room.thermals, this.me.pos, this.flier.air.z)?.top ?? null) : null;
       const lift = column ?? gust?.z ?? warm;
       const wasLifted = this.flier.air.s === LIFTED;
+      const stoodAt = this.flier.air.z;
       this.flier = stepFlier(this.flier, { pressed, held }, groundAt(this.room.perches, this.me.pos, this.flier.air.z), this.abilities, lift);
       const air = this.flier.air;
       // Taken up by a thermal: the camera draws back with the owl's height from here until it is down again (frameRise).
@@ -3143,10 +3215,14 @@ export class RoomScene extends Phaser.Scene {
         if (grounded) {
           this.flown = { n: this.flown.n + 1, peak: 0, glided: false, ms: 0 };
           this.flownFrom = at;
+          this.flownOff = { pos: { x: this.me.pos.x, y: this.me.pos.y }, z: stoodAt };
         }
         this.flown.peak = Math.max(this.flown.peak, air.z);
         if (air.s === GLIDING || air.s === LIFTED) this.flown.glided = true;
-      } else if (!grounded) this.flown.ms = at - this.flownFrom;
+      } else if (!grounded) {
+        this.flown.ms = at - this.flownFrom;
+        this.landedFromFlight();
+      }
       this.drawnAir = fall(this.drawnAir, FLIGHT_STEP_MS);
       if (airChanged(this.drawnAir, air)) {
         this.drawnAir = air;
@@ -3340,7 +3416,7 @@ export class RoomScene extends Phaser.Scene {
     const side = this.sideView();
     const pressed = side && upCounts(this.upAt, Date.now());
     if (this.upAt && !pressed) this.upAt = 0;
-    const upNow = pressed || (side && !this.decorating && holdsUp(this.keys?.direction() ?? null));
+    const upNow = pressed || (side && !this.decorating && holdsUp(this.heldNow()));
     const spots: string[] = [];
     let idolRealm: string | null = null;
     const errand = this.errand;
@@ -3740,7 +3816,8 @@ export class RoomScene extends Phaser.Scene {
   private async goTo(roomId: string, spawn: string, from: RoomStart['from'], fadeMs = LEAVE_FADE_MS, lane?: Lane, via?: RoomStart['via']): Promise<void> {
     // Counted before the room fades: keys let go during the fade or the next room's load are let go all the same.
     const rests = this.keys?.rests();
-    if (await this.leaveRoom(fadeMs)) this.scene.start('room', { room: roomId, spawn, from, lane, via, rests } satisfies RoomStart);
+    const side = this.sideView();
+    if (await this.leaveRoom(fadeMs)) this.scene.start('room', { room: roomId, spawn, from, lane, via, rests, side } satisfies RoomStart);
   }
 
   /** The owl stops, the room fades and its connection closes. False when the room is already being left. */
@@ -3748,6 +3825,8 @@ export class RoomScene extends Phaser.Scene {
     if (this.leaving) return false;
     this.leaving = true;
     this.hud.setHints([]);
+    // What the HUD shows of this room (a course's strip, the actions) fades with it (OP-346).
+    this.hud.setRoomDark(true);
     this.me.walk = null;
     for (const npc of this.npcs.values()) npc.setApproach(false, true);
     this.cameras.main.fadeOut(fadeMs, 12, 30, 54);
