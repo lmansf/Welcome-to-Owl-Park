@@ -600,3 +600,24 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   - Weighed and set aside: an arrival by air (a glide down the tree in place of the walk from the
     nest), which gets a new owl playing at once but gives the park no face; and replays of earlier
     visitors' flights, which need stored data the owner's rules keep his.
+- 2026-11-12: `main`'s browser suite went red on the art's merge commit, and this change's first run
+  was red too, each on a different test neither had touched. Neither was chance, and one was the
+  park's own fault.
+  - The canopy's "a step off the end of a bough" test watched the page's own frames for the owl in
+    the air. The drop takes 0.37 s and the flight catches up with however long a frame was (OP-353),
+    so a runner drawing fewer than three frames a second never draws the owl in it. Driven by hand:
+    at frames of 0.4 s and over a fall is counted and the owl is never seen in the air, the very
+    state the failed run reported. The park is right there. The test now runs on a clock it moves
+    itself, at fifty frames a second and at ten.
+  - The room server's "a leaf pile is shared" test failed with the pile not among the second owl's
+    objects: that owl was no longer in the grove. An owl that comes in with no doorway named, on top
+    of another, is given a spot up to 220 px from the spawn and walks over to it (its step aside),
+    and the grove's way to the hub is 65 px from its spawn: one such arrival in fifteen was walked
+    out through it (20 of 300 rolls of the room's own rule; 3 of 45 arrivals on a room server run
+    here). Nineteen rooms had some share of it. Small in the live park, where visitors come in by
+    named doorways that spread arrivals by 60 px, which reaches no way out; it bites a link straight
+    to a room, and every test that opens two owls in one. The room now gives no arrival a spot whose
+    walk over would pass through a way out (`walkCrossesExit`): 0 of 300 rolls in every room, 0 of
+    45 arrivals on the room server, and the second owl still stands apart from the first every time.
+  - Kept for next time: a red test on code a change did not touch is a finding until shown
+    otherwise; "it passed on the last run" was true of both of these for weeks.

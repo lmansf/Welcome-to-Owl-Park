@@ -124,33 +124,32 @@ test.describe('the courses’ air (OP-275)', () => {
   });
 
   test('a step off the end of a bough over the drop is no fall: the owl is in the air, and falls from there', async ({ page }) => {
+    test.slow(); // the park opened twice, every frame stepped by hand
     // On the low bough c12, the crown's drop under it. Walking off its east end used to count as a fall on
     // the spot, the owl still at the bough's height: it never got to drop, flap or glide.
-    await openPark(page, { room: 'canopy-3', spawn: 'on-c12', kit: '1' });
-    await expect.poll(async () => (await state(page)).air.z, { timeout: 10_000 }).toBe(C12.top);
-    // Watched in the page itself, frame by frame: off the bough, the owl is seen in the air below the
-    // bough's height before any fall is counted.
-    const seenInAir = page.evaluate(
-      (top) =>
-        new Promise<{ z: number; falls: number } | null>((done) => {
-          const until = performance.now() + 8000;
-          const look = () => {
-            const s = window.owlPark?.state();
-            if (s && (s.course?.falls ?? 0) > 0) return done(null);
-            if (s && s.air.s !== 0 && s.air.z < top - 5) return done({ z: s.air.z, falls: s.course?.falls ?? 0 });
-            if (performance.now() > until) return done(null);
-            requestAnimationFrame(look);
-          };
-          look();
-        }),
-      C12.top,
-    );
-    await page.evaluate((x) => window.owlPark.walkTo(x, window.owlPark.state()!.pos.y, true), C12.x1 + 120);
-    const air = await seenInAir;
-    expect(air, `off the bough the owl was never in the air: ${await seen(page)}`).not.toBeNull();
-    expect(air!.falls).toBe(0);
-    // Nothing pressed: it comes down in the drop, and that is the fall.
-    await expect.poll(async () => (await state(page)).course?.falls ?? 0, { timeout: 10_000, message: `no fall in the drop: ${await seen(page)}` }).toBe(1);
+    // On a clock only the test moves (OP-353), at fifty frames a second and at ten. The drop takes 0.37 s
+    // and the flight catches up with however long a frame was, so a runner drawing fewer than three
+    // frames a second never drew the owl in it: watched on the page's own frames, this test failed
+    // there with nothing wrong in the park (CI, Nov 12: twice in a row on one slow runner).
+    await holdTheClock(page);
+    for (const frameMs of [20, 100]) {
+      await openOnTheHeldClock(page, { room: 'canopy-3', spawn: 'on-c12', kit: '1' });
+      await until(page, 'the owl standing on the bough, the course counting its falls', async () => { const s = await now(page); return s.air.z === C12.top && s.air.s === 0 && s.course?.falls === 0; });
+      await page.evaluate((x) => window.owlPark.walkTo(x, window.owlPark.state()!.pos.y, true), C12.x1 + 120);
+      // Frame by frame: off the bough, the owl is seen in the air below the bough's height before any
+      // fall is counted.
+      let air: { z: number; falls: number } | null = null;
+      for (let t = 0; t < 4000 && !air; t += frameMs) {
+        await page.clock.fastForward(frameMs);
+        const s = await now(page);
+        if ((s.course?.falls ?? 0) > 0) break;
+        if (s.air.s !== 0 && s.air.z < C12.top - 5) air = { z: s.air.z, falls: s.course?.falls ?? 0 };
+      }
+      expect(air, `at ${frameMs} ms a frame, off the bough the owl was never in the air: ${await seen(page)}`).not.toBeNull();
+      expect(air!.falls).toBe(0);
+      // Nothing pressed: it comes down in the drop, and that is the fall.
+      await until(page, 'the fall in the drop', async () => ((await now(page)).course?.falls ?? 0) === 1);
+    }
   });
 
   for (const drop of DROPS) {
