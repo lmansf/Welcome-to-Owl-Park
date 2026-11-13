@@ -210,9 +210,10 @@ export function createWhichOwlScreen(root: HTMLElement): WhichOwlScreen {
     const q = say(card.ask);
     q.classList.add('wo-step');
     const picks = document.createElement('div');
-    // A card shows pictures when every answer on it has one (a card half pictures, half words reads as broken).
+    // A card shows pictures when every answer on it has one (a card half pictures, half words reads as broken);
+    // a painter's tab keeps its boxes, which tell the artist each picture's size and key.
     const pics = card.answers.map((a) => quizPicture(a.pic));
-    const pictured = pics.length > 0 && pics.every((p) => p !== null);
+    const pictured = !artBoxes && pics.length > 0 && pics.every((p) => p !== null);
     picks.className = `wo-picks n${card.answers.length}${artBoxes || pictured ? '' : ' words'} wo-step`;
     picks.dataset['woCard'] = card.id;
     card.answers.forEach((a, n) => {
