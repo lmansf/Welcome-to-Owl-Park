@@ -6,7 +6,7 @@
   the thermal on (OP-356, PR 234), and the courses' own art (OP-348, PR 235, put up again and
   merged on his second and third words of that day). Ticket OP-342. Branch
   `claude/determined-wozniak-3ljxrf`.
-- Last updated: 2026-11-12. Live for every visitor: the cleanup's five milestones (OP-343 to
+- Last updated: 2026-11-13. Live for every visitor: the cleanup's five milestones (OP-343 to
   OP-346, OP-349), the first flight (OP-347), the art pass (OP-348: the Great Hollow, the courses'
   ground, and the neon and ink courses on art of their own realms; 4.32 of the owner's 10 dollars
   spent), the flight at any frame rate (OP-353), three small controls on a phone (OP-354), the
@@ -32,7 +32,12 @@
   map onto the tickets of his audit of Nov 12 (OP-364 to OP-378); the four that had none are
   OP-397 to OP-400. Nothing was generated or changed under it.
 - OP-396, found while building the guardian: the Great Hollow's camera rested two ways in one
-  visit. Under "After the pass" below.
+  visit. Merged and live (PR 241, Nov 13). Under "After the pass" below.
+- From the owner's audit of Nov 12 (tickets OP-363 to OP-395, filed by another session), this
+  session takes the ones in its remit, one pull request at a time: OP-365 first (the quiz's size
+  boxes, his yes on the ticket), under "After the pass" below; then OP-369 (the HUD's chips
+  overlapping) and OP-370 (the hall at arrival). OP-368 (the second click at the turnstiles) is in
+  the gate's code, which his rules keep his, so it is left for his word.
 - Still the owner's to say: OP-335 and OP-341 (each needs a change under `.github/`, which his
   rules keep his unless he says so of that change); the "at the park" quest step (naming the
   place changes a logged step's words); OP-357 (the art tool's own tests are not part of CI and
@@ -499,6 +504,27 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   ahead than either a lead or none. It changes the feel of every room seen from above, so it would
   be built behind a flag for his look on a phone.
 
+### OP-365: the quiz's answers are cards of words
+
+- What was wrong: every answer in Which owl are you showed a dashed box that said "96 × 96" where
+  its picture will go (OP-326, so an artist knows what to paint). It is the second screen a new
+  visitor ever sees, and the owner's audit of Nov 12 read it as a park not finished. His word the
+  same day, on the ticket: words alone in the public quiz, the boxes kept behind the painter's or
+  keeper's flag.
+- The change: `ui/whichOwl.ts` adds the picture slot only on a painter's or keeper's tab
+  (`showsArtBoxes`: `?paint=1` or `?keeper=1` in the address). Every other visitor sees a card of
+  words, 120 px tall on a computer and an upright phone and 76 on a phone on its side. On a phone
+  held upright three answers stack one to a row, where three columns left each a word wide. The
+  questions, the answers' words, the points and the colour card are as they were, and
+  `docs/QUIZ-ART.md` is still the list to paint from.
+- Tests: every card of every run in `e2e/whichOwl.spec.ts` has no picture slot and no "N × N" in
+  its words (on main each answer has one); a test of the painter's tab holds what artists keep
+  (the box, its size, its art key); a unit test of the rule.
+- Should move: the share of first-time visitors who get through the quiz to an owl. Small
+  numbers: read owl by owl.
+- Seen and left: the feedback button at the screen's left edge sits over the first answer on a
+  phone held upright, before and after. That is OP-369's (one safe area for the HUD).
+
 ## Log
 
 - 2026-11-11: plan written after the walk. Five walkers at once used up the account's usage limit
@@ -923,3 +949,7 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   gap between the two keys, tried from none to three seconds), and the page notes the line as it
   comes. Kept for next time: a test that passes on a quick machine has still to be read for what
   it races, and `taskset -c 0` in front of a test run is a cheap slow runner.
+- 2026-11-13: OP-396 merged through the gate (PR 241, 75872b9) on its second run of the checks,
+  every one green, and is live (deploy run 314 on the merge commit). While those checks ran,
+  OP-365 was built in a working copy of its own (`git worktree`, its own dev server on another
+  port), so the wait on one pull request was not a wait on the next.
