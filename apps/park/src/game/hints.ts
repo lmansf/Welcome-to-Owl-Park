@@ -210,6 +210,17 @@ export function signX(x: number, w: number, view: { x: number; w: number }, marg
   return Math.min(hi, Math.max(lo, x));
 }
 
+/**
+ * Where the middle of a sign shown from afar stands across (OP-370, firstWays.ts: a doorway named to
+ * an owl wherever it stands): slid in as signX slides it while its own spot is on screen, and no
+ * further than that. Once its spot has left the screen the sign goes out with it, so it is never left
+ * standing at the screen's edge with no doorway by it; the chip there takes over its words.
+ */
+export function farSignX(x: number, w: number, view: { x: number; w: number }, margin: number): number {
+  const reach = w / 2 + margin;
+  return Math.min(x + reach, Math.max(x - reach, signX(x, w, view, margin)));
+}
+
 /** How tall an owl stands over its feet (room px), and the gap kept under them, so a sign never sits behind it. */
 const OWL_TALL = 95;
 const UNDER_FEET = 10;

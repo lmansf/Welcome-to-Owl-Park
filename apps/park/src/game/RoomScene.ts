@@ -200,7 +200,8 @@ import { enteredRoom, walkingMap } from './walkingMap';
 import { storedKeeper } from '../net/keeper';
 import { FitOverlay } from './fitOverlay';
 import type { LedgePainter, PaintDebug } from './ledgePainter';
-import { doorHintTarget, nearTargets, placeHints, sideChipWords, signFocus, signWaits, touchBottom } from './hints';
+import { doorHintTarget, nearTargets, placeHints, sideChipWords, signFocus, signWaits, signedDoors, touchBottom } from './hints';
+import { firstWays, type FirstDoor } from './firstWays';
 import { itemScale } from './items';
 import { FLOOR_KINDS, FloorThing } from './FloorThing';
 import { LeafPile, featherFind } from './LeafPile';
@@ -456,6 +457,12 @@ export class RoomScene extends Phaser.Scene {
   private signFocused: string | null = null;
   /** The doorway the owl came in by, while its sign is kept back (OP-337, hints.ts signWaits): until the owl has stepped out of its reach once. */
   private signKept: string | null = null;
+  /**
+   * The doorways named to an owl that has not played yet (OP-370, firstWays.ts): the arcade's hatch and
+   * the nearest course's gate, chosen as the owl comes in and kept while it is in the room. Their signs
+   * show wherever the owl is, and their words go to the screen's edge while their doorways are off it.
+   */
+  private firstNamed: ReadonlySet<string> = new Set();
   /** The view, screen and doors the hints were last placed for: unchanged, nothing is placed again (OP-204). */
   private hintsFor: { at: string; doors: unknown } = { at: '', doors: null };
   /** When to look again for doorways to fetch the next room's art through. */
@@ -727,6 +734,7 @@ export class RoomScene extends Phaser.Scene {
     this.keyTurns = 0;
     this.hintsShown = '';
     this.signFocused = null;
+    this.firstNamed = new Set();
     this.signKept = null;
     this.hintsFor = { at: '', doors: null };
     this.voting = false;
@@ -1321,6 +1329,8 @@ export class RoomScene extends Phaser.Scene {
       this.trailIdleAt = Date.now();
       this.time.delayedCall(TRAIL_AFTER_MS, () => this.layTrail());
     }
+    // An owl that has not played yet is named the arcade and the nearest course (OP-370), once the doorway it came in by is counted.
+    this.firstNamed = this.nameFirstWays();
     // Back from checkout in a page of its own (OP-190): in front of the turnstiles, and on through them with the ticket.
     const came = this.cameWith;
     this.cameWith = null;
@@ -1854,7 +1864,8 @@ export class RoomScene extends Phaser.Scene {
     const goal = this.me.walk && !this.keyWalk ? (this.walkGoal ?? this.me.walk.to) : null;
     const owlAt = `${Math.round(this.me.pos.x / 20)},${Math.round(this.me.pos.y / 20)},${goal ? `${Math.round(goal.x)},${Math.round(goal.y)}` : '-'}`;
     const signSeen = this.signFocused && this.doorSigns?.onScreen(this.signFocused) ? 1 : 0;
-    const at = `${v.x},${v.y},${v.width},${v.height},${window.innerWidth},${window.innerHeight},${owlAt},${signSeen}`;
+    const namedSeen = [...this.firstNamed].map((id) => (this.doorSigns?.onScreen(id) ? 1 : 0)).join('');
+    const at = `${v.x},${v.y},${v.width},${v.height},${window.innerWidth},${window.innerHeight},${owlAt},${signSeen},${namedSeen}`;
     if (at === this.hintsFor.at && this.room.doors === this.hintsFor.doors) return;
     this.hintsFor = { at, doors: this.room.doors };
     // Seen from the side, each doorway is pointed at on its own landing, and only the near ones (hints.ts).
@@ -1870,9 +1881,11 @@ export class RoomScene extends Phaser.Scene {
       if (this.signKept && !signWaits(true, all.find((t) => t.id === this.signKept), this.me.pos)) this.signKept = null;
       const focus = signFocus(all, this.me.pos, goal, this.signFocused, this.signKept);
       this.signFocused = focus;
-      this.doorSigns?.focus(focus);
+      // An owl that has not played yet is named two more, wherever it stands (OP-370).
+      const named = this.firstNamed;
+      this.doorSigns?.focus(focus, named);
       // Its sign on the floor names it once it is on screen: then no chip repeats it at the screen's edge.
-      targets = all.filter((t) => (t.id === focus && !this.doorSigns?.onScreen(t.id)) || keep.has(t.id));
+      targets = all.filter((t) => ((t.id === focus || named.has(t.id)) && !this.doorSigns?.onScreen(t.id)) || keep.has(t.id));
     } else targets = nearTargets(all, view, SIDE_HINT_REACH);
     const places = placeHints(targets, view, { w: window.innerWidth, h: window.innerHeight, ...HINT_INSETS, ...(TOUCH_SCREEN ? { bottom: touchBottom(TOUCH_HINT_BOTTOM, window.innerHeight) } : {}) });
     const shown = places.map((p) => `${p.id}:${Math.round(p.x)},${Math.round(p.y)},${p.angle.toFixed(2)}`).join('|');
@@ -2014,6 +2027,22 @@ export class RoomScene extends Phaser.Scene {
     this.hud.toast(HALL_WORDS.flown, 4200);
     this.sfx.play('bench');
     this.layTrail();
+  }
+
+  /**
+   * The doorways this room names to an owl that has not played yet (OP-370, firstWays.ts), from where
+   * the owl stands as it comes in: the arcade's hatch and the nearest course's gate. Only the oval read
+   * whole has them (a room with a bowl, the Great Hollow), where every way into play is on its rim and
+   * none is in view from the knothole.
+   */
+  private nameFirstWays(): ReadonlySet<string> {
+    if (!this.room.bowl || this.sideView()) return new Set();
+    const tried = triedDoors();
+    const doors = signedDoors(this.room, this.walking(), (id) => this.realmClosed(id)).map((d): FirstDoor => {
+      const to = roomFor(this.doorTo(d)?.room ?? '');
+      return { id: d.id, spot: doorSpot(d), play: leadsToPlay(to), arcade: to?.id === 'arcade', tried: tried.has(this.room.id, d.id) };
+    });
+    return new Set(firstWays(this.me.pos, doors));
   }
 
   /** The games of this room's own that the owl has not stood at yet (OP-338, featherTrail.ts PLAY_SPOTS). */
@@ -2494,6 +2523,12 @@ export class RoomScene extends Phaser.Scene {
     sizeLabels: string[];
     /** The words on the signs at the room's doorways (DoorDef.label). */
     doorSigns: string[];
+    /** The doorways whose signs show now: the one in focus, and those named to an owl that has not played yet (OP-370). */
+    signsShowing: string[];
+    /** Of those, the ones whose signs stand whole on screen: their words are there to read, and no chip repeats them. */
+    signsOnScreen: string[];
+    /** The doorways named to an owl that has not played yet (OP-370, firstWays.ts). */
+    firstWays: string[];
     /** Seen from above, the words on the one doorway sign showing now (OP-309). */
     signShown: string | null;
     /** Where that sign's words stand (room px), if one shows. */
@@ -2586,6 +2621,9 @@ export class RoomScene extends Phaser.Scene {
       sizeLabels: this.sizeLabels?.keys() ?? [],
       doorSigns: this.doorSigns?.labels() ?? [],
       signShown: this.doorSigns?.shown() ?? null,
+      signsShowing: this.doorSigns?.showing() ?? [],
+      signsOnScreen: (this.doorSigns?.showing() ?? []).filter((id) => this.doorSigns?.onScreen(id)),
+      firstWays: [...this.firstNamed],
       signBox: this.doorSigns?.shownBox() ?? null,
       tipShown: this.tips?.shown() ?? null,
       firstFlight: this.firstFlown,

@@ -35,10 +35,11 @@
   visit. Merged and live (PR 241, Nov 13). Under "After the pass" below.
 - From the owner's audit of Nov 12 (tickets OP-363 to OP-395, filed by another session), this
   session takes the ones in its remit, one pull request at a time. OP-365 (the quiz's size boxes,
-  his yes on the ticket) is merged and live (PR 242, Nov 13). OP-369 (one safe area along the top
-  of the screen) is built and in its pull request. Both are under "After the pass" below. Next is
-  OP-370 (the hall at arrival). OP-368 (the second click at the turnstiles) is in the gate's code,
-  which his rules keep his, so it is left for his word.
+  his yes on the ticket) and OP-369 (one safe area along the top of the screen) are merged and
+  live (PR 242 and PR 243, Nov 13). OP-370 (the Great Hollow at arrival) is built and in its pull
+  request. All three are under "After the pass" below. OP-368 (the second click at the
+  turnstiles) is in the gate's code, which his rules keep his, so it is left for his word; so is
+  the turnstiles' ticket card, which OP-369 measured and left (`ui/tickets.ts`).
 - Still the owner's to say: OP-335 and OP-341 (each needs a change under `.github/`, which his
   rules keep his unless he says so of that change); the "at the park" quest step (naming the
   place changes a logged step's words); OP-357 (the art tool's own tests are not part of CI and
@@ -565,6 +566,49 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   lies over them for its 2.6 seconds on a phone on its side (and by 3 px at 1024x768); at the
   other three sizes it is clear. One line there would put it under the stack.
 
+### OP-370: the Great Hollow at arrival
+
+- What the audit asks (Nov 12, hub orientation): a newcomer can point to the next thing to do in
+  five seconds and reach a course or the arcade without guessing at doorways.
+- Measured on main first, a newcomer through the turnstiles. Once the opening look is over the
+  camera rests on the owl at the back of the hall. At 1440x900 that view holds the knothole and
+  the two realm doorways beside it; at 1024x768 and on a phone, upright or on its side, the
+  knothole alone. No course and no arcade at any size, and no words on screen (the way back waits,
+  OP-337). The look itself shows the whole oval with nothing named. The feather trail leads to the
+  roots, a thing to practise, and says nothing.
+- The change, in two parts.
+  - Two places named (`game/firstWays.ts`, new and pure). An owl that has been through no doorway
+    into play is named two: the arcade's hatch and the nearest course's gate from where it came
+    in, by the words their signs already carry ("Down to the arcade", "Updraft Canopy" from the
+    knothole). While the opening look shows the whole oval their signs stand on their doorways.
+    As the camera comes in the same words go to the screen's edge on chips, each pointing where
+    its doorway is, and a tap on one walks the owl there. They are gone for good once the owl has
+    been through any doorway into play (the doorways tried are kept on the device, as the trail
+    keeps them). One sign at a time stays the rule for every other owl (OP-309). Only the oval
+    read whole has them (a room with a bowl). `hints.ts` `farSignX`: a sign named from afar goes
+    out of the screen with its doorway, so it is never left at the screen's edge with no doorway
+    by it.
+  - Two things about how the room reads. The floor's edge was a cream line along the foot of the
+    wall, and read as an outline left in by mistake; in a room with a wall all round its floor it
+    is now a groove, a dark line with a soft shade round it (`walkFloor.ts`, `BOWL_EDGE`). The
+    painting is drawn in a gentler light, about an eighth down and warm (`artTrial.ts`,
+    `HOLLOW_LIGHT`), so the owls, the trail and the signs stand off the floor; `?arttint=<rrggbb>`
+    tries another light on any page, and `ffffff` is the picture as painted.
+- Looked at and left as they are: the contact shadows under the owl and the roots (there since
+  OP-348); the ways with nothing behind them, grown over with roots and already unlike the open
+  doorways; the four root runs alike, which is the art's to change (OP-339's repaint); the
+  landmark, which is the guardian once its flag is on for everyone (OP-359).
+- Tests: `firstWays.test.ts` (the rule, on the hall's own doorways); `hints.test.ts` (the far
+  sign); `walkFloor.test.ts` (the groove); `artTrial.test.ts` (the light); and in
+  `e2e/townView.spec.ts`, on a held clock, a computer and a phone: during the look both signs
+  stand whole on screen and no chip repeats them; at rest neither doorway is in view and both
+  names are on chips, whole on screen and apart; an owl that has been down the hatch is named
+  neither.
+- Should move: of first-time arrivals in the Great Hollow, the share that go through a doorway
+  into play (OP-394's hub abandonment the other way round). Read owl by owl while visits are few.
+- For the owner's own test: with a fresh browser, come through the turnstiles and say out loud,
+  within five seconds of the camera coming to rest, where the arcade is and where a course is.
+
 ## Log
 
 - 2026-11-11: plan written after the walk. Five walkers at once used up the account's usage limit
@@ -1013,3 +1057,13 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   holder, so a capture taken then shows no guest's badge (the tests wait past that second, and a
   capture script must too); and the client must not be rebuilt under a running room server,
   which then serves an empty page.
+- 2026-11-13: OP-369 merged through the gate (PR 243, 1fe8fc8) on its first run of the checks
+  and is live (deploy run 316 on the merge commit).
+- 2026-11-13: OP-370 built (the Great Hollow at arrival; under "After the pass"). Measured before
+  anything was drawn: what a newcomer's screen holds once the opening look is over, at four
+  sizes. Nothing to play was in it at any of them, which made the ticket's first two points the
+  work and its art points the smaller part. Two of those needed nothing (the shadows, and the
+  ways grown over, were already as asked) and one is the art's (the four root runs alike). Kept
+  for next time: in this device's own mode an owl walks the new map from the home screen only on
+  a keeper's tab (`?keeper=1&newmap=1`); a plain tab walks the park as it was, so a capture that
+  means to show a visitor's arrival has to say so in its address or go through the room server.
