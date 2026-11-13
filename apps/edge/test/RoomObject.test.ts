@@ -848,6 +848,12 @@ class KeepingState extends FakeState {
 
 describe('an owl back from a dropped connection (OP-138)', () => {
   /** A page's hello from where its owl stands now. */
+  /** The room server stopped at once (killed, or a deploy): its sockets gone with it, nothing told; its storage stays. */
+  const killed = () => {
+    const kept = (state as KeepingState).kept;
+    state = new KeepingState();
+    for (const [k, v] of kept) (state as KeepingState).kept.set(k, v);
+  };
   const helloAt = (obj: Obj, ws: FakeSocket, pos: Vec2) => send(obj, ws, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK, pos });
   const lost = async (obj: Obj, ws: FakeSocket) => {
     ws.close(1006, 'network gone');
@@ -915,9 +921,31 @@ describe('an owl back from a dropped connection (OP-138)', () => {
     expect((state as KeepingState).kept.get('leavers')).toEqual({ hub: { v_a: { pos: { x: 3400, y: 780 }, leftAt: clock, dropped: true } } });
     // The room server stops: no close, no goodbye. It comes back on the same storage a few seconds on.
     clock += 4_000;
+    killed();
     const back = roomObject();
     await settle(); // the constructor reads its storage
     const page = connect('hub', 'v_a');
+    await helloAt(back, page, { x: 3400, y: 780 });
+    expect(page.last('welcome')?.you.pos).toEqual({ x: 3400, y: 780 });
+  });
+
+  it('writes down where an owl stands as it comes in, so one that came in just before the room server stopped is let back where it walked (OP-321)', async () => {
+    state = new KeepingState();
+    const obj = roomObject();
+    const first = connect('hub', 'v_first');
+    await helloAt(obj, first, { x: 2400, y: 730 });
+    // Another owl comes in a moment later, well inside STANDING_KEEP_MS, and walks off; no frame after.
+    clock += 2_000;
+    const b = connect('hub', 'v_b');
+    await helloAt(obj, b, { x: 2400, y: 730 });
+    await send(obj, b, { t: 'move', to: { x: 3400, y: 780 }, seq: 1 });
+    clock += 8_000;
+    // The room server stops without a goodbye and comes back on the same storage.
+    clock += 4_000;
+    killed();
+    const back = roomObject();
+    await settle();
+    const page = connect('hub', 'v_b');
     await helloAt(back, page, { x: 3400, y: 780 });
     expect(page.last('welcome')?.you.pos).toEqual({ x: 3400, y: 780 });
   });

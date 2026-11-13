@@ -285,9 +285,10 @@ const LEAVERS_KEY = 'leavers';
 /** The most owls kept there, the latest to leave first: the stored value stays small on a busy night. */
 const LEAVERS_KEPT = 500;
 /**
- * Where the owls in the rooms stand is written down this often at most while frames come in (OP-321),
- * so a room server that stops without a goodbye lets each owl back near where it stood: one storage
- * write per object every 15 s at the most, well inside the free plan's daily writes.
+ * Where the owls in the rooms stand is written down as each owl comes in or leaves, and this often at
+ * most while frames come in (OP-321), so a room server that stops without a goodbye lets each owl back
+ * near where it stood (a hello may be as far from it as the owl could walk since): one storage write
+ * per object every 15 s at the most beside the arrivals and leaves, well inside the free plan's writes.
  */
 export const STANDING_KEEP_MS = 15_000;
 /**
@@ -1265,6 +1266,9 @@ export class RoomObject extends DurableObject<Env> {
       closeSocket(ws, CLOSE.ROOM_FULL, 'room full');
       return false;
     }
+    // Where it stands from the moment it is in, not only from the next write (OP-321): a room server
+    // that stops soon after the owl came in still lets it back where it stood.
+    this.keepWhereOwlsAre();
     log.info('room.join', 'room_join_ok', 'An owl joined a room.', { owls: room.count, ...(hello.via ? { via: hello.via } : {}), ...(att.copy ? { copy: att.copy } : {}), ...(att.owner ? { owner: true } : {}), ...(att.spec ? { spectator: true } : {}) });
     if (replaced) log.info('room.join', 'reconnect_ok', 'An owl came back on a new socket before the room saw its old one go.', { gap_ms: 0, replaced: true });
     else if (back?.dropped) log.info('room.join', 'reconnect_ok', 'An owl came back after its connection dropped.', { gap_ms: Date.now() - back.leftAt });
@@ -1456,9 +1460,13 @@ export class RoomObject extends DurableObject<Env> {
   private keepWhereOwlsAre(): void {
     const now = Date.now();
     this.standingKeptAt = now;
+    // A room this object holds says itself who left it lately (an owl back is no longer among them) and who stands in it.
     const owls: Array<[string, string, Leaver]> = [];
-    for (const [id, kept] of this.leftBehind) for (const [owl, l] of Object.entries(kept)) if (now - l.leftAt <= LIMITS.leaverMemoryMs) owls.push([id, owl, l]);
-    for (const [id, room] of this.rooms) for (const [owl, l] of Object.entries(room.standingNow())) owls.push([id, owl, l]);
+    for (const [id, kept] of this.leftBehind) {
+      if (this.rooms.has(id)) continue;
+      for (const [owl, l] of Object.entries(kept)) if (now - l.leftAt <= LIMITS.leaverMemoryMs) owls.push([id, owl, l]);
+    }
+    for (const [id, room] of this.rooms) for (const [owl, l] of Object.entries({ ...room.leaversNow(), ...room.standingNow() })) owls.push([id, owl, l]);
     owls.sort((a, b) => b[2].leftAt - a[2].leftAt);
     const all: Record<string, Record<string, Leaver>> = {};
     for (const [id, owl, l] of owls.slice(0, LEAVERS_KEPT)) (all[id] ??= {})[owl] = l;
