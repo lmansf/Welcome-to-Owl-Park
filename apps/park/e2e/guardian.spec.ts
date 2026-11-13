@@ -27,6 +27,9 @@ test.describe('the guardian at the heart of the Great Hollow (OP-359, behind ?gu
   });
 
   test('it sleeps until an owl comes in by the knothole, opens its eyes, hoots once, and answers a hoot with its own; the trail goes round it', async ({ page }) => {
+    // About 170 frames, each drawn when the test moves the clock: 23 s on a quick machine, and past the
+    // usual 45 s on a slow runner, where it timed out twice running. The slow allowance, as the next test has.
+    test.slow();
     await holdTheClock(page);
     await openHallWithGuardian(page);
     let s = await now(page);

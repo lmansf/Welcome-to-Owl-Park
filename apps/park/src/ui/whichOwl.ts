@@ -11,12 +11,28 @@
  *
  * Nothing typed, no names, no score shown, no back button. The answers are kept nowhere: only the
  * result goes on, as the look. The words, picture slots and points are in
- * packages/shared/src/whichOwlBank.ts. An answer's picture is a box with its painted size on it until
- * an artist paints it (OP-326, docs/QUIZ-ART.md).
+ * packages/shared/src/whichOwlBank.ts. Until an artist paints the answers' pictures (OP-326,
+ * docs/QUIZ-ART.md) a visitor sees each answer as a card of words (OP-365): the slot, a box with its
+ * painted size on it, shows only on a painter's or a keeper's tab (showsArtBoxes), where the box
+ * tells the artist what to make.
+ *
+ * TODO-DOCS (OP-365): docs/QUIZ-ART.md says the game draws the dashed box for every visitor; it
+ * draws it with `?paint=1` or `?keeper=1` in the address, and word cards otherwise.
  */
 import { COLOUR_SETS, QUIZ_ART_SIZE, WHICH_OWL_WORDS as W, drawCards, getSpecies, natureDef, natureOf, quizLook, type ColourSetId, type Nature, type OwlLook, type QuizAnswer, type QuizCard } from '@owl-park/shared';
 import { createModal } from './modal';
 import type { PreviewFrame } from './owlBuilder';
+
+/**
+ * Whether the answers' picture slots show (OP-365): on a painter's or a keeper's tab (`?paint=1` or
+ * `?keeper=1` in the address, config.ts), where each is a dashed box with the size to paint it at and
+ * its art key. Every other visitor sees the answers as words alone: a box that says "96 × 96" reads
+ * as a park not finished (the owner's audit of Nov 12, and his word the same day).
+ */
+export function showsArtBoxes(search: string): boolean {
+  const q = new URLSearchParams(search);
+  return q.get('paint') === '1' || q.get('keeper') === '1';
+}
 
 /** How a run ended: the owl's new look, and which button took it on. */
 export type WhichOwlEnd = { kind: 'keep' | 'make'; look: OwlLook } | { kind: 'skip' } | { kind: 'closed' };
@@ -64,7 +80,12 @@ const CSS = `
 #hud .which-owl .wo-pick{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:8px;min-height:44px;padding:14px 8px 12px;border-radius:20px;
   background:rgba(246,241,227,.08);border:2px solid rgba(246,241,227,.2);color:#F6F1E3;box-shadow:none;font-size:15px;font-weight:700;line-height:1.25;white-space:normal}
 #hud .which-owl .wo-pick:hover,#hud .which-owl .wo-pick:focus-visible{border-color:#FFD36A;background:rgba(255,211,106,.12)}
-/* The picture's place (OP-326): a box with the size to paint it at, until the art comes. */
+/* Words alone (OP-365), as every visitor sees an answer until its picture is painted: a card tall enough to be an easy tap, its words in the middle. */
+#hud .which-owl .wo-picks.words .wo-pick{justify-content:center;min-height:clamp(76px,15vh,120px);padding:14px 12px;font-size:clamp(16px,2.6vh,20px)}
+/* Three answers across a phone held upright leave each a column a word wide: there they stack, one to a row. */
+@media (max-width:560px){#hud .which-owl .wo-picks.words.n3{grid-template-columns:minmax(0,1fr);width:min(360px,100%)}
+  #hud .which-owl .wo-picks.words.n3 .wo-pick{min-height:64px}}
+/* The picture's place (OP-326), on a painter's or keeper's tab: a box with the size to paint it at, until the art comes. */
 #hud .which-owl .wo-pic{display:flex;align-items:center;justify-content:center;width:clamp(64px,12vh,${QUIZ_ART_SIZE}px);aspect-ratio:1;border:2px dashed rgba(246,241,227,.5);border-radius:12px;
   font-size:12px;font-weight:600;letter-spacing:.02em;color:rgba(246,241,227,.75);background:rgba(246,241,227,.05)}
 #hud .which-owl .wo-feather{width:clamp(48px,10vh,76px);height:clamp(48px,10vh,76px)}
@@ -106,6 +127,7 @@ export function createWhichOwlScreen(root: HTMLElement): WhichOwlScreen {
   const modal = createModal(root, { name: 'which-owl', label: W.label, layout: 'full' });
   const box = modal.box;
   box.dataset['whichOwl'] = '';
+  const artBoxes = showsArtBoxes(globalThis.location?.search ?? '');
 
   let run: WhichOwlRun | null = null;
   let attempt = 0;
@@ -170,14 +192,18 @@ export function createWhichOwlScreen(root: HTMLElement): WhichOwlScreen {
     const q = say(card.ask);
     q.classList.add('wo-step');
     const picks = document.createElement('div');
-    picks.className = `wo-picks n${card.answers.length} wo-step`;
+    picks.className = `wo-picks n${card.answers.length}${artBoxes ? '' : ' words'} wo-step`;
     picks.dataset['woCard'] = card.id;
     card.answers.forEach((a, n) => {
       const b = button('', 'wo-pick', { woAnswer: String(n) });
-      // The art key names the picture for the artist; the box says the size to paint it at.
-      b.innerHTML = `<span class="wo-pic" aria-hidden="true">${QUIZ_ART_SIZE} × ${QUIZ_ART_SIZE}</span><span></span>`;
-      (b.firstElementChild as HTMLElement).dataset['woArt'] = a.pic;
-      b.lastElementChild!.textContent = a.label;
+      if (artBoxes) {
+        // For the artist: the art key names the picture, and the box says the size to paint it at.
+        const pic = Object.assign(document.createElement('span'), { className: 'wo-pic', textContent: `${QUIZ_ART_SIZE} × ${QUIZ_ART_SIZE}` });
+        pic.setAttribute('aria-hidden', 'true');
+        pic.dataset['woArt'] = a.pic;
+        b.append(pic);
+      }
+      b.append(Object.assign(document.createElement('span'), { textContent: a.label }));
       b.addEventListener('click', () => {
         // No undo: the next card slides in.
         answers.push(a);

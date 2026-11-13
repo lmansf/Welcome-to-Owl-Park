@@ -153,6 +153,7 @@ test.describe('the Great Hollow’s camera rests the same however the owl came b
   const SAME_REST = 10;
 
   test('after the opening look the owl stands where it stands on a plain address: at the middle of the view', async ({ page }) => {
+    test.slow(); // two rooms opened, the opening look and two walks, a frame at a go: 40 s on a slow runner
     await holdTheClock(page);
     // A plain address has no opening look.
     await openHeld(page, { room: 'm3-hall', newmap: '1' });
