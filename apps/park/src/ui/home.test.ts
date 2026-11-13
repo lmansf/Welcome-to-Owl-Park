@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { COLLECTOR_KEY, LOCAL_COLLECTOR_KEY, holdsOwl } from '../identity';
 import type { WalletEntry } from '../net';
-import { CLOSED_WORDS, HOME_WORDS, LINE_WORDS, reopenWords, walletSummary } from './home';
+import { CLOSED_WORDS, HOME_WORDS, LINE_WORDS, homePresence, reopenWords, walletSummary } from './home';
 
 const T0 = Date.UTC(2026, 11, 1, 18, 0, 0);
 const H = 3_600_000;
@@ -10,6 +10,19 @@ const ticket = (over: Partial<WalletEntry> = {}): WalletEntry => ({ id: 'OWL-7K3
 const storageWith = (keys: Record<string, string>) => ({ getItem: (k: string) => keys[k] ?? null });
 
 describe('the home screen (OP-065)', () => {
+  it('leads a first visit with free play, and says nothing of an empty park (OP-364)', () => {
+    expect(HOME_WORDS.playFree).toBe('Play free now');
+    // An empty or nearly empty park is not a reason to come in: no line at 0 or 1.
+    expect(homePresence(0)).toBeNull();
+    expect(homePresence(1)).toBeNull();
+    expect(homePresence(null)).toBeNull();
+    expect(homePresence(Number.NaN)).toBeNull();
+    expect(homePresence(2)).toBe('2 owls in the park right now.');
+    expect(homePresence(14)).toBe('14 owls in the park right now.');
+    // No 'grown ups' wording anywhere on the screen.
+    for (const w of Object.values(HOME_WORDS)) if (typeof w === 'string') expect(w.toLowerCase()).not.toMatch(/grown[ -]?ups?/);
+  });
+
   it('is logged in only on a device that holds an owl: a look it kept, or a collection', () => {
     expect(holdsOwl(storageWith({}))).toBe(false);
     expect(holdsOwl(null)).toBe(false);
