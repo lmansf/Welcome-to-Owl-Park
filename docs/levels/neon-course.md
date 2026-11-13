@@ -51,7 +51,7 @@ The ground line is the roofs' own deck; a sign's row says which circuit it is on
 | --- | ---: | ---: | ---: | --- | --- |
 | `ac1` | 300 | 200 | 120 | An air unit on the deck, breaker 1, glinting until it is on (OP-378) | the deck, one hop |
 | `s1` (a) | 700 | 180 | 230 | A sign | the deck, straight up |
-| `b1` | 1000 | 400 | 420 | The high roof, bench 1; its wall the deck's dark tin (OP-378) | `s1` only (from the deck it is a rise of 420) |
+| `b1` | 1000 | 400 | 420 | The high roof, bench 1 | `s1` only (from the deck it is a rise of 420) |
 | `bridge1` | 1900 | 240 | 300 | A footbridge over the street, lost feather 1 | a glide down off `b1` |
 | `s2` (a) | 3000 | 180 | 200 | A sign | the second deck |
 | `s3` (b) | 3300 | 180 | 380 | A sign | `s2` |

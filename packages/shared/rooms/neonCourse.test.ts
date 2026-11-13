@@ -9,7 +9,7 @@ import { groundAt, perchTopLimit } from '../src/perches';
 import type { Polygon } from '../src/geometry';
 import { mapOf, spawnTop, type RoomDef } from '../src/room';
 import { perchTiers } from '../src/routes';
-import { CIRCUIT_COURSE, CIRCUIT_GROUND, CIRCUIT_ROOMS, FIRST_ROOF_WALL } from './neonCourse';
+import { CIRCUIT_COURSE, CIRCUIT_GROUND, CIRCUIT_ROOMS } from './neonCourse';
 import { COURSES, ROOMS, TREE_GROUND, TREE_REALMS } from './index';
 
 const rooms = (id: string) => ROOMS[id];
@@ -209,13 +209,6 @@ describe('the neon course’s ground and walls (OP-348)', () => {
     expect(leadsOpen(r, null).map((l) => l.id)).toEqual(['lead-1']);
     expect(leadsOpen(r, []).map((l) => l.id)).toEqual(['lead-1']);
     expect(leadsOpen(r, ['breaker-1'])).toEqual([]);
-    // The bright blue wall of the first high roof is the deck's dark tin; the far roof keeps its lit sheet.
-    const wall = (id: string) => {
-      const mid = ledges.find((l) => l.id === id)!.mid!;
-      return KIT_ART[mid]?.standIn ?? mid;
-    };
-    expect(wall('b1')).toBe(FIRST_ROOF_WALL);
-    expect(wall('b2')).toBe('kit-tex-neon-lit-wall');
     // No other room of the park leads yet.
     for (const [id, room] of Object.entries(ROOMS)) if (id !== 'circuit-1') expect(room.course?.leads, id).toBeUndefined();
   });
