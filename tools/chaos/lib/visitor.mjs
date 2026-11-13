@@ -90,6 +90,7 @@ export class Visitor {
     if (!r.ok) throw new Error(`GET /api/pass: HTTP ${r.status}`);
     const body = await r.json();
     if (body.collector) this.collector = body.collector;
+    this.keptPass = typeof body.exp === 'number' ? { pass: body.pass, exp: body.exp } : null;
     return body.pass;
   }
 
@@ -118,7 +119,10 @@ export class Visitor {
     if (this.stopped) return;
     let pass;
     try {
-      pass = await this.pass();
+      // As a page does (apps/park/src/net/edge.ts getPass): the pass it holds while it has a minute
+      // left, so an owl back after a drop or a restart is the same visitor to the room (OP-321).
+      const kept = this.keptPass && this.keptPass.exp * 1000 > Date.now() + 60_000 ? this.keptPass.pass : null;
+      pass = kept ?? (await this.pass());
     } catch (e) {
       this.emit({ kind: 'error', what: 'pass', message: e.message });
       return this.retry();
@@ -134,7 +138,11 @@ export class Visitor {
       this.heartbeat = setInterval(() => ws.readyState === WebSocket.OPEN && ws.send('hb'), HEARTBEAT_MS);
     });
     ws.on('message', (data) => this.onFrame(String(data)));
-    ws.on('error', (e) => this.emit({ kind: 'error', what: 'socket', message: e.message }));
+    ws.on('error', (e) => {
+      // The pass refused at the upgrade (401): the next try takes a new one. A park that is down keeps it.
+      if (/Unexpected server response: 401/.test(e.message)) this.keptPass = null;
+      this.emit({ kind: 'error', what: 'socket', message: e.message });
+    });
     ws.on('close', (code, reason) => {
       clearInterval(this.heartbeat);
       if (this.ws !== ws) return;

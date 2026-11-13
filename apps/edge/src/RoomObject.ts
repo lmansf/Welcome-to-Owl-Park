@@ -285,6 +285,13 @@ const LEAVERS_KEY = 'leavers';
 /** The most owls kept there, the latest to leave first: the stored value stays small on a busy night. */
 const LEAVERS_KEPT = 500;
 /**
+ * Where the owls in the rooms stand is written down as each owl comes in or leaves, and this often at
+ * most while frames come in (OP-321), so a room server that stops without a goodbye lets each owl back
+ * near where it stood (a hello may be as far from it as the owl could walk since): one storage write
+ * per object every 15 s at the most beside the arrivals and leaves, well inside the free plan's writes.
+ */
+export const STANDING_KEEP_MS = 15_000;
+/**
  * The nightly restart (OP-181): how long after its notice every socket closes, by the object's alarm.
  * No shorter than the Worker keeps what it read of the gate (GATE_KEEP_MS), so every Worker knows of
  * the restart before the owls it sent home can ask to come back in.
@@ -414,6 +421,8 @@ export class RoomObject extends DurableObject<Env> {
   private closingAt: number | null = null;
   /** Where owls left each room lately, kept past the rooms themselves (OP-138). */
   private readonly leftBehind = new Map<string, Record<string, Leaver>>();
+  /** When where the owls stand was last written down (OP-321). */
+  private standingKeptAt = 0;
   /** The room server's log (OP-134), at the deployment's level. */
   private readonly log: Logger;
   /** Each room's frames' handling times since its window began (OP-134's tick_latency_p95). */
@@ -941,6 +950,7 @@ export class RoomObject extends DurableObject<Env> {
       throw e;
     } finally {
       if (at) this.sampleTick(at.room, Date.now() - t0);
+      if (at && Date.now() - this.standingKeptAt >= STANDING_KEEP_MS) this.keepWhereOwlsAre();
     }
   }
 
@@ -1256,6 +1266,9 @@ export class RoomObject extends DurableObject<Env> {
       closeSocket(ws, CLOSE.ROOM_FULL, 'room full');
       return false;
     }
+    // Where it stands from the moment it is in, not only from the next write (OP-321): a room server
+    // that stops soon after the owl came in still lets it back where it stood.
+    this.keepWhereOwlsAre();
     log.info('room.join', 'room_join_ok', 'An owl joined a room.', { owls: room.count, ...(hello.via ? { via: hello.via } : {}), ...(att.copy ? { copy: att.copy } : {}), ...(att.owner ? { owner: true } : {}), ...(att.spec ? { spectator: true } : {}) });
     if (replaced) log.info('room.join', 'reconnect_ok', 'An owl came back on a new socket before the room saw its old one go.', { gap_ms: 0, replaced: true });
     else if (back?.dropped) log.info('room.join', 'reconnect_ok', 'An owl came back after its connection dropped.', { gap_ms: Date.now() - back.leftAt });
@@ -1436,6 +1449,27 @@ export class RoomObject extends DurableObject<Env> {
     for (const [id, owl, l] of fresh.slice(0, LEAVERS_KEPT)) (all[id] ??= {})[owl] = l;
     this.leftBehind.clear();
     for (const [id, kept] of Object.entries(all)) this.leftBehind.set(id, kept);
+    this.keepWhereOwlsAre();
+  }
+
+  /**
+   * Write down where owls left lately and where the owls in the rooms stand now (OP-321), the latest
+   * first and no more than LEAVERS_KEPT: after a stop without a goodbye, the object wakes on this and
+   * an owl back soon resumes near where it stood, as one back from a dropped connection does (OP-138).
+   */
+  private keepWhereOwlsAre(): void {
+    const now = Date.now();
+    this.standingKeptAt = now;
+    // A room this object holds says itself who left it lately (an owl back is no longer among them) and who stands in it.
+    const owls: Array<[string, string, Leaver]> = [];
+    for (const [id, kept] of this.leftBehind) {
+      if (this.rooms.has(id)) continue;
+      for (const [owl, l] of Object.entries(kept)) if (now - l.leftAt <= LIMITS.leaverMemoryMs) owls.push([id, owl, l]);
+    }
+    for (const [id, room] of this.rooms) for (const [owl, l] of Object.entries({ ...room.leaversNow(), ...room.standingNow() })) owls.push([id, owl, l]);
+    owls.sort((a, b) => b[2].leftAt - a[2].leftAt);
+    const all: Record<string, Record<string, Leaver>> = {};
+    for (const [id, owl, l] of owls.slice(0, LEAVERS_KEPT)) (all[id] ??= {})[owl] = l;
     void this.ctx.storage.put(LEAVERS_KEY, all);
   }
 
