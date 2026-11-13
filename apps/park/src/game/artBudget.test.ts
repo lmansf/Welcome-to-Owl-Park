@@ -13,9 +13,7 @@ const PNG_MAX_KB = 300;
 const WEBP_MAX_KB = 700;
 
 /** Over the PNG budget on purpose, each with why. */
-const OVER_BUDGET: Record<string, string> = {
-  'hub-fg@2x.png': "the hub's overlay at 2x: 256 colours already, which WebP does not beat, and only computers load it (phones take the 1x)",
-};
+const OVER_BUDGET: Record<string, string> = {};
 
 const kb = (f: string) => statSync(join(ART, f)).size / 1024;
 
