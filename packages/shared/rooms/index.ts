@@ -676,9 +676,11 @@ export const ROOMS: Record<string, RoomDef> = {
       // it goes back to the market.
       { id: 'to-market', rect: { x: 0, y: 700, w: 120, h: 100 }, to: { room: 'market', spawn: 'from-arcade' }, toNew: { room: 'm3-hall', spawn: 'from-under' }, marker: { x: 100, y: 640 } },
       // The three cabinets, each spot on the floor in front of its cabinet and each marker on its screen.
-      { id: 'cabinet-crossing', rect: { x: 540, y: 812, w: 160, h: 60 }, marker: { x: 652, y: 482 } },
-      { id: 'cabinet-flight', rect: { x: 1820, y: 790, w: 160, h: 60 }, marker: { x: 1862, y: 496 } },
-      { id: 'cabinet-sling', rect: { x: 3910, y: 780, w: 170, h: 60 }, marker: { x: 3975, y: 468 } },
+      // A spot reaches up to the cabinet's front (OP-323), so an owl standing against the front anywhere
+      // along it, or walking the hall at the height it came in at, is at the cabinet.
+      { id: 'cabinet-crossing', rect: { x: 540, y: 770, w: 160, h: 102 }, marker: { x: 652, y: 482 } },
+      { id: 'cabinet-flight', rect: { x: 1820, y: 766, w: 160, h: 84 }, marker: { x: 1862, y: 496 } },
+      { id: 'cabinet-sling', rect: { x: 3910, y: 756, w: 170, h: 84 }, marker: { x: 3975, y: 468 } },
     ],
   },
   lobby: {
