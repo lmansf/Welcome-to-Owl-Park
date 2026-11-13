@@ -19,6 +19,7 @@ import { closed, line, notice } from './line';
 import { adminMasks, masks } from './masks';
 import { counts, healthRoute, socket } from './rooms';
 import type { Route } from './router';
+import { googleVerification, GOOGLE_VERIFY_PATH } from './siteVerification';
 import { storeWebhookRoute } from './store';
 import { tickets } from './tickets';
 import { cspReport, entry, guestPass, travel } from './visit';
@@ -82,6 +83,9 @@ export const ROUTES: readonly Route[] = [
 
   // ---- The Realm Vote ----
   { prefix: '/api/vote', handle: vote },
+
+  // ---- Google Search Console's ownership check (OP-393) ----
+  { path: GOOGLE_VERIFY_PATH, handle: googleVerification },
 
   // ---- The rooms ----
   { path: '/api/health', handle: healthRoute },
