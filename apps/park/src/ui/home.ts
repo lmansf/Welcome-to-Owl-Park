@@ -1,7 +1,7 @@
 /**
  * The home screen (OP-065): what the park opens on. Logged out (no owl on this device yet): the
- * park's name and what it is, with its mascot, Make your owl, Look around free (a ready-made owl,
- * straight in, the second site audit) and Settings. Logged in: Play, a line about the tickets
+ * park's name and what it is, with its mascot, Play free now (a ready-made owl, straight in: the
+ * second site audit's Look around free, put first by the third, OP-364), Make your owl and Settings. Logged in: Play, a line about the tickets
  * on this device, and Settings, with the visitor's own owl drawn big beside them (the builder's
  * preview scene draws it in the frame this screen leaves for it). Play always lands the owl in its
  * own nest, before its mirror (OP-105), and the park is out of the nest's door. "Logged in" means
@@ -10,7 +10,7 @@
  * and Make your owl, with their words and the time they expect to open; a keeper's tab keeps its Play.
  *
  * The screen reads top to bottom as one story (Nov 6): who the park is (the mascot, the name, its one line),
- * the way in (Play, or Make your owl and Look around free on a first visit), one small line under it about
+ * the way in (Play, or Play free now and Make your owl on a first visit), one small line under it about
  * tickets and who is in, and I already have an owl as a quiet link. Settings, About the park, Safety and
  * privacy and the chatroom-worlds line sit in a small footer. The lead under the name is for a first visit only:
  * an owl coming back already knows what the park is.
@@ -27,6 +27,14 @@ export const HOME_WORDS = {
   name: 'Owl Park',
   /** The first visit's button: there is no account to log into yet, so it makes the owl on this device (Log in returns with OP-050's sign-in). */
   logIn: 'Make your owl',
+  /**
+   * The first visit's first button (OP-364, the audit's first fix): free play, straight in with a ready-made
+   * owl (what Look around free did), ahead of Make your owl. The line under it names the first thing to do.
+   */
+  playFree: 'Play free now',
+  playFreeLine: 'Straight in with a ready-made owl: the feather trail leads to your first glide.',
+  /** For families (OP-364): what keeps the park calm, in one line under the lead. */
+  safeChat: 'Owls talk with set phrases only: there is no typed chat.',
   /** Into the owl's own nest, before its mirror, where Your owl is (OP-077, OP-105). */
   play: 'Play',
   /**
@@ -91,6 +99,16 @@ export function reopenWords(at: number, now: number, opts: { locale?: string; ti
     timeZoneName: 'short',
   }).format(at);
   return CLOSED_WORDS.back(when);
+}
+
+/**
+ * The presence line as the home screen shows it (OP-364): only when the count is worth saying. An empty or
+ * nearly empty park is not a reason to come in (the audit, p3: a quiet visit is not a selling point), so 0
+ * and 1 show nothing here; from 2 owls up the line is presenceLine's.
+ */
+export function homePresence(n: number | null): string | null {
+  if (n === null || !Number.isFinite(n) || n < 2) return null;
+  return presenceLine(n);
 }
 
 /** What the closed card shows (OP-233): the keepers' words, their reopen time if any, and whether this tab is a keeper's. */
@@ -210,6 +228,9 @@ function css(): string {
 @keyframes h-opening{0%,100%{opacity:1}50%{opacity:.72}}
 @media (prefers-reduced-motion:reduce){#hud .home .h-main[aria-busy="true"]{animation:none;opacity:.85}}
 #hud .home .h-lead{margin:0;font-size:clamp(14px,2.2vh,17px);line-height:1.4}
+#hud .home .h-safe{margin:-6px 0 0;font-size:13px;line-height:1.35;opacity:.8}
+/* Under Play free now: the first thing to do, named (OP-364). */
+#hud .home .h-free-line{margin:-6px 0 0;font-size:13px;line-height:1.35;text-align:center;color:#F6F1E3;opacity:.85}
 /* One small line under Play: the ticket line and who is in the park, side by side when both show. */
 #hud .home .h-sub{margin:-4px 0 0;font-size:13px;line-height:1.4;text-align:center;color:#F6F1E3}
 #hud .home .h-sub>span{opacity:.82}
@@ -263,6 +284,7 @@ function css(): string {
   #hud .home h1 .h-tag{font-size:13px}
   #hud .home .h-lead{font-size:14px;text-align:center}
   #hud .home .h-side .h-links button.h-link{font-size:12px;padding:6px}
+  #hud .home .h-free-line,#hud .home .h-safe{font-size:12px;text-align:center}
   #hud .home .h-sub{font-size:12px}
   #hud .home .h-welcome{font-size:11px}
 }
@@ -288,14 +310,16 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
       <div class="h-hero">
       <div class="h-brand"><span class="h-mascot" aria-hidden="true"></span><h1><span data-home-name></span> <span class="h-tag" data-home-tag></span></h1></div>
       <p class="h-lead" data-home-lead></p>
+      <p class="h-safe" data-home-safe></p>
       <p class="h-note" data-home-note hidden></p>
       <div class="h-closed" data-home-closed role="status" aria-live="polite" hidden>
         <p class="h-closed-words" data-closed-words></p>
         <p data-closed-back hidden></p>
         <p data-closed-keeper hidden></p>
       </div>
-      <button class="h-main" data-home-btn="login"></button>
-      <button class="ghost h-small h-free" data-home-btn="guest"></button>
+      <button class="h-main h-free" data-home-btn="guest"></button>
+      <p class="h-free-line" data-home-free-line></p>
+      <button class="ghost h-small" data-home-btn="login"></button>
       <button class="h-main" data-home-btn="play"></button>
       <div class="h-line" data-home-line role="status" aria-live="polite" hidden>
         <h2 data-line-heading></h2>
@@ -323,6 +347,10 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
   $<HTMLElement>('[data-home-name]').textContent = HOME_WORDS.name;
   $<HTMLElement>('[data-home-tag]').textContent = ABOUT_WORDS.tagline;
   $<HTMLElement>('[data-home-lead]').textContent = ABOUT_WORDS.homeLead;
+  const safe = $<HTMLElement>('[data-home-safe]');
+  safe.textContent = HOME_WORDS.safeChat;
+  const freeLine = $<HTMLElement>('[data-home-free-line]');
+  freeLine.textContent = HOME_WORDS.playFreeLine;
   $<HTMLElement>('[data-home-welcome]').textContent = ABOUT_WORDS.welcome;
   const presenceEl = $<HTMLElement>('[data-home-presence]');
   const lead = $<HTMLElement>('[data-home-lead]');
@@ -361,7 +389,7 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
   closedKeeper.textContent = CLOSED_WORDS.keeper;
   lineTicket.textContent = LINE_WORDS.ticket;
   login.textContent = HOME_WORDS.logIn;
-  guest.textContent = ABOUT_WORDS.lookAround;
+  guest.textContent = HOME_WORDS.playFree;
   play.textContent = HOME_WORDS.play;
   settings.textContent = HOME_WORDS.settings;
   restore.textContent = ACCOUNT_WORDS.restore;
@@ -396,6 +424,7 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
   const buttons = () => {
     login.hidden = loggedIn || shut;
     guest.hidden = loggedIn || shut;
+    freeLine.hidden = guest.hidden;
     play.hidden = !loggedIn || waiting || shut;
   };
   const frame = (): PreviewFrame => {
@@ -426,12 +455,14 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
       buttons();
       // The lead is for a first visit: an owl coming back already knows what the park is.
       lead.hidden = isIn;
+      safe.hidden = isIn;
       if (!isIn) {
         wallet.hidden = true;
         noteEl.hidden = true;
       }
       syncSub();
-      if (!shut) (isIn ? play : login).focus({ preventScroll: true });
+      // A first visit: free play takes the focus (OP-364), so Enter or a screen reader starts there.
+      if (!shut) (isIn ? play : guest).focus({ preventScroll: true });
       if (isIn) actions.stage(frame());
     },
     hide() {
@@ -501,11 +532,11 @@ export function createHomeScreen(root: HTMLElement, actions: HomeActions): HomeS
       }
       buttons();
       // Open again while the screen is up: Play is back, and takes the focus as it would have.
-      if (wasShut && !shut && shown) (loggedIn ? play : login).focus({ preventScroll: true });
+      if (wasShut && !shut && shown) (loggedIn ? play : guest).focus({ preventScroll: true });
     },
     isShut: () => shut,
     presence(n) {
-      const line = presenceLine(n);
+      const line = homePresence(n);
       presenceEl.textContent = line ?? '';
       presenceEl.hidden = line === null;
       syncSub();
