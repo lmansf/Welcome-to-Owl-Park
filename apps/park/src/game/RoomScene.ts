@@ -190,7 +190,7 @@ import { PUZZLE_ART_KEYS, artScale, drawnAsSizeBox, drawsSkinTrial, loadArt, ope
 import { SpeechBubbles } from './bubbles';
 import { backWaits, carriedIn, doorwayUnder, doorwaysOff, heldAtFall, roomsAhead, stillCarried, stillHeldSinceFall, takesDoorway, upCounts, type HeldAtFall } from './doors';
 import { PLAY_SPOTS, ROOTS_SPOT, TriedDoors, doorSpot, leadsToPlay, playSpotsAt, trailTo, type PlaySpot } from './featherTrail';
-import { CALLS, GUARDIAN_ROOM, guardianShade, type OwlSeen } from './guardian';
+import { CALLS, GUARDIAN_ROOM, GUARDIAN_VIEW, guardianShade, lookShowing, mustShow, presence, type OwlSeen } from './guardian';
 import { GuardianView, type GuardianState } from './guardianView';
 import { FIRST_FLIGHT_MARK, glidedOff, hallTipFor, hallTips } from './hallTips';
 import { HALL_WORDS } from '../ui/hallWords';
@@ -481,6 +481,11 @@ export class RoomScene extends Phaser.Scene {
   private seeThrough: SeeThrough | null = null;
   /** The guardian alive at the heart of the Great Hollow (OP-359): only there, and only behind `?guardian=1` (flags.ts). */
   private guardian: GuardianView | null = null;
+  /**
+   * The camera near the guardian (guardian.ts, presence): how much it is the guardian's now (0 to 1, eased),
+   * whether it has the camera, what the HUD covered as it took it, and when this was last worked out.
+   */
+  private guardianCam: { hold: number; on: boolean; covered: CoveredEdges; at: number } | null = null;
   /** How the owl came: by travel from the map, or (undefined) through a doorway, Play or the page's address. */
   private via: RoomStart['via'];
   private lane: Lane | undefined;
@@ -729,6 +734,7 @@ export class RoomScene extends Phaser.Scene {
     this.pieces = {};
     this.seeThrough = null;
     this.guardian = null;
+    this.guardianCam = null;
     this.sideCam = null;
     this.opening = null;
     this.rise = null;
@@ -1338,6 +1344,7 @@ export class RoomScene extends Phaser.Scene {
     this.posOverlay?.frame(this.me.pos, now, this.room.id);
     this.seeThrough?.frame(this.me.pos, this.flier.air.z);
     this.guardian?.frame(now, this.owlsSeen());
+    this.frameGuardianCam(now);
     // On a touch screen the thumbstick goes quiet while the owl is under it (OP-349): told a few times a second.
     if (TOUCH_SCREEN && now - this.owlToldAt > 180) {
       this.owlToldAt = now;
@@ -4402,6 +4409,11 @@ export class RoomScene extends Phaser.Scene {
       this.rise.covered = this.hud.coveredEdges();
       return this.frameRise();
     }
+    // And the camera near the guardian (frameGuardianCam).
+    if (this.guardianCam?.on) {
+      this.guardianCam.covered = this.hud.coveredEdges();
+      return this.frameGuardianCam(Date.now());
+    }
     // Cover the room across, and a screen of it down: a room taller than a screen (the Great Hollow's
     // plazas) scrolls down under the camera as it does along, following the owl, its owls no smaller.
     // The town view (OP-336) draws back from that in a room seen from above.
@@ -4529,6 +4541,54 @@ export class RoomScene extends Phaser.Scene {
     }
     const { width, height } = this.scale.gameSize;
     const look = lookBetween(this.nearLook(r.covered), wholeLook(this.room.size, { w: width, h: height }, RISE_HEAD), k);
+    cam.setZoom(look.zoom);
+    cam.centerOn(look.x, look.y);
+  }
+
+  /**
+   * One frame of the camera near the guardian (OP-359, guardian.ts): on the floor round it the camera
+   * shows the guardian's head and the visitor's own owl both, moved and drawn back from the owl's own
+   * view only as far as that takes, and eased to and from it as the owl comes and goes. The opening
+   * look and a ride on the rising air have the camera to themselves, and it comes in again after them.
+   */
+  private frameGuardianCam(now: number): void {
+    if (!this.guardian) return;
+    const cam = this.cameras.main;
+    const want = presence(this.me.pos);
+    const g = (this.guardianCam ??= { hold: want, on: false, covered: this.hud.coveredEdges(), at: now });
+    const dt = Math.min(0.25, Math.max(0, (now - g.at) / 1000));
+    g.at = now;
+    if (this.opening || this.rise?.back || this.mirrorFrame || this.decorating) {
+      g.on = false;
+      g.hold = 0;
+      return;
+    }
+    g.hold += (want - g.hold) * (1 - Math.exp(-GUARDIAN_VIEW.rate * dt));
+    if (want === 0 && g.hold < 0.004) {
+      g.hold = 0;
+      if (!g.on) return;
+      // Back to the owl's own camera: followed first, then fitted, so the fit's lead over the owl is kept.
+      g.on = false;
+      cam.setBackgroundColor('rgba(0,0,0,0)');
+      cam.startFollow(this.followed(), true, this.followEase(), this.followEase());
+      this.fitCamera();
+      return;
+    }
+    if (!g.on) {
+      g.on = true;
+      g.covered = this.hud.coveredEdges();
+      cam.stopFollow();
+      cam.removeBounds();
+      cam.setBackgroundColor(artTrialFor(globalThis.location?.search ?? '', this.room.id)?.beyond ?? BOWL_BEYOND);
+    }
+    const { width, height } = this.scale.gameSize;
+    const near = this.nearLook(g.covered);
+    const edges = this.viewEdges(g.covered);
+    const toRoom = this.cfg.pixelRatio / near.zoom;
+    const far = lookShowing(near, mustShow(this.me.pos, this.flier.air.z, { over: g.covered.top * toRoom, under: g.covered.bottom * toRoom }), { w: width, h: height });
+    // Held to the room, as the owl's own view is.
+    const held = { zoom: far.zoom, ...restAt(far, { w: width / far.zoom, h: height / far.zoom }, cameraBounds(this.room.size, edges, this.cfg.pixelRatio / far.zoom)) };
+    const look = lookBetween(near, held, g.hold);
     cam.setZoom(look.zoom);
     cam.centerOn(look.x, look.y);
   }

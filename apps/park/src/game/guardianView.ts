@@ -10,7 +10,8 @@
  *
  * Round it: a soft glow that breathes with it, a shadow at its foot, the rings of its hoot and the
  * ripple that hoot sends across the floor, and motes of warm light rising off it, thick and fast
- * while an owl rides the rising air at the heart. In calm motion the rings stay and the rest is still.
+ * while an owl rides the rising air at the heart. In calm motion (Settings) its hoot is the sound and
+ * the rings alone, and there are no motes.
  */
 import Phaser from 'phaser';
 import type { Vec2 } from '@owl-park/shared';
@@ -244,8 +245,9 @@ export class GuardianView {
     this.rings.explode(1);
     scene.time.delayedCall(260, () => this.rings.active && this.rings.explode(1));
     scene.time.delayedCall(560, () => this.rings.active && this.rings.explode(1));
-    scene.tweens.add({ targets: this, hootSwell: 1, duration: 260, yoyo: true, hold: 240, ease: 'Sine.easeOut' });
+    // In calm motion its hoot is the sound and the rings: no swell of light, no ripple.
     if (this.opts.calm()) return;
+    scene.tweens.add({ targets: this, hootSwell: 1, duration: 260, yoyo: true, hold: 240, ease: 'Sine.easeOut' });
     const ripple = scene.add
       .ellipse(this.at.x, this.at.y - 30, 520, 170)
       .setStrokeStyle(5, 0xffe2a8, 0.55)

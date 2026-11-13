@@ -147,5 +147,21 @@ test.describe('the guardian at the heart of the Great Hollow (OP-359, behind ?gu
       const at = await now(page);
       return at.seeThrough.length === 0 && at.guardian!.alpha === 1 && at.guardian!.beat < 0.3;
     });
+
+    // Out in front of it the camera keeps its face in view: its head and the owl are both on the screen,
+    // here and a good way further back, where the owl's own camera would have its head off the top.
+    const headTop = Math.min(...g.boxes.map((b) => b.y));
+    const bothInView = async () => {
+      const cam = await page.evaluate(() => window.owlPark.camera()!);
+      const at = await now(page);
+      return !at.walking && cam.viewY <= headTop && cam.viewY + cam.viewH >= at.pos.y;
+    };
+    await until(page, 'its head and the owl both in view', bothInView);
+    await page.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), { x: g.at.x, y: g.at.y + 620 });
+    await until(page, 'the owl further back', async () => {
+      const at = await now(page);
+      return !at.walking && at.pos.y > g.at.y + 560;
+    });
+    await until(page, 'its head and the owl both in view from further back', bothInView);
   });
 });

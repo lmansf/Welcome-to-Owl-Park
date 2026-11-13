@@ -29,6 +29,8 @@
  */
 import type { Rect, Vec2 } from '@owl-park/shared';
 import { HALL_MIDDLE, HALL_ROOM, RUN_Y } from '@owl-park/shared/rooms';
+import { OWL_BODY } from './seeThrough';
+import type { Look } from './townView';
 
 /**
  * The painting (art/guardian.png) as it is measured, in its own pixels: where the owl stands in its
@@ -84,6 +86,78 @@ export function guardianBoxes(at: Vec2 = GUARDIAN_AT, scale = GUARDIAN_SCALE): R
  */
 export function guardianShade(pad = 40, at: Vec2 = GUARDIAN_AT, scale = GUARDIAN_SCALE): Rect[] {
   return guardianBoxes(at, scale).map((b) => ({ x: b.x - pad, y: b.y - pad, w: b.w + pad * 2, h: b.h + pad * 2 }));
+}
+
+/**
+ * Near the guardian the camera keeps its face in view. Followed as in any room, an owl a few strides
+ * out in front of it has the guardian's head off the top of the screen, and everything the guardian
+ * does it does with its head. So on the floor round it the camera shows the guardian's head and the
+ * owl both: moved no further than that takes, and drawn back only when one screen cannot hold the two.
+ */
+export const GUARDIAN_VIEW = {
+  /** The floor where the camera is wholly the guardian's: this far either side of its middle line, behind the top of its head, and out in front of its foot. */
+  side: 760,
+  back: 320,
+  front: 900,
+  /** Past that floor the camera goes back to the owl's own over this distance. */
+  fade: 280,
+  /** Room kept over its ear tufts, under the owl's feet and to either side of the two (beyond what the HUD covers). */
+  over: 60,
+  under: 70,
+  beside: 150,
+  /** The camera is drawn back no further than this share of the owl's own zoom: an owl is never drawn much smaller for it. */
+  least: 0.72,
+  /** How fast the camera goes to it and from it (1/s). */
+  rate: 2.6,
+} as const;
+
+/** How much the camera is the guardian's for the visitor's own owl standing at `owl`: all of it on the floor round the guardian, none far from it. */
+export function presence(owl: Vec2, at: Vec2 = GUARDIAN_AT, scale = GUARDIAN_SCALE): number {
+  const V = GUARDIAN_VIEW;
+  const top = Math.min(...guardianBoxes(at, scale).map((b) => b.y));
+  const dx = Math.max(at.x - V.side - owl.x, 0, owl.x - (at.x + V.side));
+  const dy = Math.max(top - V.back - owl.y, 0, owl.y - (at.y + V.front));
+  const t = clamp(Math.hypot(dx, dy) / V.fade, 0, 1);
+  return 1 - t * t * (3 - 2 * t);
+}
+
+/**
+ * What the camera shows near the guardian: the owl standing at `owl`, `z` up, with room under its feet,
+ * and the guardian's head with room over it. `covered`: what the HUD covers at the top and the foot of
+ * the screen, in room px.
+ */
+export function mustShow(owl: Vec2, z: number, covered: { over: number; under: number } = { over: 0, under: 0 }, at: Vec2 = GUARDIAN_AT, scale = GUARDIAN_SCALE): { owl: Rect; head: Rect } {
+  const V = GUARDIAN_VIEW;
+  const h = guardianBoxes(at, scale)[0]!;
+  const pad = (x0: number, y0: number, x1: number, y1: number): Rect => ({ x: x0 - V.beside, y: y0 - V.over - covered.over, w: x1 - x0 + V.beside * 2, h: y1 - y0 + V.over + covered.over + V.under + covered.under });
+  return {
+    owl: pad(owl.x - OWL_BODY.w / 2, owl.y - z - OWL_BODY.h, owl.x + OWL_BODY.w / 2, owl.y),
+    head: pad(h.x, h.y, h.x + h.w, h.y + h.h),
+  };
+}
+
+/**
+ * The camera's look that shows the owl and the guardian's head on a screen `screen` (the game's own
+ * pixels), changed as little from `near` as will do: its zoom unless that cannot hold the two, then
+ * drawn back to hold them but no further than `least` of that zoom (an owl is never drawn much smaller
+ * for it); and its middle moved only as far as brings the two in. Where even that cannot hold both, the
+ * owl stays whole on the screen, with as much of the guardian's head as fits beside it.
+ */
+export function lookShowing(near: Look, must: { owl: Rect; head: Rect }, screen: { w: number; h: number }, least: number = GUARDIAN_VIEW.least): Look {
+  const { owl, head } = must;
+  const x0 = Math.min(owl.x, head.x);
+  const y0 = Math.min(owl.y, head.y);
+  const w = Math.max(owl.x + owl.w, head.x + head.w) - x0;
+  const h = Math.max(owl.y + owl.h, head.y + head.h) - y0;
+  const zoom = Math.max(near.zoom * least, Math.min(near.zoom, screen.w / w, screen.h / h));
+  // Along one way of the screen: the middle that holds both where the view can, else the owl and what it can of the head.
+  const along = (c: number, lo: number, span: number, owlLo: number, owlSpan: number, headMid: number, view: number) =>
+    span <= view ? clamp(c, lo + span - view / 2, lo + view / 2) : clamp(headMid, owlLo + Math.min(owlSpan, view) - view / 2, owlLo + view / 2);
+  return {
+    zoom,
+    x: along(near.x, x0, w, owl.x, owl.w, head.x + head.w / 2, screen.w / zoom),
+    y: along(near.y, y0, h, owl.y, owl.h, head.y + head.h / 2, screen.h / zoom),
+  };
 }
 
 /** How its eyes are: open, half shut (dozing, or on the way), or shut. */
@@ -262,7 +336,7 @@ export class GuardianMind {
   private last: number | null = null;
   private watching: string | null = null;
   private caller: { id: string; until: number } | null = null;
-  private newcomer: { id: string; until: number } | null = null;
+  private newcomer: { id: string; until: number; greeted: boolean } | null = null;
   /** No waking before this: an owl that has just come in sees its eyes open. */
   private sleepUntil = 0;
   private lastSeen: number | null = null;
@@ -287,7 +361,8 @@ export class GuardianMind {
 
   /** An owl has come into the hall. `greet`: it came in by the knothole, and is hooted to. */
   arrived(id: string, now: number, greet: boolean): void {
-    this.newcomer = { id, until: now + GUARDIAN_RULES.newcomerMs };
+    // The owl it is greeting keeps its eye: another that comes in meanwhile is looked at after.
+    if (greet || !this.newcomer?.greeted || now >= this.newcomer.until) this.newcomer = { id, until: now + GUARDIAN_RULES.newcomerMs, greeted: greet };
     // Asleep, it sleeps on a moment: the owl that has come in sees its eyes open. Awake, it only looks.
     if (this.drowse > 0.5) this.sleepUntil = Math.max(this.sleepUntil, now + GUARDIAN_RULES.wakeAfterMs);
     this.lastSeen = now;
@@ -304,7 +379,10 @@ export class GuardianMind {
     this.sleepUntil = Math.min(this.sleepUntil, now);
     this.lastSeen = now;
     const from = now + GUARDIAN_RULES.answerAfterMs;
-    if (call === 'hoot') return this.hootDue(from);
+    if (call === 'hoot') {
+      this.hootDue(from);
+      return;
+    }
     if (this.gestures.some((g) => g.kind === call && g.until > now)) return;
     const way = this.rand() < 0.5 ? 1 : -1;
     this.gestures.push({ kind: call, from, until: from + (call === 'bow' ? GUARDIAN_RULES.bowMs : GUARDIAN_RULES.tiltMs), way });

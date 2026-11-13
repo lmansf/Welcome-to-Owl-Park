@@ -388,6 +388,7 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   6. The clearing's idol on the rim is the same painting. With the flag on it stands as a carving
      (one tone of wood, still), so the living owl is not in the room twice.
   7. Its hoot is a cue in the sound table, low and soft, under the Sounds switch.
+  8. Near it the camera keeps its face in view (added while building: see "As built").
 - Not in it: the room server, the room's data, the gate, tickets, stored data, new art, spend. So
   it has no footprint yet (an owl can walk where its bough lies; a footprint is room data, and
   comes with switching it on); other owls behind it are hidden as behind any tall thing; it does
@@ -404,6 +405,52 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
 - Should move, once it is on for every visitor (behind the flag only the owner sees it): visits
   that end in the hall within a minute (down); visits that reach the arcade or a course (up); owls
   back on another day (up).
+- As built (Nov 13):
+  - It stands on the hall's middle line with its foot 142 px in front of the root runs, 1.06 times
+    the painting's size: about nine owls tall. No way into the hall sets an owl down hidden behind
+    it (a test holds every spawn to that), and its ear tufts end 167 px under the owl that comes in
+    by the knothole.
+  - Its mind is a pure file (`guardian.ts`): asleep until an owl comes in; 0.9 s later its eyes
+    open (shut, half, open); it attends to that owl; at 1.7 s it tilts its head nine degrees and
+    back; at 2.5 s it hoots once, its head lifting. It answers a hoot 0.65 s after it, one answer
+    for a crowd's hoots and no more than one hoot in 2.6 s. It answers a bow and a tilt in kind,
+    for owls that own those emotes (every owl has the hoot). It blinks every 3 to 8 s, dozes when
+    no owl has been within 1,500 px of its face for 9 s, and beats while an owl rides the rising
+    air. Its head eases by an exact spring, the same at any frame rate.
+  - The painting is cut in the page (`guardianArt.ts`): the head above a neck line that dips under
+    the chin, the body below it with its own feathers mirrored on up under where the head was, a
+    lid over each eye drawn from the brow's colour. At rest head over body is the painting, pixel
+    for pixel. The two are put together each frame into one texture shown by a plain image, so it
+    fades as one when it goes see-through.
+  - The engine the park builds (`src/engine/phaser.cjs`) has no render-texture game object; the
+    texture manager's own dynamic texture does the same job with nothing added to the build.
+  - The camera near it. The first pictures showed the fault: followed as in any room, an owl a few
+    strides out in front has the guardian's head off the top of the screen, and everything the
+    guardian does it does with its head. So on the floor round it (760 px either side, 900 px out
+    in front) the camera shows its head and the owl both, moved only as far as that takes and
+    drawn back only when one screen cannot hold the two, never to less than 0.72 of the owl's own
+    zoom. Where even that cannot hold both (a phone held sideways, the owl well out in front) the
+    owl stays whole on the screen with as much of the head as fits. Measured: on a computer the
+    whole guardian is in view from 800 px out in front; on a phone held sideways its face is in
+    view to about 500 px out.
+  - The carving: with the flag on, the treehouse clearing's idol on the rim is the same painting in
+    one tone of wood, and still.
+  - In calm motion its hoot is the sound and the rings alone, and no motes rise.
+- What the building showed, and what is left:
+  - Found on the way, and its own ticket (OP-396): after the hall's opening look, and after a ride
+    on the rising air, the camera loses the lead that keeps the back of the room in view over the
+    owl (the scene fits the camera and then starts following again, and the follow call resets the
+    lead). Every owl through the turnstiles has it. Not part of this slice: it changes the view for
+    every visitor, so it goes up as an ordinary change of its own.
+  - The roots' tips ("Hop up the roots...") stand over the inner ends of the two root runs, and at
+    the hall's zoom their words reach over the guardian's sides by a few px.
+  - An owl set down in the hall's middle (a plain link to the hall, travel by the map) stands at
+    the front of its bough.
+  - Each page works its guardian out for itself, so two visitors can see it attend to different
+    owls. Telling the room is a later slice, and the room server's.
+  - The owner's audit of Nov 12 was turned into tickets by another session the same night (OP-363
+    to OP-395). OP-370 (the hall at arrival) names the guardian as the landmark its arrival view
+    frames, once this slice is on.
 
 ## Log
 
@@ -801,3 +848,9 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   live (deploy run 312 on the merge commit). The same day the owner said yes to the guardian
   (OP-359) and where it lives, and asked for a critique of the art across the park (OP-362). The
   guardian's first slice is planned under "After the pass".
+- 2026-11-13: OP-359's first slice built, as "After the pass" says, behind `?guardian=1`. Kept for
+  next time: look at the thing from where a player stands before calling it done. The rules and
+  their tests were green while the guardian's face was off the top of the screen for any owl
+  standing in front of it; only the pictures showed it, and the camera's rule near it came from
+  them. And a worker restart mid-run (two browser runs at once ran the machine out of memory)
+  lost nothing because the work was on disk; it is now pushed as a checkpoint before any long run.

@@ -13,10 +13,14 @@ import {
   GuardianMind,
   HEAD_REACH,
   eased,
+  GUARDIAN_VIEW,
   guardianBoxes,
   guardianShade,
   headToward,
   inRoom,
+  lookShowing,
+  mustShow,
+  presence,
   seeded,
   seenAt,
   type GuardianFrame,
@@ -158,6 +162,118 @@ describe('how the guardian looks at an owl: by turning its head, as an owl does'
   });
 });
 
+describe('the camera near the guardian: its face stays in view', () => {
+  const HEAD = guardianBoxes()[0]!;
+  /** A computer's screen at the hall's zoom, the camera resting on a point as it follows an owl there. */
+  const SCREEN = { w: 1440, h: 900 };
+  const near = (x: number, y: number) => ({ zoom: 0.6, x, y });
+  const holds = (look: { zoom: number; x: number; y: number }, r: { x: number; y: number; w: number; h: number }) => {
+    const w = SCREEN.w / look.zoom;
+    const h = SCREEN.h / look.zoom;
+    return look.x - w / 2 <= r.x + 1e-6 && look.x + w / 2 >= r.x + r.w - 1e-6 && look.y - h / 2 <= r.y + 1e-6 && look.y + h / 2 >= r.y + r.h - 1e-6;
+  };
+
+  it('is wholly the guardian’s on the floor round it: where an owl comes in, at the heart, and out in front of its foot', () => {
+    expect(presence(KNOTHOLE)).toBe(1);
+    expect(presence(HALL_ROOM.spawns['default']!)).toBe(1);
+    expect(presence(HEART.pos)).toBe(1);
+    expect(presence({ x: GUARDIAN_AT.x, y: GUARDIAN_AT.y + GUARDIAN_VIEW.front })).toBe(1);
+    expect(presence({ x: GUARDIAN_AT.x + GUARDIAN_VIEW.side, y: GUARDIAN_AT.y })).toBe(1);
+  });
+
+  it('is the owl’s own again away from it, coming back by degrees and never by a jump', () => {
+    const east = (d: number) => presence({ x: GUARDIAN_AT.x + GUARDIAN_VIEW.side + d, y: GUARDIAN_AT.y });
+    expect(east(GUARDIAN_VIEW.fade)).toBe(0);
+    expect(east(GUARDIAN_VIEW.fade + 500)).toBe(0);
+    let last = 1;
+    for (let d = 0; d <= GUARDIAN_VIEW.fade; d += 10) {
+      const p = east(d);
+      expect(p).toBeLessThanOrEqual(last);
+      expect(last - p).toBeLessThan(0.08);
+      last = p;
+    }
+    // At the hall's two ends an owl is far from it.
+    expect(presence({ x: 300, y: GUARDIAN_AT.y })).toBe(0);
+    expect(presence({ x: HALL_ROOM.size.w - 300, y: GUARDIAN_AT.y })).toBe(0);
+  });
+
+  /** The box that holds both of what must show. */
+  const both = (m: { owl: { x: number; y: number; w: number; h: number }; head: { x: number; y: number; w: number; h: number } }) => {
+    const x = Math.min(m.owl.x, m.head.x);
+    const y = Math.min(m.owl.y, m.head.y);
+    return { x, y, w: Math.max(m.owl.x + m.owl.w, m.head.x + m.head.w) - x, h: Math.max(m.owl.y + m.owl.h, m.head.y + m.head.h) - y };
+  };
+
+  it('must show the owl and its head, each with room over it and under it', () => {
+    const owl = { x: GUARDIAN_AT.x + 300, y: GUARDIAN_AT.y + 400 };
+    const must = mustShow(owl, 0, { over: 40, under: 120 });
+    expect(must.head.y).toBe(HEAD.y - GUARDIAN_VIEW.over - 40);
+    expect(must.head.x).toBe(HEAD.x - GUARDIAN_VIEW.beside);
+    expect(must.owl.y + must.owl.h).toBe(owl.y + GUARDIAN_VIEW.under + 120);
+    expect(must.owl.x + must.owl.w).toBeGreaterThanOrEqual(owl.x + GUARDIAN_VIEW.beside);
+    // An owl up in the air over its head is shown where it is drawn.
+    const high = mustShow(HEART.pos, HEART.top);
+    expect(high.owl.y).toBeLessThan(HEART.pos.y - HEART.top - 80);
+  });
+
+  it('leaves the owl’s own view as it is where that already holds the two', () => {
+    const owl = HALL_ROOM.spawns['default']!;
+    const own = near(owl.x, owl.y - 300);
+    const must = mustShow(owl, 0);
+    expect(holds(own, both(must))).toBe(true);
+    expect(lookShowing(own, must, SCREEN)).toEqual(own);
+  });
+
+  it('moves up only as far as brings its head in, for an owl a few strides out in front', () => {
+    const owl = { x: GUARDIAN_AT.x, y: GUARDIAN_AT.y + 330 };
+    const own = near(owl.x, owl.y - 300);
+    const must = mustShow(owl, 0);
+    expect(holds(own, both(must))).toBe(false);
+    const look = lookShowing(own, must, SCREEN);
+    expect(look.zoom).toBe(own.zoom);
+    expect(look.x).toBe(own.x);
+    expect(look.y).toBeLessThan(own.y);
+    expect(holds(look, both(must))).toBe(true);
+    // No further than it had to: the top of what must show is at the top of the screen.
+    expect(look.y - SCREEN.h / look.zoom / 2).toBeCloseTo(must.head.y, 6);
+  });
+
+  it('draws back where one screen cannot hold the two, and never so far that an owl is drawn much smaller', () => {
+    const owl = { x: GUARDIAN_AT.x, y: GUARDIAN_AT.y + 800 };
+    const own = near(owl.x, owl.y - 300);
+    const must = mustShow(owl, 0);
+    const look = lookShowing(own, must, SCREEN);
+    expect(look.zoom).toBeLessThan(own.zoom);
+    expect(look.zoom).toBeGreaterThanOrEqual(own.zoom * GUARDIAN_VIEW.least);
+    expect(holds(look, both(must))).toBe(true);
+    expect(GUARDIAN_VIEW.least).toBeGreaterThanOrEqual(0.7);
+  });
+
+  it('keeps the owl whole on the screen where even drawn back the two do not fit: a phone held sideways, the owl well out in front', () => {
+    const phone = { w: 844, h: 390 };
+    const zoom = 0.42;
+    const owl = { x: GUARDIAN_AT.x + 200, y: GUARDIAN_AT.y + 700 };
+    const must = mustShow(owl, 0, { over: 100, under: 60 });
+    const look = lookShowing({ zoom, x: owl.x, y: owl.y - 180 }, must, phone);
+    expect(look.zoom).toBeCloseTo(zoom * GUARDIAN_VIEW.least, 9);
+    const view = { w: phone.w / look.zoom, h: phone.h / look.zoom };
+    expect(both(must).h).toBeGreaterThan(view.h);
+    // The owl, with its room, is all in view.
+    expect(look.y + view.h / 2).toBeGreaterThanOrEqual(must.owl.y + must.owl.h - 1e-6);
+    expect(look.y - view.h / 2).toBeLessThanOrEqual(must.owl.y + 1e-6);
+    expect(look.x - view.w / 2).toBeLessThanOrEqual(must.owl.x + 1e-6);
+    expect(look.x + view.w / 2).toBeGreaterThanOrEqual(must.owl.x + must.owl.w - 1e-6);
+    // And the view is as far up toward its head as that allows: the owl's room ends at the foot of the screen.
+    expect(look.y + view.h / 2).toBeCloseTo(must.owl.y + must.owl.h, 6);
+    // Nearer, the same phone holds the two.
+    const close = mustShow({ x: GUARDIAN_AT.x, y: GUARDIAN_AT.y + 100 }, 0);
+    const held = lookShowing({ zoom, x: GUARDIAN_AT.x, y: GUARDIAN_AT.y - 80 }, close, phone);
+    const hv = { w: phone.w / held.zoom, h: phone.h / held.zoom };
+    expect(held.y - hv.h / 2).toBeLessThanOrEqual(close.head.y + 1e-6);
+    expect(held.y + hv.h / 2).toBeGreaterThanOrEqual(close.owl.y + close.owl.h - 1e-6);
+  });
+});
+
 describe('the guardian’s mind', () => {
   it('sleeps until an owl comes in, and that owl sees its eyes open', () => {
     const m = mind();
@@ -204,6 +320,21 @@ describe('the guardian’s mind', () => {
     expect(most).toBeGreaterThan(lookRoll + HEAD_REACH.tilt * 0.4);
     // And it is over: its head is back to looking.
     expect(Math.abs(at(5800).head.roll)).toBeLessThan(lookRoll + 0.01);
+  });
+
+  it('keeps its eye on the owl it is greeting when another comes in meanwhile', () => {
+    const m = mind();
+    const me = owl('me', KNOTHOLE);
+    // Another owl, much nearer its face than the one that has come in.
+    const other = owl('other', { x: FACE.x + 80, y: FACE.y + 200 });
+    expect(distance(seenAt(other), FACE)).toBeLessThan(distance(seenAt(me), FACE) - R.nearer);
+    m.arrived('me', 0, true);
+    m.arrived('other', 300, false);
+    const frames = run(m, 0, R.greetAfterMs + 1000, [me, other]);
+    expect(frames.filter((f) => f.attending !== null).every((f) => f.attending === 'me')).toBe(true);
+    expect(frames.filter((f) => f.hooted)).toHaveLength(1);
+    // Its greeting over, it looks at whichever is nearest.
+    expect(m.frame(R.newcomerMs + 500, [me, other]).attending).toBe('other');
   });
 
   it('looks at an owl back from one of the hall’s own ways, and does not hoot at it', () => {
