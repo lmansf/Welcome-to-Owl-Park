@@ -1,6 +1,6 @@
 import { devices, type APIRequestContext, type Browser, type BrowserContextOptions, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { E2E_ADMIN_KEY, STORE_CARD, enterAsGuest, state, walkToDoor } from './helpers';
+import { E2E_ADMIN_KEY, GATE_ASK, STORE_CARD, enterAsGuest, settleCamera, state, toScreen, walkAndStop, walkToDoor } from './helpers';
 
 /**
  * The opening switch (OP-067) through the room server: the keepers flip the front gate with the
@@ -114,6 +114,34 @@ test.describe('the opening switch (OP-067)', () => {
       await walkToDoor(a, 'gate');
       await inAsSpectator(a);
       await a.screenshot({ path: `e2e-screenshots/gate-closed-turnstiles-${shot}.png` });
+      await a.context().close();
+    });
+  }
+
+  for (const [name, device] of [
+    ['a computer', COMPUTER],
+    ['a phone', PHONE],
+  ] as const) {
+    test(`on ${name}: a tap on the turnstiles from in front of them, then one press of Enter as a guest, and the owl is in (OP-368)`, async ({ browser, request }) => {
+      await pastTheClose((await flip(request, 'ticket'))['closedAt'] as number);
+      const a = await arrive(browser, device);
+      const gate = (await state(a)).doors.find((d) => d.id === 'gate')!;
+      // Just in front of the middle turnstile, as a visitor who walked up to look stands, then a real tap on the turnstile.
+      await walkAndStop(a, gate.x, 740);
+      await settleCamera(a);
+      const at = await toScreen(a, gate.x, 690);
+      if (device === PHONE) await a.touchscreen.tap(at.x, at.y);
+      else await a.mouse.click(at.x, at.y);
+      const ask = a.locator(GATE_ASK);
+      await expect(ask).toBeVisible({ timeout: 15_000 });
+      // The card stays up for the choice: the tap that walked the owl in does not answer it as neither.
+      await a.waitForTimeout(800);
+      await expect(ask).toBeVisible();
+      if (device === PHONE) await ask.locator('[data-gate-ask="guest"]').tap();
+      else await ask.locator('[data-gate-ask="guest"]').click();
+      await expect(ask).toBeHidden();
+      await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toBe('hub');
+      await expect.poll(async () => (await state(a)).spectator, { timeout: 15_000 }).toBe(true);
       await a.context().close();
     });
   }
