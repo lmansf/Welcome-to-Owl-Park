@@ -77,7 +77,10 @@ describe('which owl are you: the bank (OP-076, OP-330, OP-331)', () => {
   });
 
   it('opens with a plain welcome: no pet names and no lines about knowing the player (OP-327)', () => {
-    expect(WHICH_OWL_WORDS.intro).toHaveLength(3);
+    // One welcome screen before the first question (OP-367), and a first run ends on Play as this owl.
+    expect(WHICH_OWL_WORDS.intro).toHaveLength(1);
+    expect(WHICH_OWL_WORDS.intro[0]).toMatch(/^Welcome to Owl Park!/);
+    expect(WHICH_OWL_WORDS.play).toBe('Play as this owl');
     for (const w of quizWords()) {
       expect(w.toLowerCase(), w).not.toMatch(/little one|grown.?ups?|i want to know you|i know you/);
       // US spelling in every visible word.

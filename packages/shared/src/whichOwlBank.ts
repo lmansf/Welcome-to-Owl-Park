@@ -389,12 +389,9 @@ export const COLOUR_SETS: readonly ColourSet[] = [
 export const WHICH_OWL_WORDS = {
   /** What a screen reader calls the quiz. */
   label: 'Which owl are you?',
-  intro: [
-    'Welcome to Owl Park!',
-    'Every owl here is a little different. Answer a few quick questions to find out which owl you are.',
-    'Pick the answer that sounds most like you. There are no wrong answers.',
-  ],
-  next: 'Next',
+  /** One screen of welcome (OP-367: the audit counted three Next screens before the first question). */
+  intro: ['Welcome to Owl Park! Every owl here is a little different. Answer a few quick questions to find out which owl you are. There are no wrong answers.'],
+  next: 'Start',
   skip: 'Skip',
   counter: (n: number, of: number) => `${n} of ${of}`,
   colours: 'Which colors do you like best?',
@@ -403,6 +400,11 @@ export const WHICH_OWL_WORDS = {
   /** Over the result's name. */
   youAre: 'You are',
   keep: 'Keep it',
+  /**
+   * A first run's one primary button at the reveal and in the builder after it (OP-367): straight into
+   * the park as this owl, with no separate Play step on the home screen. A retake keeps Keep it.
+   */
+  play: 'Play as this owl',
   makeYours: 'Make it yours',
   again: 'Not me? Try again',
   /** The Menu's Settings tab, once the owl exists. */

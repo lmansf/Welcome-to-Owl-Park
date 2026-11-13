@@ -1,11 +1,11 @@
 /**
  * Which owl are you (OP-076, rebuilt in OP-325 to OP-331): a new owl's first run, between Make your
- * owl and the owl builder. Three friendly lines of welcome, eight questions about owl life (a quick
+ * owl and the owl builder. One screen of welcome (OP-367; it was three), eight questions about owl life (a quick
  * either/or, six cards of two to four answers, a quick either/or), a last card for the owl's colors,
  * a short pause, then the reveal: the owl glides in big in its new kind and colors (the builder's
  * preview scene draws it in the frame this screen leaves for it, under the see-through reveal), its
  * name, what the player shares with that owl, a true owl fact and something to try in the park, with
- * Keep it, Make it yours, and Not me? Try again. Skip, in the corner, goes to the builder at once.
+ * Play as this owl (a first run, OP-367: straight into the park; a retake says Keep it), Make it yours, and Not me? Try again. Skip, in the corner, goes to the builder at once.
  * Retake the quiz (the Menu's Settings tab) runs it again for an owl that already exists: only its
  * kind and colors change, never its id, friend code or what it wears.
  *
@@ -281,7 +281,8 @@ export function createWhichOwlScreen(root: HTMLElement): WhichOwlScreen {
     enjoy.dataset['woEnjoy'] = '';
     const actions = document.createElement('div');
     actions.className = 'wo-actions';
-    const keep = button(W.keep, '', { woKeep: '' });
+    // A first run goes straight into the park from here (OP-367); a retake is already in it.
+    const keep = button(r.firstRun ? W.play : W.keep, '', { woKeep: '' });
     keep.addEventListener('click', () => end({ kind: 'keep', look }));
     const makeBtn = button(W.makeYours, 'ghost', { woMake: '' });
     makeBtn.addEventListener('click', () => end({ kind: 'make', look }));
