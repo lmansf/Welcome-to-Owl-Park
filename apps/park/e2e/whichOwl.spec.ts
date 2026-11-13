@@ -105,7 +105,9 @@ async function answerCards(page: Page, pick: number, isMobile: boolean): Promise
           const r = a.getBoundingClientRect();
           return Math.min(r.width, r.height);
         }),
-        boxes: el.querySelectorAll('.wo-pic, [data-wo-art]').length,
+        // A dashed box with its size on it, never shown to a visitor (OP-365), and the painted pictures (OP-404).
+        boxes: el.querySelectorAll('.wo-pic:not(.wo-painted)').length,
+        pictures: [...el.querySelectorAll<HTMLImageElement>('img.wo-painted')].map((img) => img.currentSrc || img.src),
         text: (el as HTMLElement).innerText,
         // The answers the feedback button lies over (OP-369): none.
         under: answers.filter((a) => {
@@ -126,10 +128,13 @@ async function answerCards(page: Page, pick: number, isMobile: boolean): Promise
       expect(count).toBeGreaterThanOrEqual(2);
       expect(count).toBeLessThanOrEqual(4);
     }
-    // Every answer is a big enough target for a thumb, and a card of words: no picture slot, and no box
-    // with its size written on it, which a visitor read as a park not finished (OP-365).
+    // Every answer is a big enough target for a thumb with its painted picture (OP-404), and no box with
+    // its size written on it, which a visitor read as a park not finished (OP-365).
     for (const size of seen.sizes) expect(size).toBeGreaterThanOrEqual(44);
     expect(seen.boxes).toBe(0);
+    expect(seen.pictures, `card ${id}: a painted picture on every answer`).toHaveLength(count);
+    for (const src of seen.pictures) expect(src).toMatch(/\/art\/quiz-[a-z-]+(%402x)?\.png/);
+    await expect.poll(() => page.locator('[data-wo-card] img.wo-painted').evaluateAll((imgs) => imgs.every((i) => (i as HTMLImageElement).complete && (i as HTMLImageElement).naturalWidth > 0))).toBe(true);
     expect(seen.text).not.toMatch(/\d+\s*[×x]\s*\d+/);
     // The feedback button, on screen through the quiz, lies over no answer: on a phone it sat on the first (OP-369).
     expect(seen.under, `the feedback button over an answer of card ${id}`).toBe(0);

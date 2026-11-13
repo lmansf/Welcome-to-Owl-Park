@@ -11,15 +11,15 @@
  *
  * Nothing typed, no names, no score shown, no back button. The answers are kept nowhere: only the
  * result goes on, as the look. The words, picture slots and points are in
- * packages/shared/src/whichOwlBank.ts. Until an artist paints the answers' pictures (OP-326,
- * docs/QUIZ-ART.md) a visitor sees each answer as a card of words (OP-365): the slot, a box with its
- * painted size on it, shows only on a painter's or a keeper's tab (showsArtBoxes), where the box
- * tells the artist what to make.
+ * packages/shared/src/whichOwlBank.ts. Each answer draws its painted picture (OP-404, quizPicture);
+ * a card with an answer still unpainted shows words alone (OP-365), and the slot, a box with its
+ * painted size on it, shows only on a painter's or a keeper's tab (showsArtBoxes).
  *
  * TODO-DOCS (OP-365): docs/QUIZ-ART.md says the game draws the dashed box for every visitor; it
  * draws it with `?paint=1` or `?keeper=1` in the address, and word cards otherwise.
  */
 import { COLOUR_SETS, QUIZ_ART_SIZE, WHICH_OWL_WORDS as W, drawCards, getSpecies, natureDef, natureOf, quizLook, type ColourSetId, type Nature, type OwlLook, type QuizAnswer, type QuizCard } from '@owl-park/shared';
+import { PUBLISHED_ART, versioned } from '../game/publishedArt';
 import { createModal } from './modal';
 import type { PreviewFrame } from './owlBuilder';
 
@@ -32,6 +32,19 @@ import type { PreviewFrame } from './owlBuilder';
 export function showsArtBoxes(search: string): boolean {
   const q = new URLSearchParams(search);
   return q.get('paint') === '1' || q.get('keeper') === '1';
+}
+
+/**
+ * An answer's painted picture as the build ships it (OP-404): `quiz-<art key>.webp` or `.png` in
+ * public/art, with its `@2x` copy for a dense screen, or null while it has none.
+ */
+export function quizPicture(pic: string, published: ReadonlyMap<string, string> = PUBLISHED_ART): { src: string; srcset: string } | null {
+  const base = `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}art/`;
+  const at = (name: string) => `${base}${published === PUBLISHED_ART ? versioned(name) : encodeURIComponent(name)}`;
+  const one = ['webp', 'png'].map((ext) => `quiz-${pic}.${ext}`).find((n) => published.has(n));
+  if (!one) return null;
+  const two = ['webp', 'png'].map((ext) => `quiz-${pic}@2x.${ext}`).find((n) => published.has(n));
+  return { src: at(one), srcset: two ? `${at(one)} 1x, ${at(two)} 2x` : '' };
 }
 
 /** How a run ended: the owl's new look, and which button took it on. */
@@ -88,6 +101,8 @@ const CSS = `
 /* The picture's place (OP-326), on a painter's or keeper's tab: a box with the size to paint it at, until the art comes. */
 #hud .which-owl .wo-pic{display:flex;align-items:center;justify-content:center;width:clamp(64px,12vh,${QUIZ_ART_SIZE}px);aspect-ratio:1;border:2px dashed rgba(246,241,227,.5);border-radius:12px;
   font-size:12px;font-weight:600;letter-spacing:.02em;color:rgba(246,241,227,.75);background:rgba(246,241,227,.05)}
+/* A painted picture (OP-404) in the box's place: the same size, no dashes. */
+#hud .which-owl img.wo-pic.wo-painted{display:block;border:0;padding:0;background:none;object-fit:contain}
 #hud .which-owl .wo-feather{width:clamp(48px,10vh,76px);height:clamp(48px,10vh,76px)}
 /* The owl is the reveal's centrepiece: it never gives up its room when the words run past a phone's
    screen (a flex child shrinks by default, which left a thumb-sized owl), and on a phone the owl
@@ -195,11 +210,22 @@ export function createWhichOwlScreen(root: HTMLElement): WhichOwlScreen {
     const q = say(card.ask);
     q.classList.add('wo-step');
     const picks = document.createElement('div');
-    picks.className = `wo-picks n${card.answers.length}${artBoxes ? '' : ' words'} wo-step`;
+    // A card shows pictures when every answer on it has one (a card half pictures, half words reads as broken);
+    // a painter's tab keeps its boxes, which tell the artist each picture's size and key.
+    const pics = card.answers.map((a) => quizPicture(a.pic));
+    const pictured = !artBoxes && pics.length > 0 && pics.every((p) => p !== null);
+    picks.className = `wo-picks n${card.answers.length}${artBoxes || pictured ? '' : ' words'} wo-step`;
     picks.dataset['woCard'] = card.id;
     card.answers.forEach((a, n) => {
       const b = button('', 'wo-pick', { woAnswer: String(n) });
-      if (artBoxes) {
+      if (pictured) {
+        const { src, srcset } = pics[n]!;
+        const img = Object.assign(document.createElement('img'), { className: 'wo-pic wo-painted', src, alt: '', width: QUIZ_ART_SIZE, height: QUIZ_ART_SIZE, decoding: 'async' });
+        if (srcset) img.srcset = srcset;
+        img.setAttribute('aria-hidden', 'true');
+        img.dataset['woArt'] = a.pic;
+        b.append(img);
+      } else if (artBoxes) {
         // For the artist: the art key names the picture, and the box says the size to paint it at.
         const pic = Object.assign(document.createElement('span'), { className: 'wo-pic', textContent: `${QUIZ_ART_SIZE} × ${QUIZ_ART_SIZE}` });
         pic.setAttribute('aria-hidden', 'true');
