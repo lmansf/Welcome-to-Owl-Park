@@ -912,3 +912,14 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   about which of the two is right, and the answer is in where the room's things are, not in which
   came first. Also: the dev server reloads the first page opened after a served file changes, so a
   run starts with a throwaway page load.
+- 2026-11-13: OP-396's first run of the checks failed on one test the change does not touch: the
+  first flight's (`e2e/park.spec.ts`, OP-347), twice, the line that marks the glide not on screen.
+  Not the camera: the test's steps take the same time with main's code as with the branch's. That
+  shard's runner was 1.7 to 2.9 times slower than the table of usual times, and the test raced
+  real time in two places. It pushed west and then jumped, and on a slow enough runner the owl has
+  walked off the stump and down to the floor before the jump comes (seen on one core, with main's
+  code too). And it looked for a four-second line after five steps of its own, each most of a
+  second on two cores. It now jumps first and then pushes (the glide comes off the stump at any
+  gap between the two keys, tried from none to three seconds), and the page notes the line as it
+  comes. Kept for next time: a test that passes on a quick machine has still to be read for what
+  it races, and `taskset -c 0` in front of a test run is a cheap slow runner.
