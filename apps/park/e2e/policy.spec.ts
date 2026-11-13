@@ -61,8 +61,8 @@ test.describe('the page policy (OP-140)', () => {
       await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toMatch(/^nest-[a-z0-9]{8}$/);
       await expect.poll(async () => (await state(page)).nest?.mine, { timeout: 10_000 }).toBe(true);
 
-      // The climb, with its realm and portal opened by the keepers.
-      await realms(request, { open: ['glass'], portal: true, night: 'easy' });
+      // The climb, with its portal opened by the keepers (the realm is open to every owl).
+      await realms(request, { open: [], portal: true, night: 'easy' });
       await openPark(page, { transport: 'edge', room: 'glass', spawn: 'from-hub' });
       await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe('glass');
       await toPortal(page);

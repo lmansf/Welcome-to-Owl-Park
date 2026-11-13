@@ -25,6 +25,21 @@
  * - `kind: "contact"` (OP-192): a paid order's buyer (email and the store's customer id), into the
  *   owner's `contacts` schema, never the `game` one: the only rows here that name a person. The
  *   Worker sends them straight from the store; one order sent again lands once.
+ * - `kind: "room_stay"` (OP-265): live stays, one event as an owl comes into a room (`enter`) and
+ *   one as its stay ends (`leave`, with why), applied in order by `game.apply_room_stays`: an enter
+ *   closes the visit's open stay and opens its own in the same transaction. A batch sent twice
+ *   changes nothing the second time.
+ * - `kind: "quest_progress"` (OP-266): each step of each quest an owl takes, one event as it begins
+ *   (`start`) and one as it ends (`end`, with how: done, abandoned, expired, retired), applied in
+ *   order by `game.apply_quest_progress`, so `game.quest_progress` holds an open row for every owl's
+ *   current step. A batch sent twice changes nothing the second time. Never a puzzle's code or key.
+ * - `kind: "quest_catalogue"` (OP-266): every quest and every step of each (handing in included),
+ *   into `game.dim_quest` and `game.dim_quest_step` by `game.set_quest_catalogue`; one no longer
+ *   listed stays, marked out of the catalogue.
+ * - `kind: "play_event"` (OP-304): what an owl did in play that the stays and quest steps do not
+ *   show: a parkour run begun, a bench or part reached, a fall (where, to 10 px), a clear (its time),
+ *   a thing used (a leaf pile, a stall, the moonbeam). Into `game.play_event`, one already there (by
+ *   its event id) skipped.
  * - `dry_run: true` (the owner's check, never the park): keeps nothing, and says whether the tables answer.
  *
  * Every other row is anonymous by construction, and checked again here before anything is kept: the
@@ -52,10 +67,25 @@ export const CHANGE_REASONS = ['first', 'chosen', 'quest', 'seasonal'] as const;
 /** A room's kind of place, and how an owl came into it (OP-113). */
 export const REALM_KINDS = ['realm', 'hub', 'nest'] as const;
 export const ENTRY_SOURCES = ['walked', 'spawn', 'deep_link', 'reconnect', 'travel'] as const;
+/** How a live stay began (OP-265): never a reconnect, which continues the stay it came back to. */
+export const STAY_ENTRIES = ['walked', 'spawn', 'deep_link', 'travel'] as const;
+/** Why a live stay ended (OP-265). */
+export const EXIT_REASONS = ['moved', 'logoff', 'timeout', 'server_restart'] as const;
 /** What a visit was past the turnstiles (OP-192): a full visitor's or a spectator's (OP-191). */
 export const VISITOR_KINDS = ['visitor', 'spectator'] as const;
 /** What happened to a ticket order, or to a ticket at the gate (OP-192). */
 export const PURCHASE_EVENTS = ['paid', 'claimed', 'refunded', 'cancelled', 'scanned'] as const;
+/** How a quest step ended (OP-266). */
+export const QUEST_OUTCOMES = ['done', 'abandoned', 'expired', 'retired'] as const;
+/** What a quest step asks (OP-266): the quest book's goals, and handing the quest in. */
+export const GOAL_KINDS = ['talk', 'visit', 'interact', 'emote', 'gather', 'puzzle', 'hand_in'] as const;
+export const QUEST_TYPES = ['talk', 'visit', 'interact', 'emote', 'gather', 'mixed', 'puzzle'] as const;
+export const DIFFICULTIES = ['easy', 'medium', 'hard'] as const;
+export const QUEST_LENGTHS = ['short', 'medium', 'long'] as const;
+export const CADENCES = ['story', 'daily', 'weekly', 'monthly'] as const;
+/** The most quests, and steps, one quest catalogue holds. */
+export const MAX_QUESTS = 2000;
+export const MAX_QUEST_STEPS = 20_000;
 /** The park's ticket kinds: a fixed list, never free text. */
 export const TICKET_KINDS = ['day', 'night', 'annual', 'event', 'opening-night'] as const;
 
@@ -94,6 +124,8 @@ export interface SessionRow {
   collectibles_gained: number;
   /** A full visitor's or a spectator's past the turnstiles, or null (never past them, or a Worker from before OP-192). */
   visitor_kind: (typeof VISITOR_KINDS)[number] | null;
+  /** One of our own test visits (scripted checks, bots, QA walks): kept, and left out of the reports. */
+  is_test: boolean;
 }
 
 /** A ticket event, for `game.fact_purchase` (OP-192). */
@@ -134,6 +166,90 @@ export interface RealmVisitRow {
   exited_at: string;
   entry_source: (typeof ENTRY_SOURCES)[number];
   collectibles_gained: number;
+}
+
+/** A live stay's event, for `game.room_stay` (OP-265). */
+export type RoomStayRow =
+  | {
+      event: 'enter';
+      stay_id: string;
+      session_id: string;
+      collector_id: string;
+      at: string;
+      realm: string;
+      realm_kind: (typeof REALM_KINDS)[number];
+      map_id: 1 | 2;
+      entry_source: (typeof STAY_ENTRIES)[number];
+    }
+  | { event: 'leave'; stay_id: string; at: string; exit_reason: (typeof EXIT_REASONS)[number] };
+
+/** A quest step's event, for `game.quest_progress` (OP-266). */
+export type QuestProgressRow =
+  | {
+      event: 'start';
+      progress_id: string;
+      run_id: string;
+      collector_id: string;
+      session_id: string | null;
+      quest_id: string;
+      period: string;
+      step_no: number;
+      at: string;
+      realm: string | null;
+      expires_at: string | null;
+    }
+  | { event: 'end'; progress_id: string; at: string; session_id: string | null; realm: string | null; outcome: (typeof QUEST_OUTCOMES)[number] };
+
+/** What a play event is (OP-304). */
+export const PLAY_EVENTS = ['course_start', 'course_bench', 'course_part', 'course_fall', 'course_clear', 'interact'] as const;
+
+/** A play event, for `game.play_event` (OP-304). */
+export interface PlayEventRow {
+  event_id: string;
+  event: (typeof PLAY_EVENTS)[number];
+  collector_id: string;
+  session_id: string | null;
+  run_id: string | null;
+  occurred_at: string;
+  realm: string | null;
+  course_id: string | null;
+  thing: string | null;
+  pos_x: number | null;
+  pos_y: number | null;
+  ms: number | null;
+  practice: boolean;
+}
+
+/** A quest, for `game.dim_quest` (OP-266). */
+export interface QuestRefRow {
+  quest_id: string;
+  title: string;
+  giver_npc: string;
+  giver_room: string | null;
+  quest_type: (typeof QUEST_TYPES)[number];
+  difficulty: (typeof DIFFICULTIES)[number];
+  length: (typeof QUEST_LENGTHS)[number];
+  cadence: (typeof CADENCES)[number];
+  template: string | null;
+  step_count: number;
+  reward_feathers: number;
+  reward_item: string | null;
+  requires: string[];
+  puzzle_id: string | null;
+}
+
+/** A step of a quest, for `game.dim_quest_step` (OP-266). */
+export interface QuestStepRefRow {
+  quest_id: string;
+  step_no: number;
+  goal_kind: (typeof GOAL_KINDS)[number];
+  target_room: string | null;
+  target_realm_kind: (typeof REALM_KINDS)[number] | null;
+  target_npc: string | null;
+  target_thing: string | null;
+  need_count: number;
+  distinct_only: boolean;
+  step_text: string;
 }
 
 export const FEEDBACK_KINDS = ['bug', 'idea', 'praise', 'other'] as const;
@@ -177,6 +293,14 @@ export interface Tables {
   addSessions(rows: SessionRow[]): Promise<number>;
   /** Keeps the times in rooms not there yet whose visit is; returns how many those were. */
   addRealmVisits(rows: RealmVisitRow[]): Promise<number>;
+  /** Applies live stays' events in order (OP-265); returns how many changed a row. */
+  addRoomStays(rows: RoomStayRow[]): Promise<number>;
+  /** Applies quest steps' events in order (OP-266); returns how many changed a row. */
+  addQuestProgress(rows: QuestProgressRow[]): Promise<number>;
+  /** Makes the quest reference tables these lists (OP-266): each in them, and every other one marked out of the catalogue. */
+  setQuestCatalogue(quests: QuestRefRow[], steps: QuestStepRefRow[]): Promise<void>;
+  /** Keeps the play events not there yet (OP-304); returns how many those were. */
+  addPlayEvents(rows: PlayEventRow[]): Promise<number>;
   /** Keeps the notes not there yet; returns how many those were. */
   addFeedback(rows: FeedbackRow[]): Promise<number>;
   /** Keeps the ticket events not there yet; returns how many those were. */
@@ -200,8 +324,13 @@ const HASH = /^[0-9a-f]{64}$/;
 const COLLECTIBLE = /^(furniture:)?[a-z0-9][a-z0-9-]{0,47}(~[0-9]{1,2})?$/;
 /** A room's neutral id, a collectible's kind or a rarity: a short lower-case word. */
 const WORD = /^[a-z]{1,20}$/;
-/** A room the park's log names: a word, or a level of the tree (`l0` to `l5`, OP-128), so a letter then letters or digits. */
-const ROOM_WORD = /^[a-z][a-z0-9]{0,19}$/;
+/** A room slug with hyphens, as used by the tree's rooms (`m3-hall`, `trail-1`). */
+const STAY_ROOM = /^[a-z][a-z0-9-]{0,19}$/;
+
+/** Room visits and notes use neutral room slugs. The Worker collapses every private nest to `nest`. */
+function isNeutralRoom(v: unknown): v is string {
+  return typeof v === 'string' && STAY_ROOM.test(v) && !v.startsWith('nest-');
+}
 
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e));
@@ -221,7 +350,7 @@ function wordOrNull(v: unknown): string | null | undefined {
 /** A room's name or none, as `wordOrNull`; undefined when it is neither. */
 function roomOrNull(v: unknown): string | null | undefined {
   if (v === null || v === undefined) return null;
-  return typeof v === 'string' && ROOM_WORD.test(v) ? v : undefined;
+  return isNeutralRoom(v) ? v : undefined;
 }
 
 /** Whether two keys are the same, compared by their digests so the time taken says nothing of either. */
@@ -310,6 +439,9 @@ export function checkSession(v: unknown): SessionRow | string {
   // A Worker from before OP-192 sends none: the visit is kept without one.
   const kind = r['visitor_kind'] ?? null;
   if (kind !== null && !VISITOR_KINDS.includes(kind as SessionRow['visitor_kind'] & string)) return 'visitor_kind';
+  // A Worker from before test visits were marked sends none: the visit counts as a player's, as before.
+  const test = r['is_test'] ?? false;
+  if (typeof test !== 'boolean') return 'is_test';
   return {
     session_id: r['session_id'],
     collector_id: r['collector_id'],
@@ -319,6 +451,7 @@ export function checkSession(v: unknown): SessionRow | string {
     realms_entered: realms,
     collectibles_gained: gained,
     visitor_kind: kind as SessionRow['visitor_kind'],
+    is_test: test,
   };
 }
 
@@ -392,7 +525,7 @@ export function checkRealmVisit(v: unknown): RealmVisitRow | string {
   if (typeof r['visit_id'] !== 'string' || !UUID.test(r['visit_id'])) return 'visit_id';
   if (typeof r['session_id'] !== 'string' || !UUID.test(r['session_id'])) return 'session_id';
   if (typeof r['collector_id'] !== 'string' || !HASH.test(r['collector_id'])) return 'collector_id';
-  if (typeof r['realm'] !== 'string' || !ROOM_WORD.test(r['realm'])) return 'realm';
+  if (!isNeutralRoom(r['realm'])) return 'realm';
   if (!REALM_KINDS.includes(r['realm_kind'] as RealmVisitRow['realm_kind'])) return 'realm_kind';
   const map = r['map_id'] ?? 1;
   if (map !== 1 && map !== 2) return 'map_id';
@@ -414,6 +547,221 @@ export function checkRealmVisit(v: unknown): RealmVisitRow | string {
     exited_at: exited,
     entry_source: r['entry_source'] as RealmVisitRow['entry_source'],
     collectibles_gained: gained,
+  };
+}
+
+/** A live stay's event as the table takes it (OP-265), or the reason it is left out. */
+export function checkRoomStay(v: unknown): RoomStayRow | string {
+  const r = obj(v);
+  if (typeof r['stay_id'] !== 'string' || !UUID.test(r['stay_id'])) return 'stay_id';
+  const at = iso(r['at']);
+  if (!at) return 'at';
+  if (r['event'] === 'leave') {
+    if (!EXIT_REASONS.includes(r['exit_reason'] as (typeof EXIT_REASONS)[number])) return 'exit_reason';
+    return { event: 'leave', stay_id: r['stay_id'], at, exit_reason: r['exit_reason'] as (typeof EXIT_REASONS)[number] };
+  }
+  if (r['event'] !== 'enter') return 'event';
+  if (typeof r['session_id'] !== 'string' || !UUID.test(r['session_id'])) return 'session_id';
+  if (typeof r['collector_id'] !== 'string' || !HASH.test(r['collector_id'])) return 'collector_id';
+  if (typeof r['realm'] !== 'string' || !STAY_ROOM.test(r['realm'])) return 'realm';
+  if (!REALM_KINDS.includes(r['realm_kind'] as (typeof REALM_KINDS)[number])) return 'realm_kind';
+  const map = r['map_id'] ?? 1;
+  if (map !== 1 && map !== 2) return 'map_id';
+  if (!STAY_ENTRIES.includes(r['entry_source'] as (typeof STAY_ENTRIES)[number])) return 'entry_source';
+  return {
+    event: 'enter',
+    stay_id: r['stay_id'],
+    session_id: r['session_id'],
+    collector_id: r['collector_id'],
+    at,
+    realm: r['realm'],
+    realm_kind: r['realm_kind'] as (typeof REALM_KINDS)[number],
+    map_id: map,
+    entry_source: r['entry_source'] as (typeof STAY_ENTRIES)[number],
+  };
+}
+
+/** A course's id, a piece's, or a thing used as its kind and id (`leaf-pile:hub-leaves-1`). */
+const PLAY_THING = /^[a-z0-9][a-z0-9-]{0,47}(:[a-z0-9][a-z0-9-]{0,63})?$/;
+const COURSE_ID = /^[a-z0-9][a-z0-9-]{0,47}$/;
+/** The largest place in a room the log takes (the widest rooms are under 10,000 px). */
+const MAX_POS = 100_000;
+/** The longest run time taken: a run is forgotten after an hour, so a day is plenty. */
+const MAX_MS = 86_400_000;
+
+const intOrNull = (v: unknown, lo: number, hi: number): number | null | undefined => {
+  if (v === null || v === undefined) return null;
+  return typeof v === 'number' && Number.isInteger(v) && v >= lo && v <= hi ? v : undefined;
+};
+
+/** A play event as the table takes it (OP-304), or the reason it is left out. */
+export function checkPlayEvent(v: unknown): PlayEventRow | string {
+  const r = obj(v);
+  if (typeof r['event_id'] !== 'string' || !UUID.test(r['event_id'])) return 'event_id';
+  if (!PLAY_EVENTS.includes(r['event'] as (typeof PLAY_EVENTS)[number])) return 'event';
+  const event = r['event'] as (typeof PLAY_EVENTS)[number];
+  if (typeof r['collector_id'] !== 'string' || !HASH.test(r['collector_id'])) return 'collector_id';
+  const session = r['session_id'] ?? null;
+  if (session !== null && (typeof session !== 'string' || !UUID.test(session))) return 'session_id';
+  const run = r['run_id'] ?? null;
+  if (run !== null && (typeof run !== 'string' || !UUID.test(run))) return 'run_id';
+  const at = iso(r['occurred_at']);
+  if (!at) return 'occurred_at';
+  const realm = stayRoomOrNull(r['realm']);
+  if (realm === undefined) return 'realm';
+  const course = r['course_id'] ?? null;
+  if (course !== null && (typeof course !== 'string' || !COURSE_ID.test(course))) return 'course_id';
+  if (event !== 'interact' && course === null) return 'course_id';
+  const thing = r['thing'] ?? null;
+  if (thing !== null && (typeof thing !== 'string' || !PLAY_THING.test(thing))) return 'thing';
+  if (event === 'interact' && thing === null) return 'thing';
+  const x = intOrNull(r['pos_x'], -MAX_POS, MAX_POS);
+  if (x === undefined) return 'pos_x';
+  const y = intOrNull(r['pos_y'], -MAX_POS, MAX_POS);
+  if (y === undefined) return 'pos_y';
+  // Where an owl stood is kept for a fall alone.
+  if (event !== 'course_fall' && (x !== null || y !== null)) return 'pos_x';
+  const ms = intOrNull(r['ms'], 0, MAX_MS);
+  if (ms === undefined) return 'ms';
+  const practice = r['practice'] ?? false;
+  if (typeof practice !== 'boolean') return 'practice';
+  return {
+    event_id: r['event_id'],
+    event,
+    collector_id: r['collector_id'],
+    session_id: session as string | null,
+    run_id: run as string | null,
+    occurred_at: at,
+    realm,
+    course_id: course as string | null,
+    thing: thing as string | null,
+    pos_x: x,
+    pos_y: y,
+    ms,
+    practice,
+  };
+}
+
+/** A quest's id, an NPC's, a template's or a puzzle's: lower-case words joined by hyphens (`story-welcome`, `leaves-bramble-easy`). */
+const QUEST_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
+/** A quest's period: '' for a story quest, else its park day, week or month (`2026-11-04`, `W2026-11-02`, `M2026-11`). */
+const PERIOD = /^$|^[WM]?[0-9]{4}-[0-9]{2}(-[0-9]{2})?$/;
+/** Words shown to visitors (a quest's title, a step's): no control characters, and short. */
+const SHOWN = /^[^\u0000-\u001f\u007f]{1,200}$/;
+
+function idOrNull(v: unknown): string | null | undefined {
+  if (v === null || v === undefined) return null;
+  return typeof v === 'string' && QUEST_ID.test(v) ? v : undefined;
+}
+
+/** A room a quest names, as a live stay's (`STAY_ROOM`), or none; undefined when it is neither. */
+function stayRoomOrNull(v: unknown): string | null | undefined {
+  if (v === null || v === undefined) return null;
+  return typeof v === 'string' && STAY_ROOM.test(v) ? v : undefined;
+}
+
+/** A quest step's event as the table takes it (OP-266), or the reason it is left out. */
+export function checkQuestProgress(v: unknown): QuestProgressRow | string {
+  const r = obj(v);
+  if (typeof r['progress_id'] !== 'string' || !UUID.test(r['progress_id'])) return 'progress_id';
+  const at = iso(r['at']);
+  if (!at) return 'at';
+  const session = r['session_id'] ?? null;
+  if (session !== null && (typeof session !== 'string' || !UUID.test(session))) return 'session_id';
+  const realm = stayRoomOrNull(r['realm']);
+  if (realm === undefined) return 'realm';
+  if (r['event'] === 'end') {
+    if (!QUEST_OUTCOMES.includes(r['outcome'] as (typeof QUEST_OUTCOMES)[number])) return 'outcome';
+    return { event: 'end', progress_id: r['progress_id'], at, session_id: session as string | null, realm, outcome: r['outcome'] as (typeof QUEST_OUTCOMES)[number] };
+  }
+  if (r['event'] !== 'start') return 'event';
+  if (typeof r['run_id'] !== 'string' || !UUID.test(r['run_id'])) return 'run_id';
+  if (typeof r['collector_id'] !== 'string' || !HASH.test(r['collector_id'])) return 'collector_id';
+  if (typeof r['quest_id'] !== 'string' || !QUEST_ID.test(r['quest_id'])) return 'quest_id';
+  if (typeof r['period'] !== 'string' || !PERIOD.test(r['period'])) return 'period';
+  const step = r['step_no'];
+  if (typeof step !== 'number' || !Number.isInteger(step) || step < 1 || step > 100) return 'step_no';
+  const expires = r['expires_at'] === null || r['expires_at'] === undefined ? null : iso(r['expires_at']);
+  if (expires === null && r['expires_at'] !== null && r['expires_at'] !== undefined) return 'expires_at';
+  return {
+    event: 'start',
+    progress_id: r['progress_id'],
+    run_id: r['run_id'],
+    collector_id: r['collector_id'],
+    session_id: session as string | null,
+    quest_id: r['quest_id'],
+    period: r['period'],
+    step_no: step,
+    at,
+    realm,
+    expires_at: expires,
+  };
+}
+
+const smallCount = (v: unknown, min: number, max: number): v is number => typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
+
+/** A quest as `game.dim_quest` takes it (OP-266), or null to refuse the catalogue. */
+export function checkQuestRef(v: unknown): QuestRefRow | null {
+  const q = obj(v);
+  if (typeof q['quest_id'] !== 'string' || !QUEST_ID.test(q['quest_id'])) return null;
+  if (typeof q['title'] !== 'string' || !SHOWN.test(q['title'])) return null;
+  if (typeof q['giver_npc'] !== 'string' || !QUEST_ID.test(q['giver_npc'])) return null;
+  const giverRoom = stayRoomOrNull(q['giver_room']);
+  const template = idOrNull(q['template']);
+  const puzzle = idOrNull(q['puzzle_id']);
+  if (giverRoom === undefined || template === undefined || puzzle === undefined) return null;
+  if (!QUEST_TYPES.includes(q['quest_type'] as QuestRefRow['quest_type'])) return null;
+  if (!DIFFICULTIES.includes(q['difficulty'] as QuestRefRow['difficulty'])) return null;
+  if (!QUEST_LENGTHS.includes(q['length'] as QuestRefRow['length'])) return null;
+  if (!CADENCES.includes(q['cadence'] as QuestRefRow['cadence'])) return null;
+  if (!smallCount(q['step_count'], 1, 99) || !smallCount(q['reward_feathers'], 0, 100_000)) return null;
+  const item = q['reward_item'] ?? null;
+  if (item !== null && (typeof item !== 'string' || !(item === 'pick' || COLLECTIBLE.test(item)))) return null;
+  const requires = q['requires'] ?? [];
+  if (!Array.isArray(requires) || requires.length > 20 || !requires.every((x) => typeof x === 'string' && QUEST_ID.test(x))) return null;
+  return {
+    quest_id: q['quest_id'],
+    title: q['title'],
+    giver_npc: q['giver_npc'],
+    giver_room: giverRoom,
+    quest_type: q['quest_type'] as QuestRefRow['quest_type'],
+    difficulty: q['difficulty'] as QuestRefRow['difficulty'],
+    length: q['length'] as QuestRefRow['length'],
+    cadence: q['cadence'] as QuestRefRow['cadence'],
+    template,
+    step_count: q['step_count'],
+    reward_feathers: q['reward_feathers'],
+    reward_item: item as string | null,
+    requires: requires as string[],
+    puzzle_id: puzzle,
+  };
+}
+
+/** A quest's step as `game.dim_quest_step` takes it (OP-266), or null to refuse the catalogue. */
+export function checkQuestStepRef(v: unknown): QuestStepRefRow | null {
+  const s = obj(v);
+  if (typeof s['quest_id'] !== 'string' || !QUEST_ID.test(s['quest_id'])) return null;
+  if (!smallCount(s['step_no'], 1, 100)) return null;
+  if (!GOAL_KINDS.includes(s['goal_kind'] as QuestStepRefRow['goal_kind'])) return null;
+  const room = stayRoomOrNull(s['target_room']);
+  const npc = idOrNull(s['target_npc']);
+  const thing = idOrNull(s['target_thing']);
+  if (room === undefined || npc === undefined || thing === undefined) return null;
+  const kind = s['target_realm_kind'] ?? null;
+  if (kind !== null && !REALM_KINDS.includes(kind as (typeof REALM_KINDS)[number])) return null;
+  if (!smallCount(s['need_count'], 1, 1000) || typeof s['distinct_only'] !== 'boolean') return null;
+  if (typeof s['step_text'] !== 'string' || !SHOWN.test(s['step_text'])) return null;
+  return {
+    quest_id: s['quest_id'],
+    step_no: s['step_no'],
+    goal_kind: s['goal_kind'] as QuestStepRefRow['goal_kind'],
+    target_room: room,
+    target_realm_kind: kind as QuestStepRefRow['target_realm_kind'],
+    target_npc: npc,
+    target_thing: thing,
+    need_count: s['need_count'],
+    distinct_only: s['distinct_only'],
+    step_text: s['step_text'],
   };
 }
 
@@ -493,6 +841,28 @@ async function catalogue(body: Record<string, unknown>, tables: Tables): Promise
   return json({ ok: true, items: items.length });
 }
 
+async function questCatalogue(body: Record<string, unknown>, tables: Tables): Promise<Response> {
+  const sentQuests = Array.isArray(body['quests']) ? body['quests'] : null;
+  const sentSteps = Array.isArray(body['steps']) ? body['steps'] : null;
+  if (!sentQuests || !sentQuests.length || !sentSteps || !sentSteps.length) return json({ error: 'quests and steps must be lists' }, 400);
+  if (sentQuests.length > MAX_QUESTS || sentSteps.length > MAX_QUEST_STEPS) return json({ error: `at most ${MAX_QUESTS} quests and ${MAX_QUEST_STEPS} steps` }, 413);
+  const quests = sentQuests.map(checkQuestRef);
+  const steps = sentSteps.map(checkQuestStepRef);
+  // All or nothing, as the collectibles' catalogue: a part of it would mark the rest out.
+  if (quests.some((q) => q === null)) return json({ error: 'a quest is not one' }, 400);
+  if (steps.some((s) => s === null)) return json({ error: 'a step is not one' }, 400);
+  const ids = new Set((quests as QuestRefRow[]).map((q) => q.quest_id));
+  if (ids.size !== quests.length) return json({ error: 'a quest is listed twice' }, 400);
+  if ((steps as QuestStepRefRow[]).some((s) => !ids.has(s.quest_id))) return json({ error: 'a step names a quest not listed' }, 400);
+  await tables.setQuestCatalogue(quests as QuestRefRow[], steps as QuestStepRefRow[]);
+  return json({ ok: true, quests: quests.length, steps: steps.length });
+}
+
+/** The kinds of request the park sends. */
+export const KINDS = ['collect', 'catalogue', 'player', 'session', 'realm_visit', 'feedback', 'purchase', 'contact', 'room_stay', 'quest_progress', 'quest_catalogue', 'play_event'] as const;
+
+const isKind = (v: unknown): v is (typeof KINDS)[number] => KINDS.includes(v as (typeof KINDS)[number]);
+
 export async function handle(req: Request, deps: Deps): Promise<Response> {
   const key = deps.key?.trim() ?? '';
   if (key.length < MIN_KEY) return json({ error: 'not set up' }, 503);
@@ -513,8 +883,8 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     return json({ ok: true, dry_run: true, tables });
   }
   const kind = body['kind'];
-  if (kind !== 'collect' && kind !== 'catalogue' && kind !== 'player' && kind !== 'session' && kind !== 'realm_visit' && kind !== 'feedback' && kind !== 'purchase' && kind !== 'contact') {
-    return json({ error: 'kind must be collect, catalogue, player, session, realm_visit, feedback, purchase or contact' }, 400);
+  if (!isKind(kind)) {
+    return json({ error: `kind must be ${KINDS.slice(0, -1).join(', ')} or ${KINDS.at(-1)}` }, 400);
   }
   // Without its tables the function keeps nothing, and says so: the park keeps the rows and sends them again.
   const tables = deps.tables;
@@ -535,8 +905,16 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
         return await keepRows(kind, body, checkPurchase, (rows) => tables.addPurchases(rows));
       case 'contact':
         return await keepRows(kind, body, checkContact, (rows) => tables.addContacts(rows));
+      case 'room_stay':
+        return await keepRows(kind, body, checkRoomStay, (rows) => tables.addRoomStays(rows));
+      case 'quest_progress':
+        return await keepRows(kind, body, checkQuestProgress, (rows) => tables.addQuestProgress(rows));
+      case 'play_event':
+        return await keepRows(kind, body, checkPlayEvent, (rows) => tables.addPlayEvents(rows));
       case 'catalogue':
         return await catalogue(body, tables);
+      case 'quest_catalogue':
+        return await questCatalogue(body, tables);
     }
   } catch (e) {
     console.error(`[owl-park-log] the ${String(body['kind'])} was not kept:`, message(e));
@@ -554,11 +932,12 @@ export interface Db {
 
 const LOG_COLUMNS = 'event_id, collector_id, collectible_id, collectible_type, realm, acquired_at, session_id, device_class, first_entry_at, backfill';
 const CATALOGUE_COLUMNS = 'collectible_id, kind, rarity, realm';
-const SESSION_COLUMNS = 'session_id, collector_id, started_at, ended_at, device_class, realms_entered, collectibles_gained, visitor_kind';
+const SESSION_COLUMNS = 'session_id, collector_id, started_at, ended_at, device_class, realms_entered, collectibles_gained, visitor_kind, is_test';
 const PURCHASE_COLUMNS = 'event_id, event, order_key, collector_id, occurred_at, ticket_kinds, tickets, amount_cents, upsell, held, via, valid_until';
 /** The owner's buyers (OP-192): a schema of their own, apart from the park's anonymous `game` tables. */
 export const CONTACTS_SCHEMA = 'contacts';
 const REALM_VISIT_COLUMNS = 'visit_id, session_id, collector_id, realm, realm_kind, map_id, entered_at, exited_at, entry_source, collectibles_gained';
+const PLAY_EVENT_COLUMNS = 'event_id, event, collector_id, session_id, run_id, occurred_at, realm, course_id, thing, pos_x, pos_y, ms, practice';
 const FEEDBACK_COLUMNS = 'event_id, park_feedback_id, collector_id, session_id, kind, body, realm, realm_kind, device_class, submitted_at';
 
 /**
@@ -649,6 +1028,29 @@ export function gameTables(db: Db): Tables {
       const res = await db.unsafe(`select ${CONTACTS_SCHEMA}.add_contacts($1::text::jsonb) as kept`, [JSON.stringify(rows)]);
       const kept = Array.isArray(res) ? Number((res[0] as { kept?: unknown } | undefined)?.kept ?? 0) : 0;
       return Number.isFinite(kept) ? kept : 0;
+    },
+    async addRoomStays(rows) {
+      // In order, in one call and so one transaction (sql/room_stays.sql): an enter closes the visit's open stay and opens its own.
+      const res = await db.unsafe(`select ${SCHEMA}.apply_room_stays($1::text::jsonb) as kept`, [JSON.stringify(rows)]);
+      const kept = Array.isArray(res) ? Number((res[0] as { kept?: unknown } | undefined)?.kept ?? 0) : 0;
+      return Number.isFinite(kept) ? kept : 0;
+    },
+    async addQuestProgress(rows) {
+      // In order, in one call and so one transaction (sql/quest_progress.sql): a step's start closes the run's open step before it.
+      const res = await db.unsafe(`select ${SCHEMA}.apply_quest_progress($1::text::jsonb) as kept`, [JSON.stringify(rows)]);
+      const kept = Array.isArray(res) ? Number((res[0] as { kept?: unknown } | undefined)?.kept ?? 0) : 0;
+      return Number.isFinite(kept) ? kept : 0;
+    },
+    async setQuestCatalogue(quests, steps) {
+      // One call, so one transaction: every quest and step in, and any not among them marked out.
+      await db.unsafe(`select ${SCHEMA}.set_quest_catalogue($1::text::jsonb, $2::text::jsonb)`, [JSON.stringify(quests), JSON.stringify(steps)]);
+    },
+    async addPlayEvents(rows) {
+      const kept = await db.unsafe(
+        `insert into ${SCHEMA}.play_event (${PLAY_EVENT_COLUMNS}) select ${PLAY_EVENT_COLUMNS} from jsonb_populate_recordset(null::${SCHEMA}.play_event, $1::text::jsonb) on conflict (event_id) do nothing returning event_id`,
+        [JSON.stringify(rows)],
+      );
+      return Array.isArray(kept) ? kept.length : 0;
     },
     async addFeedback(rows) {
       // The words go in the batch's one JSON parameter like every other field: never part of the query.

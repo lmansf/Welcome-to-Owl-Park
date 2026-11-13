@@ -59,7 +59,8 @@ config.vars = {
   RATE_LIMITS: 'off',
   MAX_SOCKETS_PER_IP: '64',
   // The most the server takes for a room (apps/edge/src/rooms.ts); above it the defaults apply.
-  ROOM_CAPS: JSON.stringify(capacity ? { lobby: 120, hub: 30, grove: 120, market: 120 } : { lobby: 120, hub: 120, grove: 120, market: 120 }),
+  // The new map's Great Hollow, ground room and stair rooms too (OP-211's tree steps, run-steps.mjs --plan tree).
+  ROOM_CAPS: JSON.stringify(capacity ? { lobby: 120, hub: 30, grove: 120, market: 120 } : { lobby: 120, hub: 120, grove: 120, market: 120, 'm3-hall': 120, 'm3-ground': 120, 'm3-stair-1': 120, 'm3-stair-2': 120, 'm3-stair-3': 120 }),
 };
 // The copy's keys go up as secrets (wrangler deploy --secrets-file), never as vars: Wrangler prints a
 // var's first characters, which the log's mask (the whole key) does not catch. Its own signing key

@@ -3,11 +3,16 @@ import {
   EDGE_PROTOCOL_VERSION,
   HEARTBEAT_FRAME,
   HEARTBEAT_INTERVAL_MS,
+  STUMP_ROOM,
+  isPartyRoom,
   parseServerFrame,
   positionAlongWalk,
+  readClosedView,
   type ActKind,
   type ClientAct,
   type ClientFrame,
+  type CourseAct,
+  type ClosedView,
   type FeedbackDraft,
   type LineStatus,
   type OwlAccount,
@@ -16,20 +21,24 @@ import {
   type PortraitLook,
   type ParkMessage,
   type PlayerState,
+  type PuzzleView,
   type QuestBoard,
   type ServerAct,
+  type ServerEscape,
   type ServerFrame,
   type TaskView,
   type Vec2,
   type Walk,
 } from '@owl-park/shared';
-import type { ActRefusal, ActivityLink, HandInReply, NestEditReply, NestLink, QuestLink, QuestReply, UseReply } from '../collect/service';
+import type { ActRefusal, ActivityLink, CourseLink, CourseReply, HandInReply, NestEditReply, NestLink, PuzzleReply, QuestLink, QuestReply, UseReply } from '../collect/service';
 import { deviceTimeZone } from '../collect/service';
 import { COLLECTOR_KEY } from '../identity';
 import { EmoteGate, MoveBudget } from './budget';
 import { keeperToken } from './keeper';
 import { pageLog } from './pageLog';
-import { OPEN_ENTRY, type AccountConfirm, type AccountLink, type Entry, type LineLink, type ParkTransport, type RoomConnection, type RoomHandlers, type ScanReply, type TicketWallet, type WalletEntry } from './transport';
+import { testVisit } from './testVisit';
+import { goToGoogle } from './toGoogle';
+import { OPEN_ENTRY, type AccountConfirm, type AccountGoogle, type AccountLink, type Entry, type EscapeLink, type ReferralLink, type ReferralState, type LineLink, type ParkTransport, type RoomConnection, type RoomHandlers, type ScanReply, type TicketWallet, type WalletEntry } from './transport';
 
 /** Remote owls are drawn this far behind the server clock so network jitter never shows. */
 const RENDER_DELAY_MS = 100;
@@ -48,7 +57,7 @@ const REPLY_TIMEOUT_MS = 6_000;
 
 /** A client frame that expects an answer, before its request number is added. */
 type Request = ClientFrame extends infer F ? (F extends { r: number } ? Omit<F, 'r'> : never) : never;
-type Answer = Extract<ServerFrame, { t: 'quests' | 'handin' | 'useResult' | 'refused' | 'act' | 'nest' | 'street' | 'admitted' }>;
+type Answer = Extract<ServerFrame, { t: 'quests' | 'handin' | 'useResult' | 'refused' | 'act' | 'nest' | 'street' | 'admitted' | 'course' | 'puzzle' | 'escape' }>;
 
 const OFFLINE: QuestReply = { ok: false, reason: 'offline', board: null, updates: [] };
 
@@ -131,6 +140,8 @@ export class EdgeTransport implements ParkTransport {
   private opening = false;
   /** The latest entry (OP-075): every room's welcome renews it, and the line gives one to an owl it calls. */
   private entryToken: string | null = readEntry();
+  /** Which copy of the Party Grove this owl was last in (OP-314): a party game's room is in that copy's room server. */
+  private stumpCopy = 1;
 
   /** This screen's owl is on another screen now (OP-139): no pass, no socket, until it is brought back. */
   private moved = false;
@@ -163,6 +174,30 @@ export class EdgeTransport implements ParkTransport {
       }
     },
   };
+
+  /**
+   * Whether the park is closed for setup (OP-233): asked with the browser's cache, which the Worker lets
+   * keep the answer a few seconds; null when the park did not answer with one.
+   */
+  async parkCount(): Promise<number | null> {
+    try {
+      const res = await fetch(`${this.base}/api/counts`);
+      if (!res.ok) return null;
+      const counts = (await res.json()) as Record<string, unknown>;
+      return Object.values(counts).reduce<number>((sum, n) => sum + (typeof n === 'number' && Number.isFinite(n) && n > 0 ? n : 0), 0);
+    } catch {
+      return null;
+    }
+  }
+
+  async closed(): Promise<ClosedView | null> {
+    try {
+      const res = await fetch(`${this.base}/api/closed`);
+      return res.ok ? readClosedView(await res.json()) : null;
+    } catch {
+      return null;
+    }
+  }
 
   private async lineAnswer(res: Response): Promise<LineStatus> {
     if (!res.ok) throw new Error(`the line answered ${res.status}`);
@@ -274,6 +309,39 @@ export class EdgeTransport implements ParkTransport {
     }
   }
 
+  readonly referrals: ReferralLink = {
+    view: async () => {
+      try {
+        const res = await this.api('/api/referral');
+        if (!res.ok) return null;
+        const body = (await res.json()) as ReferralState;
+        return body.mode === 'on' || body.mode === 'preview' ? body : null;
+      } catch {
+        return null;
+      }
+    },
+    invite: async (code) => {
+      try {
+        const res = await this.api('/api/referral/invite', { method: 'POST', body: JSON.stringify({ code }) });
+        const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+        if (res.ok && body['ok'] === true) return { ok: true, state: body as unknown as ReferralState };
+        const reason = typeof body['reason'] === 'string' ? (body['reason'] as never) : 'offline';
+        return { ok: false, reason };
+      } catch {
+        return { ok: false, reason: 'offline' };
+      }
+    },
+    freeTicket: async () => {
+      try {
+        const res = await this.api('/api/tickets/checkout', { method: 'POST', body: JSON.stringify({ referral: true }) });
+        const body = res.ok ? ((await res.json()) as { url?: unknown }) : {};
+        return typeof body.url === 'string' && body.url.startsWith('https://') ? body.url : null;
+      } catch {
+        return null;
+      }
+    },
+  };
+
   readonly accounts: AccountLink = {
     account: async () => {
       try {
@@ -323,7 +391,26 @@ export class EdgeTransport implements ParkTransport {
       if (r.status === 410) return 'gone';
       return r.status === 404 ? 'no-owl' : 'offline';
     },
+    googleReady: () => {
+      this.googleAsked ??= fetch(`${this.base}/api/account/google`, { cache: 'no-store' })
+        .then(async (res) => res.ok && ((await res.json()) as { ready?: unknown }).ready === true)
+        .catch(() => false);
+      return this.googleAsked;
+    },
+    google: async (kind): Promise<AccountGoogle> => {
+      // The page comes back from Google to its own query string (its room, its settings); tokens never ride in it.
+      const back = location.search.length <= 400 ? location.search : '';
+      const r = await this.accountPost('google/start', { for: kind, back }, kind === 'protect');
+      if (!r) return 'offline';
+      if (r.status === 429) return 'try-later';
+      // Only Google's own sign-in page; the page comes back from there.
+      if (r.status !== 200 || !goToGoogle(r.body['url'])) return r.status === 401 ? 'offline' : 'not-ready';
+      return new Promise<AccountGoogle>(() => {});
+    },
   };
+
+  /** Whether the park offers Sign in with Google (OP-313), asked once a page. */
+  private googleAsked: Promise<boolean> | null = null;
 
   /** An authenticated call to the park API; a refused pass is renewed once. */
   async api(path: string, init: RequestInit = {}): Promise<Response> {
@@ -377,6 +464,16 @@ export class EdgeTransport implements ParkTransport {
     return this.api('/api/feedback', { method: 'POST', body: JSON.stringify(draft) });
   }
 
+  /** The thanks ladder for feedback (OP-272). */
+  feedbackRewards(): Promise<Response> {
+    return this.api('/api/feedback/reward');
+  }
+
+  /** Keep the card about the grey mouse closed for this owl (OP-272). */
+  closeFeedbackCard(): Promise<Response> {
+    return this.api('/api/feedback/close', { method: 'POST', body: '{}' });
+  }
+
   async join(roomId: string, self: PlayerState, handlers: RoomHandlers): Promise<RoomConnection> {
     handlers.onStatus('connecting');
     const wsBase = this.base ? this.base.replace(/^http/, 'ws') : `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
@@ -390,6 +487,9 @@ export class EdgeTransport implements ParkTransport {
     let spawn = requestedSpawn && SPAWN_NAME.test(requestedSpawn) ? requestedSpawn : undefined;
     /** Come by travel from the map (OP-130): said in the hello until the room has let the owl in. */
     let via = (self as PlayerState & { via?: string }).via === 'travel' ? ('travel' as const) : undefined;
+    /** The park the owl walks (OP-265), said in every hello: the room logs a shared room's stay in it. */
+    const walkMap = (self as PlayerState & { map?: number }).map;
+    const map = walkMap === 1 || walkMap === 2 ? walkMap : undefined;
     let backoff = BACKOFF_MIN_MS;
     let heartbeat: ReturnType<typeof setInterval> | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -401,7 +501,7 @@ export class EdgeTransport implements ParkTransport {
     /** When the socket dropped (it reconnects): the page's log tells the gap once the room has the owl again (OP-134). */
     let droppedAt: number | null = null;
     /** Which copy of the room the server put this owl in (OP-075): a dropped socket asks for the same one. */
-    let copy = 1;
+    let copy = isPartyRoom(roomId) ? this.stumpCopy : 1;
     /** Our id as the server knows it (from the pass), which differs from the scene's local id. */
     let selfId: string | null = null;
     const knownPeers = new Set<string>();
@@ -419,7 +519,7 @@ export class EdgeTransport implements ParkTransport {
     let lastR = 0;
     const readyWaiters: Array<(ok: boolean) => void> = [];
 
-    const toLocalWalk = (w: { from: Vec2; to: Vec2; at: number }): Walk => ({ from: w.from, to: w.to, startedAt: w.at - offset + RENDER_DELAY_MS });
+    const toLocalWalk = (w: { from: Vec2; to: Vec2; at: number; dash?: true }): Walk => ({ from: w.from, to: w.to, startedAt: w.at - offset + RENDER_DELAY_MS, ...(w.dash ? { dash: true as const } : {}) });
     /** A time on the room's clock as remote owls are drawn on this page's (an air state's, OP-084). */
     const toLocalAt = (at: number): number => at - offset + RENDER_DELAY_MS;
     /** Board times are on the server clock; the HUD counts down on this device's. */
@@ -427,8 +527,28 @@ export class EdgeTransport implements ParkTransport {
       ...b,
       nextDay: b.nextDay - offset,
       nextWeek: b.nextWeek - offset,
+      nextMonth: b.nextMonth - offset,
       active: b.active.map((q) => (q.endsAt ? { ...q, endsAt: q.endsAt - offset } : q)),
     });
+    /** A jammed lock's time is on the server clock too (OP-255). */
+    /** A sealed hollow's frame with its times on this page's clock (OP-310). */
+    const escapeHere = (f: ServerEscape): ServerEscape => {
+      if (!f.view) return f;
+      const v = f.view;
+      const at = (t: number | null) => (t ? t - offset : t);
+      return {
+        ...f,
+        view: {
+          ...v,
+          startedAt: at(v.startedAt),
+          endedAt: at(v.endedAt),
+          hintAt: v.hintAt ? v.hintAt - offset : 0,
+          vines: v.vines.map((x) => (x.tuggedAt ? { ...x, tuggedAt: x.tuggedAt - offset } : x)),
+          locks: v.locks.map((l) => (l.jammedUntil ? { ...l, jammedUntil: l.jammedUntil - offset } : l)),
+        },
+      };
+    };
+    const puzzleHere = (v: PuzzleView): PuzzleView => ({ ...v, locks: v.locks.map((l) => (l.jammedUntil ? { ...l, jammedUntil: l.jammedUntil - offset } : l)) });
     const toLocalTasks = (t: TaskView): TaskView => ({ ...t, endsAt: t.endsAt - offset });
     const answer = (f: Answer) => {
       const r = f.r;
@@ -457,6 +577,19 @@ export class EdgeTransport implements ParkTransport {
       queued = null;
       if (queueTimer) clearTimeout(queueTimer);
       queueTimer = null;
+    };
+    /**
+     * A dash (OP-224) goes at once, ahead of any walk waiting: it is over in a fifth of a second. The
+     * room echoes it as a move with its number, or puts it right with the walk it keeps.
+     */
+    const sendDash = (to: Vec2) => {
+      clearQueue();
+      clearPending();
+      budget.take(Date.now());
+      seq += 1;
+      const mine = seq;
+      pending.set(mine, { to, timer: setTimeout(() => pending.delete(mine), ECHO_TIMEOUT_MS), resent: true });
+      sendFrame({ t: 'dash', to, seq: mine });
     };
     /** Send the waiting move as soon as the budget allows. */
     const flushMove = () => {
@@ -527,6 +660,7 @@ export class EdgeTransport implements ParkTransport {
           }
           handlers.onCounts?.(f.counts);
           copy = f.copy ?? 1;
+          if (roomId === STUMP_ROOM) this.stumpCopy = copy;
           this.keepEntry(f.entry);
           if (f.notice !== undefined) handlers.onNotice?.(f.notice);
           if (f.realms) handlers.onRealms?.(f.realms);
@@ -559,7 +693,7 @@ export class EdgeTransport implements ParkTransport {
               // Only the newest move may correct our walk: the echo of a superseded one is stale.
               const newest = f.seq === seq && !queued;
               const differs = !predicted || Math.hypot(predicted.x - f.to.x, predicted.y - f.to.y) > 2;
-              if (newest && differs) handlers.onSelfWalk?.({ from: f.from, to: f.to, startedAt: Date.now() });
+              if (newest && differs) handlers.onSelfWalk?.({ from: f.from, to: f.to, startedAt: Date.now(), ...(f.dash ? { dash: true as const } : {}) });
             }
             break;
           }
@@ -595,12 +729,21 @@ export class EdgeTransport implements ParkTransport {
           // An answer to one of our requests, or a push after an arrival or an emote moved a quest.
           if (!answer(f)) handlers.onQuests?.(toLocalBoard(f.board), f.updates);
           break;
+        case 'puzzle':
+          // An answer, or a push after someone else in this owl's run moved it along (OP-255).
+          if (!answer(f) && f.view) handlers.onPuzzle?.(f.quest, puzzleHere(f.view), f.board ? toLocalBoard(f.board) : undefined, f.updates);
+          break;
+        case 'escape':
+          // An answer, or a push after another owl of the group moved the run along (OP-310).
+          if (!answer(f)) handlers.onEscape?.(escapeHere(f));
+          break;
         case 'handin':
         case 'useResult':
         case 'refused':
         case 'act':
         case 'street':
         case 'admitted':
+        case 'course':
           answer(f);
           break;
         case 'nest':
@@ -617,10 +760,18 @@ export class EdgeTransport implements ParkTransport {
           if (f.why === 'setup') setupSign = f.sign ?? '';
           else if (f.why === 'realm') handlers.onRealmClosed?.(f.sign ?? '');
           else if (f.why === 'gate') handlers.onNotThroughGate?.();
+          else if (f.why === 'party') handlers.onPartyClosed?.();
           else handlers.onNestClosed?.(f.why);
           break;
         case 'realms':
           handlers.onRealms?.(f.realms);
+          break;
+        case 'stump':
+          // The Old Stump's seats (OP-314): an answer and a push alike; times are none.
+          handlers.onStump?.(f);
+          break;
+        case 'party':
+          handlers.onParty?.(f);
           break;
         case 'restart':
           if (typeof f.words === 'string' && f.words) handlers.onRestartNotice?.(f.words);
@@ -712,11 +863,24 @@ export class EdgeTransport implements ParkTransport {
       },
       use: async (target): Promise<UseReply> => {
         const f = await request({ t: 'use', target });
-        if (f?.t === 'useResult') return { ok: f.ok, ...(f.reason ? { reason: f.reason } : {}), feathers: f.feathers, total: f.total, updates: f.updates };
+        if (f?.t === 'useResult') return { ok: f.ok, ...(f.reason ? { reason: f.reason } : {}), feathers: f.feathers, total: f.total, updates: f.updates, ...(f.practice ? { practice: true as const } : {}) };
         return { ok: false, reason: f?.t === 'refused' ? f.reason : 'offline', feathers: 0, total: -1, updates: [] };
       },
       // The room counts arrivals and emotes itself.
       note: () => undefined,
+      puzzle: async (op, quest, args = {}): Promise<PuzzleReply> => {
+        const f = await request({ t: 'puzzle', op, quest, ...args });
+        if (f?.t !== 'puzzle') return { ok: false, reason: f?.t === 'refused' ? f.reason : 'offline', view: null, updates: [] };
+        return {
+          ok: f.ok,
+          ...(f.reason ? { reason: f.reason } : {}),
+          ...(f.left !== undefined ? { left: f.left } : {}),
+          view: f.view ? puzzleHere(f.view) : null,
+          ...(f.near ? { near: f.near } : {}),
+          ...(f.board ? { board: toLocalBoard(f.board) } : {}),
+          updates: f.updates ?? [],
+        };
+      },
     };
     /** An activity request (with its note, or its game and result), and its answer (an `act` frame, or why there is none). */
     const act = async (a: ActKind, extra: Omit<ClientAct, 't' | 'a' | 'r'> = {}): Promise<ServerAct | { ok: false; reason: ActRefusal }> => {
@@ -816,6 +980,29 @@ export class EdgeTransport implements ParkTransport {
       // The room forgets the owl when it leaves.
       close: () => undefined,
     };
+    /** A course step (OP-224) and its answer, or why there is none. */
+    const courseAsk = async (a: CourseAct, id?: string): Promise<CourseReply> => {
+      const f = await request({ t: 'course', a, ...(id !== undefined ? { id } : {}) });
+      if (f?.t !== 'course') return { ok: false, reason: 'offline' };
+      if (!f.ok) return { ok: false, reason: f.reason };
+      return { ok: true, view: f.view, ...(f.first !== undefined ? { first: f.first } : {}), ...(f.at ? { at: f.at } : {}), ...(typeof f.top === 'number' && f.top > 0 ? { top: f.top } : {}), ...(f.paid ? { paid: f.paid } : {}) };
+    };
+    const escape: EscapeLink = {
+      ask: async (a, args = {}) => {
+        const f = await request({ t: 'escape', a, ...args });
+        return f?.t === 'escape' ? escapeHere(f) : { t: 'escape', a, ok: false, reason: 'offline' };
+      },
+    };
+    const course: CourseLink = {
+      state: () => courseAsk('state'),
+      start: () => courseAsk('start'),
+      reach: (kind, id) => courseAsk(kind, id),
+      open: (id) => courseAsk('shortcut', id),
+      fall: () => courseAsk('fall'),
+      finish: () => courseAsk('finish'),
+      // The room forgets the run's page when it leaves; the run itself is kept.
+      close: () => undefined,
+    };
     const failWaiters = () => {
       for (const w of waiters.values()) {
         clearTimeout(w.timer);
@@ -851,7 +1038,8 @@ export class EdgeTransport implements ParkTransport {
       welcomed = false;
       opened = false;
       // The entry lets an owl that was inside back in while the park has a line; a dropped socket asks for its own copy.
-      const extra = `${this.entryToken ? `&entry=${encodeURIComponent(this.entryToken)}` : ''}${copy > 1 ? `&copy=${copy}` : ''}`;
+      // One of our own test visits says so (testVisit.ts), so the log keeps it out of the visitor counts.
+      const extra = `${this.entryToken ? `&entry=${encodeURIComponent(this.entryToken)}` : ''}${copy > 1 ? `&copy=${copy}` : ''}${testVisit ? '&test=1' : ''}`;
       const socket = new WebSocket(`${wsBase}/ws/${encodeURIComponent(roomId)}?pass=${encodeURIComponent(pass.pass)}${extra}`);
       ws = socket;
       socket.onopen = () => {
@@ -861,6 +1049,7 @@ export class EdgeTransport implements ParkTransport {
         if (spawn) hello.spawn = spawn;
         if (via) hello.via = via;
         if (keeper) hello.keeper = keeper;
+        if (map) hello.map = map;
         const pos = handlers.here?.() ?? currentPos();
         hello.pos = { x: Math.round(pos.x), y: Math.round(pos.y) };
         socket.send(JSON.stringify(hello));
@@ -903,6 +1092,15 @@ export class EdgeTransport implements ParkTransport {
           handlers.onStatus('offline');
           return;
         }
+        if (ev.code === CLOSE.TICKET_ENDED) {
+          // Its ticket ran out mid-visit (OP-237): home, with a fresh pass for the next Play, which
+          // meets the front gate again. Nothing reconnects.
+          this.pass = null;
+          this.ticketId = null;
+          handlers.onTicketEnded?.();
+          handlers.onStatus('offline');
+          return;
+        }
         if (ev.code === CLOSE.SETUP) {
           // Closed for setup (OP-205): home, where the closed card shows the keepers' words. Nothing
           // reconnects; Play tries again, and the room says so again until the park opens.
@@ -916,7 +1114,7 @@ export class EdgeTransport implements ParkTransport {
           handlers.onStatus('offline');
           return; // it waits in the line on the home screen
         }
-        if (ev.code === CLOSE.ROOM_FULL || ev.code === CLOSE.REPLACED || ev.code === CLOSE.NOT_ADMITTED || ev.code === CLOSE.NEST_CLOSED || ev.code === CLOSE.REALM_CLOSED || ev.code === CLOSE.NOT_THROUGH_GATE) {
+        if (ev.code === CLOSE.ROOM_FULL || ev.code === CLOSE.REPLACED || ev.code === CLOSE.NOT_ADMITTED || ev.code === CLOSE.NEST_CLOSED || ev.code === CLOSE.REALM_CLOSED || ev.code === CLOSE.NOT_THROUGH_GATE || ev.code === CLOSE.PARTY_CLOSED) {
           handlers.onStatus('offline');
           return; // the scene decides what to do; no reconnect loop
         }
@@ -952,9 +1150,18 @@ export class EdgeTransport implements ParkTransport {
     await connect();
 
     return {
+      serverNow: () => Date.now() + offset,
+      // The party game (OP-314): the room answers with `stump` and `party` frames, heard by the handlers.
+      party: {
+        send: (op, more = {}) => sendFrame({ t: 'party', op, r: ++lastR, ...more } as ClientFrame),
+      },
       send(msg: ParkMessage) {
         switch (msg.t) {
           case 'move':
+            if (msg.walk.dash) {
+              sendDash({ x: Math.round(msg.walk.to.x), y: Math.round(msg.walk.to.y) });
+              break;
+            }
             queued = { x: Math.round(msg.walk.to.x), y: Math.round(msg.walk.to.y) };
             flushMove();
             break;
@@ -995,6 +1202,8 @@ export class EdgeTransport implements ParkTransport {
       link,
       acts,
       nests,
+      course,
+      escape,
       track(state: PlayerState) {
         current = state;
         spawn = undefined;
@@ -1036,6 +1245,6 @@ export class EdgeTransport implements ParkTransport {
   }
 }
 
-function fromSnapshot(o: OwlSnapshot, toLocalWalk: (w: { from: Vec2; to: Vec2; at: number }) => Walk, toLocalAt: (at: number) => number): PlayerState {
+function fromSnapshot(o: OwlSnapshot, toLocalWalk: (w: { from: Vec2; to: Vec2; at: number; dash?: true }) => Walk, toLocalAt: (at: number) => number): PlayerState {
   return { id: o.id, look: o.look, pos: o.pos, walk: o.walk ? toLocalWalk(o.walk) : null, ...(o.asleep ? { asleep: true } : {}), ...(o.air ? { air: { ...o.air, at: toLocalAt(o.air.at) } } : {}), v: 1 };
 }

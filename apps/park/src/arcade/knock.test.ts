@@ -160,7 +160,7 @@ describe('Talon Toss (OP-137)', () => {
     onward(b);
     expect(b.over).toBe(true);
     expect(b.phase).toBe('over');
-    expect(b.overLine()).toBe('No target down, 0 points.');
+    expect(b.overLine()).toBe('0 points.');
     // Aim and launch do nothing once it is over.
     b.release();
     expect(b.shots).toBe(KNOCK_SHOTS);
@@ -205,9 +205,9 @@ describe('Talon Toss (OP-137)', () => {
     Object.assign(g, { cleared: 3, score: 30 });
     expect(g.overLine()).toBe('All three targets down! 30 points.');
     Object.assign(g, { cleared: 1, score: 9 });
-    expect(g.overLine()).toBe('1 target down, 9 points.');
+    expect(g.overLine()).toBe('1 target down! 9 points.');
     Object.assign(g, { cleared: 0, score: 1 });
-    expect(g.overLine()).toBe('No target down, 1 point.');
+    expect(g.overLine()).toBe('1 point.');
   });
 
   it('aims by the pull: back and down sends the owl up and on; hardly a pull launches nothing', () => {
@@ -225,6 +225,26 @@ describe('Talon Toss (OP-137)', () => {
     g.release();
     expect(g.phase).toBe('aim');
     expect(g.shots).toBe(0);
+  });
+
+  it('takes a pull forward, towards the targets, as no shot: a slingshot is pulled back (OP-345)', () => {
+    const g = new KnockGame(Matter, 0);
+    // A good pull first, so there is an aim to lose.
+    g.aimByPull(-100, 60);
+    expect(g.power).toBeGreaterThan(0.5);
+    // Dragged towards the targets, level, up or down: no power, and letting go launches nothing.
+    for (const [dx, dy] of [[120, 0], [80, 60], [80, -60], [0, 90]] as const) {
+      g.aimByPull(dx, dy);
+      expect(g.power, `${dx},${dy}`).toBe(0);
+      g.release();
+      expect(g.phase, `${dx},${dy}`).toBe('aim');
+      expect(g.shots, `${dx},${dy}`).toBe(0);
+    }
+    // Pulled back again: the aim is there again, and it launches.
+    g.aimByPull(-100, 60);
+    expect(g.power).toBeGreaterThan(0.5);
+    g.release();
+    expect(g.shots).toBe(1);
   });
 
   it('plays the same shots the same way every time', () => {

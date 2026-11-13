@@ -2,9 +2,11 @@ import { ARCADE_NAME, NEST_WORDS, TRAVEL_WORDS, WAY_OUT_WORDS, WHICH_OWL_WORDS, 
 import type { CollectionState } from '../collect/state';
 import { rasterNames } from '../game/artNames';
 import { PUBLISHED_ART, versioned } from '../game/publishedArt';
+import { ROOMS } from '../rooms';
 import type { WalletEntry } from '../net/transport';
 import type { SettingsStore } from '../settings';
 import { ACCOUNT_WORDS } from './account';
+import { REFERRAL_WORDS } from './referral';
 import { HOME_WORDS } from './home';
 import { settingsRows, syncSettings } from './settingsScreen';
 import { walletLine } from './tickets';
@@ -181,6 +183,8 @@ export interface NestTabState {
   away: boolean;
   /** The owl's account (OP-139): its friend code and whether an email protects it. Null while accounts are off. */
   account?: HTMLElement[] | null;
+  /** Bring a friend (OP-056): the card's parts. Null while it is off for this page. */
+  friends?: HTMLElement[] | null;
 }
 
 /** `toMap`: the Map tab with the owl's nest picked, where travel home is (OP-130; it was Go home here, OP-114). */
@@ -199,6 +203,11 @@ export function renderNest(panel: HTMLElement, nest: NestTabState, toMap: () => 
     owl.dataset['account'] = '';
     panel.appendChild(owl);
   }
+  if (nest.friends) {
+    const friends = card(REFERRAL_WORDS.title, ...nest.friends);
+    friends.dataset['referral'] = '';
+    panel.appendChild(friends);
+  }
   panel.appendChild(card('Today’s furniture gift', note('A new piece for your nest every day: open Decorate in your nest to take it.')));
   panel.appendChild(card('Visiting', note('An open nest shows its owl’s flag on a door of the nests’ street: walk in to visit.')));
 }
@@ -213,7 +222,15 @@ interface Place {
   row: number;
   /** A closed arch: shown, its name kept until it is public. */
   closed?: boolean;
+  /** A place shown with 'You are here' but no travel card (the new map's places travel has no landing for yet). */
+  noTravel?: boolean;
 }
+
+/**
+ * The arcade on the map (OP-346): its own name and what it is. The doorway's sign in the Great Hollow
+ * and the quests say "the arcade"; the map said only Neon Roost, a second name for the one place.
+ */
+export const ARCADE_PLACE = `${ARCADE_NAME}, the arcade`;
 
 /** The park as it stands: inside the turnstiles the great tree and what leads off it, outside the gate the nests. */
 export const MAP_PLACES: readonly Place[] = [
@@ -223,7 +240,7 @@ export const MAP_PLACES: readonly Place[] = [
   { id: 'grove', name: 'The treehouse clearing', col: 0, row: 1 },
   { id: 'hub', name: 'The great tree', col: 1, row: 1 },
   { id: 'market', name: 'The neon street', col: 2, row: 1 },
-  { id: 'arcade', name: ARCADE_NAME, col: 2, row: 2 },
+  { id: 'arcade', name: ARCADE_PLACE, col: 2, row: 2 },
   { id: 'lobby', name: 'The front gate', col: 1, row: 2 },
   { id: 'homes', name: 'The nests’ street', col: 1, row: 3 },
   { id: 'nest', name: NEST_WORDS.yourNest, col: 1, row: 4 },
@@ -241,10 +258,56 @@ export const MAP_PATHS: ReadonlyArray<[string, string]> = [
   ['homes', 'nest'],
 ];
 
+/**
+ * The new map (OP-282), top to bottom as it is walked: the nests and the Treetop Commons with the
+ * turnstiles, then down the knothole into the Great Hollow, the four Commons side by side in it with
+ * the realms beyond them, the Party Grove out of the trunk's door, and the root stair down to the
+ * cavern and its arcade. Every place travels (NEW_MAP_LANDINGS, OP-305), into the park once through the
+ * Treetop Commons' turnstiles.
+ */
+export const NEW_MAP_PLACES: readonly Place[] = [
+  { id: 'nest', name: NEST_WORDS.yourNest, col: 0, row: 0 },
+  { id: 'homes', name: 'The nests’ street', col: 1, row: 0 },
+  { id: 'lobby', name: 'The Treetop Commons', col: 1, row: 1 },
+  { id: 'm3-hall', name: 'The Great Hollow', col: 1, row: 2 },
+  // The ink-wash realm has no room yet: its Commons leads only to its course, so the course is its place (OP-303).
+  { id: 'ink', name: 'Brushstroke Bridges', col: 0, row: 2, noTravel: true },
+  { id: 'glass', name: 'The glass realm', col: 0, row: 3 },
+  { id: 'grove', name: 'The treehouse clearing', col: 1, row: 3 },
+  { id: 'market', name: 'The neon street', col: 2, row: 3 },
+  // On the new map 'hub' is the Party Grove, and travel lands in it (NEW_MAP_LANDINGS), not at the gate.
+  { id: 'hub', name: 'The Party Grove', col: 2, row: 2 },
+  { id: 'arcade', name: ARCADE_PLACE, col: 2, row: 4 },
+];
+
+/** The new map's paths, as its doorways join the places. */
+export const NEW_MAP_PATHS: ReadonlyArray<[string, string]> = [
+  ['nest', 'homes'],
+  ['homes', 'lobby'],
+  ['lobby', 'm3-hall'],
+  ['m3-hall', 'ink'],
+  ['m3-hall', 'glass'],
+  ['m3-hall', 'grove'],
+  ['m3-hall', 'market'],
+  ['m3-hall', 'hub'],
+  ['m3-hall', 'arcade'],
+  ['market', 'arcade'],
+];
+
+/** The map's places and paths for the park the owl walks: the new map (3), or today's park and the tree. */
+export function mapLayout(walking: number): { places: readonly Place[]; paths: ReadonlyArray<[string, string]>; cols: number; rows: number } {
+  return walking === 3 ? { places: NEW_MAP_PLACES, paths: NEW_MAP_PATHS, cols: 3, rows: 5 } : { places: MAP_PLACES, paths: MAP_PATHS, cols: 3, rows: 5 };
+}
+
+/** On the new map, a parkour course's rooms are its realm's place, by course id (OP-303): each is entered from that realm's Commons. */
+export const NEW_MAP_COURSE_PLACES: Readonly<Record<string, string>> = { brush: 'ink', canopy: 'grove', circuit: 'market' };
+
 /** The map's place for a room the owl is in: any owl's nest is "a nest"; the owl's own is Your nest. */
-export function mapPlaceOf(room: string, ownNest: boolean, open: readonly string[] = []): string | null {
+export function mapPlaceOf(room: string, ownNest: boolean, open: readonly string[] = [], walking = 1): string | null {
   if (room.startsWith('nest-') || room === 'nest') return ownNest ? 'nest' : 'homes';
-  return MAP_PLACES.some((p) => p.id === room && (!p.closed || open.includes(p.id))) ? room : null;
+  const course = walking === 3 ? ROOMS[room]?.course?.id : undefined;
+  if (course !== undefined && Object.hasOwn(NEW_MAP_COURSE_PLACES, course)) return NEW_MAP_COURSE_PLACES[course]!;
+  return mapLayout(walking).places.some((p) => p.id === room && (!p.closed || open.includes(p.id))) ? room : null;
 }
 
 /** Travel from the map (OP-130), as the Map tab shows it. */
@@ -277,21 +340,34 @@ export const REFUSAL_WORDS: Readonly<Record<TravelRefusal, string>> = {
 };
 
 /**
- * A place's card on the map (OP-130), from where the owl is (`here`) and what it has walked into.
- * The nest always travels home and any other place once walked into. Into the park is only through
- * the front gate: the great tree's card travels to the gate, outside the turnstiles, and a place
- * inside the park offers the gate instead until the owl has walked through it.
+ * A place's card on the map (OP-130), from where the owl is (`here`). The nest always travels home and
+ * every other place from the start (the whole map open, Nov 8). Into the park is only through the front
+ * gate: the great tree's card travels to the gate, outside the turnstiles, and a place inside the park
+ * offers the gate instead until the owl has walked through it.
  */
-export function placeCard(place: string, here: string | null, travel: { places: readonly string[]; gate: boolean }): PlaceCard {
+export function placeCard(place: string, here: string | null, travel: { places: readonly string[]; gate: boolean }, walking = 1): PlaceCard {
   if (place === here) return { line: TRAVEL_WORDS.youAreHere, button: null };
   if (place === 'nest') return { line: null, button: { label: TRAVEL_WORDS.home, to: 'nest' } };
-  if (!canTravel(place, travel.places)) return { line: TRAVEL_WORDS.notYet, button: null };
-  // Both land outside the turnstiles; whichever the owl has walked into.
-  const gateWay = here === 'lobby' ? undefined : (['hub', 'lobby'] as const).find((p) => canTravel(p, travel.places));
-  const toGate = gateWay ? { label: TRAVEL_WORDS.gate, to: gateWay } : null;
+  if (walking === 3) return newMapCard(place, here, travel);
+  if (!canTravel(place)) return { line: TRAVEL_WORDS.notYet, button: null };
+  // Outside the turnstiles, where both the gate and today's great tree land.
+  const toGate = here === 'lobby' ? null : { label: TRAVEL_WORDS.gate, to: 'lobby' };
   if (place === 'hub') return here === 'lobby' ? { line: TRAVEL_WORDS.atGate, button: null } : { line: TRAVEL_WORDS.throughGate, button: toGate };
   if (place === 'lobby') return { line: null, button: toGate };
   if (needsGate(place) && !travel.gate) return { line: TRAVEL_WORDS.gateFirst, button: toGate };
+  return { line: null, button: { label: TRAVEL_WORDS.here, to: place } };
+}
+
+/**
+ * A place's card on the new map (OP-305): every place travels, from the start. Into the park is only
+ * through the Treetop Commons' turnstiles, so a place inside offers the Commons instead until the owl
+ * has walked through them since it was last outside.
+ */
+function newMapCard(place: string, here: string | null, travel: { places: readonly string[]; gate: boolean }): PlaceCard {
+  if (!canTravel(place, 3)) return { line: TRAVEL_WORDS.notYet, button: null };
+  const toGate = here === 'lobby' ? null : { label: TRAVEL_WORDS.newGate, to: 'lobby' };
+  if (place === 'lobby') return { line: null, button: { label: TRAVEL_WORDS.here, to: 'lobby' } };
+  if (needsGate(place, 3) && !travel.gate) return { line: TRAVEL_WORDS.newGateFirst, button: toGate };
   return { line: null, button: { label: TRAVEL_WORDS.here, to: place } };
 }
 
@@ -317,12 +393,13 @@ export function newlyLit(storage: Pick<Storage, 'getItem' | 'setItem'> | null, p
  * With `travel` (OP-130) each open place is a button: lit once walked into (the nest always), and a
  * tap opens its card below the map, with the hold that travels.
  */
-export function renderMap(panel: HTMLElement, here: string | null, open: readonly string[] = [], travel: MapTravel | null = null): void {
+export function renderMap(panel: HTMLElement, here: string | null, open: readonly string[] = [], travel: MapTravel | null = null, walking = 1): void {
   const map = el('div', 'mmap');
-  const cols = 3;
-  const rows = 5;
-  const at = new Map(MAP_PLACES.map((p) => [p.id, { ...p, closed: p.closed && !open.includes(p.id) }]));
-  const lines = MAP_PATHS.map(([a, b]) => {
+  const layout = mapLayout(walking);
+  const { cols, rows } = layout;
+  map.style.gridTemplateRows = `repeat(${rows},minmax(72px,auto))`;
+  const at = new Map(layout.places.map((p) => [p.id, { ...p, closed: p.closed && !open.includes(p.id) }]));
+  const lines = layout.paths.map(([a, b]) => {
     const p = at.get(a)!;
     const q = at.get(b)!;
     return `<line x1="${p.col + 0.5}" y1="${p.row + 0.5}" x2="${q.col + 0.5}" y2="${q.row + 0.5}"${q.closed ? ' class="closed"' : ''}/>`;
@@ -334,8 +411,8 @@ export function renderMap(panel: HTMLElement, here: string | null, open: readonl
   const drawCard = () => {
     cardBox.replaceChildren();
     const place = picked ? at.get(picked) : undefined;
-    if (!travel || !place || place.closed) return;
-    const what = placeCard(place.id, here, travel);
+    if (!travel || !place || place.closed || place.noTravel) return;
+    const what = placeCard(place.id, here, travel, walking);
     const box = card(place.name);
     box.dataset['travelCard'] = place.id;
     const said = note(what.line ?? '');
@@ -371,8 +448,8 @@ export function renderMap(panel: HTMLElement, here: string | null, open: readonl
     cardBox.appendChild(box);
   };
   for (const p of at.values()) {
-    const tappable = travel !== null && !p.closed;
-    const lit = tappable && (p.id === 'nest' || canTravel(p.id, travel.places));
+    const tappable = travel !== null && !p.closed && !p.noTravel;
+    const lit = tappable && (p.id === 'nest' || canTravel(p.id, walking));
     const pin = el(tappable ? 'button' : 'div', `pin${p.closed ? ' closed' : ''}${p.id === here ? ' here' : ''}${tappable && !lit ? ' unlit' : ''}`);
     pin.dataset['place'] = p.id;
     pin.style.gridColumn = String(p.col + 1);
@@ -407,8 +484,17 @@ export function renderMap(panel: HTMLElement, here: string | null, open: readonl
   panel.appendChild(map);
   panel.appendChild(cardBox);
   drawCard();
-  if (travel) panel.appendChild(note(TRAVEL_WORDS.map));
+  if (travel) panel.appendChild(note(mapNote(walking)));
+  if (walking === 3) {
+    panel.appendChild(note('Through the turnstiles and down the knothole: the Great Hollow, its four Commons side by side, each with a doorway to its realm and its course. In the middle of the hollow, the trunk’s door out to the Party Grove and the hatch down to the arcade. Outside the turnstiles: the Treetop Commons, the nests’ street and your nest.'));
+    return;
+  }
   panel.appendChild(note('Inside the turnstiles: the great tree, with the treehouse clearing and the neon street on either side, and Neon Roost off the neon street. Outside the gate: the nests’ street and your nest. The boarded arches open as new realms arrive.'));
+}
+
+/** The map's line on travel: the new map's way in is the Treetop Commons, today's park's the front gate. */
+export function mapNote(walking: number): string {
+  return walking === 3 ? TRAVEL_WORDS.newMap : TRAVEL_WORDS.map;
 }
 
 // ---------- Settings ----------
@@ -423,7 +509,7 @@ export interface SettingsTabDeps {
   feedback(): void;
   title(): void;
   leave(): void;
-  /** The owl's account (OP-139): where a grown-up protects the owl. Null while accounts are off. */
+  /** The owl's account (OP-139): where the player protects the owl. Null while accounts are off. */
   account?: HTMLElement[] | null;
   /** Retake the quiz (OP-076): which owl are you, again, for a new kind and colours. Null with no owl yet. */
   retake?: (() => void) | null;

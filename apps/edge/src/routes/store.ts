@@ -57,6 +57,8 @@ export async function storeWebhookRoute(c: RouteCtx): Promise<Response> {
     log.info('worker.store', 'webhook_received', 'A store webhook was taken.', { ...about, status: r.status, duration_ms: Date.now() - t0 });
     if (r.repeat) log.info('worker.store', 'webhook_duplicate', 'A store webhook came again for work an earlier delivery already did.', about);
     if (r.recorded) log.info('worker.store', 'order_recorded', 'A paid order’s tickets were made.', { ...about, tickets: r.recorded.tickets, held: r.recorded.held });
+    // A free Day Ticket's order (OP-056) that spent no offer of the park's: it waits for the owner's check.
+    if (r.referral === 'held' && r.recorded) log.warn('worker.store', 'referral_held', 'An order used the free Day Ticket’s code without a checkout the park opened for it, for more than one Day Ticket, or for a friend whose email already had one: it waits for the owner’s check.', { ...about });
     if (r.placed && order) {
       // The gate's checkout (OP-175, OP-180): the tickets are on the owl that paid, and its buyer is offered a link to protect it, as a claim's is (OP-186).
       log.info('worker.tickets', 'claim_moved', 'A paid order’s tickets went onto the owl that checked out at the gate.', { via: 'checkout', collector_hash: hashForLog(r.placed.device), order_hash: hashForLog(order), tickets: r.placed.tickets });

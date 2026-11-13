@@ -156,6 +156,17 @@ describe('spectators at the turnstiles (OP-191)', () => {
     ]);
   });
 
+  it('tell the room object of our own test visits, by the Worker\'s word alone', async () => {
+    const e = park.env();
+    const guest = await guestPass(e);
+    // A page that says it is a test (?test=1 on its socket), or a headless browser, is marked; the page's own header goes.
+    expect((await call(e, `/ws/lobby?pass=${encodeURIComponent(guest)}&test=1`, { headers: { Upgrade: 'websocket', Origin: 'https://park.example' } })).status).not.toBe(403);
+    expect((await socket(e, 'lobby', guest, { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) HeadlessChrome/141.0.0.0 Safari/537.36' })).status).not.toBe(403);
+    expect((await socket(e, 'lobby', guest, { 'X-Test-Visit': '1' })).status).not.toBe(403);
+    expect((await socket(e, 'lobby', guest)).status).not.toBe(403);
+    expect(park.sockets.map((h) => h.get('X-Test-Visit'))).toEqual(['1', '1', null, null]);
+  });
+
   it('let a ticket holder in as a visitor, and everyone while the gate is open', async () => {
     const e = park.env({ SPECTATORS: 'on' });
     const { admitted } = await owlWithTicket(e);

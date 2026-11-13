@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SIDEWAYS_MIN, alongTheFloor, attachKeyboard, heldDirection, holdsUp } from './keyboard';
+import { PARK_KEYS_ATTR, SIDEWAYS_MIN, alongTheFloor, attachKeyboard, heldDirection, holdsUp } from './keyboard';
 
 describe('heldDirection', () => {
   it('maps WASD and the arrow keys to the four ways', () => {
@@ -59,7 +59,12 @@ describe('holdsUp (OP-212)', () => {
 /** Just enough of a window for the listener: events are plain objects handed to the handlers. */
 function fakeWindow() {
   const handlers = new Map<string, (e: unknown) => void>();
-  const doc = { visibilityState: 'visible', addEventListener: () => {}, removeEventListener: () => {} };
+  const docHandlers = new Map<string, (e: unknown) => void>();
+  const doc = {
+    visibilityState: 'visible',
+    addEventListener: (type: string, fn: (e: unknown) => void) => docHandlers.set(type, fn),
+    removeEventListener: (type: string) => docHandlers.delete(type),
+  };
   const win = {
     document: doc,
     addEventListener: (type: string, fn: (e: unknown) => void) => handlers.set(type, fn),
@@ -70,7 +75,12 @@ function fakeWindow() {
     handlers.get(type)?.({ code, key: '', repeat: false, target: null, preventDefault: () => (prevented = true), ...extra });
     return prevented;
   };
-  return { win: win as unknown as Window, key, fire: (type: string) => handlers.get(type)?.({}) };
+  return {
+    win: win as unknown as Window,
+    key,
+    fire: (type: string) => handlers.get(type)?.({}),
+    focus: (target: unknown) => docHandlers.get('focusin')?.({ target }),
+  };
 }
 
 describe('attachKeyboard', () => {
@@ -141,6 +151,49 @@ describe('attachKeyboard', () => {
     expect(calls).toEqual([]);
   });
 
+  it("jumps on the space bar from the play bar's buttons, which keep the focus after a click (OP-293)", () => {
+    const { key, calls } = setup();
+    // The Menu button, focused by a click or given the focus back as the menu closes: Space is still the jump, never the menu.
+    const menuBtn = { tagName: 'BUTTON', isContentEditable: false, getAttribute: () => null, closest: (sel: string) => (sel === `[${PARK_KEYS_ATTR}]` ? {} : null) };
+    expect(key('keydown', 'Space', { target: menuBtn })).toBe(true);
+    expect(key('keyup', 'Space', { target: menuBtn })).toBe(true);
+    expect(calls).toEqual(['jump', 'jump end']);
+    // A button anywhere else (a dialog's) still takes its own Space press.
+    const elsewhere = { tagName: 'BUTTON', isContentEditable: false, getAttribute: () => null, closest: () => null };
+    expect(key('keydown', 'Space', { target: elsewhere })).toBe(false);
+    expect(key('keyup', 'Space', { target: elsewhere })).toBe(false);
+    expect(calls).toEqual(['jump', 'jump end', 'jump end']);
+  });
+
+  it('counts each time the walking keys are all let go, however soon one is pressed again', () => {
+    const { key, keys, fire } = setup();
+    expect(keys.rests()).toBe(0);
+    key('keydown', 'KeyW');
+    key('keydown', 'KeyD');
+    key('keyup', 'KeyD'); // W is still held: nothing let go
+    expect(keys.rests()).toBe(0);
+    key('keyup', 'KeyW');
+    expect(keys.rests()).toBe(1);
+    // Down again before anything looked: the count has it, where the held direction alone would not.
+    key('keydown', 'KeyW');
+    expect(keys.direction()).toEqual({ x: 0, y: -1 });
+    expect(keys.rests()).toBe(1);
+    // A key that repeats while held, and a key let go that was not held, let nothing go.
+    key('keydown', 'KeyW', { repeat: true });
+    key('keyup', 'KeyA');
+    expect(keys.rests()).toBe(1);
+    // The window losing focus lets go too; with nothing held, it lets nothing go.
+    fire('blur');
+    expect(keys.rests()).toBe(2);
+    fire('blur');
+    expect(keys.rests()).toBe(2);
+    // Left and right held together walk nowhere: the owl has stopped, as when both are let go.
+    key('keydown', 'KeyA');
+    key('keydown', 'KeyD');
+    expect(keys.direction()).toBeNull();
+    expect(keys.rests()).toBe(3);
+  });
+
   it('leaves typing and browser shortcuts alone', () => {
     const { key, keys, calls } = setup();
     expect(key('keydown', 'KeyW', { target: { tagName: 'INPUT', isContentEditable: false } })).toBe(false);
@@ -169,5 +222,34 @@ describe('attachKeyboard', () => {
     key('keydown', 'ArrowDown');
     key('keydown', 'KeyD');
     expect(calls).toEqual(['up', 'up']);
+  });
+  it('types every park key into a text field: no walk, no jump, no action, nothing prevented', () => {
+    const { key, keys, calls } = setup();
+    const field = { tagName: 'TEXTAREA', isContentEditable: false };
+    for (const code of ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowLeft', 'Space', 'ShiftLeft', 'KeyE', 'KeyM', 'KeyT', 'KeyQ', 'KeyJ', 'Digit2']) {
+      expect(key('keydown', code, { target: field }), code).toBe(false);
+    }
+    expect(key('keydown', 'KeyD', { target: { tagName: 'DIV', isContentEditable: true } })).toBe(false);
+    expect(keys.direction()).toBeNull();
+    expect(calls).toEqual([]);
+  });
+
+  it("leaves a phone keyboard's composing keys alone, wherever they land", () => {
+    const { key, keys, calls } = setup();
+    expect(key('keydown', 'KeyD', { isComposing: true })).toBe(false);
+    expect(key('keydown', '', { keyCode: 229 })).toBe(false);
+    expect(keys.direction()).toBeNull();
+    expect(calls).toEqual([]);
+  });
+
+  it('lets go of held keys when a text field takes the focus, and not for a button', () => {
+    const { key, keys, focus, calls } = setup();
+    key('keydown', 'KeyD');
+    key('keydown', 'Space');
+    focus({ tagName: 'BUTTON', isContentEditable: false });
+    expect(keys.direction()).toEqual({ x: 1, y: 0 });
+    focus({ tagName: 'TEXTAREA', isContentEditable: false });
+    expect(keys.direction()).toBeNull();
+    expect(calls).toEqual(['jump', 'jump end']);
   });
 });

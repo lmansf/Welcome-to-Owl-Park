@@ -105,13 +105,15 @@ else
   fail 'the page answers 200 with HTML' "$(seen page1)"
 fi
 
-# guard.ts `parkPolicy` and `newNonce`: script-src is 'self' and a fresh 128-bit nonce in hex, nothing else.
+# guard.ts `parkPolicy` and `newNonce`: script-src is 'self', a fresh 128-bit nonce in hex and HeyCatch's
+# analytics host (guard.ts ANALYTICS_HOST: the SDK's helper script and its events), nothing else.
+ANALYTICS='https://in.heycatch.ai'
 CSP1="$(header page1 Content-Security-Policy)"
 CSP2="$(header page2 Content-Security-Policy)"
-NONCE1="$(printf '%s' "$CSP1" | sed -nE "s/.*script-src 'self' 'nonce-([0-9a-f]{32})'(;.*)?$/\1/p")"
-NONCE2="$(printf '%s' "$CSP2" | sed -nE "s/.*script-src 'self' 'nonce-([0-9a-f]{32})'(;.*)?$/\1/p")"
+NONCE1="$(printf '%s' "$CSP1" | sed -nE "s/.*script-src 'self' 'nonce-([0-9a-f]{32})'( https:\/\/in\.heycatch\.ai)?(;.*)?$/\1/p")"
+NONCE2="$(printf '%s' "$CSP2" | sed -nE "s/.*script-src 'self' 'nonce-([0-9a-f]{32})'( https:\/\/in\.heycatch\.ai)?(;.*)?$/\1/p")"
 csp_missing=''
-for d in "default-src 'self'" "script-src 'self' 'nonce-$NONCE1'" "style-src 'self' 'unsafe-inline'" "img-src 'self' data: blob:" \
+for d in "default-src 'self'" "script-src 'self' 'nonce-$NONCE1' $ANALYTICS" "style-src 'self' 'unsafe-inline'" "img-src 'self' data: blob:" \
   "object-src 'none'" "base-uri 'none'" "form-action 'self'" "frame-ancestors 'none'" \
   'report-uri /api/csp-report'; do
   printf '%s;' "$CSP1" | grep -qF "$d;" || csp_missing="$csp_missing [$d]"
@@ -119,14 +121,14 @@ done
 # connect-src names the host the Worker was asked at; `wrangler dev` asks it as localhost:8787
 # (wrangler.jsonc dev.host), so on this machine any local host is taken.
 if [ "$LOCAL" = 1 ]; then
-  printf '%s;' "$CSP1" | grep -qE "connect-src 'self' ws://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?;" || csp_missing="$csp_missing [connect-src 'self' ws://<this machine>]"
+  printf '%s;' "$CSP1" | grep -qE "connect-src 'self' ws://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)? https://in\.heycatch\.ai;" || csp_missing="$csp_missing [connect-src 'self' ws://<this machine> $ANALYTICS]"
 else
-  printf '%s;' "$CSP1" | grep -qF "connect-src 'self' $WS_SCHEME://$HOSTPORT;" || csp_missing="$csp_missing [connect-src 'self' $WS_SCHEME://$HOSTPORT]"
+  printf '%s;' "$CSP1" | grep -qF "connect-src 'self' $WS_SCHEME://$HOSTPORT $ANALYTICS;" || csp_missing="$csp_missing [connect-src 'self' $WS_SCHEME://$HOSTPORT $ANALYTICS]"
 fi
 if [ -n "$NONCE1" ] && [ -z "$csp_missing" ] && ! printf '%s' "$CSP1" | grep -q 'unsafe-eval'; then
-  pass 'Content-Security-Policy: own scripts and a nonce only, own host to talk to, no framing, no plugins, no base'
+  pass 'Content-Security-Policy: own scripts, a nonce and the analytics host only, own host and the analytics host to talk to, no framing, no plugins, no base'
 else
-  fail 'Content-Security-Policy: own scripts and a nonce only, own host to talk to, no framing, no plugins, no base' "policy: ${CSP1:-<none>}; missing:${csp_missing:- the nonce}"
+  fail 'Content-Security-Policy: own scripts, a nonce and the analytics host only, own host and the analytics host to talk to, no framing, no plugins, no base' "policy: ${CSP1:-<none>}; missing:${csp_missing:- the nonce}"
 fi
 
 # guard.ts `guardedPage`: a new nonce on every load.

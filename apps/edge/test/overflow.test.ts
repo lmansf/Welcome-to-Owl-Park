@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { LINE_DEFAULTS, RIBBON_WORDS, hashForLog, lineRate, ribbonNow, waitMinutes, withLineChanges, withRibbonChanges, REALMS_DEFAULTS, SETUP_DEFAULTS } from '@owl-park/shared';
+import { LINE_DEFAULTS, LINE_PER_ADDRESS, LINE_STALE_MS, RIBBON_WORDS, hashForLog, lineRate, ribbonNow, waitMinutes, withLineChanges, withRibbonChanges, REALMS_DEFAULTS, SETUP_DEFAULTS } from '@owl-park/shared';
 import { CLAIM_GRACE_MS, Line } from '../src/line';
 import { ENTRY_TTL_S, mintEntry, mintPass, verifyEntry, verifyPass } from '../src/pass';
 import type { Env } from '../src/env';
@@ -54,6 +54,8 @@ describe('the line (OP-075)', () => {
     // Called and still held: it counts against the free places.
     expect(line.outstanding(T0 + HOLD - 1, HOLD)).toBe(1);
     expect(line.claim(a, 'c_aaaaaaaa', T0 + HOLD, HOLD)).toBe(false);
+    // The next owl's page is still looking (near the front it asks every few seconds): its turn comes.
+    line.status(b, 'c_bbbbbbbb', T0 + HOLD - 5_000, HOLD);
     expect(line.tick(T0 + HOLD, HOLD, 1)).toBe(1);
     expect(line.status(a, 'c_aaaaaaaa', T0 + HOLD, HOLD)).toEqual({ state: 'expired' });
     expect(line.status(b, 'c_bbbbbbbb', T0 + HOLD, HOLD)).toEqual({ state: 'called', holdUntil: T0 + 2 * HOLD });
@@ -237,6 +239,24 @@ describe('the overflow object (OP-075)', () => {
     expect((await join('c_cccccccc')).body).toEqual({ state: 'go' });
   });
 
+  it('counts the park at once when a room turns a newcomer away as full, and says whether the line takes it (OP-322)', async () => {
+    // Off: the line takes nobody, and the rooms are not asked.
+    rooms.counts.set('park', { hub: 3 });
+    expect((await post<{ line: boolean }>('/full', {})).body).toEqual({ line: false });
+    expect(rooms.asked).toEqual([]);
+    // On by itself at 3: counted at 2, then the park fills within the count's few seconds.
+    rooms.counts.set('park', { hub: 2 });
+    await post('/settings', { line: { mode: 'auto', threshold: 3, holdMin: 3 } });
+    expect((await st()).active).toBe(false);
+    rooms.counts.set('park', { hub: 3 });
+    at(T0 + 1_000);
+    expect((await st()).active).toBe(false);
+    const asked = rooms.asked.length;
+    expect((await post<{ line: boolean }>('/full', {})).body).toEqual({ line: true });
+    expect(rooms.asked.length).toBe(asked + 1);
+    expect((await join('c_aaaaaaaa')).body).toMatchObject({ state: 'waiting', place: 1 });
+  });
+
   it('tells the line (OP-134): a number taken, a turn taken with how long it waited, the depth every ten seconds, and the realms switch', async () => {
     const cap = captureLogs();
     try {
@@ -256,12 +276,65 @@ describe('the overflow object (OP-075)', () => {
       logged(cap.lines, 'queue_depth', { waiting: 0, held: 1 });
       await look(1, 'c_aaaaaaaa');
       logged(cap.lines, 'queue_admit', { n: 1, who_hash: hashForLog('c_aaaaaaaa'), waited_ms: 12_000 });
-      await post('/settings', { realms: { open: ['glass'], portal: true, night: 'hard' } });
-      logged(cap.lines, 'realms_set', { component: 'overflow', open: ['glass'], portal: true, night: 'hard' });
+      await post('/settings', { realms: { open: ['l3'], portal: true, night: 'hard' } });
+      logged(cap.lines, 'realms_set', { component: 'overflow', open: ['l3'], portal: true, night: 'hard' });
       expect(JSON.stringify(cap.lines)).not.toContain('c_aaaaaaaa');
     } finally {
       cap.restore();
     }
+  });
+
+  it('gives one address no more than its share of numbers, and logs the refusal by the collector\'s hash alone (OP-244)', async () => {
+    const cap = captureLogs();
+    try {
+      rooms.counts.set('park', { hub: 5 });
+      await post('/settings', { line: { mode: 'on', threshold: 1, holdMin: 3 } });
+      const addr = 'k_address_one_key';
+      const taken: LineAnswer[] = [];
+      for (let i = 0; i < LINE_PER_ADDRESS + 3; i++) taken.push((await post<LineAnswer>('/line/join', { who: `c_script${String(i).padStart(4, '0')}`, addr })).body);
+      expect(taken.filter((a) => a.state === 'waiting')).toHaveLength(LINE_PER_ADDRESS);
+      expect(taken.slice(LINE_PER_ADDRESS)).toEqual([{ state: 'full' }, { state: 'full' }, { state: 'full' }]);
+      logged(cap.lines, 'queue_refused', { component: 'room.queue', who_hash: hashForLog(`c_script${String(LINE_PER_ADDRESS).padStart(4, '0')}`), reason: 'address', limit: LINE_PER_ADDRESS });
+      expect(JSON.stringify(cap.lines)).not.toContain(addr);
+      // A browser asking again for the number it holds is no new number; another address is not held back.
+      expect((await post<LineAnswer>('/line/join', { who: 'c_script0000', addr })).body).toMatchObject({ state: 'waiting', n: 1 });
+      expect((await post<LineAnswer>('/line/join', { who: 'c_neighbour', addr: 'k_address_two_key' })).body).toMatchObject({ state: 'waiting', place: LINE_PER_ADDRESS + 1 });
+      // A key the Worker would never send counts as none.
+      expect((await post<LineAnswer>('/line/join', { who: 'c_oddkey00', addr: 'not a key!' })).body).toMatchObject({ state: 'waiting' });
+    } finally {
+      cap.restore();
+    }
+  });
+
+  it('passes over a number that stood near the front without looking, and calls the next one, which looked (OP-244)', async () => {
+    rooms.counts.set('park', { hub: 2 });
+    await post('/settings', { line: { mode: 'on', threshold: 2, holdMin: 3 } });
+    const quiet = (await join('c_quiet000')).body;
+    const keen = (await join('c_keen0000')).body;
+    expect([quiet, keen]).toMatchObject([{ n: 1, place: 1 }, { n: 2, place: 2 }]);
+    // A while later, the park is still full; the second owl's page keeps asking, the first's never does.
+    for (let t = 5_000; t <= LINE_STALE_MS + 5_000; t += 5_000) {
+      at(T0 + t);
+      await look(2, 'c_keen0000');
+    }
+    // A place frees: the quiet number is passed over, and the next is called in its place.
+    rooms.counts.set('park', { hub: 1 });
+    at(T0 + LINE_STALE_MS + 6_000);
+    await obj.alarm();
+    expect((await look(2, 'c_keen0000')).body).toMatchObject({ state: 'called', n: 2 });
+    expect((await look(1, 'c_quiet000')).body).toEqual({ state: 'expired' });
+  });
+
+  it('calls a number that looked lately, however long it waited (OP-244)', async () => {
+    rooms.counts.set('park', { hub: 2 });
+    await post('/settings', { line: { mode: 'on', threshold: 2, holdMin: 3 } });
+    await join('c_patient0');
+    at(T0 + 10 * MIN);
+    await look(1, 'c_patient0');
+    rooms.counts.set('park', { hub: 1 });
+    at(T0 + 10 * MIN + 2_000);
+    await obj.alarm();
+    expect((await look(1, 'c_patient0')).body).toMatchObject({ state: 'called', n: 1 });
   });
 
   it('gives up a place held too long, calling the next, and the late owl joins again at the back', async () => {
@@ -338,11 +411,13 @@ describe('the overflow object (OP-075)', () => {
 
   it('keeps the realms switch (the stained-glass climb), refuses a room that is not gated or a night it does not know, and tells the rooms', async () => {
     expect((await post('/settings', { realms: { open: ['hub'] } })).status).toBe(400);
+    // The glass realm is open to every owl now (the whole map open, Nov 8): the switch no longer has it.
+    expect((await post('/settings', { realms: { open: ['glass'] } })).status).toBe(400);
     expect((await post('/settings', { realms: { night: 'never' } })).status).toBe(400);
     expect((await post('/settings', { realms: { portal: 'yes' } })).status).toBe(400);
-    const r = await post<OverflowState>('/settings', { realms: { open: ['glass'], portal: true, night: 'hard' } });
+    const r = await post<OverflowState>('/settings', { realms: { open: ['l3'], portal: true, night: 'hard' } });
     expect(r.status).toBe(200);
-    const realms = { open: ['glass'], portal: true, night: 'hard' };
+    const realms = { open: ['l3'], portal: true, night: 'hard' };
     expect(r.body.realms).toEqual(realms);
     expect((await (await obj.fetch(new Request('https://park/notice'))).json()) as unknown).toEqual({ words: null, realms, setup: SETUP_DEFAULTS });
     // Closing it again reaches the rooms through the same notice.
@@ -367,10 +442,10 @@ describe('the overflow object (OP-075)', () => {
     try {
       const r = await post<OverflowState>('/settings', { setup: { on: true, words: '  Back at 5:15  ' } });
       expect(r.status).toBe(200);
-      expect(r.body.setup).toEqual({ on: true, words: 'Back at 5:15' });
+      expect(r.body.setup).toEqual({ on: true, words: 'Back at 5:15', reopenAt: null });
       logged(cap.lines, 'setup_on', { component: 'overflow' });
-      expect((await (await obj.fetch(new Request('https://park/notice'))).json()) as unknown).toEqual({ words: null, realms: REALMS_DEFAULTS, setup: { on: true, words: 'Back at 5:15' } });
-      expect((await post<OverflowState>('/settings', { setup: { on: false } })).body.setup).toEqual({ on: false, words: 'Back at 5:15' });
+      expect((await (await obj.fetch(new Request('https://park/notice'))).json()) as unknown).toEqual({ words: null, realms: REALMS_DEFAULTS, setup: { on: true, words: 'Back at 5:15', reopenAt: null } });
+      expect((await post<OverflowState>('/settings', { setup: { on: false } })).body.setup).toEqual({ on: false, words: 'Back at 5:15', reopenAt: null });
       logged(cap.lines, 'setup_off', { component: 'overflow' });
     } finally {
       cap.restore();
@@ -391,6 +466,21 @@ describe('the overflow object (OP-075)', () => {
     rooms.counts.set('nests', { nests: 4 });
     await post('/settings', { line: { mode: 'auto', threshold: 100 } });
     expect(await st()).toMatchObject({ count: 7 });
+  });
+
+  it('keeps a reopen time with the setup switch, refuses one that is not a time, and forgets it when the park opens (OP-233)', async () => {
+    const back = T0 + 2 * 60 * MIN;
+    for (const reopenAt of ['5:15', -1, 1.5, Date.UTC(2100, 0, 1), true]) expect((await post('/settings', { setup: { on: true, reopenAt } })).status).toBe(400);
+    expect((await post<OverflowState>('/settings', { setup: { on: true, reopenAt: back } })).body.setup).toEqual({ on: true, words: null, reopenAt: back });
+    // Words saved later keep the time; the time can be cleared on its own.
+    expect((await post<OverflowState>('/settings', { setup: { words: 'Back soon' } })).body.setup).toEqual({ on: true, words: 'Back soon', reopenAt: back });
+    expect((await post<OverflowState>('/settings', { setup: { reopenAt: null } })).body.setup).toEqual({ on: true, words: 'Back soon', reopenAt: null });
+    // Opening the park forgets the time it gave, so the next closing starts with none; the words stay.
+    await post('/settings', { setup: { reopenAt: back } });
+    expect((await post<OverflowState>('/settings', { setup: { on: false } })).body.setup).toEqual({ on: false, words: 'Back soon', reopenAt: null });
+    // A time can be set ahead of the closing, and is kept through it.
+    await post('/settings', { setup: { reopenAt: back } });
+    expect((await post<OverflowState>('/settings', { setup: { on: true } })).body.setup).toEqual({ on: true, words: 'Back soon', reopenAt: back });
   });
 
   it('refuses settings out of bounds, and copies while the park runs in one object', async () => {

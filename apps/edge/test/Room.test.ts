@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { AIRBORNE, CLOSE, EDGE_PROTOCOL_VERSION, EMOTE_EVERY_MS, GROUNDED, ON_GROUND, STREET_DOORS, STREET_ROOM, WALK_SPEED, arrivalPoint, distance, isWalkable, nestDoorIndex, resolveTarget, type Air, type ClientHello, type RoomDef, type ServerFrame, type Vec2 } from '@owl-park/shared';
+import { AIRBORNE, LIFTED, UPDRAFT_RISE, AIR_DASH_COOLDOWN_MS, AIR_DASH_DISTANCE, AIR_DASH_MS, AIR_DASH_SPEED, DASH_SLACK_PX, CLOSE, EDGE_PROTOCOL_VERSION, EMOTE_EVERY_MS, GROUNDED, ON_GROUND, STREET_DOORS, STREET_ROOM, WALK_SPEED, arrivalPoint, distance, isWalkable, nestDoorIndex, resolveTarget, type Air, type ClientHello, type RoomDef, type ServerFrame, type Vec2, segmentTouchesRect, walkCrossesExit } from '@owl-park/shared';
 import { ROOMS, roomFor } from '@owl-park/shared/rooms';
 import { Room, LIMITS, type Peer, type PositionRejection, type VisitorState } from '../src/Room';
 
@@ -127,6 +127,61 @@ describe('Room', () => {
       const pos = p.last('welcome')!.you.pos;
       const inside = pos.x >= 700 && pos.x <= 900 && pos.y >= 600 && pos.y <= 800;
       expect(inside).toBe(false);
+    }
+  });
+
+  /** The spot the room gives an owl that comes in on top of another standing on the spawn, for one roll of the dice. */
+  const besideAnother = (room: RoomDef, seed: number): Vec2 => {
+    let s = seed * 7919;
+    const random = () => {
+      s = (s * 1103515245 + 12345) & 0x7fffffff;
+      return s / 0x7fffffff;
+    };
+    const r2 = new Room(room, { now: () => now, random, cap: 50, counts: () => ({}) });
+    const spawn = room.spawns['default']!;
+    // The first owl stands on the spawn, where its page has it; the second's page has it there too.
+    r2.join(new FakePeer(), 'a', hello({ pos: spawn }));
+    const b = new FakePeer();
+    r2.join(b, 'b', hello({ pos: spawn }));
+    return b.last('welcome')!.you.pos;
+  };
+
+  it('never puts an arrival where its walk over from the spawn would pass through a way out (OP-342)', () => {
+    // A way out beside the spawn, as the grove's way to the hub is: 65 px east of it and just above.
+    // The page walks its owl from where it came in to the room's spot (its step aside), and a walk
+    // through a doorway is a walk out of the room.
+    const rect = { x: 715, y: 615, w: 125, h: 80 };
+    const withExit: RoomDef = { ...def, spawns: { default: { x: 650, y: 700 } }, doors: [{ id: 'out', rect, to: { room: 'other', spawn: 'default' } }] };
+    const spawn = withExit.spawns['default']!;
+    let apart = 0;
+    for (let seed = 1; seed <= 300; seed++) {
+      const at = besideAnother(withExit, seed);
+      expect(segmentTouchesRect(spawn, at, rect), `roll ${seed}: the walk from the spawn to ${at.x},${at.y} passes through the way out`).toBe(false);
+      if (distance(at, spawn) >= 3) apart++;
+    }
+    // The room still spreads its arrivals: the second owl stands apart from the first.
+    expect(apart).toBe(300);
+  });
+
+  it('in the grove, an owl that comes in beside another is never walked out through the way to the hub (OP-342)', () => {
+    // As the park's own room has it: the way to the hub is 65 px from where owls come in, and one
+    // arrival in fifteen was given a spot across it.
+    const grove = ROOMS['grove']!;
+    const spawn = grove.spawns['default']!;
+    for (let seed = 1; seed <= 300; seed++) {
+      const at = besideAnother(grove, seed);
+      expect(walkCrossesExit(grove, spawn, at), `roll ${seed}: the walk from the spawn to ${at.x},${at.y} passes through a way out`).toBe(false);
+    }
+  });
+
+  it('gives no arrival, in any room of the park, a spot its walk over would leave the room by (OP-342)', () => {
+    for (const room of Object.values(ROOMS)) {
+      const spawn = room.spawns['default'];
+      if (!spawn || !room.doors.length) continue;
+      for (let seed = 1; seed <= 60; seed++) {
+        const at = besideAnother(room, seed);
+        expect(walkCrossesExit(room, spawn, at), `${room.id}, roll ${seed}: the walk from the spawn to ${at.x},${at.y} passes through a way out`).toBe(false);
+      }
     }
   });
 
@@ -601,6 +656,57 @@ describe('Room hooks for collectibles, quests and interactables', () => {
     expect(dropped).toBe(LIMITS.framesPerWindow + 1);
   });
 
+  it('takes the triple jump: two flaps left after the jump, then one, then none, as high as both flaps go and never a fourth (OP-239)', () => {
+    const a = new FakePeer();
+    const b = new FakePeer();
+    room.join(a, 'a', hello());
+    room.join(b, 'b', hello());
+    // The allowance covers a jump and both flaps above the room's highest top (the floor here).
+    expect(LIMITS.maxRise).toBeGreaterThan(371);
+    for (const air of [
+      { z: 7.2, vz: 858.3, s: AIRBORNE, f: 2 },
+      { z: 149, vz: 760, s: AIRBORNE, f: 1 },
+      { z: 260, vz: 760, s: AIRBORNE, f: 0 },
+      { z: 370, vz: -10, s: AIRBORNE, f: 0 },
+    ] as Air[]) {
+      expect(room.air('a', air), JSON.stringify(air)).toBe(true);
+      now += 100;
+    }
+    expect(b.count('air')).toBe(4);
+    expect(b.last('air')!.air).toEqual({ z: 370, vz: -10, s: AIRBORNE, f: 0 });
+    // A fourth take-off's worth of flaps, and a height past every flap, are dropped.
+    expect(room.air('a', { z: 30, vz: 100, s: AIRBORNE, f: 3 } as unknown as Air)).toBe(false);
+    expect(room.air('a', { z: LIMITS.maxRise + 1, vz: -10, s: AIRBORNE, f: 0 })).toBe(false);
+    expect(b.count('air')).toBe(4);
+  });
+
+  it('believes an owl standing anywhere along a slope where it is, and refuses one off the slope (OP-238)', () => {
+    // The fixture room with a hill across the middle of its floor: up gently 80 over 320, down again.
+    const hilly: RoomDef = {
+      ...def,
+      perches: [
+        {
+          id: 'hill',
+          area: [{ x: 300, y: 700 }, { x: 940, y: 700 }, { x: 940, y: 900 }, { x: 300, y: 900 }],
+          top: 80,
+          solid: true,
+          profile: [{ x: 300, top: 0 }, { x: 620, top: 80 }, { x: 940, top: 0 }],
+        },
+      ],
+    };
+    const r = new Room(hilly, { now: () => now, random: () => 0.5, cap: 3 });
+    const a = new FakePeer();
+    const b = new FakePeer();
+    r.join(a, 'a', hello({ pos: { x: 460, y: 800 } }), 's0');
+    r.join(b, 'b', hello());
+    // Half way up the slope, standing at its height there: believed, and told.
+    expect(r.air('a', { z: 40, vz: 0, s: GROUNDED, f: 0 })).toBe(true);
+    expect(b.last('air')!.air).toEqual({ z: 40, vz: 0, s: GROUNDED, f: 0 });
+    // Standing at a height along the hill's range but not its height here, or above all of it: refused.
+    expect(r.air('a', { z: 78, vz: 0, s: GROUNDED, f: 0 })).toBe(false);
+    expect(r.air('a', { z: 120, vz: 0, s: GROUNDED, f: 0 })).toBe(false);
+  });
+
   it('keeps an owl standing on a perch up there, lets it walk and come back there, and believes its air to a jump above the highest (OP-084)', () => {
     // The fixture room with a bench along its back wall (its front face over the floor's back edge) and a beam above it.
     const withPerches: RoomDef = {
@@ -813,5 +919,358 @@ describe('Room: the street and the nests', () => {
     expect(r.count).toBe(3);
     expect(owner.last('welcome')!.room).toBe('nest-k3x9q2ab');
     expect(peers[1]!.last('enter')!.owl.id).toBe('owner');
+  });
+});
+
+describe('Room: the dash, in a parkour course (OP-224)', () => {
+  let now = 1_000_000;
+  const refused: string[] = [];
+  const rejected: PositionRejection[] = [];
+  const make = (d: RoomDef) => new Room(d, { now: () => now, random: () => 0.5, cap: 5, rejected: (_id, why) => rejected.push(why), dashRefused: (_id, why) => refused.push(why) });
+  const jump: Air = { z: 7.2, vz: 858.3, s: AIRBORNE, f: 1 };
+  let seq = 0;
+  beforeEach(() => {
+    now = 1_000_000;
+    refused.length = 0;
+    rejected.length = 0;
+    seq = 0;
+  });
+  const dash = (room: Room, to: Vec2) => room.dash('a', { t: 'dash', to, seq: ++seq });
+
+  it('is the dash’s numbers: 900 px/s, 162 px, once a jump, 350 ms apart', () => {
+    expect([AIR_DASH_SPEED, AIR_DASH_DISTANCE, AIR_DASH_COOLDOWN_MS]).toEqual([900, 162, 350]);
+  });
+
+  it('is refused outside a course, and the owl walks on as the room had it', () => {
+    const room = make(def);
+    const a = new FakePeer();
+    room.join(a, 'a', hello());
+    room.air('a', jump);
+    const at = room.positionOf('a')!;
+    dash(room, { x: at.x + 160, y: at.y });
+    expect(refused).toEqual(['not-held']);
+    expect(rejected).toEqual(['dash']);
+    expect(a.last('move')).toMatchObject({ from: at, to: at, seq: 1 });
+    expect(a.last('move')?.dash).toBeUndefined();
+  });
+
+  it('is refused on the ground, even in a course', () => {
+    const room = make(ROOMS['trail-1']!);
+    const a = new FakePeer();
+    room.join(a, 'a', hello());
+    const at = room.positionOf('a')!;
+    dash(room, { x: at.x + 160, y: at.y });
+    expect(refused).toEqual(['grounded']);
+  });
+
+  it('is taken in the air in a course: a walk at the dash’s pace, told to the others, and no further than a dash goes', () => {
+    const room = make(ROOMS['trail-1']!);
+    const a = new FakePeer();
+    const b = new FakePeer();
+    room.join(a, 'a', hello());
+    room.join(b, 'b', hello());
+    const at = room.positionOf('a')!;
+    room.air('a', jump);
+    now += 50;
+    dash(room, { x: at.x + 1000, y: at.y });
+    expect(refused).toEqual([]);
+    const told = b.last('move')!;
+    expect(told).toMatchObject({ id: 'a', from: at, dash: true });
+    expect(distance(told.from, told.to)).toBeLessThanOrEqual(AIR_DASH_DISTANCE + DASH_SLACK_PX);
+    expect(told.to.x).toBeGreaterThan(at.x + AIR_DASH_DISTANCE - 1);
+    expect(a.last('move')).toMatchObject({ seq: 1, dash: true });
+    // Over in about AIR_DASH_MS (a little more for the slack): where the room has the owl then is the dash's end.
+    now += AIR_DASH_MS + 50;
+    expect(room.positionOf('a')).toEqual(told.to);
+  });
+
+  it('goes once a jump: a second dash in the same jump is refused, and the landing brings it back', () => {
+    const room = make(ROOMS['trail-1']!);
+    const a = new FakePeer();
+    room.join(a, 'a', hello());
+    const at = room.positionOf('a')!;
+    room.air('a', jump);
+    dash(room, { x: at.x + 100, y: at.y });
+    now += AIR_DASH_COOLDOWN_MS + 10;
+    // A flap, still up: the dash stays spent.
+    room.air('a', { z: 80, vz: 500, s: AIRBORNE, f: 0 });
+    dash(room, { x: at.x + 300, y: at.y });
+    expect(refused).toEqual(['spent']);
+    // Down (well after the jump), up again: the dash is back.
+    now += 3000;
+    room.air('a', jump);
+    dash(room, { x: at.x + 400, y: at.y });
+    expect(refused).toEqual(['spent']);
+    expect(a.last('move')?.dash).toBe(true);
+  });
+
+  it('waits out the cooldown, however quick the landing and the next jump', () => {
+    const room = make(ROOMS['trail-1']!);
+    const a = new FakePeer();
+    room.join(a, 'a', hello());
+    const at = room.positionOf('a')!;
+    room.air('a', jump);
+    dash(room, { x: at.x + 100, y: at.y });
+    now += 100;
+    room.air('a', ON_GROUND);
+    now += 50;
+    room.air('a', jump);
+    dash(room, { x: at.x, y: at.y + 100 });
+    expect(refused).toEqual(['cooldown']);
+  });
+
+  it('puts an owl down where a fall takes it, standing, with its dash back', () => {
+    const room = make(ROOMS['trail-1']!);
+    const a = new FakePeer();
+    const b = new FakePeer();
+    room.join(a, 'a', hello());
+    room.join(b, 'b', hello());
+    room.air('a', jump);
+    const at = room.positionOf('a')!;
+    dash(room, { x: at.x + 100, y: at.y });
+    expect(room.place('a', { x: 340, y: 450 })).toBe(true);
+    expect(room.positionOf('a')).toEqual({ x: 340, y: 450 });
+    expect(b.last('move')).toMatchObject({ id: 'a', from: { x: 340, y: 450 }, to: { x: 340, y: 450 } });
+    expect(room.place('a', { x: 10, y: 10 })).toBe(false);
+    now += AIR_DASH_COOLDOWN_MS;
+    room.air('a', jump);
+    dash(room, { x: 500, y: 450 });
+    expect(refused).toEqual([]);
+  });
+
+  it('puts an owl back up on a bench that stands on a ledge, and on the floor when no ledge is that high there', () => {
+    const room = make(ROOMS['brush-1']!);
+    const a = new FakePeer();
+    const b = new FakePeer();
+    room.join(a, 'a', hello());
+    room.join(b, 'b', hello());
+    const bench = ROOMS['brush-1']!.course!.benches!.find((p) => p.id === 'bench-1')!;
+    expect(bench.top).toBeGreaterThan(0);
+    expect(room.place('a', bench.at, bench.top)).toBe(true);
+    expect(b.last('air')).toMatchObject({ id: 'a', air: { z: bench.top, s: GROUNDED } });
+    const frames = b.frames.length;
+    // A height with no ledge under it is the floor, as a fall always was.
+    expect(room.place('a', { x: 120, y: bench.at.y }, 360)).toBe(true);
+    expect(b.frames.slice(frames).some((f) => f.t === 'air')).toBe(false);
+  });
+});
+
+describe('Room: updrafts, in a room seen from the side (OP-226)', () => {
+  let now = 1_000_000;
+  const rejected: PositionRejection[] = [];
+  beforeEach(() => {
+    now = 1_000_000;
+    rejected.length = 0;
+  });
+
+  it('takes a lifted owl only inside a column that is on, rising to its top, and tells the others', () => {
+    const probe = new Room(def, { now: () => now, random: () => 0.5, cap: 5 });
+    probe.join(new FakePeer(), 'p', hello());
+    const x = probe.positionOf('p')!.x;
+    // One column over where an owl comes in, always on; one that gusts for 3 s in 5, starting at park time 0 (1_000_000 is a whole number of cycles).
+    const columns = { ...def, updrafts: [{ id: 'up', x: x - 60, w: 120, top: 300 }, { id: 'gust', x: x - 60, w: 120, top: 250, onMs: 3000, offMs: 2000 }] };
+    const room = new Room(columns, { now: () => now, random: () => 0.5, cap: 5, rejected: (_id, why) => rejected.push(why) });
+    const a = new FakePeer();
+    const b = new FakePeer();
+    room.join(a, 'a', hello());
+    room.join(b, 'b', hello());
+    const lifted: Air = { z: 120, vz: UPDRAFT_RISE, s: LIFTED, f: 0, h: 300 };
+    expect(room.air('a', lifted)).toBe(true);
+    expect(b.last('air')).toMatchObject({ id: 'a', air: lifted });
+    // A top no column here has: refused.
+    expect(room.air('a', { ...lifted, h: 280 })).toBe(false);
+    expect(rejected).toEqual(['lift']);
+    // The gust while it is on, and a moment after it drops; not once it has been off a while.
+    now += 1000;
+    expect(room.air('a', { ...lifted, h: 250 })).toBe(true);
+    now += 2300;
+    expect(room.air('a', { ...lifted, h: 250 })).toBe(true);
+    now += 500;
+    expect(room.air('a', { ...lifted, h: 250 })).toBe(false);
+    expect(rejected).toEqual(['lift', 'lift']);
+  });
+
+  it('refuses a lifted owl in a room with no updrafts', () => {
+    const room = new Room(def, { now: () => now, random: () => 0.5, cap: 5, rejected: (_id, why) => rejected.push(why) });
+    room.join(new FakePeer(), 'a', hello());
+    expect(room.air('a', { z: 120, vz: UPDRAFT_RISE, s: LIFTED, f: 0, h: 300 })).toBe(false);
+    expect(rejected).toEqual(['lift']);
+  });
+});
+
+describe('Room: a thermal, in a room seen from above (OP-340)', () => {
+  let now = 1_000_000;
+  const rejected: PositionRejection[] = [];
+  beforeEach(() => {
+    now = 1_000_000;
+    rejected.length = 0;
+  });
+
+  it('takes a lifted owl only inside the thermal, rising to its top, as high as it lifts and a jump over', () => {
+    const probe = new Room(def, { now: () => now, random: () => 0.5, cap: 5 });
+    probe.join(new FakePeer(), 'p', hello());
+    const at = probe.positionOf('p')!;
+    // Without a thermal the room holds its owls to a jump and its flaps over the floor.
+    expect(probe.air('p', { z: 600, vz: 0, s: AIRBORNE, f: 0 })).toBe(false);
+
+    // One over where an owl comes in, 900 high; another far across the room.
+    const warm = { ...def, thermals: [{ id: 'heart', pos: { x: at.x, y: at.y }, r: 160, top: 900 }, { id: 'far', pos: { x: at.x + 1200, y: at.y }, r: 160, top: 500 }] };
+    const room = new Room(warm, { now: () => now, random: () => 0.5, cap: 5, rejected: (_id, why) => rejected.push(why) });
+    const a = new FakePeer();
+    const b = new FakePeer();
+    room.join(a, 'a', hello());
+    room.join(b, 'b', hello());
+    const lifted: Air = { z: 400, vz: UPDRAFT_RISE, s: LIFTED, f: 0, h: 900 };
+    expect(room.air('a', lifted)).toBe(true);
+    expect(b.last('air')).toMatchObject({ id: 'a', air: lifted });
+    // To the top, and a glide on from there: both as high as the thermal lifts.
+    expect(room.air('a', { ...lifted, z: 900 })).toBe(true);
+    expect(room.air('a', { z: 880, vz: -80, s: 2, f: 0 })).toBe(true);
+    // A top this thermal has not (the far one's, which the owl is nowhere near): refused.
+    expect(room.air('a', { ...lifted, h: 500 })).toBe(false);
+    expect(rejected).toEqual(['lift']);
+    // Higher than any thermal here lifts, and a jump and its flaps: no air state at all.
+    expect(room.air('a', { z: 900 + 400, vz: 0, s: AIRBORNE, f: 0 })).toBe(false);
+  });
+
+  it('refuses a lifted owl that stands outside every thermal of the room', () => {
+    const probe = new Room(def, { now: () => now, random: () => 0.5, cap: 5 });
+    probe.join(new FakePeer(), 'p', hello());
+    const at = probe.positionOf('p')!;
+    const warm = { ...def, thermals: [{ id: 'far', pos: { x: at.x + 1200, y: at.y }, r: 160, top: 900 }] };
+    const room = new Room(warm, { now: () => now, random: () => 0.5, cap: 5, rejected: (_id, why) => rejected.push(why) });
+    room.join(new FakePeer(), 'a', hello());
+    expect(room.air('a', { z: 120, vz: UPDRAFT_RISE, s: LIFTED, f: 0, h: 900 })).toBe(false);
+    expect(rejected).toEqual(['lift']);
+  });
+});
+
+describe('no walk ends on top of another owl (OP-248)', () => {
+  let now = 1_000_000;
+  let room: Room;
+  let seq = 0;
+  const peers = new Map<string, FakePeer>();
+  beforeEach(() => {
+    now = 1_000_000;
+    seq = 0;
+    peers.clear();
+    let seed = 7;
+    const random = () => {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      return seed / 0x7fffffff;
+    };
+    room = new Room(def, { now: () => now, random, cap: 20 });
+  });
+  const join = (id: string) => {
+    const p = new FakePeer();
+    peers.set(id, p);
+    room.join(p, id, hello());
+    return p;
+  };
+  /** Send a walk and let it finish; returns where the room said it ends. */
+  const walk = (id: string, to: Vec2, finish = true) => {
+    room.move(id, { t: 'move', to, seq: ++seq });
+    const end = peers.get(id)!.last('move')!;
+    if (finish) now += 60_000;
+    return end;
+  };
+  /** An owl standing at exactly `at`, far from where any other owl stands. */
+  const standing = (id: string, at: Vec2) => {
+    join(id);
+    expect(walk(id, at).to).toEqual(at);
+  };
+  const gap = LIMITS.minSpacingPx;
+
+  it('a walk aimed dead on a standing owl ends just beside them, on the side it came from', () => {
+    standing('a', { x: 800, y: 700 });
+    standing('b', { x: 400, y: 700 });
+    const echo = walk('b', { x: 800, y: 700 });
+    expect(distance(echo.to, { x: 800, y: 700 })).toBeGreaterThanOrEqual(gap);
+    expect(distance(echo.to, { x: 800, y: 700 })).toBeLessThanOrEqual(gap + LIMITS.spacingSlackPx + 1);
+    expect(echo.to.x).toBeLessThan(800); // short of them, on the walker's side
+    expect(echo.seq).toBe(seq);
+    // Everyone else is told the same spot, and the room has the owl there once it arrives.
+    expect(peers.get('a')!.last('move')!.to).toEqual(echo.to);
+    expect(room.positionOf('b')).toEqual(echo.to);
+  });
+
+  it('a walk aimed a little off another owl ends just outside them on the side it was aimed at', () => {
+    standing('a', { x: 800, y: 700 });
+    standing('b', { x: 400, y: 600 });
+    const aim = { x: 800, y: 712 }; // just below them, from the walker's left
+    const end = walk('b', aim).to;
+    expect(distance(end, { x: 800, y: 700 })).toBeGreaterThanOrEqual(gap);
+    expect(end.y).toBeGreaterThan(700);
+    expect(distance(end, aim)).toBeLessThan(gap);
+  });
+
+  it('a walk aimed just past another owl ends past them, not short of them', () => {
+    standing('a', { x: 800, y: 700 });
+    standing('b', { x: 400, y: 700 });
+    const end = walk('b', { x: 812, y: 700 }).to;
+    expect(end.x).toBeGreaterThanOrEqual(800 + gap);
+  });
+
+  it('counts where a walking owl will stop, not where it is on the way', () => {
+    standing('a', { x: 300, y: 700 });
+    standing('b', { x: 1200, y: 700 });
+    walk('a', { x: 800, y: 700 }, false); // under way, still far from its end
+    const end = walk('b', { x: 800, y: 700 }).to;
+    expect(distance(end, { x: 800, y: 700 })).toBeGreaterThanOrEqual(gap);
+    expect(end.x).toBeGreaterThan(800);
+  });
+
+  it('lets a walk end where another owl only was, once it has walked off', () => {
+    standing('a', { x: 800, y: 700 });
+    standing('b', { x: 400, y: 700 });
+    walk('a', { x: 1300, y: 700 }, false); // leaving: its walk ends far away
+    expect(walk('b', { x: 800, y: 700 }).to).toEqual({ x: 800, y: 700 });
+  });
+
+  it('keeps the spot beside them on the floor when the side it was aimed at is off it', () => {
+    standing('a', { x: 800, y: 505 }); // at the top edge of the floor
+    standing('b', { x: 800, y: 800 });
+    const end = walk('b', { x: 800, y: 480 }).to; // past them, off the floor
+    expect(isWalkable(end, def.walkable)).toBe(true);
+    expect(distance(end, { x: 800, y: 505 })).toBeGreaterThanOrEqual(gap);
+  });
+
+  it('finds a free side when the nearest spot beside them is taken by a third owl', () => {
+    standing('a', { x: 800, y: 700 });
+    standing('c', { x: 800 - gap - LIMITS.spacingSlackPx, y: 700 }); // right where a walk from the left would stop
+    standing('b', { x: 400, y: 700 });
+    const end = walk('b', { x: 800, y: 700 }).to;
+    expect(end.y).toBeLessThan(700); // the next side round from the walker's, the same one every time
+    for (const id of ['a', 'c']) {
+      const at = room.positionOf(id)!;
+      expect(distance(end, at)).toBeGreaterThanOrEqual(gap);
+    }
+  });
+
+  it('an owl already beside another owl that aims onto them stays put, and its page is told so', () => {
+    standing('a', { x: 800, y: 700 });
+    standing('b', { x: 400, y: 700 });
+    const beside = walk('b', { x: 800, y: 700 }).to;
+    const echo = walk('b', { x: 800, y: 700 });
+    expect(echo.from).toEqual(beside);
+    expect(echo.to).toEqual(beside);
+    expect(echo.seq).toBe(seq);
+  });
+
+  it('with no free spot reachable beside them, a walk ends where it was aimed, as before', () => {
+    const box: RoomDef = { ...def, walkable: [[{ x: 785, y: 685 }, { x: 815, y: 685 }, { x: 815, y: 715 }, { x: 785, y: 715 }]], spawns: { default: { x: 800, y: 700 } } };
+    room = new Room(box, { now: () => now, random: () => 0.5, cap: 20 });
+    join('a');
+    join('b');
+    walk('a', { x: 800, y: 700 });
+    expect(walk('b', { x: 787, y: 687 }).to).toEqual({ x: 787, y: 687 });
+    expect(walk('b', { x: 800, y: 700 }).to).toEqual({ x: 800, y: 700 });
+  });
+
+  it('leaves a walk aimed near nobody exactly as it was aimed', () => {
+    standing('a', { x: 800, y: 700 });
+    standing('b', { x: 400, y: 700 });
+    expect(walk('b', { x: 800 - gap - 10, y: 700 }).to).toEqual({ x: 800 - gap - 10, y: 700 });
+    expect(walk('b', { x: 800 - gap, y: 700 }).to).toEqual({ x: 800 - gap, y: 700 }); // the spacing itself is clear
   });
 });

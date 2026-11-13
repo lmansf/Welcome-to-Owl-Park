@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { arrivalPoint, doorAxis, entryPoint, inExit, laneThrough } from './doorways';
+import { arrivalPoint, doorAxis, entryPoint, inExit, laneThrough, walkCrossesExit } from './doorways';
 import type { RoomDef } from './room';
 
 /** A room with one doorway back to `other`: in the far wall, or in the west wall. */
@@ -69,6 +69,24 @@ describe('doorways keep the lane (OP-124)', () => {
     expect(inExit(r, { x: 800, y: 480 })).toBe(true);
     expect(inExit(r, { x: 150, y: 650 })).toBe(false);
     expect(inExit(r, { x: 350, y: 650 })).toBe(true);
+  });
+
+  it('knows a straight walk that passes through a way out, and only a way out (OP-342)', () => {
+    // A doorway out beside the spawn, as the grove's is: 65 px east of it and just above.
+    const r = room('far');
+    r.doors.push({ id: 'out', rect: { x: 865, y: 615, w: 125, h: 80 }, to: { room: 'third', spawn: 'default' } });
+    const spawn = r.spawns['default']!;
+    // Up and to the east, through the doorway; along the floor under it, or west, past it.
+    expect(walkCrossesExit(r, spawn, { x: 990, y: 640 })).toBe(true);
+    expect(walkCrossesExit(r, { x: 990, y: 640 }, spawn)).toBe(true);
+    expect(walkCrossesExit(r, spawn, { x: 1000, y: 720 })).toBe(false);
+    expect(walkCrossesExit(r, spawn, { x: 600, y: 640 })).toBe(false);
+    // The doorway in the far wall is a way out too.
+    expect(walkCrossesExit(r, spawn, { x: 800, y: 500 })).toBe(true);
+    // A spot that leads nowhere (a stall) is no way out; a nest's door on the street is one.
+    r.doors.push({ id: 'shop', rect: { x: 500, y: 660, w: 100, h: 80 } }, { id: 'nest-door-2', rect: { x: 300, y: 660, w: 100, h: 80 } });
+    expect(walkCrossesExit(r, spawn, { x: 450, y: 700 })).toBe(false);
+    expect(walkCrossesExit(r, spawn, { x: 250, y: 700 })).toBe(true);
   });
 });
 

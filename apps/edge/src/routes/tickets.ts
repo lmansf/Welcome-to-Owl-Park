@@ -3,10 +3,11 @@ import { hashForLog } from '@owl-park/shared';
 import { deviceClass } from '../collectLog';
 import { openingOn, passLinkReady, storeCatalogue } from '../opening';
 import { GUEST_PASS_TTL_S, mintPass, requireSecret } from '../pass';
+import { checkoutHash, referralCode, referralRewardCode, referralsOn, thankReferrer } from '../referrals';
 import { KINDS, passCartLink, ticketCartLink } from '../shopify';
 import { storeConfig } from '../storeApi';
 import { CORS, json, passFrom, readJson } from './http';
-import { deskOf, gateOf, logPurchase, mirrorLater, offerProtectByOrder } from './park';
+import { collections, deskOf, gateOf, logPurchase, mirrorLater, offerProtectByOrder } from './park';
 import type { RouteCtx } from './router';
 
 // ---- Tickets (C35): the wallet on this device, the emailed and shared links, and the gate ----
@@ -67,13 +68,21 @@ export async function tickets(c: RouteCtx): Promise<Response> {
   if (url.pathname === '/api/tickets/checkout') {
     // The gate's checkout (OP-175, OP-180): a cart link with one Day Ticket and a one-time token for this owl, so the paid ticket lands here.
     // With `kind: 'annual'` (OP-198), the annual pass instead: the card before the store offers it beside the Day Ticket.
+    // A free Day Ticket (OP-056): the store's code that takes it off, on a checkout kept for one of this owl's offers.
+    const free = body['referral'] === true;
+    const code = free ? referralCode(env) : null;
+    if (free && (!code || body['kind'] === 'annual')) return json({ error: 'not-set-up' }, 503);
     const store = storeConfig(env);
     const catalogue = store ? await storeCatalogue(env) : null;
     const variant = body['kind'] === 'annual' ? catalogue?.passVariant : catalogue?.dayVariant;
     if (!store || !variant) return json({ error: 'not-set-up' }, 503);
     const r = await desk('/tickets/checkout', { device });
     if (r.status !== 200 || typeof r.body['token'] !== 'string') return reply(r);
-    return json({ url: ticketCartLink(store.shop, variant, r.body['token']) });
+    const offer = code ? await collections(env).referralCheckout(device, await checkoutHash(r.body['token'])) : null;
+    if (code && !offer) return json({ error: 'no-offer' }, 409);
+    // A thank-you has its own code when set (the friend's is once per customer; thank-yous have no cap).
+    const use = offer?.kind === 'reward' ? (referralRewardCode(env) ?? code) : code;
+    return json({ url: ticketCartLink(store.shop, variant, r.body['token'], use ?? undefined) });
   }
   if (url.pathname === '/api/tickets/pass') {
     // Opening night's pass (C42, half price): the cart link, for an Opening Night Ticket on this owl that went through
@@ -107,6 +116,8 @@ export async function tickets(c: RouteCtx): Promise<Response> {
       const kind = KINDS.find((k) => k === r.body['kind']);
       const storeOrder = typeof scanOrder === 'string' && /^\d{1,20}$/.test(scanOrder) ? scanOrder : null;
       if (kind) logPurchase(ctx, env, log, { event: 'scanned', order: storeOrder, cid: device, at: Date.now(), kinds: [kind], tickets: 1, cents: null, until: typeof until === 'number' ? until : null, ref: tid });
+      // A friend brought by another owl (OP-056) went through the gate: that owl is thanked.
+      if (referralsOn(env)) ctx.waitUntil(thankReferrer(collections(env), desk, log, device));
     }
     return json({ ...scanned, pass: admittedPass, exp, gate: (await gateOf(env)).mode, adm: true });
   }

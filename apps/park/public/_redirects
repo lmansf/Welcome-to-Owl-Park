@@ -1,0 +1,39 @@
+# HeyCatch short links (heycatch.ai/agents.md): a one-character path, /a to /z and /0 to /9, is a HeyCatch
+# channel's link. It goes to the park's page with the channel in the query (302), which is the attribution;
+# the SDK takes the query off the address bar once the page loads. The park has no one-character page.
+/a /?utm_source=heycatch&utm_campaign=a 302
+/b /?utm_source=heycatch&utm_campaign=b 302
+/c /?utm_source=heycatch&utm_campaign=c 302
+/d /?utm_source=heycatch&utm_campaign=d 302
+/e /?utm_source=heycatch&utm_campaign=e 302
+/f /?utm_source=heycatch&utm_campaign=f 302
+/g /?utm_source=heycatch&utm_campaign=g 302
+/h /?utm_source=heycatch&utm_campaign=h 302
+/i /?utm_source=heycatch&utm_campaign=i 302
+/j /?utm_source=heycatch&utm_campaign=j 302
+/k /?utm_source=heycatch&utm_campaign=k 302
+/l /?utm_source=heycatch&utm_campaign=l 302
+/m /?utm_source=heycatch&utm_campaign=m 302
+/n /?utm_source=heycatch&utm_campaign=n 302
+/o /?utm_source=heycatch&utm_campaign=o 302
+/p /?utm_source=heycatch&utm_campaign=p 302
+/q /?utm_source=heycatch&utm_campaign=q 302
+/r /?utm_source=heycatch&utm_campaign=r 302
+/s /?utm_source=heycatch&utm_campaign=s 302
+/t /?utm_source=heycatch&utm_campaign=t 302
+/u /?utm_source=heycatch&utm_campaign=u 302
+/v /?utm_source=heycatch&utm_campaign=v 302
+/w /?utm_source=heycatch&utm_campaign=w 302
+/x /?utm_source=heycatch&utm_campaign=x 302
+/y /?utm_source=heycatch&utm_campaign=y 302
+/z /?utm_source=heycatch&utm_campaign=z 302
+/0 /?utm_source=heycatch&utm_campaign=0 302
+/1 /?utm_source=heycatch&utm_campaign=1 302
+/2 /?utm_source=heycatch&utm_campaign=2 302
+/3 /?utm_source=heycatch&utm_campaign=3 302
+/4 /?utm_source=heycatch&utm_campaign=4 302
+/5 /?utm_source=heycatch&utm_campaign=5 302
+/6 /?utm_source=heycatch&utm_campaign=6 302
+/7 /?utm_source=heycatch&utm_campaign=7 302
+/8 /?utm_source=heycatch&utm_campaign=8 302
+/9 /?utm_source=heycatch&utm_campaign=9 302

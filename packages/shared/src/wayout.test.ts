@@ -4,7 +4,7 @@ import { doorTarget } from './doorways';
 import { distanceToRect, isWalkable, pointInRect, rectCenter } from './geometry';
 import { STREET_ROOM, TREE_STREET_ROOM, isStreetRoom, streetOf } from './homes';
 import { resolveTarget } from './resolveTarget';
-import { findSpawn } from './room';
+import { ROOM_H, findSpawn } from './room';
 import { LEFT_PARK_SPAWN, LOBBY_ROOM, WAY_OUT_DOOR, WAY_OUT_WORDS, insidePark, isFreeRoom, parkwardDoor } from './wayout';
 
 describe('leaving the park', () => {
@@ -21,12 +21,13 @@ describe('leaving the park', () => {
     for (const room of ['hub', 'grove', 'market', 'arcade']) expect(insidePark(room), room).toBe(true);
   });
 
-  it('walks out where the owls walk in: the hub floor’s bottom edge below the turnstiles’ arrival spot', () => {
+  it('walks out where the owls walk in: the ring painted in the hub’s floor, below the turnstiles’ arrival spot', () => {
     expect(gate.to).toEqual({ room: 'hub', spawn: 'default' });
     const arrival = hub.spawns['default']!;
     expect(wayOut.to).toEqual({ room: LOBBY_ROOM, spawn: LEFT_PARK_SPAWN });
-    // On the floor's bottom edge, straight below the arrival spot, but not where an owl arrives.
-    expect(wayOut.rect.y + wayOut.rect.h).toBe(hub.size.h);
+    // At the painting's foot (its floor runs on below as a plaza, Nov 8), straight below the arrival spot, but not where an owl arrives.
+    expect(wayOut.rect.y + wayOut.rect.h).toBe(ROOM_H);
+    expect(wayOut.rect.y).toBeGreaterThan(arrival.y);
     expect(arrival.x).toBeGreaterThan(wayOut.rect.x);
     expect(arrival.x).toBeLessThan(wayOut.rect.x + wayOut.rect.w);
     expect(pointInRect(arrival, wayOut.rect)).toBe(false);

@@ -20,6 +20,44 @@ async function openSay(page: Page): Promise<Locator> {
 }
 
 test.describe('prewritten chat', () => {
+  test('a greeting can be said back once by tapping its short-lived reply (OP-271)', async ({ context, isMobile }) => {
+    test.slow(); // Two rendered rooms and a timed reply.
+    const a = await context.newPage();
+    const b = await context.newPage();
+    await b.clock.install();
+    await openPark(a, { id: 'owl-a' });
+    await openPark(b, { id: 'owl-b' });
+    await expect.poll(async () => (await state(b)).peers.map((p) => p.id)).toEqual(['owl-a']);
+    // Keep browser automation latency outside the four seconds offered to the player.
+    await b.clock.pauseAt(new Date(await b.evaluate(() => Date.now() + 2_000)));
+    const now = await b.evaluate(() => Date.now());
+    await a.clock.setFixedTime(new Date(now));
+    expect(await a.evaluate(() => window.owlPark.say(1))).toBe(true);
+    const hi = b.getByRole('button', { name: 'Say back: Hi!' });
+    await expect(hi).toBeVisible();
+    if (isMobile) await hi.tap({ force: true });
+    else await hi.click({ force: true });
+    await expect.poll(() => bubbles(a)).toContainEqual({ id: 'owl-b', n: 1 });
+    expect(await b.evaluate(() => window.owlPark.say(2))).toBe(false);
+    await expect(b.locator('[data-say-reply]')).toBeHidden();
+
+    // The other owl may speak again, but a recent reply should not prompt another one.
+    await a.clock.setFixedTime(new Date(now + 3_100));
+    expect(await a.evaluate(() => window.owlPark.say(2))).toBe(true);
+    await expect.poll(() => bubbles(b)).toContainEqual({ id: 'owl-a', n: 2 });
+    await expect(b.locator('[data-say-reply]')).toBeHidden();
+
+    await a.clock.setFixedTime(new Date(now + 10_100));
+    await b.clock.fastForward(10_100);
+    expect(await a.evaluate(() => window.owlPark.say(3))).toBe(true);
+    const again = b.getByRole('button', { name: 'Say back: Nice to meet you!' });
+    await expect(again).toBeVisible();
+    await b.clock.fastForward(3_999);
+    await expect(again).toBeVisible();
+    await b.clock.fastForward(1);
+    await expect(again).toBeHidden();
+  });
+
   test('Say from its button: a phrase picked on the wheel shows over the owl, in the other tab too, and the next waits its turn', async ({ context }) => {
     test.slow(); // two live parks in one browser
     const a = await context.newPage();
@@ -144,6 +182,7 @@ test.describe('prewritten chat', () => {
     expect(await b.evaluate(() => window.owlPark.say(3))).toBe(true);
     await expect.poll(() => bubbles(a), { timeout: 10_000 }).toContainEqual({ id: 'owl-b', n: 3 });
     expect(await bubbles(b)).toEqual([]);
+    await expect(b.locator('[data-say-reply]')).toBeHidden();
 
     // On again: the next phrase shows.
     await setting.click();

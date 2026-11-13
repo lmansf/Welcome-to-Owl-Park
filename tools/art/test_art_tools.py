@@ -26,7 +26,7 @@ from PIL import Image, ImageDraw, ImageOps, PngImagePlugin  # noqa: E402
 
 from artlib import (ALLOWED_CHUNKS, BUDGET_BYTES, FLIGHT_LAYERS, OWL_SPECIES, ArtError, flight_layers, flight_master, load_assets,  # noqa: E402
                     owl_layer_base, owl_master_of, parse_hex, species_layers)
-from artlib import forbidden, pngmeta, prov, webpmeta  # noqa: E402
+from artlib import bands, forbidden, level, pngmeta, prov, webpmeta  # noqa: E402
 from artlib.budget import BudgetError, encode_under_budget  # noqa: E402
 from artlib.chroma import ChromaError, ChromaParams, clear_glow, key_out, solidify  # noqa: E402
 from artlib import fields  # noqa: E402
@@ -1813,3 +1813,372 @@ class TestCli(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestLevel(unittest.TestCase):
+    """Levelling the recut's run rows (OP-251): one colour across a row, the alpha and the detail kept."""
+
+    PUBLIC = HERE.parent.parent / "apps" / "park" / "public" / "art"
+
+    @staticmethod
+    def ramp(w=320, h=60, lo=110, hi=200, tint=(1.0, 0.9, 0.8)):
+        x = np.linspace(lo, hi, w)[None, :, None] * np.array(tint)[None, None, :]
+        rgb = np.repeat(x, h, axis=0)
+        rgb[::8] *= 0.85  # a joint every 8 rows: detail that must stay
+        alpha = np.full((h, w, 1), 255.0)
+        alpha[: h // 6] = 0
+        return Image.fromarray(np.clip(np.concatenate([rgb, alpha], axis=2), 0, 255).astype(np.uint8), "RGBA")
+
+    def test_a_ramp_comes_out_level_with_its_alpha_and_its_joints(self):
+        img = self.ramp()
+        target = level.row_target([img])
+        out, params = level.level_piece(img, target)
+        prof = level.column_profiles(out)[0]
+        mid = prof[20:-20]
+        self.assertLess(float(mid.max() - mid.min()), 3.0, "the left-to-right drift is gone")
+        self.assertAlmostEqual(params["L_after"], target[0], delta=1.5)
+        self.assertTrue(np.array_equal(np.asarray(out)[..., 3], np.asarray(img)[..., 3]), "the alpha is untouched")
+        L = np.asarray(out.convert("L"), dtype=float)
+        self.assertGreater(float(L[16:, 160].std()), 3.0, "the joints inside the piece stay")
+
+    def test_the_same_input_gives_the_same_output(self):
+        img = self.ramp()
+        t = level.row_target([img])
+        self.assertEqual(level.level_piece(img, t)[0].tobytes(), level.level_piece(img, t)[0].tobytes())
+
+    def test_every_published_recut_row_reads_as_one_colour_across(self):
+        rows = ["plank", "plank-thin", "plank-rail", "branch", "branch-thin", "branch-mossy", "stone", "stone-thin", "stone-mossy", "earth", "earth-thin", "earth-path"]
+        parts = ["cap-left", "mid-320", "mid-480", "mid-640", "cap-right"]
+        for row in rows:
+            files = [self.PUBLIC / f"kit-cut-{row}-{p}.webp" for p in parts]
+            if not all(f.exists() for f in files):
+                self.skipTest(f"the {row} row is not in this checkout")
+            means = [level.mean_L(Image.open(f)) for f in files]
+            self.assertLess(max(means) - min(means), 4.0, f"{row}: its pieces differ in lightness ({', '.join(f'{m:.1f}' for m in means)})")
+
+
+class TestBands(unittest.TestCase):
+    """The value bands (OP-250): the targets set them, the grade reaches them, every published layer keeps them."""
+
+    TARGETS = HERE / "targets"
+    PUBLIC = HERE.parent.parent / "apps" / "park" / "public" / "art"
+
+    def test_the_targets_measure_inside_the_bands_they_set(self):
+        from PIL import Image
+        for key, bands_of in (("l4", {}), ("plaza", {}), ("clearing", {})):
+            f = self.TARGETS / f"target-{key}.png"
+            if not f.exists():
+                self.skipTest(f"{f.name} is not in this checkout")
+            m = bands.measure_target(Image.open(f))
+            self.assertEqual(bands.problems(m["sky"], "sky"), [], f"{key}: the sky band is the sky layer's band")
+            self.assertEqual(bands.problems(m["backdrop"], "mid"), [], f"{key}: the backdrop band is the middle layer's band")
+            self.assertEqual(bands.problems(m["floor"], "walk"), [], f"{key}: the floor band is the walkable layer's band")
+            self.assertGreaterEqual(m["floor"]["contrast"], 7.5, f"{key}: the floor carries the most contrast")
+            self.assertGreater(m["floor"]["L_mean"], m["backdrop"]["L_mean"], f"{key}: the floor is lighter than the backdrop")
+            self.assertGreater(m["backdrop"]["L_mean"], m["sky"]["L_mean"], f"{key}: the backdrop is lighter than the sky")
+
+    def test_every_published_backdrop_layer_is_inside_its_band(self):
+        from PIL import Image
+        assets = load_assets()
+        keys = sorted(k for k, v in assets.items() if v.get("kind") == "layer" and (self.PUBLIC / f"{k}.webp").exists())
+        if not keys:
+            self.skipTest("no published backdrop layer in this checkout")
+        failures = []
+        for key in keys:
+            band, limits = bands.band_of(key)
+            with Image.open(self.PUBLIC / f"{key}.webp") as im:
+                probs = bands.problems(bands.stats(im), limits)
+            if probs:
+                failures.append(f"{key} [{band}]: {'; '.join(probs)}")
+        self.assertEqual(failures, [], "outside their value bands (docs/TREE_STYLE.md 2b; `pnpm art:finish bands --all`):\n" + "\n".join(failures))
+
+    def _loud_layer(self, w: int, h: int, keyed: bool) -> "Image.Image":
+        """A bright, hard, saturated layer: a checker of lantern gold and navy with a soft top (keyed) edge."""
+        from PIL import Image
+        y, x = np.mgrid[0:h, 0:w]
+        checker = ((x // 24 + y // 24) % 2).astype(np.float64)
+        rgb = np.stack([30 + checker * 225, 40 + checker * 170, 120 - checker * 90], -1)
+        rgb += 20 * np.sin(x / 50.0)[..., None]
+        arr = np.clip(rgb, 0, 255).astype(np.uint8)
+        if not keyed:
+            return Image.fromarray(arr, "RGB")
+        alpha = np.clip((y - h * 0.3) / (h * 0.1), 0, 1) * 255
+        alpha[(x // 64 + y // 64) % 7 == 0] = 0
+        return Image.fromarray(np.dstack([arr, np.round(alpha).astype(np.uint8)]), "RGBA")
+
+    def test_the_grade_reaches_the_band_keeps_the_alpha_and_repeats_itself(self):
+        for band, w, h, keyed in (("sky", 400, 225, False), ("far", 400, 225, True), ("mid", 200, 112, True)):
+            img = self._loud_layer(w, h, keyed)
+            before = bands.stats(img)
+            self.assertTrue(bands.problems(before, band), f"{band}: the synthetic layer starts outside its band")
+            out, params = bands.grade_to_band(img, band, (40, 60, 100))
+            self.assertEqual(out.mode, img.mode)
+            self.assertEqual(bands.problems(bands.stats(out), band), [], f"{band}: {params}")
+            if keyed:
+                self.assertEqual(out.getchannel("A").tobytes(), img.getchannel("A").tobytes(), "the alpha is untouched")
+                self.assertIn("haze", params)
+                self.assertIn("blur", params)
+            else:
+                self.assertNotIn("haze", params)
+            again, _ = bands.grade_to_band(img, band, (40, 60, 100))
+            self.assertEqual(again.tobytes(), out.tobytes(), "deterministic")
+            self.assertTrue(bands.tools_line(params).startswith(f"bands: {band}"))
+        # a layer already inside its band is left as it is apart from the soft pass it is entitled to
+        from PIL import Image
+        calm = Image.new("RGB", (400, 225), (28, 36, 60))
+        out, params = bands.grade_to_band(calm, "sky")
+        self.assertEqual(out.tobytes(), calm.tobytes())
+        self.assertEqual(sorted(params), ["after", "band", "before"])
+
+    def test_the_bands_command_grades_in_place_with_provenance_and_a_dry_run_writes_nothing(self):
+        from PIL import Image
+        area = next(iter(postprocess.kit_table()["areas"]))
+        sky_key, far_key, mid_key = f"kit-{area}-sky-a", f"kit-{area}-far-a", f"kit-{area}-mid-b"
+        with tempfile.TemporaryDirectory() as td:
+            public = Path(td) / "art"
+            public.mkdir()
+            prov_path = Path(td) / "provenance.jsonl"
+            for key, w, h, keyed in ((sky_key, 1600, 900, False), (far_key, 1600, 900, True), (mid_key, 800, 450, True)):
+                data, _ = webpmeta.encode_under_budget(self._loud_layer(w, h, keyed), BUDGET_BYTES)
+                (public / f"{key}.webp").write_bytes(data)
+                prov.append(prov_path, prov.build_line(asset=f"{key}.webp", key=key, logical="1x", sha256=postprocess.sha256_bytes(data), nbytes=len(data), colors=None, budget_relaxed=False,
+                                                       sidecar={"hash16": "ab" * 8, "provider": "mock", "seed": 5}, published_at="2026-11-03T00:00:00Z", tools=["layer: heal band=0.2"], human_edits=["picked"]))
+            before = {f.name: f.read_bytes() for f in public.iterdir()}
+            common = ["--public", str(public), "--provenance", str(prov_path), "--work", str(Path(td) / "work"), "--now", "2026-11-03T01:00:00Z"]
+            self.assertEqual(postprocess.main(["bands", "--all", "--dry-run", *common]), 0)
+            self.assertEqual({f.name: f.read_bytes() for f in public.iterdir()}, before, "a dry run writes nothing")
+            self.assertEqual(len(prov.read_lines(prov_path)), 3)
+            self.assertEqual(postprocess.main(["bands", "--all", "--note", "graded into the bands", *common]), 0)
+            lines = prov.read_lines(prov_path)
+            self.assertEqual(len(lines), 6)
+            for key in (sky_key, far_key, mid_key):
+                data = (public / f"{key}.webp").read_bytes()
+                self.assertNotEqual(data, before[f"{key}.webp"])
+                line = [l for l in lines if l["asset"] == f"{key}.webp"][-1]
+                self.assertEqual((line["sha256"], line["bytes"], line["raw_hash16"], line["seed"]), (postprocess.sha256_bytes(data), len(data), "ab" * 8, 5))
+                self.assertEqual(line["tools"][0], "layer: heal band=0.2")
+                self.assertTrue(any(t.startswith("bands: ") for t in line["tools"]), line["tools"])
+                self.assertEqual(line["human_edits"], ["picked", "graded into the bands"])
+                self.assertEqual(prov.problems(line), [])
+                with Image.open(public / f"{key}.webp") as im:
+                    self.assertEqual(bands.problems(bands.stats(im), bands.band_of(key)[1]), [], key)
+                    if key != sky_key:
+                        with Image.open(io.BytesIO(before[f"{key}.webp"])) as was:
+                            self.assertEqual(im.getchannel("A").tobytes(), was.getchannel("A").tobytes(), "the alpha is untouched")
+            self.assertTrue((Path(td) / "work" / "review" / f"bands-{area}.png").exists())
+            # a second run skips what is graded already
+            after = {f.name: f.read_bytes() for f in public.iterdir()}
+            self.assertEqual(postprocess.main(["bands", "--all", *common]), 0)
+            self.assertEqual({f.name: f.read_bytes() for f in public.iterdir()}, after)
+            self.assertEqual(len(prov.read_lines(prov_path)), 6)
+
+
+class TestKit(unittest.TestCase):
+    """The art kit (OP-229): healing a texture to tile, and cutting a sheet's cells into pieces."""
+
+    def test_heal_tile_makes_a_painting_wrap(self):
+        from PIL import Image
+        rng = np.random.default_rng(7)
+        # a smooth non-tiling field: a gradient plus low-frequency blobs, strong mismatch at the edges
+        y, x = np.mgrid[0:256, 0:256].astype(np.float32)
+        base = 128 + 90 * np.sin(x / 40) * np.cos(y / 37) + (x - 128) * 0.4
+        arr = np.stack([base, base * 0.8 + 20, base * 0.6 + 40], -1) + rng.normal(0, 3, (256, 256, 3))
+        img = Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), "RGB")
+        before = postprocess.tile_seam_ratio(img)
+        self.assertGreater(max(before["seam_x"], before["seam_y"]), 3.0)
+        healed = postprocess.heal_tile(img)
+        after = postprocess.tile_seam_ratio(healed)
+        self.assertLess(max(after["seam_x"], after["seam_y"]), 1.6)
+        small = postprocess.resize_tiling(healed, 128)
+        self.assertEqual(small.size, (128, 128))
+        self.assertLess(max(postprocess.tile_seam_ratio(small).values()), 1.6)
+        # a keyed layer healed sideways only: its alpha wraps too, and the up-and-down edges are untouched
+        rgba = img.convert("RGBA")
+        rgba.putalpha(Image.fromarray(np.clip(base, 0, 255).astype(np.uint8), "L"))
+        side = postprocess.heal_tile(rgba, axes=(1,))
+        self.assertEqual(side.mode, "RGBA")
+        self.assertLess(postprocess.tile_seam_ratio(side)["seam_x"], 1.6)
+        # the up-and-down wrap is neither healed nor broken by a sideways pass
+        self.assertAlmostEqual(postprocess.tile_seam_ratio(side)["seam_y"], postprocess.tile_seam_ratio(rgba)["seam_y"], delta=0.6)
+
+    def test_trim_key_frame_cuts_a_painted_border_of_the_key_colour(self):
+        from PIL import Image
+        # the model paints its magenta a little off (255, 1, 191): the border is sampled, not assumed
+        img = Image.new("RGB", (400, 200), (255, 1, 191))
+        panel = Image.new("RGB", (300, 120), (30, 40, 90))
+        img.paste(panel, (60, 50))
+        out, trim = postprocess.trim_key_frame(img, "#FF00FF")
+        self.assertEqual(trim, (60, 50, 40, 30))
+        self.assertEqual(out.size, (300, 120))
+        # a painting that reaches its edges is left alone
+        same, none = postprocess.trim_key_frame(panel, "#FF00FF")
+        self.assertEqual(none, (0, 0, 0, 0))
+        self.assertIs(same, panel)
+
+    def test_layer_fade_top_ramps_the_alpha_in_below_the_first_opaque_row(self):
+        from PIL import Image
+        kit = postprocess.kit_table()
+        area = next(iter(kit["areas"]))
+        key = f"kit-{area}-far-a"
+        with tempfile.TemporaryDirectory() as td:
+            work = Path(td) / "work"
+            raw_dir = work / "raw" / key
+            raw_dir.mkdir(parents=True)
+            img = Image.new("RGB", (2048, 1152), (255, 0, 255))
+            img.paste(Image.new("RGB", (2048, 600), (40, 60, 90)), (0, 552))
+            img.save(raw_dir / "bbbbbbbbbbbbbbbb.png")
+            (raw_dir / "bbbbbbbbbbbbbbbb.json").write_text(json.dumps({"schema": 1, "key": key, "key_colour": "#FF00FF", "hash16": "bbbbbbbbbbbbbbbb"}))
+            (raw_dir / "SELECTED").write_text("bbbbbbbbbbbbbbbb")
+            (work / "final").mkdir()
+            rc = postprocess.main(["layer", key, "--work", str(work), "--no-heal", "--fade-top", "100"])
+            self.assertEqual(rc, 0)
+            out = np.asarray(Image.open(work / "final" / f"{key}.webp").convert("RGBA"))[..., 3]
+            top = int(np.nonzero((out > 0).any(axis=1))[0][0])
+            self.assertLess(out[top + 10].mean(), 60, "the first rows below the edge are nearly clear")
+            self.assertGreater(out[top + 95].mean(), 200, "the ramp reaches opaque about --fade-top px down")
+            self.assertEqual(out[-1].min(), 255, "the bottom stays opaque")
+
+    def test_a_landmark_is_a_one_piece_sheet_on_its_own_canvas(self):
+        from PIL import Image, ImageDraw
+        kit = postprocess.kit_table()
+        name = next(iter(kit["landmarks"]))
+        key = f"kit-sheet-landmark-{name}"
+        sheet, prefix = postprocess.kit_sheet(key)
+        self.assertEqual((prefix, len(sheet["pieces"]), sheet["pieces"][0]["name"]), ("kit-landmark-", 1, name))
+        with tempfile.TemporaryDirectory() as td:
+            work = Path(td) / "work"
+            raw_dir = work / "raw" / key
+            raw_dir.mkdir(parents=True)
+            img = Image.new("RGB", (1024, 1024), (255, 0, 255))
+            d = ImageDraw.Draw(img)
+            d.ellipse((312, 212, 712, 812), fill=(74, 51, 34))
+            d.ellipse((452, 100, 572, 240), fill=(201, 162, 39))
+            img.save(raw_dir / "cccccccccccccccc.png")
+            (raw_dir / "cccccccccccccccc.json").write_text(json.dumps({"schema": 1, "key": key, "key_colour": "#FF00FF", "hash16": "cccccccccccccccc"}))
+            (raw_dir / "SELECTED").write_text("cccccccccccccccc")
+            (work / "final").mkdir()
+            rc = postprocess.main(["pieces", key, "--work", str(work), "--grow", "2"])
+            self.assertEqual(rc, 0)
+            piece = kit["landmarks"][name]
+            one = Image.open(work / "final" / f"kit-landmark-{name}.webp")
+            self.assertEqual((one.mode, one.size), ("RGBA", (piece["w"], piece["h"])))
+            self.assertTrue((work / "final" / f"kit-landmark-{name}@2x.webp").exists())
+
+    def test_a_target_is_kept_as_reference_art_with_its_own_provenance(self):
+        from PIL import Image
+        key = "target-l4"
+        with tempfile.TemporaryDirectory() as td:
+            work = Path(td) / "work"
+            raw_dir = work / "raw" / key
+            raw_dir.mkdir(parents=True)
+            Image.new("RGB", (1600, 900), (44, 76, 122)).save(raw_dir / "dddddddddddddddd.png")
+            (raw_dir / "dddddddddddddddd.json").write_text(json.dumps({"schema": 1, "key": key, "hash16": "dddddddddddddddd", "provider": "fal", "seed": 9800, "size": "1600x900"}))
+            (raw_dir / "SELECTED").write_text("dddddddddddddddd")
+            (work / "final").mkdir()
+            out = Path(td) / "targets"
+            rc = postprocess.main(["target", key, "--work", str(work), "--targets-dir", str(out), "--note", "approved by the owner in chat"])
+            self.assertEqual(rc, 0)
+            kept = Image.open(out / f"{key}.png")
+            self.assertEqual(kept.size, (1600, 900))
+            lines = [json.loads(l) for l in (out / "provenance.jsonl").read_text().splitlines()]
+            self.assertEqual((len(lines), lines[0]["key"], lines[0]["asset"], lines[0]["raw_hash16"], lines[0]["seed"]), (1, key, f"{key}.png", "dddddddddddddddd", 9800))
+            self.assertEqual(lines[0]["human_edits"], ["approved by the owner in chat"])
+            self.assertEqual(postprocess.prov.problems(lines[0]), [])
+
+    def test_runs_cuts_caps_and_three_middles_from_each_run(self):
+        from PIL import Image, ImageDraw
+        kit = postprocess.kit_table()
+        material = next(iter(kit["recut"]["runs"]))
+        run = kit["recut"]["runs"][material]
+        key = f"kit-sheet-cut-run-{material}"
+        with tempfile.TemporaryDirectory() as td:
+            work = Path(td) / "work"
+            raw_dir = work / "raw" / key
+            raw_dir.mkdir(parents=True)
+            img = Image.new("RGB", (2720, 1530), (255, 0, 255))
+            d = ImageDraw.Draw(img)
+            for i, row in enumerate(run["rows"]):
+                h2 = 2 * row["h"]
+                y = 120 + i * 480
+                d.rectangle((100, y, 2620, y + h2), fill=(74, 51, 34))
+                d.rectangle((100, y, 2620, y + 12), fill=(140, 110, 70))
+            img.save(raw_dir / "eeeeeeeeeeeeeeee.png")
+            (raw_dir / "eeeeeeeeeeeeeeee.json").write_text(json.dumps({"schema": 1, "key": key, "key_colour": "#FF00FF", "hash16": "eeeeeeeeeeeeeeee"}))
+            (raw_dir / "SELECTED").write_text("eeeeeeeeeeeeeeee")
+            (work / "final").mkdir()
+            rc = postprocess.main(["runs", key, "--work", str(work)])
+            self.assertEqual(rc, 0)
+            row = run["rows"][0]
+            for part, w in (("cap-left", kit["recut"]["cap"]), ("cap-right", kit["recut"]["cap"]), *[(f"mid-{n}", n) for n in kit["recut"]["lengths"]]):
+                # a wholly opaque piece is written without an alpha channel, so it opens as RGB
+                one = Image.open(work / "final" / f"kit-cut-{row['name']}-{part}.webp").convert("RGBA")
+                self.assertEqual(one.size, (w, row["h"]), part)
+                a = np.asarray(one)[..., 3]
+                self.assertGreater(a.mean(), 250, f"{part}: a run piece is opaque")
+            self.assertEqual(len(list((work / "final").glob("kit-cut-*.webp"))), 2 * 5 * len(run["rows"]))
+
+    def test_columns_cuts_full_height_pieces_and_heals_the_tile(self):
+        from PIL import Image, ImageDraw
+        kit = postprocess.kit_table()
+        name, col = next((n, c) for n, c in kit["recut"]["columns"].items() if n != "about")
+        key = f"kit-sheet-cut-col-{name}"
+        with tempfile.TemporaryDirectory() as td:
+            work = Path(td) / "work"
+            raw_dir = work / "raw" / key
+            raw_dir.mkdir(parents=True)
+            W, H = [int(v) for v in col["size"].split("x")]
+            img = Image.new("RGB", (W, H), (255, 0, 255))
+            d = ImageDraw.Draw(img)
+            xs = [(120, 560), (700, 1500), (1640, 2000)]
+            for (x0, x1) in xs:
+                d.rectangle((x0, 0, x1, H), fill=(74, 51, 34))
+                for y in range(0, H, 40):
+                    d.rectangle((x0, y, x1, y + 6), fill=(50, 34, 22))
+            img.save(raw_dir / "ffffffffffffffff.png")
+            (raw_dir / "ffffffffffffffff.json").write_text(json.dumps({"schema": 1, "key": key, "key_colour": "#FF00FF", "hash16": "ffffffffffffffff"}))
+            (raw_dir / "SELECTED").write_text("ffffffffffffffff")
+            (work / "final").mkdir()
+            rc = postprocess.main(["columns", key, "--work", str(work)])
+            self.assertEqual(rc, 0)
+            for p in col["pieces"]:
+                one = Image.open(work / "final" / f"kit-cut-{p['name']}.webp").convert("RGBA")
+                self.assertEqual(one.size, (p["w"], p["h"]), p["name"])
+                a = np.asarray(one)[..., 3]
+                self.assertGreater(a.mean(), 250, f"{p['name']}: a column piece is opaque")
+                self.assertGreater(a[0].mean(), 250, f"{p['name']}: cut straight at the top")
+                self.assertGreater(a[-1].mean(), 250, f"{p['name']}: cut straight at the bottom")
+            tile = next(p for p in col["pieces"] if p.get("tile"))
+            two = np.asarray(Image.open(work / "final" / f"kit-cut-{tile['name']}@2x.webp").convert("RGB")).astype(float)
+            self.assertLess(float(np.abs(two[0] - two[-1]).mean()), 12.0, "the tile's top and bottom rows meet")
+
+    def test_pieces_cuts_six_cells_into_their_keys(self):
+        from PIL import Image, ImageDraw
+        kit = postprocess.kit_table()
+        name, sheet = next(iter(kit["sheets"].items()))
+        key = f"kit-sheet-{name}"
+        with tempfile.TemporaryDirectory() as td:
+            work = Path(td) / "work"
+            raw_dir = work / "raw" / key
+            raw_dir.mkdir(parents=True)
+            img = Image.new("RGB", (2048, 1152), (255, 0, 255))
+            d = ImageDraw.Draw(img)
+            for i in range(6):
+                cx, cy = (i % 3 + 0.5) * 2048 / 3, (i // 3 + 0.5) * 576
+                d.ellipse((cx - 200, cy - 120, cx + 200, cy + 120), fill=(74, 51, 34))
+                d.ellipse((cx - 60, cy - 200, cx + 60, cy - 80), fill=(201, 162, 39))
+            img.save(raw_dir / "aaaaaaaaaaaaaaaa.png")
+            (raw_dir / "aaaaaaaaaaaaaaaa.json").write_text(json.dumps({"schema": 1, "key": key, "key_colour": "#FF00FF", "hash16": "aaaaaaaaaaaaaaaa"}))
+            (raw_dir / "SELECTED").write_text("aaaaaaaaaaaaaaaa")
+            (work / "final").mkdir()
+            rc = postprocess.main(["pieces", key, "--work", str(work)])
+            self.assertEqual(rc, 0)
+            for p in sheet["pieces"]:
+                pkey = f"kit-{p['name']}"
+                one = work / "final" / f"{pkey}.webp"
+                self.assertTrue(one.exists(), pkey)
+                with Image.open(one) as im:
+                    self.assertEqual(im.size, (p.get("w", sheet["w"]), p.get("h", sheet["h"])))
+                    self.assertIn("A", im.getbands())
+                rec = json.loads((work / "final" / f"{pkey}.post.json").read_text())
+                self.assertEqual(rec["sheet"]["key"], key)
+                self.assertEqual(rec["sheet"]["cell"], sheet["pieces"].index(p) + 1)

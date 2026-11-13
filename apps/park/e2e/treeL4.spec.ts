@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { openPark, settleCamera, state } from './helpers';
 
 /**
@@ -35,7 +35,7 @@ test.describe('the tree, level 4 (OP-159)', () => {
 
   test('reads at a glance: its painted ledges with no line drawn over them, the ways down to level 3 and up to level 5 marked (OP-173)', async ({ page }) => {
     await openPark(page, { room: 'l4' });
-    expect((await state(page)).tree).toEqual({ fronts: 0, raised: 0, shades: 0, lips: 0, marks: 2, behind: false });
+    expect((await state(page)).tree).toEqual({ fronts: 0, raised: 0, shades: 0, lips: 0, marks: 2, barriers: 0, landings: 0, behind: false });
   });
 
   for (const [spawn, screen] of [['west', 0], ['east', 1]] as const) {

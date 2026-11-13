@@ -173,6 +173,10 @@ carry `run_id` (the request's chaos run). **Socket fields** are `room`, `session
 | `pass_rejected` | `worker.pass` | info | A route refused a pass (`passFrom`) | `route`, `reason`: `missing`, `expired`, `invalid` (`passRefusal`, `pass.ts`) |
 | `claim_moved` | `worker.tickets` | info | Tickets moved onto an owl. Two places, below | below |
 | `claim_in_use` | `worker.tickets` | info | A claim or share link named tickets already in use on another owl; nothing moved (the ticket desk's 409, OP-174) | `via`: `claim` or `share`; `collector_hash`; `device_class`; `order_hash` (when the desk's answer names the order: a claim; a share's answer names none); `in_use` (the order's running tickets on another owl; 1 when the answer gives no number) |
+| `referral_invited` | `worker.accounts` | info | An owl new to the park typed a friend's code and was offered a free Day Ticket (`routes/referral.ts`, OP-056) | `collector_hash` (the friend) |
+| `referral_refused` | `worker.accounts` | info | A friend code typed in was not taken (OP-056) | `collector_hash`; `reason`: `unknown-code`, `self`, `same-device`, `same-email`, `has-ticket`, `already-invited` or `too-many` |
+| `referral_thanked` | `worker.tickets` | info | A brought friend's ticket started at the gate, and the owl that brought them was thanked (`thankReferrer`, `referrals.ts`, OP-056) | `collector_hash` (the owl thanked); `reason`: `ticket` or `feathers` (no cap: every friend thanks once) |
+| `referral_held` | `worker.store` | warn | An order used a free Day Ticket's code without a checkout the park opened for an offer, for more than one Day Ticket, or for a friend whose email already had a friend's free Day Ticket (or whose email the store would not say): it waits for the owner's check (OP-056) | `topic`, `order_hash` |
 | `order_protect_mailed` | `worker.accounts` | info | A ticket landed on an owl (a claim, or the gate's checkout) and its buyer was mailed one protect link (`offerOrderProtect`, `accounts.ts`, OP-186) | `collector_hash`, `order_hash` |
 | `order_protect_unsent` | `worker.accounts` | warn | No protect link went to a ticket's buyer (OP-186) | `collector_hash`, `order_hash`, `reason`: `no-email` (the store gave none: an app not allowed customers' emails, the store out of reach, or none given) or `mail-failed` |
 | `room_join_ok` | `room.join` | info | An owl joined a room (`RoomObject.join`) | socket fields; `owls` (in the room now); `via` (`travel`, when the hello says so); `copy` (the room's copy, OP-075); `owner: true` (its own nest); `spectator: true` (OP-191) |
@@ -222,8 +226,12 @@ carry `run_id` (the request's chaos run). **Socket fields** are `room`, `session
 | `gate_flag_cleared` | `collections.travel` | info | An owl is outside the park again: into it is through the front gate next time (OP-130) | socket fields |
 | `health_check` | `worker.health` | info; error when a part did not answer, or (off this machine) a key is not set | `/api/health` (OP-068) | `ok`, `parts` (`rooms`, `tickets`, `collections`: each true or false), `configured` (`signing`, `admin`: whether `PASS_SIGNING_KEY` and `ADMIN_KEY` are set, never their values, OP-209), `duration_ms` |
 | `climb_band_refused` | `collections.climb` | info | A band of the climb was refused | socket fields; `climb_ref`; `band`; `reason`: `idle`, `too-fast`, `forgotten` (`AscentResult`, `climbbook.ts`); `practice: true` (a spectator's run, OP-191) |
-| `spectator_refused` | `room.play` | info | A spectator asked for something locked to ticket holders (a quest, an NPC owl, a leaf pile or a stall, a quest item, today's tasks), told once per socket; or a spectator's pass did not make it a full visitor, told each time (OP-191) | socket fields; `frame` (the first refused frame, or `admit`); for `admit`, `reason`: `pass`, `not-admitted`, `not-this-owl`, `before-socket` |
+| `spectator_refused` | `room.play` | info | A spectator asked for something locked to ticket holders (a quest, an NPC owl, a quest item, today's tasks; leaf piles, stalls and the moonbeam are open to it since OP-243), told once per socket; or a spectator's pass did not make it a full visitor, told each time (OP-191) | socket fields; `frame` (the first refused frame, or `admit`); for `admit`, `reason`: `pass`, `not-admitted`, `not-this-owl`, `before-socket` |
 | `spectator_admitted` | `room.join` | info | A spectator's ticket made it a full visitor in place (OP-191) | socket fields |
+| `party_started` | `room.play` | info | A party game began at the Old Stump, in its own room (OP-314) | socket fields; `owls` (visitors), `bots` (park owls in the other seats) |
+| `party_refused` | `room.play` | info | An owl was turned away at the Old Stump, or a start could not be (OP-314) | socket fields; `reason`: `full`, `closing`, `few` |
+| `party_ended` | `room.play` | info | A party game ended before its last round, once (OP-314) | `room`; `why`: `finished`, `restart`, `empty`; `round`; `owls` (visitors) |
+| `party_paid` | `room.play` | info | A finished party game's feathers reached one visitor (OP-314) | `room`; `place`; `feathers`; `games` (party games paid today) |
 | `read_failed` | many | error, warn | Something could not be read; what stands instead is in `msg`. Many places, below | below |
 | `write_failed` | many | error, warn | Something was not kept or not told; what follows is in `msg`. Many places, below | below |
 | `send_failed` | many | error, warn | A message or a close did not go. Several places, below | below |
@@ -347,9 +355,10 @@ No call logs a reserved event yet, so none has a component or level; `worker.fra
 
 ## Every event, checked
 
-`LOG_EVENTS` holds 62 events, every one in the table above: `log_field_refused`,
+`LOG_EVENTS` holds 68 events, every one in the table above: `log_field_refused`,
 `signing_key_missing`, `signing_key_refused`, `pass_issued`, `pass_verified`, `pass_rejected`, `claim_moved`,
-`claim_in_use`, `order_protect_mailed`, `order_protect_unsent`, `room_join_ok`,
+`claim_in_use`, `referral_invited`, `referral_refused`, `referral_thanked`, `referral_held`,
+`order_protect_mailed`, `order_protect_unsent`, `room_join_ok`,
 `room_join_refused`, `room_leave`, `reconnect_ok`, `queue_enter`, `queue_admit`, `queue_depth`,
 `tick_latency_p95`, `emote_throttled`, `position_rejected`, `webhook_received`,
 `webhook_rejected`, `webhook_duplicate`, `webhook_failed`, `order_recorded`, `store_unreachable`,

@@ -13,6 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@heycatch/sdk": "0.8.5",
     "@owl-park/shared": "workspace:*",
     "matter-js": "0.20.0",
     "phaser": "3.90.0"

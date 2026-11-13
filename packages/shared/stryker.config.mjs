@@ -51,5 +51,8 @@ export default strykerOptions(
     plugins: [import.meta.resolve('@stryker-mutator/vitest-runner'), import.meta.resolve('@stryker-mutator/typescript-checker')],
     // The tests as `vitest run` has them, with longer to finish (vitest.stryker.config.mjs).
     vitest: { configFile: 'vitest.stryker.config.mjs' },
+    // The instrumented floor baseline took 4m27s locally and exceeded 5m on CI (OP-317).
+    // Keep every baseline test; allow slower runners to finish before mutation testing begins.
+    dryRunTimeoutMinutes: process.env['MUTATION_SHARD'] === 'floor' ? 10 : 5,
   },
 );

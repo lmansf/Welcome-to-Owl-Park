@@ -1,12 +1,13 @@
 /**
- * Which owl are you (OP-076): the quiz's rules, pure so the tests run them exactly as the page does.
- * The words, pictures and points live in whichOwlBank.ts. A run draws QUIZ_CARDS cards from the
- * bank (seeded, so a run can be replayed in a test, and a retake with a new seed draws a new set),
- * adds up each answer's points, and the nature with the most wins. A tie goes to the nature that
- * scored first in the run. The colour card never touches the nature, and the answers themselves are
- * kept nowhere: only the result (species and colours) becomes the owl's look.
+ * Which owl are you (OP-076, OP-330): the quiz's rules, pure so the tests run them exactly as the page
+ * does. The words, pictures and points live in whichOwlBank.ts. A run asks one opener, QUIZ_MIDDLE
+ * middle cards and one closer from the bank (seeded, so a run can be replayed in a test, and a retake
+ * with a new seed draws a new set), each card's answers in a seeded order of their own. It adds up
+ * each answer's points, and the nature with the most wins. A tie goes to the nature that scored first
+ * in the run. The colour card never touches the nature, and the answers themselves are kept nowhere:
+ * only the result (species and colours) becomes the owl's look.
  */
-import { COLOUR_SETS, NATURES, WHICH_OWL_BANK, QUIZ_CARDS, QUIZ_MIN_MAIN, type ColourSetId, type Nature, type NatureDef, type QuizAnswer, type QuizCard } from './whichOwlBank';
+import { COLOUR_SETS, NATURES, WHICH_OWL_BANK, QUIZ_CARDS, QUIZ_MIN_MAIN, type ColourSetId, type Nature, type NatureDef, type QuizAnswer, type QuizCard, type QuizSlot } from './whichOwlBank';
 import { getSpecies } from './species';
 import type { OwlLook } from './protocol';
 
@@ -41,23 +42,36 @@ export function coversEveryNature(cards: readonly QuizCard[]): boolean {
   return NATURES.every((n) => (count.get(n.id) ?? 0) >= QUIZ_MIN_MAIN);
 }
 
+function shuffle<T>(items: readonly T[], rand: () => number): T[] {
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [out[i], out[j]] = [out[j]!, out[i]!];
+  }
+  return out;
+}
+
+const ofSlot = (bank: readonly QuizCard[], slot: QuizSlot) => bank.filter((c) => c.slot === slot);
+
 /**
- * The cards for one run: QUIZ_CARDS of the bank, in a seeded order, drawn again until every nature
- * has its QUIZ_MIN_MAIN main answers. A bank that cannot cover them in 500 draws gets its first cards.
+ * The cards for one run, in the order asked: one opener, then n - 2 middle cards, then one closer,
+ * each picked in a seeded order, drawn again until every nature has its QUIZ_MIN_MAIN main answers.
+ * Each card comes back with its answers in a seeded order (a copy: the bank is never changed), so no
+ * place on the screen always means the same owl. A bank that cannot cover every nature in 500 draws
+ * gets its first opener, middle cards and closer, answers in the bank's order.
  */
 export function drawCards(seed: string, bank: readonly QuizCard[] = WHICH_OWL_BANK, n = QUIZ_CARDS): QuizCard[] {
   const rand = seededRandom(seed);
-  const take = Math.min(n, bank.length);
+  const open = ofSlot(bank, 'open');
+  const middle = ofSlot(bank, 'middle');
+  const close = ofSlot(bank, 'close');
+  const middleCount = Math.min(Math.max(0, n - (open.length ? 1 : 0) - (close.length ? 1 : 0)), middle.length);
+  const pick = (o: readonly QuizCard[], m: readonly QuizCard[], c: readonly QuizCard[]) => [...o.slice(0, 1), ...m.slice(0, middleCount), ...c.slice(0, 1)];
   for (let tries = 0; tries < 500; tries++) {
-    const pool = [...bank];
-    for (let i = pool.length - 1; i > 0; i--) {
-      const j = Math.floor(rand() * (i + 1));
-      [pool[i], pool[j]] = [pool[j]!, pool[i]!];
-    }
-    const cards = pool.slice(0, take);
-    if (coversEveryNature(cards)) return cards;
+    const cards = pick(shuffle(open, rand), shuffle(middle, rand), shuffle(close, rand));
+    if (coversEveryNature(cards)) return cards.map((c) => ({ ...c, answers: shuffle(c.answers, rand) }));
   }
-  return bank.slice(0, take);
+  return pick(open, middle, close);
 }
 
 /** The nature a run's answers point to: the most points, and on a tie the nature that scored first. */

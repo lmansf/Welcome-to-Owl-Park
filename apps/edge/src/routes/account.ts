@@ -3,6 +3,7 @@ import { type Logger, hashForLog } from '@owl-park/shared';
 import { accountRoute, accountsOn, emailKeys, mailSender } from '../accounts';
 import { roomObjectNames } from '../copies';
 import type { Env } from '../env';
+import { googleCallback, googleClient, googleStart } from '../google';
 import { requireSecret } from '../pass';
 import { ROOMS } from '../rooms';
 import { ACCOUNT_BODY_MAX, CORS, clientIp, json, passFrom, readJson } from './http';
@@ -34,11 +35,13 @@ export async function tellMoved(env: Env, log: Logger, cid: string, dev: string)
 export async function account(c: RouteCtx): Promise<Response> {
   const { request, env, url, log } = c;
   if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
+  const path = url.pathname.slice('/api/account/'.length);
+  if (path === 'google' || path.startsWith('google/')) return google(c, path);
   if (!accountsOn(env) || request.method !== 'POST') return json({ error: 'not found' }, 404);
   if (Number(request.headers.get('Content-Length') ?? 0) > ACCOUNT_BODY_MAX) return json({ error: 'too large' }, 413);
   const body = await readJson(request);
   if (!body) return json({ error: 'bad request' }, 400);
-  const r = await accountRoute(url.pathname.slice('/api/account/'.length), body, {
+  const r = await accountRoute(path, body, {
     rpc: collections(env),
     secret: requireSecret(env, url),
     keys: emailKeys(env),
@@ -51,4 +54,40 @@ export async function account(c: RouteCtx): Promise<Response> {
     now: Date.now(),
   });
   return r ? json(r.body, r.status) : json({ error: 'not found' }, 404);
+}
+
+/**
+ * Sign in with Google (OP-313, google.ts): whether it is ready, its start and Google's way back. Every
+ * one is a 404 unless GOOGLE_SIGNIN is on and Google's client and the accounts' key are set.
+ */
+async function google(c: RouteCtx, path: string): Promise<Response> {
+  const { request, env, url, log } = c;
+  const client = googleClient(env);
+  const keys = emailKeys(env);
+  if (!client || !keys) return json({ error: 'not found' }, 404);
+  if (path === 'google' && request.method === 'GET') return json({ ok: true, ready: true });
+  const start = path === 'google/start' && request.method === 'POST';
+  const back = path === 'google/callback' && request.method === 'GET';
+  if (!start && !back) return json({ error: 'not found' }, 404);
+  let body: Record<string, unknown> | null = {};
+  if (start) {
+    if (Number(request.headers.get('Content-Length') ?? 0) > ACCOUNT_BODY_MAX) return json({ error: 'too large' }, 413);
+    body = await readJson(request);
+    if (!body) return json({ error: 'bad request' }, 400);
+  }
+  const deps = {
+    rpc: collections(env),
+    client,
+    secret: requireSecret(env, url),
+    keys,
+    origin: url.origin,
+    // Only protecting needs the page's owl: bringing one here works from a screen whose owl has moved.
+    cid: start && body['for'] === 'protect' ? ((await passFrom(request, env, log))?.cid ?? null) : null,
+    ip: clientIp(request, env),
+    cookies: request.headers.get('Cookie'),
+    fetch: (input: RequestInfo | URL, init?: RequestInit) => fetch(input, init),
+    log,
+    now: Date.now(),
+  };
+  return start ? googleStart(body, deps) : googleCallback(url.searchParams, deps);
 }

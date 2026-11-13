@@ -1,10 +1,11 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { mapCard, openPark, state, travelTo, walkToDoor } from './helpers';
+import { frames, mapCard, openPark, state, travelTo, walkToDoor } from './helpers';
 
 /**
- * Travel from the Menu's map (OP-130). A place lights up once the owl has walked into it, and its
- * card's button, held, travels there; the owl's own nest is always there. Into the park only through
+ * Travel from the Menu's map (OP-130). Every place is lit from the start (the owner's "whole map
+ * unlocked", Nov 8), one walked into sparkles the first time the map shows it, and a card's button,
+ * held, travels there; the owl's own nest is always there. Into the park only through
  * the front gate: a place inside the park offers the gate instead until the owl has walked through
  * the turnstiles, and going home puts it outside again. On this device (the local mode), and through
  * the room server, which keeps the map with the owl and turns a travel in away without the gate.
@@ -37,16 +38,16 @@ async function walkedBefore(page: Page, collector: string, places: string[]): Pr
 test.describe.configure({ timeout: 120_000 });
 
 test.describe('travel from the map (OP-130)', () => {
-  test('a place lights up once walked into, with a sparkle; its card, held, travels there; the nest is always there', async ({ page }) => {
+  test('every place is lit from the start, one walked into sparkles once; its card, held, travels there; the nest is always there', async ({ page }) => {
     test.skip(isEdge(), 'on this device; through the room server below');
     await openPark(page, { room: 'homes', collector: `e2e-travel-lit-${test.info().project.name}` });
     const menu = page.getByRole('dialog', { name: 'Menu' });
-    // The street is walked into; the gate not yet: its card says how it lights up, and offers nothing.
+    // Only the street is walked into, and still the gate is lit and its card travels there.
     let card = await mapCard(page, 'lobby');
-    await expect(card).toContainText('Walk there once, and you can travel there from the map.');
-    await expect(card.locator('[data-travel]')).toHaveCount(0);
+    await expect(card.locator('[data-travel]')).toHaveText('Travel to the gate');
     await expect(menu.locator('button.pin[data-place="homes"]')).toHaveAttribute('data-lit', '');
-    await expect(menu.locator('button.pin[data-place="lobby"]')).toHaveClass(/unlit/);
+    await expect(menu.locator('button.pin[data-place="lobby"]')).toHaveAttribute('data-lit', '');
+    await expect(menu.locator('button.pin.unlit')).toHaveCount(0);
     await expect(menu.locator('button.pin[data-place="nest"]')).toHaveAttribute('data-lit', '');
     // Closed arches are no place to tap.
     await expect(menu.locator('button.pin[data-place="closed-a"]')).toHaveCount(0);
@@ -115,6 +116,28 @@ test.describe('travel from the map (OP-130)', () => {
     await expect(card).toContainText('Enter the park through the gate first.');
   });
 
+  test('on the new map the Party Grove is a place like any other: signed back into the Great Hollow, one sign at a time, and travel goes there', async ({ page }) => {
+    test.skip(isEdge(), 'on this device');
+    await page.addInitScript(() => {
+      try {
+        sessionStorage.setItem('owl-park-map', '3');
+      } catch {
+        // A browser that keeps nothing walks today's park.
+      }
+    });
+    await openPark(page, { room: 'hub', spawn: 'default', collector: `e2e-travel-grove-${test.info().project.name}` });
+    await expect.poll(async () => (await state(page)).doorSigns, { timeout: 15_000 }).toContain('Back into the Great Hollow');
+    // One doorway at a time is named (OP-309): the way back, which the owl lands beside, and no chips for the
+    // rest at the screen's edges, on a phone or a computer.
+    await expect.poll(async () => (await state(page)).signShown, { timeout: 10_000 }).toBe('Back into the Great Hollow');
+    expect(await page.locator('#hud .hint').count()).toBeLessThanOrEqual(1);
+    // Through the trunk's door into the Great Hollow, and travel back from the map, never walked to before.
+    await walkToDoor(page, 'to-lobby');
+    await inRoom(page, 'm3-hall');
+    await travelTo(page, 'hub');
+    await inRoom(page, 'hub');
+  });
+
   test('M opens the map; its places and the travel button answer keys', async ({ page, isMobile }) => {
     test.skip(isEdge() || isMobile, 'a keyboard, on this device');
     await openPark(page, { room: 'homes', collector: 'e2e-travel-keys' });
@@ -142,9 +165,14 @@ test.describe('travel from the map (OP-130)', () => {
     // A new page for the same owl: the room server kept its map, and the gate walked through.
     await openPark(page, { transport: 'edge', room: 'market' });
     await expect.poll(async () => (await state(page)).travel, { timeout: 15_000 }).toEqual({ places: ['hub', 'grove', 'market'], gate: true });
-    // Realm to realm.
+    // Realm to realm, trip after trip (OP-358): the room server has the owl through the gate from the rooms it let it into.
     await travelTo(page, 'grove');
     await inRoom(page, 'grove');
+    await travelTo(page, 'market');
+    await inRoom(page, 'market');
+    await travelTo(page, 'grove');
+    await inRoom(page, 'grove');
+    await expect.poll(async () => (await state(page)).travel.gate, { timeout: 15_000 }).toBe(true);
     // Home: outside the park, so the room server forgets the gate.
     await travelTo(page, 'nest');
     await inRoom(page, /^nest-[a-z0-9]{8}$/);
@@ -162,5 +190,46 @@ test.describe('travel from the map (OP-130)', () => {
     await expect(page.getByText('Enter the park through the gate first.')).toBeVisible({ timeout: 20_000 });
     await inRoom(page, home);
     await expect.poll(async () => (await state(page)).travel.gate).toBe(false);
+  });
+
+  test('with the room out of reach the map still travels, trip after trip, once the owl has walked through the turnstiles (OP-358)', async ({ page }) => {
+    test.skip(!isEdge(), 'a page the Worker answers while no room lets its owl in');
+    // A network that lets pages through and not sockets: every room's socket closes as it opens, while
+    // the Worker goes on answering. It has seen this owl walk into no room, so its map says "not
+    // through the gate"; the page, which walked the owl through, is the one that knows.
+    await page.routeWebSocket(/\/ws\//, (ws) => ws.close());
+    await page.addInitScript(() => {
+      try {
+        sessionStorage.setItem('owl-park-map', '3');
+      } catch {
+        // A browser that keeps nothing walks today's park.
+      }
+    });
+    /** The Worker's answer about the map, asked as each room is come into: the test goes on only once the page has had it. */
+    const mapAnswered = () => page.waitForResponse((r) => r.url().includes('/api/travel'), { timeout: 30_000 });
+    let answered = mapAnswered();
+    // At the front gate, outside the turnstiles, wandering alone.
+    const q = new URLSearchParams({ transport: 'edge', room: 'lobby', kit: '0', art: 'old' });
+    await page.goto(`/?${q.toString()}`);
+    await page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
+    await expect(page.locator('[data-dot][data-status]')).toHaveAttribute('data-status', 'offline', { timeout: 20_000 });
+    await answered;
+    expect((await state(page)).travel.gate).toBe(false);
+    // Through the turnstiles into the Great Hollow: the page knows it is through.
+    answered = mapAnswered();
+    await walkToDoor(page, 'gate');
+    await inRoom(page, 'm3-hall');
+    await answered;
+    await frames(page, 3);
+    expect((await state(page)).travel.gate, 'in the Great Hollow, through the turnstiles').toBe(true);
+    // Three trips in a row inside the park, each made after the Worker's answer for the room before it.
+    for (const place of ['grove', 'glass', 'market']) {
+      answered = mapAnswered();
+      await travelTo(page, place);
+      await inRoom(page, place);
+      await answered;
+      await frames(page, 3);
+      expect((await state(page)).travel.gate, `in ${place}, after the Worker's answer`).toBe(true);
+    }
   });
 });

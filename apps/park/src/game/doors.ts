@@ -1,4 +1,4 @@
-import { isStreetRoom, distanceToRect, doorTarget, nestDoorIndex, pointInRect, type DoorDef, type Rect, type RoomDef, type Vec2 } from '@owl-park/shared';
+import { isStreetRoom, distanceToRect, doorTarget, nestDoorIndex, pointInRect, type DoorDef, type Rect, type RoomDef, type Vec2, type WalkMap } from '@owl-park/shared';
 import { NEST_ROOM, roomFor } from '../rooms';
 
 /**
@@ -22,6 +22,89 @@ export function takesDoorway(rect: Rect, walkTo: Vec2 | null, fromKeys: boolean,
   const aimed = walkTo !== null && distanceToRect(walkTo, rect) <= DOOR_AIM_PX;
   if (sideView) return !fromKeys && aimed;
   return fromKeys || walkTo === null || aimed;
+}
+
+/**
+ * The way back waits for a fresh push. An owl walks into a doorway with a key or the thumbstick held,
+ * and is still holding it as the next room comes in. Where the two rooms' doorways lie the same way
+ * (up into the turnstiles and up into the knothole they open on; a nest's door and the street's), the
+ * same push walked it straight back out, and in again, for as long as it was held (the play log, Nov 8
+ * to 10: five of the seven trips from the Great Hollow up to the Treetop Commons were back within five
+ * seconds). So the doorway back where an owl just came from stays shut to it until it has let go once.
+ *
+ * `waiting` is true from the moment the owl comes in. It holds while a way is still `held`, and while a
+ * screen that takes the keys covers the room (`covered`): held keys read as let go under one. `rested`
+ * is the letting go itself, counted as it happens (Keys.rests) since the owl took the doorway: a key let
+ * go and pressed again between two looks, as a quick thumb does on a slow phone, is a fresh push too.
+ *
+ * TODO-DOCS (OP-333): docs/ARCHITECTURE.md's client rules, where a walk takes a doorway: the doorway
+ * back where an owl came from waits until the keys or the thumbstick held as it came in are let go
+ * (seen from above the owl stops at its foot; seen from the side a held up does not take it, a new
+ * press does). The check: apps/park/e2e/wayBack.spec.ts.
+ */
+export function backWaits(waiting: boolean, held: boolean, covered: boolean, rested = false): boolean {
+  return waiting && !rested && (held || covered);
+}
+
+/**
+ * A direction held across a change of view is not a walk (OP-346). A doorway seen from the side is
+ * taken with up, and up is still held as the next room comes in: seen from above that is a walk north,
+ * and an owl out of a course marched across the Great Hollow with nothing pressed afresh (1,000 px in
+ * three seconds, measured). The other way round, the push that walked an owl into a course's doorway
+ * walked it on toward the first pit before the room had been read. Between two rooms seen the same way
+ * a held direction carries on as it always has: there it still points where the owl was going.
+ *
+ * The direction the owl came in with (`held`, as the room starts), or null when it is free to walk:
+ * the room it left was seen the same way (`fromSide`, undefined for an owl that came by no doorway),
+ * nothing is held, or the keys were let go on the way (`rested`, Keys.rests).
+ *
+ * TODO-DOCS (OP-346): docs/ARCHITECTURE.md's client rules, beside the way back (OP-333): a direction
+ * held through a doorway between a side view and a view from above does not walk the owl until it is
+ * let go or points elsewhere. The check: apps/park/e2e/wayBack.spec.ts.
+ */
+export function carriedIn(fromSide: boolean | undefined, side: boolean, held: Vec2 | null, rested: boolean): Vec2 | null {
+  if (fromSide === undefined || fromSide === side || rested || !held) return null;
+  return { x: held.x, y: held.y };
+}
+
+/**
+ * How far a held direction may turn (the cosine of the angle) and still be the one the owl came in
+ * with (carriedIn): a thumbstick wavers, a new push points elsewhere. Under the 45 degrees between two
+ * neighbouring ways of the walking keys, so any key added or let go is a new push.
+ */
+export const CARRIED_COS = Math.cos((40 * Math.PI) / 180);
+
+/** The direction the owl came in with, while it is still held (carriedIn): null once it is let go or points elsewhere. */
+export function stillCarried(carried: Vec2 | null, held: Vec2 | null): Vec2 | null {
+  if (!carried || !held) return null;
+  return carried.x * held.x + carried.y * held.y >= CARRIED_COS ? carried : null;
+}
+
+/** The push held as a course's fall put the owl back, and how often the keys had been let go by then (heldAtFall). */
+export interface HeldAtFall {
+  dir: Vec2;
+  rests: number;
+}
+
+/**
+ * A push still held as a fall puts the owl back is not a walk (OP-360). A fall puts the owl on its
+ * bench, a step from a ledge's end, and a thumbstick held through the fall walked it straight off
+ * again: the play log has falls one and two seconds apart, the owl back in the water before its
+ * player had seen where it stood. So the push held at the fall waits, as one held through a doorway
+ * between two views does (carriedIn), until it is let go or points elsewhere (stillHeldSinceFall).
+ * Null with nothing held.
+ *
+ * TODO-DOCS (OP-360): docs/ARCHITECTURE.md's client rules, beside the push held through a doorway
+ * (OP-346): a push held as a course's fall puts the owl back does not walk it until it is let go or
+ * points elsewhere. The check: apps/park/e2e/course.spec.ts.
+ */
+export function heldAtFall(held: Vec2 | null, rests: number): HeldAtFall | null {
+  return held ? { dir: { x: held.x, y: held.y }, rests } : null;
+}
+
+/** Whether the push held at a fall is still held: not let go since (the keys' rests, counted as they happen) and pointing the same way (stillCarried). */
+export function stillHeldSinceFall(then: HeldAtFall | null, held: Vec2 | null, rests: number): boolean {
+  return then !== null && rests === then.rests && stillCarried(then.dir, held) !== null;
 }
 
 /**
@@ -54,7 +137,7 @@ export const WAY_DOOR_PX = 8;
  * street) but the one the tap is aimed at, a little wider than drawn, and none the owl at `pos`
  * already stands in. A leg that ended by one on its way would go through it.
  */
-export function doorwaysOff(room: RoomDef, pos: Vec2, aim: Vec2, closed: (roomId: string) => boolean, map: 1 | 2 = 1): Rect[] {
+export function doorwaysOff(room: RoomDef, pos: Vec2, aim: Vec2, closed: (roomId: string) => boolean, map: WalkMap = 1): Rect[] {
   const m = WAY_DOOR_PX;
   return room.doors
     .filter((d) => {
@@ -86,7 +169,7 @@ export function roomsAhead(
   walkTo: Vec2 | null,
   fromKeys: boolean,
   closed: (roomId: string) => boolean,
-  map: 1 | 2 = 1,
+  map: WalkMap = 1,
   sideView = false,
 ): RoomDef[] {
   const out: RoomDef[] = [];

@@ -1,11 +1,11 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { openPark, settleCamera, state } from './helpers';
 
 /**
  * The tree's level 5, the canopy (OP-158), in two rooms joined at the front gate: the nests street
- * (three screens, outside the gate: bough 6 at its far west end, the nest doors and the trunk) and the
- * canopy (three screens inside: the entrance arch with the stair down to level 4, the lounge and gift
- * shop, and bough 7). On the local transport a gated room is open.
+ * (three screens, outside the gate: bough 6 at its far west end, shut for now, the nest doors and the
+ * trunk) and the canopy (three screens inside: the entrance arch with the stair down to level 4, the
+ * lounge and gift shop, and bough 7, shut for now). On the local transport a gated room is open.
  */
 
 const GROUND = 770;
@@ -34,8 +34,8 @@ test.describe('the tree, level 5 (OP-158)', () => {
       ['tree-l5-w1-fg', 1.2],
       ['tree-l5-0-fg', 1.2],
     ]);
-    // Bough 6's six ledges, painted with no line drawn over them (OP-206), and the front gate marked (the far end's doorway is shut).
-    expect(s.tree).toEqual({ fronts: 0, raised: 0, shades: 0, lips: 0, marks: 1, behind: false });
+    // The front gate marked; bough 6 shut behind a fallen branch with the closed way beyond, and boards over the spare nest (OP-220).
+    expect(s.tree).toEqual({ fronts: 0, raised: 0, shades: 0, lips: 0, marks: 1, barriers: 2, landings: 0, behind: false });
   });
 
   test('the canopy opens on the ground line, its scrolling layers at their own rates', async ({ page }) => {
@@ -55,8 +55,8 @@ test.describe('the tree, level 5 (OP-158)', () => {
       ['tree-l5-e2-fg', 1.2],
       ['tree-l5-e3-fg', 1.2],
     ]);
-    // Bough 7's six ledges, painted with no line over them (OP-206), the way back out to the street and the stair down marked.
-    expect(s.tree).toEqual({ fronts: 0, raised: 0, shades: 0, lips: 0, marks: 2, behind: false });
+    // The way back out to the street and the stair down marked; bough 7 shut behind a fallen branch (OP-220).
+    expect(s.tree).toEqual({ fronts: 0, raised: 0, shades: 0, lips: 0, marks: 2, barriers: 1, landings: 0, behind: false });
   });
 
   for (const [room, spawn, screen] of [['l5-street', 'west', 0], ['l5', 'east', 2]] as const) {

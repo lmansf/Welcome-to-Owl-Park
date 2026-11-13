@@ -6,7 +6,12 @@ import {
   checkItem,
   checkPurchase,
   checkPlayer,
+  checkPlayEvent,
   checkRealmVisit,
+  checkQuestProgress,
+  checkQuestRef,
+  checkQuestStepRef,
+  checkRoomStay,
   checkRow,
   checkSession,
   gameTables,
@@ -17,8 +22,13 @@ import {
   type FeedbackRow,
   type LogRow,
   type PlayerRow,
+  type PlayEventRow,
   type PurchaseRow,
+  type QuestProgressRow,
+  type QuestRefRow,
+  type QuestStepRefRow,
   type RealmVisitRow,
+  type RoomStayRow,
   type SessionRow,
   type Tables,
 } from '../src/handler.ts';
@@ -52,6 +62,10 @@ function memoryTables(): Tables & {
   feedback: FeedbackRow[];
   purchases: PurchaseRow[];
   contacts: ContactRow[];
+  roomStays: Array<{ stay_id: string; session_id: string; realm: string; entered_at: string; left_at: string | null; exit_reason: string | null }>;
+  questSteps: Array<{ progress_id: string; run_id: string; step_no: number; started_at: string; completed_at: string | null; outcome: string | null }>;
+  quests: { quests: QuestRefRow[]; steps: QuestStepRefRow[] } | null;
+  played: PlayEventRow[];
 } {
   const rows: LogRow[] = [];
   const purchases: PurchaseRow[] = [];
@@ -61,7 +75,57 @@ function memoryTables(): Tables & {
   const sessions: SessionRow[] = [];
   const realmVisits: RealmVisitRow[] = [];
   const feedback: FeedbackRow[] = [];
+  const roomStays: Array<{ stay_id: string; session_id: string; realm: string; entered_at: string; left_at: string | null; exit_reason: string | null }> = [];
+  const questSteps: Array<{ progress_id: string; run_id: string; step_no: number; started_at: string; completed_at: string | null; outcome: string | null }> = [];
+  const tables = { quests: null as { quests: QuestRefRow[]; steps: QuestStepRefRow[] } | null };
+  const played: PlayEventRow[] = [];
   return {
+    played,
+    async addPlayEvents(batch: PlayEventRow[]) {
+      let kept = 0;
+      for (const p of batch) if (!played.some((x) => x.event_id === p.event_id) && played.push(p)) kept++;
+      return kept;
+    },
+    questSteps,
+    get quests() {
+      return tables.quests;
+    },
+    async setQuestCatalogue(quests: QuestRefRow[], steps: QuestStepRefRow[]) {
+      tables.quests = { quests, steps };
+    },
+    // As game.apply_quest_progress does it (sql/quest_progress.sql), in order.
+    async addQuestProgress(batch: QuestProgressRow[]) {
+      let changed = 0;
+      for (const e of batch) {
+        if (e.event === 'start') {
+          if (questSteps.some((x) => x.progress_id === e.progress_id)) continue;
+          for (const x of questSteps) if (x.run_id === e.run_id && x.completed_at === null) Object.assign(x, { completed_at: e.at, outcome: 'done' });
+          questSteps.push({ progress_id: e.progress_id, run_id: e.run_id, step_no: e.step_no, started_at: e.at, completed_at: null, outcome: null });
+          changed++;
+        } else {
+          const x = questSteps.find((y) => y.progress_id === e.progress_id && y.completed_at === null);
+          if (x && Object.assign(x, { completed_at: e.at, outcome: e.outcome })) changed++;
+        }
+      }
+      return changed;
+    },
+    roomStays,
+    // As game.apply_room_stays does it (sql/room_stays.sql), in order.
+    async addRoomStays(batch: RoomStayRow[]) {
+      let changed = 0;
+      for (const e of batch) {
+        if (e.event === 'enter') {
+          if (roomStays.some((x) => x.stay_id === e.stay_id)) continue;
+          for (const x of roomStays) if (x.session_id === e.session_id && x.left_at === null) Object.assign(x, { left_at: e.at, exit_reason: 'moved' });
+          roomStays.push({ stay_id: e.stay_id, session_id: e.session_id, realm: e.realm, entered_at: e.at, left_at: null, exit_reason: null });
+          changed++;
+        } else {
+          const x = roomStays.find((y) => y.stay_id === e.stay_id && y.left_at === null);
+          if (x && Object.assign(x, { left_at: e.at, exit_reason: e.exit_reason })) changed++;
+        }
+      }
+      return changed;
+    },
     rows,
     catalogue,
     players,
@@ -191,6 +255,8 @@ describe('the park log (OP-107)', () => {
 
   it('checks every field of a row', () => {
     expect(checkRow(row(1))).toMatchObject({ event_id: uuid(1), backfill: false });
+    expect(checkRow(row(1, { realm: 'm3-hall' }))).toMatchObject({ realm: 'm3-hall' });
+    expect(checkRow(row(1, { realm: 'nest-abcdefgh' }))).toBe('realm');
     expect(checkRow(row(1, { realm: null, session_id: null, device_class: null, first_entry_at: null, backfill: true }))).toMatchObject({ realm: null, session_id: null, backfill: true });
     expect(checkRow(row(1, { collectible_id: 'furniture:rug' }))).toMatchObject({ collectible_id: 'furniture:rug' });
     expect(checkRow(row(1, { collectible_id: 'Not An Id' }))).toBe('collectible_id');
@@ -257,7 +323,7 @@ describe('the player stats (OP-111)', () => {
     expect(await (await post({ kind: 'player', rows: [version(1), version(2, { owl_type: 'snowy', change_reason: 'chosen' })] }, { tables })).json()).toEqual({ ok: true, kept: 2, duplicates: 0, skipped: 0 });
     expect(await (await post({ kind: 'player', rows: [version(1)] }, { tables })).json()).toEqual({ ok: true, kept: 0, duplicates: 1, skipped: 0 });
     expect(await (await post({ kind: 'session', rows: [visit(10), visit(10)] }, { tables })).json()).toEqual({ ok: true, kept: 1, duplicates: 1, skipped: 0 });
-    expect(tables.sessions[0]).toEqual({ ...visit(10), visitor_kind: null });
+    expect(tables.sessions[0]).toEqual({ ...visit(10), visitor_kind: null, is_test: false });
   });
 
   it('takes an owl kind only from the fixed list and a colour only as a hex value, and a visit only forwards in time', () => {
@@ -268,8 +334,11 @@ describe('the player stats (OP-111)', () => {
     expect(checkPlayer(version(1, { change_reason: 'because' }))).toBe('change_reason');
     expect(checkPlayer(version(1, { collector_id: 'c_abcdefghij' }))).toBe('collector_id');
     // A visit from a Worker before OP-192 has no kind: kept without one.
-    expect(checkSession(visit(1))).toEqual({ ...visit(1), visitor_kind: null });
-    expect(checkSession(visit(1, { visitor_kind: 'spectator' }))).toEqual(visit(1, { visitor_kind: 'spectator' }));
+    expect(checkSession(visit(1))).toEqual({ ...visit(1), visitor_kind: null, is_test: false });
+    expect(checkSession(visit(1, { visitor_kind: 'spectator' }))).toEqual(visit(1, { visitor_kind: 'spectator', is_test: false }));
+    // One of our own test visits is kept, marked; a Worker from before the mark sends none (a player's visit).
+    expect(checkSession(visit(1, { is_test: true }))).toEqual({ ...visit(1), visitor_kind: null, is_test: true });
+    expect(checkSession(visit(1, { is_test: 'yes' }))).toBe('is_test');
     expect(checkSession(visit(1, { visitor_kind: 'free' }))).toBe('visitor_kind');
     expect(checkSession(visit(1, { ended_at: '2026-10-19T15:59:00.000Z' }))).toBe('ended_at');
     expect(checkSession(visit(1, { realms_entered: -1 }))).toBe('realms_entered');
@@ -302,8 +371,10 @@ describe('time per room (OP-113)', () => {
     expect(tables.realmVisits).toEqual([stay(1)]);
   });
 
-  it('takes a room only as a neutral word, its kind and how the owl came in only from their lists, and a time only forwards', () => {
+  it('takes only a neutral room slug, known kinds and entry sources, and time that goes forwards', () => {
     expect(checkRealmVisit(stay(1))).toEqual(stay(1));
+    const hollow = stay(1, { realm: 'm3-hall', realm_kind: 'hub', map_id: 2 });
+    expect(checkRealmVisit(hollow)).toEqual(hollow);
     expect(checkRealmVisit(stay(1, { realm: 'nest-abcdefgh' }))).toBe('realm');
     expect(checkRealmVisit(stay(1, { realm: null }))).toBe('realm');
     expect(checkRealmVisit(stay(1, { realm_kind: 'castle' }))).toBe('realm_kind');
@@ -353,6 +424,8 @@ describe("visitors' feedback (OP-166)", () => {
 
   it('takes the words only in the park\'s limits, the kind only from its list, and nothing that could name anyone', () => {
     expect(checkFeedback(note(1))).toEqual(note(1));
+    const hollow = note(1, { realm: 'm3-hall', realm_kind: 'hub' });
+    expect(checkFeedback(hollow)).toEqual(hollow);
     expect(checkFeedback(note(1, { kind: 'complaint' }))).toBe('kind');
     expect(checkFeedback(note(1, { body: 'hi' }))).toBe('body');
     expect(checkFeedback(note(1, { body: 'x'.repeat(1001) }))).toBe('body');
@@ -439,12 +512,234 @@ describe('tickets and buyers (OP-192)', () => {
   });
 });
 
+describe('room stays, live (OP-265)', () => {
+  const enter = (i: number, extra: Record<string, unknown> = {}) => ({
+    event: 'enter',
+    stay_id: uuid(i),
+    session_id: uuid(900),
+    collector_id: A,
+    at: `2026-11-03T16:0${i}:00.000Z`,
+    realm: 'grove',
+    realm_kind: 'realm',
+    map_id: 1,
+    entry_source: 'walked',
+    ...extra,
+  });
+  const leave = (i: number, at: string, reason: string) => ({ event: 'leave', stay_id: uuid(i), at, exit_reason: reason });
+
+  it('opens a stay as the owl comes in, closes it as moved when the next opens, and changes nothing when sent again', async () => {
+    const tables = memoryTables();
+    const batch = { kind: 'room_stay', rows: [enter(1, { entry_source: 'spawn', realm: 'lobby', realm_kind: 'hub' }), enter(2, { realm: 'l5-street', realm_kind: 'hub' }), leave(2, '2026-11-03T16:05:00.000Z', 'logoff')] };
+    expect(await (await post(batch, { tables })).json()).toEqual({ ok: true, kept: 3, duplicates: 0, skipped: 0 });
+    expect(await (await post(batch, { tables })).json()).toEqual({ ok: true, kept: 0, duplicates: 3, skipped: 0 });
+    expect(tables.roomStays.map((r) => [r.realm, r.left_at, r.exit_reason])).toEqual([
+      ['lobby', '2026-11-03T16:02:00.000Z', 'moved'],
+      ['l5-street', '2026-11-03T16:05:00.000Z', 'logoff'],
+    ]);
+  });
+
+  it('takes an exit reason and an entry only from their lists, the owl and the visit only as hashes, and no other field', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    expect(checkRoomStay(enter(1))).toEqual(enter(1));
+    expect(checkRoomStay(enter(1, { map_id: undefined }))).toEqual(enter(1));
+    expect(checkRoomStay(leave(1, '2026-11-03T16:05:00Z', 'server_restart'))).toEqual(leave(1, '2026-11-03T16:05:00.000Z', 'server_restart'));
+    expect(checkRoomStay(leave(1, '2026-11-03T16:05:00Z', 'kicked'))).toBe('exit_reason');
+    expect(checkRoomStay(enter(1, { entry_source: 'reconnect' }))).toBe('entry_source');
+    expect(checkRoomStay(enter(1, { event: 'teleport' }))).toBe('event');
+    expect(checkRoomStay(enter(1, { collector_id: 'c_abcdefghij' }))).toBe('collector_id');
+    expect(checkRoomStay(enter(1, { session_id: 'v_visitAAAA1' }))).toBe('session_id');
+    expect(checkRoomStay(enter(1, { realm: 'Grove!' }))).toBe('realm');
+    expect(checkRoomStay(enter(1, { map_id: 3 }))).toBe('map_id');
+    expect(checkRoomStay(enter(1, { at: 'now' }))).toBe('at');
+    expect(checkRoomStay({ ...enter(1), stay_id: 'x' })).toBe('stay_id');
+    // A position, a name or an address is never taken, even when sent.
+    expect(Object.keys(checkRoomStay({ ...enter(1), x: 120, y: 300, name: 'Hoot', ip: '1.2.3.4' }) as object)).toEqual(Object.keys(enter(1)));
+    expect(Object.keys(checkRoomStay({ ...leave(1, '2026-11-03T16:05:00Z', 'moved'), x: 1 }) as object)).toEqual(['event', 'stay_id', 'at', 'exit_reason']);
+  });
+
+});
+
+describe('quest progress (OP-266)', () => {
+  const start = (i: number, extra: Record<string, unknown> = {}) => ({
+    event: 'start',
+    progress_id: uuid(i),
+    run_id: uuid(500),
+    collector_id: A,
+    session_id: uuid(900),
+    quest_id: 'story-welcome',
+    period: '',
+    step_no: i,
+    at: `2026-11-04T16:0${i}:00.000Z`,
+    realm: 'hub',
+    expires_at: null,
+    ...extra,
+  });
+  const end = (i: number, outcome = 'done', extra: Record<string, unknown> = {}) => ({ event: 'end', progress_id: uuid(i), at: `2026-11-04T16:0${i}:30.000Z`, session_id: uuid(900), realm: 'grove', outcome, ...extra });
+  const quest = (extra: Record<string, unknown> = {}) => ({
+    quest_id: 'story-welcome',
+    title: 'Welcome to Owl Park',
+    giver_npc: 'bramble',
+    giver_room: 'hub',
+    quest_type: 'mixed',
+    difficulty: 'easy',
+    length: 'long',
+    cadence: 'story',
+    template: null,
+    step_count: 1,
+    reward_feathers: 50,
+    reward_item: 'leaf-crown~0',
+    requires: [],
+    puzzle_id: null,
+    ...extra,
+  });
+  const step = (n: number, extra: Record<string, unknown> = {}) => ({
+    quest_id: 'story-welcome',
+    step_no: n,
+    goal_kind: n === 1 ? 'talk' : 'hand_in',
+    target_room: 'hub',
+    target_realm_kind: 'hub',
+    target_npc: n === 1 ? 'pip' : 'bramble',
+    target_thing: null,
+    need_count: 1,
+    distinct_only: false,
+    step_text: n === 1 ? 'Talk to Pip at the hub' : 'Hand it in to Bramble',
+    ...extra,
+  });
+  const post = (body: unknown) => new Request('https://log.example/owl-park-log', { method: 'POST', headers: { Authorization: `Bearer ${KEY}` }, body: JSON.stringify(body) });
+
+  it('applies each step in order: a start closes the run step before it, an end closes its own, a batch sent twice changes nothing', async () => {
+    const tables = memoryTables();
+    const batch = { kind: 'quest_progress', rows: [start(1), end(1), start(2), start(3), end(3, 'abandoned')] };
+    const res = await handle(post(batch), { key: KEY, tables });
+    expect(await res.json()).toEqual({ ok: true, kept: 5, duplicates: 0, skipped: 0 });
+    expect(tables.questSteps.map((x) => [x.step_no, x.outcome])).toEqual([
+      [1, 'done'],
+      [2, 'done'],
+      [3, 'abandoned'],
+    ]);
+    const again = await handle(post(batch), { key: KEY, tables });
+    expect(await again.json()).toEqual({ ok: true, kept: 0, duplicates: 5, skipped: 0 });
+  });
+
+  it('checks every field, and takes nothing it does not know: never a code, a name or a position', () => {
+    expect(checkQuestProgress(start(1))).toEqual(start(1));
+    expect(checkQuestProgress(start(1, { period: '2026-11-04', expires_at: '2026-11-05T05:00:00Z' }))).toMatchObject({ period: '2026-11-04', expires_at: '2026-11-05T05:00:00.000Z' });
+    expect(checkQuestProgress(start(1, { period: 'W2026-11-02' }))).toMatchObject({ period: 'W2026-11-02' });
+    expect(checkQuestProgress(start(1, { period: 'M2026-11', realm: null, session_id: null }))).toMatchObject({ realm: null, session_id: null });
+    expect(checkQuestProgress(start(1, { collector_id: 'c_abcdefghij' }))).toBe('collector_id');
+    expect(checkQuestProgress(start(1, { quest_id: 'Story Welcome' }))).toBe('quest_id');
+    expect(checkQuestProgress(start(1, { period: 'yesterday' }))).toBe('period');
+    expect(checkQuestProgress(start(1, { step_no: 0 }))).toBe('step_no');
+    expect(checkQuestProgress(start(1, { expires_at: 'soon' }))).toBe('expires_at');
+    expect(checkQuestProgress(start(1, { realm: 'The Grove' }))).toBe('realm');
+    expect(checkQuestProgress(start(1, { run_id: 'x' }))).toBe('run_id');
+    expect(checkQuestProgress(end(1, 'won'))).toBe('outcome');
+    expect(checkQuestProgress({ ...end(1), event: 'peek' })).toBe('event');
+    expect(Object.keys(checkQuestProgress({ ...start(1), code: ['moon', 'star'], name: 'Hoot', x: 1 }) as object)).toEqual(Object.keys(start(1)));
+    expect(Object.keys(checkQuestProgress({ ...end(1), code: ['moon'] }) as object)).toEqual(['event', 'progress_id', 'at', 'session_id', 'realm', 'outcome']);
+  });
+
+  it('takes the quest catalogue whole, or refuses it whole', async () => {
+    const tables = memoryTables();
+    const ok = await handle(post({ kind: 'quest_catalogue', version: 'abc', quests: [quest()], steps: [step(1), step(2)] }), { key: KEY, tables });
+    expect(await ok.json()).toEqual({ ok: true, quests: 1, steps: 2 });
+    expect(tables.quests!.steps.map((s) => s.goal_kind)).toEqual(['talk', 'hand_in']);
+    const bad = async (body: Record<string, unknown>) => (await handle(post({ kind: 'quest_catalogue', quests: [quest()], steps: [step(1)], ...body }), { key: KEY, tables })).status;
+    expect(await bad({ quests: [quest({ cadence: 'hourly' })] })).toBe(400);
+    expect(await bad({ quests: [quest(), quest()] })).toBe(400);
+    expect(await bad({ steps: [step(1, { quest_id: 'not-listed' })] })).toBe(400);
+    expect(await bad({ steps: [step(1, { step_text: 'Talk\u0000' })] })).toBe(400);
+    expect(await bad({ steps: [] })).toBe(400);
+    expect(checkQuestRef(quest({ reward_item: 'pick', template: 'leaves', requires: ['story-welcome'], puzzle_id: 'lockbox' }))).toMatchObject({ reward_item: 'pick', puzzle_id: 'lockbox' });
+    expect(checkQuestRef(quest({ title: 'x'.repeat(201) }))).toBeNull();
+    expect(checkQuestStepRef(step(1, { goal_kind: 'fly' }))).toBeNull();
+    expect(checkQuestStepRef(step(1, { target_room: null, target_realm_kind: null, target_thing: 'leaf-pile', need_count: 3, distinct_only: true }))).toMatchObject({ target_room: null, need_count: 3 });
+  });
+});
+
+describe('play events (OP-304)', () => {
+  const ev = (i: number, extra: Record<string, unknown> = {}) => ({
+    event_id: uuid(i),
+    event: 'course_fall',
+    collector_id: A,
+    session_id: uuid(900),
+    run_id: uuid(500),
+    occurred_at: '2026-11-08T02:00:00.000Z',
+    realm: 'trail-1',
+    course_id: 'trail',
+    thing: null,
+    pos_x: 1230,
+    pos_y: 720,
+    ms: null,
+    practice: false,
+    ...extra,
+  });
+  const post = (body: unknown) => new Request('https://log.example/owl-park-log', { method: 'POST', headers: { Authorization: `Bearer ${KEY}` }, body: JSON.stringify(body) });
+
+  it('keeps each event once by its event id, and leaves out a row that fails its check', async () => {
+    const tables = memoryTables();
+    const rows = [ev(1), ev(2, { event: 'course_start', pos_x: null, pos_y: null }), ev(3, { event: 'interact', course_id: null, run_id: null, thing: 'leaf-pile:hub-leaves-1', pos_x: null, pos_y: null }), ev(4, { event: 'teleport' })];
+    const res = await handle(post({ kind: 'play_event', rows }), { key: KEY, tables });
+    expect(await res.json()).toEqual({ ok: true, kept: 3, duplicates: 0, skipped: 1 });
+    const again = await handle(post({ kind: 'play_event', rows: rows.slice(0, 3) }), { key: KEY, tables });
+    expect(await again.json()).toEqual({ ok: true, kept: 0, duplicates: 3, skipped: 0 });
+  });
+
+  it('checks every field, keeps a position for a fall alone, and takes nothing it does not know', () => {
+    expect(checkPlayEvent(ev(1))).toEqual(ev(1));
+    expect(checkPlayEvent(ev(1, { event: 'course_clear', pos_x: null, pos_y: null, ms: 30_000 }))).toMatchObject({ ms: 30_000 });
+    expect(checkPlayEvent(ev(1, { event: 'course_start', pos_x: 10, pos_y: null }))).toBe('pos_x');
+    expect(checkPlayEvent(ev(1, { pos_x: 1.5 }))).toBe('pos_x');
+    expect(checkPlayEvent(ev(1, { pos_y: 1e9 }))).toBe('pos_y');
+    expect(checkPlayEvent(ev(1, { collector_id: 'c_abcdefghij' }))).toBe('collector_id');
+    expect(checkPlayEvent(ev(1, { course_id: null }))).toBe('course_id');
+    expect(checkPlayEvent(ev(1, { course_id: 'Trail One' }))).toBe('course_id');
+    expect(checkPlayEvent(ev(1, { event: 'interact', course_id: null, thing: null, pos_x: null, pos_y: null }))).toBe('thing');
+    expect(checkPlayEvent(ev(1, { thing: '<b>' }))).toBe('thing');
+    expect(checkPlayEvent(ev(1, { realm: 'The Grove' }))).toBe('realm');
+    expect(checkPlayEvent(ev(1, { ms: -1 }))).toBe('ms');
+    expect(checkPlayEvent(ev(1, { practice: 'yes' }))).toBe('practice');
+    expect(checkPlayEvent(ev(1, { occurred_at: 'now' }))).toBe('occurred_at');
+    expect(checkPlayEvent(ev(1, { run_id: 'x' }))).toBe('run_id');
+    expect(Object.keys(checkPlayEvent({ ...ev(1), name: 'Hoot', ip: '1.2.3.4' }) as object)).toEqual(Object.keys(ev(1)));
+  });
+});
+
 describe("the game schema's tables", () => {
+  it('keeps play events (OP-304) once by event id, the rows only in the JSON parameter', async () => {
+    const calls: Array<{ query: string; params: unknown[] }> = [];
+    const db: Db = { unsafe: async (query, params) => (calls.push({ query, params }), [{ event_id: 'x' }]) };
+    const r = checkPlayEvent({ event_id: uuid(1), event: 'interact', collector_id: A, session_id: null, run_id: null, occurred_at: '2026-11-08T02:00:00Z', realm: 'hub', course_id: null, thing: 'leaf-pile:hub-leaves-1', pos_x: null, pos_y: null, ms: null, practice: false }) as PlayEventRow;
+    expect(await gameTables(db).addPlayEvents([r])).toBe(1);
+    expect(calls[0]!.query).toContain('insert into game.play_event');
+    expect(calls[0]!.query).toContain('on conflict (event_id) do nothing');
+    expect(calls[0]!.params).toEqual([JSON.stringify([r])]);
+    expect(calls[0]!.query).not.toContain(A);
+  });
+
   function recorder(answer: unknown = []): Db & { calls: Array<{ query: string; params: unknown[] }> } {
     const calls: Array<{ query: string; params: unknown[] }> = [];
     return { calls, unsafe: async (query, params) => (calls.push({ query, params }), answer) };
   }
 
+  it('applies quest steps and sets the quest catalogue (OP-266) through database functions, the rows only in JSON parameters', async () => {
+    const db = recorder([{ kept: 1 }]);
+    const rows = [checkQuestProgress({ event: 'end', progress_id: uuid(1), at: '2026-11-04T16:00:00Z', session_id: null, realm: null, outcome: 'expired' })] as QuestProgressRow[];
+    expect(await gameTables(db).addQuestProgress(rows)).toBe(1);
+    expect(db.calls[0]!.query).toBe('select game.apply_quest_progress($1::text::jsonb) as kept');
+    expect(db.calls[0]!.params).toEqual([JSON.stringify(rows)]);
+    await gameTables(db).setQuestCatalogue([], []);
+    expect(db.calls[1]!.query).toBe('select game.set_quest_catalogue($1::text::jsonb, $2::text::jsonb)');
+    expect(db.calls[1]!.params).toEqual(['[]', '[]']);
+  });
+
+  it('applies live room stays (OP-265) through the database function, the events only in its JSON parameter', async () => {
+    const db = recorder([{ kept: 2 }]);
+    const rows = [checkRoomStay({ event: 'enter', stay_id: uuid(1), session_id: uuid(900), collector_id: A, at: '2026-11-03T16:00:00Z', realm: 'grove', realm_kind: 'realm', map_id: 1, entry_source: 'walked' }), checkRoomStay({ event: 'leave', stay_id: uuid(1), at: '2026-11-03T16:05:00Z', exit_reason: 'timeout' })] as RoomStayRow[];
+    expect(await gameTables(db).addRoomStays(rows)).toBe(2);
+    expect(db.calls[0]!.query).toBe('select game.apply_room_stays($1::text::jsonb) as kept');
+    expect(db.calls[0]!.params).toEqual([JSON.stringify(rows)]);
+  });
   it('sends a batch as one JSON parameter, skipping rows already there, and counts what the database kept', async () => {
     const db = recorder([{ event_id: uuid(1) }]);
     const r = checkRow(row(1)) as LogRow;

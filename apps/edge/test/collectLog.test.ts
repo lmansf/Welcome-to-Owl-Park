@@ -7,13 +7,16 @@ import {
   collectibleType,
   deviceClass,
   furnitureId,
+  isTestVisit,
   logConfig,
   logRoom,
   orderKey,
   realmKind,
   ROOM_KINDS,
   saltedHash,
+  saltedUuid,
   type FeedbackLogRow,
+  type QuestProgressRow,
   type LogConfig,
   type LogRow,
   type PurchaseRow,
@@ -82,6 +85,14 @@ describe('the collection log (OP-107)', () => {
     expect(logConfig({ ...env, PARK_LOG_URL: 'http://log.example/x' })).toBeNull();
     expect(logConfig({ ...env, PARK_LOG_URL: 'not a url' })).toBeNull();
     expect(logConfig({ ...env, PARK_LOG_URL: 'http://localhost:8790/log' })?.url).toBe('http://localhost:8790/log');
+  });
+
+  it('tells our own test visits by the page\'s word or a headless browser, and a player\'s visit as none', () => {
+    expect(isTestVisit('1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0 Safari/537.36')).toBe(true);
+    expect(isTestVisit(null, 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 HeadlessChrome/141.0.0.0 Safari/537.36')).toBe(true);
+    expect(isTestVisit(null, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0 Safari/537.36')).toBe(false);
+    expect(isTestVisit('0', null)).toBe(false);
+    expect(isTestVisit(null, null)).toBe(false);
   });
 
   it('tells a phone from a desktop and nothing finer, and names rooms by their neutral ids', () => {
@@ -174,14 +185,15 @@ describe('the collection log (OP-107)', () => {
     const t = rig();
     t.book.ensure(CID, undefined, MON);
     await t.log.flush();
-    expect(t.sent.map((s) => s.body.kind)).toEqual(['collect', 'catalogue']);
+    // The quests and their steps follow (OP-266, questLog.test.ts).
+    expect(t.sent.map((s) => s.body.kind)).toEqual(['collect', 'catalogue', 'quest_catalogue']);
     const items = t.sent[1]!.body.items!;
     expect(items).toHaveLength(allVariants().length + FURNITURE.length);
     expect(items.find((i) => i.id === 'witch-hat~3')).toEqual({ id: 'witch-hat~3', kind: 'wear', rarity: 'uncommon', realm: null });
     expect(items.find((i) => i.id === 'furniture:rug')).toEqual({ id: 'furniture:rug', kind: 'furniture', rarity: null, realm: null });
     t.book.grant(CID, 'cape~2', 'quest', MON);
     await t.log.flush();
-    expect(t.sent.map((s) => s.body.kind)).toEqual(['collect', 'catalogue', 'collect']);
+    expect(t.sent.map((s) => s.body.kind)).toEqual(['collect', 'catalogue', 'quest_catalogue', 'collect']);
   });
 
   it('keeps the rows when a send fails, wakes to try again later, and sends them then', async () => {
@@ -382,12 +394,14 @@ describe('the collections object and its log', () => {
     };
     const sent: LogRow[] = [];
     const notes: FeedbackLogRow[] = [];
+    const quests: QuestProgressRow[] = [];
     vi.stubGlobal(
       'fetch',
       vi.fn(async (_url: string, init: RequestInit) => {
         const body = JSON.parse(String(init.body)) as { kind: string; rows?: LogRow[] };
         if (body.kind === 'collect') sent.push(...body.rows!);
         if (body.kind === 'feedback') notes.push(...(body.rows as unknown as FeedbackLogRow[]));
+        if (body.kind === 'quest_progress') quests.push(...(body.rows as unknown as QuestProgressRow[]));
         return new Response('{"ok":true}');
       }),
     );
@@ -396,7 +410,7 @@ describe('the collections object and its log', () => {
     const settle = async () => {
       while (pending.length) await pending.shift();
     };
-    return { obj, sent, notes, settle, alarm: () => alarm };
+    return { obj, sent, notes, quests, settle, alarm: () => alarm };
   }
 
   afterEach(() => vi.unstubAllGlobals());
@@ -430,6 +444,20 @@ describe('the collections object and its log', () => {
     expect(JSON.stringify(t.notes)).not.toContain('Mozilla');
     expect(JSON.stringify(t.notes)).not.toContain('390x844');
     expect((await t.obj.feedback('open', 10)).map((f) => f.text)).toEqual(['The door sticks']);
+  });
+
+  it('sends each quest step with the visit and room the owl is in now, from its live stay (OP-266)', async () => {
+    const t = await objectRig();
+    await t.obj.seen({ cid: CID, pass: PASS, device: 'phone', room: 'hub', entered: true }, { species: 'barn', body: '#7A5C99' });
+    expect((await t.obj.accept(CID, 'story-welcome', 'hub')).ok).toBe(true);
+    await t.obj.questEvent(CID, { kind: 'talk', npc: 'pip' }, 'hub');
+    await t.settle();
+    expect(t.quests.map((r) => (r.event === 'start' ? `start ${r.step_no}` : `end ${r.outcome}`))).toEqual(['start 1', 'end done', 'start 2']);
+    expect(t.quests[0]).toMatchObject({ quest_id: 'story-welcome', realm: 'hub', session_id: await saltedUuid(CONFIG.salt, 'session', PASS) });
+    // An owl in no room: the step still goes, with no visit or room.
+    await t.obj.accept('c_otherowlxx', 'story-welcome', 'hub');
+    await t.settle();
+    expect(t.quests.at(-1)).toMatchObject({ event: 'start', session_id: null, realm: null });
   });
 
   it('backfills on the owner\'s word', async () => {

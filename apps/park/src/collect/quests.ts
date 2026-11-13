@@ -1,4 +1,5 @@
-import { getQuest, type ActiveQuestView, type QuestBoard, type QuestOfferView } from '@owl-park/shared';
+import { getQuest, questPuzzle, type ActiveQuestView, type PuzzleView, type QuestBoard, type QuestOfferView } from '@owl-park/shared';
+import type { PuzzleNeighbour } from './service';
 
 type Listener = (board: QuestBoard | null) => void;
 
@@ -12,11 +13,56 @@ export type NpcMark = 'ready' | 'step' | 'offer' | null;
  */
 export class QuestState {
   board: QuestBoard | null = null;
+  /** Puzzle quests' runs as the page last had them (OP-255), by quest. */
+  readonly puzzles = new Map<string, PuzzleView>();
+  /** Owls close by in a run of a puzzle quest, by quest (the journal's Join list). */
+  readonly near = new Map<string, PuzzleNeighbour[]>();
+  /**
+   * Whether the room server isn't answering for the board (OP-280): the park could not connect, or a
+   * board request came back offline. Shown in place of "Loading" until a board comes.
+   */
+  offline = false;
   private readonly listeners = new Set<Listener>();
 
   set(board: QuestBoard | null): void {
     this.board = board;
-    for (const cb of this.listeners) cb(board);
+    if (board) this.offline = false;
+    // A puzzle quest no longer carried takes its run off the page.
+    const carried = new Set((board?.active ?? []).map((q) => q.id));
+    for (const q of [...this.puzzles.keys()]) if (!carried.has(q)) this.puzzles.delete(q);
+    for (const q of [...this.near.keys()]) if (!carried.has(q)) this.near.delete(q);
+    this.changed();
+  }
+
+  /** The board isn't answering (true), or is again (false); a change is told to the listeners. */
+  setOffline(on: boolean): void {
+    if (this.offline === on) return;
+    this.offline = on;
+    this.changed();
+  }
+
+  /** A puzzle quest's run as it now stands. */
+  setPuzzle(quest: string, view: PuzzleView | null): void {
+    if (view) this.puzzles.set(quest, view);
+    else this.puzzles.delete(quest);
+    this.changed();
+  }
+
+  setNear(quest: string, near: PuzzleNeighbour[]): void {
+    this.near.set(quest, near);
+    this.changed();
+  }
+
+  /** Carried quests that are puzzles (OP-255). */
+  get puzzleQuests(): ActiveQuestView[] {
+    return this.active.filter((q) => {
+      const def = getQuest(q.id);
+      return !!def && !!questPuzzle(def);
+    });
+  }
+
+  private changed(): void {
+    for (const cb of this.listeners) cb(this.board);
   }
 
   onChange(cb: Listener): () => void {

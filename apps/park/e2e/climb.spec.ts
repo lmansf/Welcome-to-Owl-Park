@@ -1,7 +1,7 @@
 import type { APIRequestContext, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { autoClimbTo, climbRun, climbState, openClimb, startClimb, tapKey, toPortal } from './climbPlay';
-import { E2E_ADMIN_KEY, openPark, state } from './helpers';
+import { E2E_ADMIN_KEY, openPark, state, actionButton } from './helpers';
 
 /**
  * The stained-glass climb (designs/the-stained-glass-climb.md). On this device (the local mode, the
@@ -79,6 +79,34 @@ test.describe('the stained-glass climb', () => {
     await page.locator('.climb [data-stop]').click();
   });
 
+  test('the Feedback form opened over the climb types every key, and the owl stays put', async ({ page }) => {
+    test.skip(isEdge(), 'the same in every suite');
+    await atThePortal(page, `e2e-climb-typing-${test.info().project.name}`);
+    await openClimb(page);
+    await startClimb(page);
+    await expect.poll(async () => (await climbState(page))?.grounded ?? false, { timeout: 5_000 }).toBe(true);
+    const foot = (await climbState(page))!;
+    await page.locator('[data-feedback-bug]').click();
+    const feedback = page.getByRole('dialog', { name: 'Feedback' });
+    await expect(feedback).toBeVisible();
+    const note = feedback.getByRole('textbox', { name: 'Your note' });
+    await note.click();
+    // Every letter the climb and the park move on: walk, jump, dash (Shift for the capital), interact, the Menu.
+    const words = 'wasd jumps, Dash xk, emtqj 1 2 3';
+    await page.keyboard.type(words);
+    await expect(note).toHaveValue(words);
+    const now = (await climbState(page))!;
+    expect(now.jumpsUsed).toBe(foot.jumpsUsed);
+    expect(Math.abs(now.x - foot.x)).toBeLessThan(1);
+    // Closed, the climb hears its keys again (the focus is back on the bug button, so a walk, not the space bar).
+    await feedback.getByRole('button', { name: 'Close feedback' }).click();
+    await expect(feedback).toBeHidden();
+    await page.keyboard.down('ArrowRight');
+    await expect.poll(async () => (await climbState(page))?.x ?? 0, { timeout: 5_000 }).toBeGreaterThan(foot.x + 20);
+    await page.keyboard.up('ArrowRight');
+    await page.locator('.climb [data-stop]').click();
+  });
+
   test('the clouds: ten feathers over six storeys, the Glass Circlet once, and the run reference', async ({ page }) => {
     test.skip(isEdge(), 'through the room server below');
     const before = await atThePortal(page, `e2e-clouds-${test.info().project.name}`);
@@ -98,7 +126,7 @@ test.describe('the stained-glass climb', () => {
 });
 
 test.describe('the stained-glass climb through the room server', () => {
-  // As deployed before and after: the realm closed, the portal off, the moon's night.
+  // As deployed before and after: the portal off, the moon's night. (The realm itself is open to every owl since Nov 8.)
   const asDeployed = async ({ request }: { request: APIRequestContext }) => {
     if (isEdge()) await realms(request, { open: [], portal: false, night: null });
   };
@@ -106,7 +134,7 @@ test.describe('the stained-glass climb through the room server', () => {
 
   test('a storey pays, the climb survives a dropped socket, and a portal switched off shows its phrase', async ({ page, request }) => {
     test.skip(!isEdge(), 'the room server only');
-    await realms(request, { open: ['glass'], portal: true, night: 'easy' });
+    await realms(request, { open: [], portal: true, night: 'easy' });
     const before = await atThePortal(page, 'edge');
     await openClimb(page);
     await expect(page.locator('.climb [data-start-line]')).toHaveText('A gentle night');
@@ -146,29 +174,28 @@ test.describe('the stained-glass climb through the room server', () => {
     await expect(page.locator('.climb-layer')).toBeHidden();
     // The portal switched off: Climb shows the approved phrase and opens nothing. (The room server may
     // have placed the owl afresh when the socket came back, so it walks to the portal again first.)
-    await realms(request, { open: ['glass'], portal: false, night: 'easy' });
+    await realms(request, { open: [], portal: false, night: 'easy' });
     await toPortal(page);
     await expect.poll(async () => (await state(page)).actions, { timeout: 10_000 }).toContain('portal');
     // The room server's word that the portal is off has reached the page.
     await expect
       .poll(() => page.evaluate(() => (window.owlPark.game.scene.getScene('room') as unknown as { realms: { portal: boolean } }).realms.portal), { timeout: 10_000 })
       .toBe(false);
-    await page.locator('[data-action="portal"]').click();
+    await actionButton(page, 'portal').click();
     await expect(page.locator('[data-toasts]')).toContainText('Pardon Our Feathers');
     await expect(page.locator('.climb-layer')).toBeHidden();
   });
 
-  test("while the realm is closed, an owl stops at the arch's blockade instead of walking in behind it (OP-127)", async ({ page }) => {
+  test('the east arch walks straight into the glass realm, open to every owl with the switch untouched (the whole map open, Nov 8)', async ({ page }) => {
     test.skip(!isEdge(), 'the room server only');
     await openPark(page, { transport: 'edge' });
     const settled = () => expect.poll(async () => (await state(page)).walking, { timeout: 15_000 }).toBe(false);
-    // In front of the east arch (the hub's to-glass doorway), then straight on into it: the blockade's
-    // foot is at y 668 and the arch's floor runs back to y 604.
+    // In front of the east arch (the hub's to-glass doorway), then straight on into it, where a
+    // blockade once stood at y 668 while the realm was shut (OP-127).
     await page.evaluate(() => window.owlPark.walkTo(2665, 690));
     await settled();
     await page.evaluate(() => window.owlPark.walkTo(2665, 610));
-    await settled();
-    expect((await state(page)).pos.y).toBeGreaterThan(668);
-    await expect(page.locator('[data-toasts]')).toContainText('Hatching Soon');
+    await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe('glass');
+    await expect(page.locator('[data-toasts]')).not.toContainText('Hatching Soon');
   });
 });

@@ -193,6 +193,10 @@ jobs:
           secrets: |
             RESEND_API_KEY
             MAIL_FROM
+      # The SEO audit: tell search engines which pages changed (tools/indexnow.mjs). Never fails the deploy.
+      - name: Tell search engines the pages changed (IndexNow)
+        continue-on-error: true
+        run: node tools/indexnow.mjs
       # Whichever way the secrets were set (repository secrets above, or wrangler secret put), the
       # Worker's secret names as they stand after the deploy.
       - name: List the Worker's secret names

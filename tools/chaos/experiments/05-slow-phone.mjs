@@ -27,7 +27,7 @@ export default {
   name: 'One phone on a 3G network',
   hypothesis: "A phone on 3G comes into the hub and can play (its owl walks, the others are there), and the load screen's bar shows the bytes as they come: it only grows, in steps, while the park loads (OP-129).",
   blastRadius: 'One scripted phone page in the throwaway park, its network and processor slowed.',
-  rollback: 'The page closes.',
+  rollbackPlan: 'The page closes.',
   needsBrowser: true,
   pauseChecks: { names: ['journey'], why: "the journey's page would share the browser with the slowed phone" },
   async run(ctx) {

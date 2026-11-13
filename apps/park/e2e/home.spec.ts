@@ -9,7 +9,7 @@ import { dist, settleCamera, state, toScreen, travelTo } from './helpers';
  * owl in its own nest, before its mirror, every time (OP-105).
  */
 const home = (page: Page) => page.evaluate(() => window.owlPark.home());
-const button = (page: Page, id: 'login' | 'play' | 'settings') => page.locator(`[data-home-btn="${id}"]`);
+const button = (page: Page, id: 'login' | 'guest' | 'play' | 'settings') => page.locator(`[data-home-btn="${id}"]`);
 /** The home screen's buttons as shown, in order. */
 const shownButtons = (page: Page) => page.locator('[data-home-btn]').evaluateAll((bs) => bs.filter((b) => !(b as HTMLElement).hidden).map((b) => b.textContent));
 /** Where Play puts the owl: before its nest's mirror (NEST_ROOM's `mirror` spawn). */
@@ -59,11 +59,12 @@ async function parkSignOnScreen(page: Page): Promise<{ x: number; y: number } | 
 test.describe('the home screen (OP-065)', () => {
   test('a first visit logs in: the owl is made, the builder opens on it, and Play goes into its own nest', async ({ page }) => {
     await openHome(page);
-    await expect(page.locator('[data-home] h1')).toHaveText('Owl Park');
+    await expect(page.locator('[data-home] h1')).toHaveText('Owl Park A cozy park you visit in your browser');
     await expect(button(page, 'login')).toHaveText('Make your owl');
+    await expect(button(page, 'guest')).toHaveText('Look around free');
     await expect(button(page, 'settings')).toBeVisible();
     await expect(button(page, 'play')).toBeHidden();
-    expect(await shownButtons(page)).toEqual(['Make your owl', 'Settings']);
+    expect(await shownButtons(page)).toEqual(['Make your owl', 'Look around free', 'Settings']);
     // Nothing of the park shows: no Menu, no bar, no thumbstick.
     await expect(page.locator('[data-menu-btn]')).toBeHidden();
     await expect(page.locator('#hud .bar')).toBeHidden();
@@ -104,6 +105,47 @@ test.describe('the home screen (OP-065)', () => {
     await expect(page.locator('[data-menu-btn]')).toBeVisible();
     expect((await home(page)).shown).toBe(false);
     expect((await state(page)).look.body).toBe('#3E6B48');
+  });
+
+  test('says what the park is, and opens About the park and Safety and privacy (the site audit)', async ({ page, isMobile }) => {
+    await openHome(page);
+    await expect(page.locator('[data-home-lead]')).toHaveText('No download. Enter free as a guest, wander as an owl, alongside everyone else who is here right now.');
+    await expect(page.locator('[data-home-welcome]')).toHaveText('Built for anyone who misses the old chatroom worlds.');
+    expect(await page.title()).toBe('Owl Park - a cozy virtual park you visit in your browser');
+    for (const [kind, title, words] of [
+      ['about', 'About the park', 'It is not for anyone who wants to chat freely'],
+      ['safety', 'Safety and privacy', 'There is no typed chat.'],
+    ] as const) {
+      const button = page.locator(`[data-home-info="${kind}"]`);
+      await expect(button).toHaveText(title);
+      if (isMobile) await button.tap();
+      else await button.click();
+      const card = page.getByRole('dialog', { name: title });
+      await expect(card).toBeVisible();
+      await expect(card).toContainText(words);
+      await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-home-${kind}.png` });
+      await page.keyboard.press('Escape');
+      await expect(card).toBeHidden();
+      await expect(button).toBeFocused();
+    }
+    // The screens are words only: the home screen's buttons are as they were.
+    expect(await shownButtons(page)).toEqual(['Make your owl', 'Look around free', 'Settings']);
+  });
+
+  test('Look around free: a ready-made owl, with no quiz and no builder, straight into its own nest (the second site audit)', async ({ page, isMobile }) => {
+    await openHome(page);
+    if (isMobile) await button(page, 'guest').tap();
+    else await button(page, 'guest').click();
+    await expect(page.getByRole('dialog', { name: 'Which owl are you?' })).toBeHidden();
+    await inOwnNest(page);
+    expect(await page.evaluate(() => localStorage.getItem('owl-park:look'))).not.toBeNull();
+    // Logged in now: the home screen comes back with Play, and no free button.
+    await page.locator('[data-menu-btn]').click();
+    const menu = page.getByRole('dialog', { name: 'Menu' });
+    await menu.locator('[data-tab="settings"]').click();
+    await menu.locator('[data-screen="title"]').click();
+    await page.waitForFunction(() => window.owlPark.home().shown, null, { timeout: 20_000 });
+    expect(await shownButtons(page)).toEqual(['Play', 'Settings']);
   });
 
   test('a return visit is logged in at once, with the owl as it was, and Play takes the focus', async ({ page }) => {
@@ -204,5 +246,40 @@ test.describe('the home screen (OP-065)', () => {
     expect(await page.evaluate(() => window.owlPark.state())).toBeNull();
     await play(page);
     await expect(page.locator('[data-menu-btn]')).toBeVisible();
+  });
+
+  test('reads as one story: the name and its line, then Play, with Settings and the two screens in a small footer close under it (Nov 6)', async ({ page }) => {
+    // The phone project checks the narrowest common phone (375 px), the desktop one a laptop.
+    const phone = test.info().project.name === 'phone';
+    await page.setViewportSize(phone ? { width: 375, height: 812 } : { width: 1280, height: 800 });
+    await openHome(page);
+    const lead = page.locator('[data-home-lead]');
+    const footer = page.locator('[data-home] .h-foot');
+    // A first visit: the lead says what the park is, and the footer holds Settings and the two notes.
+    await expect(lead).toBeVisible();
+    for (const sel of ['[data-home-btn="settings"]', '[data-home-info="about"]', '[data-home-info="safety"]', '[data-home-welcome]']) {
+      await expect(footer.locator(sel)).toBeVisible();
+    }
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-home-tidy-first-visit.png` });
+
+    await logIn(page);
+    // Coming back, the owl knows what the park is: no lead, and Play is the one big thing.
+    await expect(lead).toBeHidden();
+    const play = await button(page, 'play').boundingBox();
+    const settings = await button(page, 'settings').boundingBox();
+    expect(play && settings).toBeTruthy();
+    // The footer sits under Play, smaller than it.
+    expect(settings!.y).toBeGreaterThan(play!.y + play!.height);
+    expect(settings!.height).toBeLessThan(play!.height);
+    // Everything fits without scrolling the side.
+    expect(await page.locator('[data-home] .h-side').evaluate((s) => s.scrollHeight <= s.clientHeight + 1)).toBe(true);
+    // Balanced: the footer follows the hero closely (no empty band between them on a tall phone), and its
+    // three links take at most two rows.
+    const hero = (await page.locator('[data-home] .h-hero').boundingBox())!;
+    const foot = (await footer.boundingBox())!;
+    expect(foot.y - (hero.y + hero.height)).toBeLessThan(40);
+    const rows = await footer.locator('.h-links button').evaluateAll((bs) => new Set(bs.map((b) => Math.round(b.getBoundingClientRect().top))).size);
+    expect(rows).toBeLessThanOrEqual(2);
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-home-tidy-logged-in.png` });
   });
 });

@@ -742,7 +742,14 @@ test('geometry exports the live room data with the assets table', () => {
   const r = spawnSync(process.execPath, [GEN, 'geometry', '--stdout'], { encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);
   const g = JSON.parse(r.stdout);
-  assert.deepEqual(Object.keys(g.rooms).sort(), ['arcade', 'glass', 'grove', 'homes', 'hub', 'l1', 'lobby', 'market', 'nest']);
+  // Every room the shared data declares, whatever rooms the park has grown since: the export is the live data.
+  const roomsDir = path.join(G.REPO_ROOT, 'packages/shared/rooms');
+  // rooms/kit.ts is left out: its rooms are the kit's stand-ins for rooms declared elsewhere and the
+  // rooms laid out ahead of the park (the plaza, OP-241), which the export does not carry.
+  const declared = fs.readdirSync(roomsDir).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && f !== 'kit.ts')
+    .flatMap((f) => [...fs.readFileSync(path.join(roomsDir, f), 'utf8').matchAll(/^ {2,4}id:\s*'([a-z0-9-]+)'/gm)].map((m) => m[1])); // rooms (and the nest's own RoomDef) sit at one indent or two; ledges and props deeper
+  for (const id of ['hub', 'grove', 'market', 'l1', 'l5']) assert.ok(declared.includes(id), `${id} is declared`);
+  assert.deepEqual(Object.keys(g.rooms).sort(), [...new Set(declared)].sort());
   // The tree's level 1 (map 2, OP-156, OP-162): four screens, each a sky plate, a middle distance and an
   // overlay scrolling at rates of their own over its playfield, the fading tiles with their fades.
   const l1 = g.rooms.l1;
@@ -978,4 +985,128 @@ test('the models command lists every family and marks the selected one', () => {
   assert.equal(r.status, 0, r.stderr);
   for (const id of Object.keys(G.MODELS)) assert.ok(r.stdout.includes(id), id);
   assert.match(r.stdout, /seedream-v4\.5 \*/);
+});
+
+test('the art kit (OP-229): kit.json, the jobs, the loader table and the assets table agree', async () => {
+  const K = await import('../kit.mjs');
+  const art = parseArtTable();
+  const jobs = new Map(G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS }).map((j) => [j.key, j]));
+  assert.equal(Object.keys(K.KIT.textures).length, 10);
+  assert.equal(Object.keys(K.KIT.sheets).length, 22);
+  for (const key of K.KIT_TEXTURE_KEYS) {
+    assert.deepEqual(art[key], { w: K.KIT.texture_size, h: K.KIT.texture_size, kind: 'texture' }, `${key} in art.ts`);
+    assert.equal(ASSETS.keys[key].format, 'webp', `${key} ships as WebP`);
+    const job = jobs.get(key);
+    assert.equal(job.kind, 'texture');
+    assert.equal(job.size, `${2 * K.KIT.texture_size}x${2 * K.KIT.texture_size}`, `${key} generated at twice the tile`);
+    assert.match(job.prompt, /tileable/);
+  }
+  const names = new Set();
+  for (const [name, sheet] of Object.entries(K.KIT.sheets)) {
+    assert.equal(sheet.pieces.length, 6, `${name}: six pieces, three across and two down`);
+    const job = jobs.get(`kit-sheet-${name}`);
+    assert.ok(job && job.kind === 'sheet' && job.key_colour === K.KIT_KEY_COLOUR, `${name} has a sheet job on the key colour`);
+    assert.ok(P.HELPER_KEYS.includes(`kit-sheet-${name}`), `${name} is a helper key, not a shipped asset`);
+    for (const p of sheet.pieces) {
+      assert.ok(!names.has(p.name), `piece ${p.name} named once`);
+      names.add(p.name);
+      assert.match(p.name, /^[a-z][a-z0-9-]*$/);
+      assert.match(job.prompt, new RegExp(p.desc.slice(0, 30).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `${name}: the prompt names ${p.name}`);
+      const key = `kit-${p.name}`;
+      assert.deepEqual(art[key], { w: p.w ?? sheet.w, h: p.h ?? sheet.h, kind: 'piece' }, `${key} in art.ts at its size`);
+      assert.equal(ASSETS.keys[key].key_colour, K.KIT_KEY_COLOUR, `${key} keyed on the sheet's colour`);
+      assert.equal(ASSETS.keys[key].format, 'webp');
+      assert.ok(!jobs.has(key), `${key} is cut from its sheet, not generated on its own`);
+    }
+  }
+  assert.equal(names.size, 132);
+  // The area sets: accent textures, prop sheets and seven sideways-repeating backdrop layers each.
+  for (const [areaName, area] of Object.entries(K.KIT_AREAS)) {
+    assert.deepEqual(Object.keys(area.layers), ['sky-a', 'sky-b', 'far-a', 'far-b', 'mid-a', 'mid-b', 'mid-c'], `${areaName}: seven layers`);
+    // Three accent textures each; the neon street has a fourth, the wall of its own buildings (OP-348).
+    assert.equal(Object.keys(area.textures).length, areaName === 'neon' ? 4 : 3); assert.equal(Object.keys(area.sheets).length, 3);
+    for (const name of Object.keys(area.layers)) {
+      const key = `kit-${areaName}-${name}`;
+      const [w, h] = K.LAYER_SIZES[name.split('-')[0]];
+      assert.deepEqual(art[key], { w, h, kind: 'layer' }, `${key} in art.ts`);
+      const job = jobs.get(key);
+      assert.ok(job && job.kind === 'layer', `${key} has a layer job`);
+      assert.equal(Boolean(job.key_colour), !name.startsWith('sky'), `${key}: far and middle layers are keyed, skies are not`);
+      assert.equal(Boolean(ASSETS.keys[key].key_colour), !name.startsWith('sky'));
+      assert.match(job.prompt, /repeats sideways/);
+    }
+    for (const [name, sheet] of Object.entries(area.sheets)) {
+      const key = `kit-sheet-${areaName}-${name}`;
+      assert.ok(P.HELPER_KEYS.includes(key) && jobs.get(key)?.kind === 'sheet', `${key} is a helper key with a sheet job`);
+      for (const p of sheet.pieces) assert.deepEqual(art[`kit-${areaName}-${p.name}`], { w: p.w ?? sheet.w, h: p.h ?? sheet.h, kind: 'piece' });
+    }
+  }
+  // Course props: extra six-prop sheets under kit.courses.<area>, keyed and cut like the area's own.
+  for (const [areaName, sheets] of Object.entries(K.KIT_COURSES)) {
+    assert.ok(K.KIT_AREAS[areaName], `${areaName}: a course belongs to an area set`);
+    for (const [name, sheet] of Object.entries(sheets)) {
+      const key = `kit-sheet-${areaName}-${name}`;
+      assert.equal(sheet.pieces.length, 6, `${key}: six pieces`);
+      assert.ok(!(name in K.KIT_AREAS[areaName].sheets), `${key}: not also an area sheet`);
+      assert.ok(P.HELPER_KEYS.includes(key) && jobs.get(key)?.kind === 'sheet' && jobs.get(key).size === K.SHEET_SIZE, `${key} is a helper key with a sheet job`);
+      for (const p of sheet.pieces) assert.deepEqual(art[`kit-${areaName}-${p.name}`], { w: p.w ?? sheet.w, h: p.h ?? sheet.h, kind: 'piece' });
+    }
+  }
+  // Landmarks: one prop each on a square canvas of its own, cut to kit-landmark-<name>.
+  assert.equal(Object.keys(K.KIT_LANDMARKS).length, 20);
+  for (const [name, piece] of Object.entries(K.KIT_LANDMARKS)) {
+    const key = `kit-sheet-landmark-${name}`;
+    assert.ok(K.KIT_AREAS[piece.area], `${key}: lit as its area`);
+    const job = jobs.get(key);
+    assert.ok(P.HELPER_KEYS.includes(key) && job?.kind === 'sheet' && job.size === K.LANDMARK_SIZE && job.key_colour === K.KIT_KEY_COLOUR, `${key} is a helper key with a one-prop job`);
+    assert.match(job.prompt, /One game prop, whole and centred/);
+    assert.deepEqual(job.derives, [`kit-landmark-${name}`]);
+    assert.deepEqual(art[`kit-landmark-${name}`], { w: piece.w, h: piece.h, kind: 'piece' }, `${key} in art.ts`);
+  }
+  for (const job of [jobs.get('kit-tex-bark'), jobs.get('kit-sheet-signs-a')]) assert.match(job.prompt, /No text, letters or numbers anywhere/, 'the prompts ask for no text');
+});
+
+test('the recut (OP-251): run images and join sheets carry their target as a reference and derive kit-cut pieces', async () => {
+  const K = await import('../kit.mjs');
+  const art = parseArtTable();
+  const jobs = new Map(G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS }).map((j) => [j.key, j]));
+  // Four runs of the tree's, and one each of the neon street's and the ink realm's own (OP-348).
+  assert.equal(K.KIT_RECUT_RUN_KEYS.length, 6);
+  assert.equal(K.KIT_RECUT_SHEET_KEYS.length, 5);
+  assert.equal(K.KIT_RECUT_COLUMN_KEYS.length, 1);
+  for (const key of [...K.KIT_RECUT_RUN_KEYS, ...K.KIT_RECUT_SHEET_KEYS, ...K.KIT_RECUT_COLUMN_KEYS]) {
+    const job = jobs.get(key);
+    assert.ok(P.HELPER_KEYS.includes(key) && job?.kind === 'sheet' && job.key_colour === K.KIT_KEY_COLOUR, `${key} is a helper key with a keyed sheet job`);
+    assert.equal(job.size, K.KIT_RECUT_RUN_KEYS.includes(key) ? K.RUN_SIZE : K.KIT_RECUT_COLUMN_KEYS.includes(key) ? '2048x2048' : K.SHEET_SIZE);
+    assert.equal(job.refs.length, 1);
+    // A run of a realm's own is painted from a published painting of that realm, the rest from a target.
+    const ownRealm = K.KIT_RECUT.runs[key.replace('kit-sheet-cut-run-', '')]?.area;
+    if (ownRealm) assert.match(job.refs[0].ref, new RegExp(`^@final:kit-${ownRealm}-`), `${key} is painted from its realm's own art`);
+    else assert.match(job.refs[0].ref, /^@guide:target-(l4|plaza|clearing)-ref$/, `${key} is painted from a target`);
+    assert.ok(job.derives.length > 0 && job.derives.every((d) => d.startsWith('kit-cut-')));
+  }
+  for (const p of K.KIT_RECUT_PIECES) {
+    assert.deepEqual(art[p.key], { w: p.w, h: p.h, kind: 'piece' }, `${p.key} in art.ts at its size`);
+    assert.equal(ASSETS.keys[p.key].key_colour, K.KIT_KEY_COLOUR);
+    assert.ok(!jobs.has(p.key), `${p.key} is cut, not generated on its own`);
+  }
+  assert.equal(K.KIT_RECUT_PIECES.length, 120);
+  assert.equal(new Set(K.KIT_RECUT_PIECES.map((p) => p.key)).size, 120, 'every cut piece comes from one sheet');
+  assert.deepEqual(K.KIT_RECUT_PIECES.filter((p) => p.column).map((p) => p.key), ['kit-cut-trunk-edge-left', 'kit-cut-trunk-mid', 'kit-cut-trunk-edge-right']);
+});
+
+test('the art targets (OP-249): three helper keys painted at 1600 x 900 from the preview and the greybox', async () => {
+  const T = await import('../targets.mjs');
+  const jobs = new Map(G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS }).map((j) => [j.key, j]));
+  assert.deepEqual(T.TARGET_KEYS, ['target-l4', 'target-plaza', 'target-clearing']);
+  for (const key of T.TARGET_KEYS) {
+    assert.ok(P.HELPER_KEYS.includes(key), `${key} is a helper key, never shipped`);
+    assert.ok(!(key in ASSETS.keys), `${key} has no asset of its own`);
+    const job = jobs.get(key);
+    assert.equal(job.kind, 'anchor', `${key}: a reference painting at its own size, not a room shipped at 2x`);
+    assert.equal(job.size, T.TARGET_SIZE);
+    assert.equal(job.variants, 4);
+    assert.deepEqual(job.refs.map((r) => [r.ref, r.optional]), [[`@guide:${key}-preview`, false], [`@guide:${key}-greybox`, false]]);
+    for (const must of ['full moon', 'upper right', 'Value bands', 'No text, letters or numbers', 'No owls']) assert.match(job.prompt, new RegExp(must), `${key}: ${must}`);
+  }
 });

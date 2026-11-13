@@ -1,8 +1,14 @@
 import Phaser from 'phaser';
-import { ROOM_W, WAY_OUT_DOOR, type RoomDef } from '@owl-park/shared';
+import { KIT_ART, ROOM_W, WAY_OUT_DOOR, idolRealms, kitFilesOf, seenFromSide, type RoomDef } from '@owl-park/shared';
+import { flagOn } from '../flags';
 import { ANCHORS } from '../rooms';
 import { ART, blockadeKey } from './art';
+import { FOOT_SHADOW_DEPTH, footShadow } from './bowlView';
+import { tintImage } from './canvasTint';
 import { footOrigin, hitArea } from './fit';
+import { GUARDIAN_ROOM } from './guardian';
+import { carvedTexture } from './guardianView';
+import { IDOL_FLARE } from './idolFlare';
 
 /** Generated helper textures shared by every room. */
 export function ensureFxTextures(scene: Phaser.Scene): void {
@@ -45,13 +51,27 @@ export function ensureFxTextures(scene: Phaser.Scene): void {
  * A set piece drawn at its logical size whatever the texture's resolution, standing on its anchor by
  * what it draws rather than by its frame's padded bottom edge (OP-127).
  */
-function piece(scene: Phaser.Scene, x: number, y: number, key: string): Phaser.GameObjects.Image {
+/** A kit piece standing with its art's foot at (x, y), at its logical size (things to use out on a plaza draw themselves with it too, FloorThing.ts). */
+export function piece(scene: Phaser.Scene, x: number, y: number, key: string): Phaser.GameObjects.Image {
   const spec = ART[key];
-  const foot = footOrigin(key);
+  const foot = footOf(key);
   const img = scene.add.image(x, y, key).setOrigin(foot.x, foot.y);
   if (spec) img.setDisplaySize(spec.w, spec.h);
   return img;
 }
+
+/**
+ * Where a piece stands in its frame: its own art's foot (the sprite manifest), else that of the art
+ * standing in for a realm kit slot (OP-276), else a kit piece's measured box, else its frame's bottom middle.
+ */
+function footOf(key: string): { x: number; y: number } {
+  const kit = KIT_ART[key];
+  const box = kit?.foot !== undefined && kit.left !== undefined && kit.right !== undefined ? { x: (kit.left + kit.right) / 2 / kit.w, y: kit.foot / kit.h } : { x: 0.5, y: 1 };
+  return footOrigin(key, footOrigin(kitFilesOf(key), box));
+}
+
+/** The realm's idol (OP-276): the glass realm's is its kit slot, drawn from today's idol until its artist's comes. */
+export const GLASS_IDOL = 'kit-glass-idol-owl';
 
 /**
  * A tap area round the piece itself, not its frame (OP-127): an idol's glow fills most of its picture
@@ -60,16 +80,23 @@ function piece(scene: Phaser.Scene, x: number, y: number, key: string): Phaser.G
  */
 function hugging(img: Phaser.GameObjects.Image, key: string): Phaser.Types.Input.InputConfiguration {
   const res = img.frame.width / (ART[key]?.w ?? img.frame.width);
-  const area = hitArea(key, Math.abs(img.scaleX) * res);
+  const area = hitArea(key, Math.abs(img.scaleX) * res) ?? hitArea(kitFilesOf(key), Math.abs(img.scaleX) * res);
   if (!area) return { useHandCursor: true };
   return { hitArea: new Phaser.Geom.Rectangle(area.x * res, area.y * res, area.w * res, area.h * res), hitAreaCallback: Phaser.Geom.Rectangle.Contains, useHandCursor: true };
 }
 
 /** Scale so a set piece anchored at its feet keeps its head inside the frame. */
-function fitBelowTop(key: string, anchorY: number, margin = 24): number {
+function fitBelowTop(key: string, anchorY: number, tallest = Number.POSITIVE_INFINITY, margin = 24): number {
   const h = ART[key]?.h ?? 1;
-  return Math.min(1, Math.max(0.2, (anchorY - margin) / h));
+  return Math.min(1, tallest / h, Math.max(0.2, (anchorY - margin) / h));
 }
+
+/**
+ * How tall an idol stands at most in a room seen from almost straight above (RoomDef.bowl, the Great
+ * Hollow): the three stand the same height round the rim, and on a phone none hides the doorways
+ * beside it (the neon robot owl, Nov 8, covered the neon street's sign).
+ */
+export const BOWL_IDOL_TALL = 560;
 
 export interface Idol {
   /** The tappable mythical owl. */
@@ -79,11 +106,43 @@ export interface Idol {
 }
 
 export interface SetPieces {
+  /** The room's idol: its one, or the first of several. */
   idol?: Idol;
+  /** A room with several idols (RoomDef.idols): each, by the realm it takes the vote for. */
+  idols?: Record<string, Idol>;
   /** The lobby's turnstiles: a flash of gold as an owl goes through. */
   gate?: { react(): void };
   /** The hub's arches into gated realms, by door id: the blockade while the realm is closed, the doorway's glow while it is open. */
   arches?: Record<string, { blockade: Phaser.GameObjects.Image | null; glow: Phaser.GameObjects.Image }>;
+  /** Every piece stood among the owls, its foot its depth: the tall ones go see-through while the visitor's own owl is behind them (seeThroughArt.ts, OP-346). */
+  standing?: Phaser.GameObjects.Image[];
+}
+
+/** Each idol glow's size before any swell, and the swell under way, so pledges close together never stack. */
+const FLARES = new WeakMap<Phaser.GameObjects.Image, { scaleX: number; scaleY: number; alpha: number; tween?: Phaser.Tweens.TweenChain | undefined }>();
+
+/**
+ * An idol's glow swells once, slowly, when a visitor pledges (IDOL_FLARE), and settles back. A pledge
+ * during a swell restarts it from where the glow is, so a burst of pledges holds the glow up rather
+ * than pulsing it, and the glow always settles back to its own size.
+ */
+function flareGlow(scene: Phaser.Scene, glow: Phaser.GameObjects.Image): void {
+  let flare = FLARES.get(glow);
+  if (!flare) FLARES.set(glow, (flare = { scaleX: glow.scaleX, scaleY: glow.scaleY, alpha: glow.alpha }));
+  const settled = flare.tween ? flare.alpha : glow.alpha;
+  flare.tween?.stop();
+  flare.alpha = settled;
+  const { scaleX, scaleY } = flare;
+  flare.tween = scene.tweens.chain({
+    targets: glow,
+    tweens: [
+      { alpha: IDOL_FLARE.glowPeak, scaleX: scaleX * IDOL_FLARE.glowSwell, scaleY: scaleY * IDOL_FLARE.glowSwell, duration: IDOL_FLARE.riseMs, ease: 'Sine.easeInOut' },
+      { alpha: settled, scaleX, scaleY, duration: IDOL_FLARE.riseMs, ease: 'Sine.easeInOut' },
+    ],
+    onComplete: () => {
+      if (flare) flare.tween = undefined;
+    },
+  });
 }
 
 const DOOR_GLOW: Record<string, number> = { market: 0xff2aa1, arcade: 0x00e5ff, grove: 0xffb347, glass: 0x9fd0ff };
@@ -96,29 +155,54 @@ function doorGlow(scene: Phaser.Scene, m: { x: number; y: number }, to: string):
 }
 
 /** Large set pieces (guardian, giant robot owl, blockades) sorted into the owl depth range. */
-export function addSetPieces(scene: Phaser.Scene, room: RoomDef, onIdolTap?: (pointer: Phaser.Input.Pointer, event: Phaser.Types.Input.EventData) => void): SetPieces {
+export function addSetPieces(
+  scene: Phaser.Scene,
+  room: RoomDef,
+  onIdolTap?: (pointer: Phaser.Input.Pointer, event: Phaser.Types.Input.EventData, realm: string) => void,
+): SetPieces {
   const anchors = ANCHORS[room.id] ?? {};
-  const pieces: SetPieces = {};
-  const tappable = (img: Phaser.GameObjects.Image) => {
+  // The realms whose idols stand here: the room's own, the one its `idol` doorway votes for, or each of
+  // several over its own spot (the Great Hollow's Commons, RoomDef.idols).
+  const realms = idolRealms(room);
+  const tallest = room.bowl ? BOWL_IDOL_TALL : Number.POSITIVE_INFINITY;
+  const standing: Phaser.GameObjects.Image[] = [];
+  const pieces: SetPieces = { standing };
+  const tappable = (img: Phaser.GameObjects.Image, realm: string) => {
     img.setInteractive(hugging(img, img.texture.key));
-    img.on(Phaser.Input.Events.GAMEOBJECT_POINTER_UP, (pointer: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => onIdolTap?.(pointer, event));
+    img.on(Phaser.Input.Events.GAMEOBJECT_POINTER_UP, (pointer: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => onIdolTap?.(pointer, event, realm));
   };
-  if (room.id === 'grove' && anchors['guardian']) {
+  // In a room with a light of its own (the Great Hollow, OP-348) each idol, painted for its realm, takes
+  // that light, and a shadow lies at its foot: it stands in the room and is not laid over it.
+  const idolShadows = room.bowl ? scene.add.graphics().setDepth(FOOT_SHADOW_DEPTH) : null;
+  const stood = (realm: string, idol: Idol) => {
+    if (room.bowl?.light !== undefined) tintImage(scene, idol.image, idol.image.texture.key, room.bowl.light);
+    if (idolShadows) footShadow(idolShadows, idol.image.x, idol.image.y, idol.image.displayWidth * 0.62);
+    standing.push(idol.image);
+    pieces.idol ??= idol;
+    if (!room.idols) return;
+    pieces.idols ??= {};
+    pieces.idols[realm] = idol;
+  };
+  if (realms.includes('grove') && anchors['guardian']) {
     const a = anchors['guardian'];
-    const glow = scene.add.image(a.x, a.y - 300, 'fx-glow').setTint(0xffd27a).setAlpha(0.3).setScale(5, 4).setDepth(a.y - 1).setBlendMode(Phaser.BlendModes.ADD);
-    const k = fitBelowTop('guardian', a.y);
+    const k = fitBelowTop('guardian', a.y, tallest);
+    // Its glow is the idol's size: an idol drawn smaller (a bowl room) lights that much less of the room round it (OP-348).
+    const glow = scene.add.image(a.x, a.y - 300 * k, 'fx-glow').setTint(0xffd27a).setAlpha(0.3).setScale(5 * k, 4 * k).setDepth(a.y - 1).setBlendMode(Phaser.BlendModes.ADD);
     const guardian = piece(scene, a.x, a.y, 'guardian').setDepth(a.y);
     const sx = guardian.scaleX * k;
     const sy = guardian.scaleY * k;
     guardian.setScale(sx, sy);
-    scene.tweens.add({ targets: guardian, scaleY: sy * 1.015, scaleX: sx * 0.995, duration: 4200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-    scene.tweens.add({ targets: glow, alpha: 0.48, scaleX: 5.4, duration: 3600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-    tappable(guardian);
-    pieces.idol = {
+    // Where the guardian itself is alive at the heart of the room (OP-359, behind ?guardian=1), this one on
+    // the rim is its carving: one tone of wood, and still. The living owl is not in the room twice.
+    const carving = room.id === GUARDIAN_ROOM && flagOn('guardian') ? carvedTexture(scene) : null;
+    if (!carving) scene.tweens.add({ targets: guardian, scaleY: sy * 1.015, scaleX: sx * 0.995, duration: 4200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    scene.tweens.add({ targets: glow, alpha: 0.48, scaleX: 5.4 * k, duration: 3600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    tappable(guardian, 'grove');
+    stood('grove', {
       image: guardian,
       react: () => {
         // The guardian stirs: its glow swells and a drift of fireflies rises from the bough.
-        scene.tweens.add({ targets: glow, alpha: 0.9, scaleX: 6.4, scaleY: 5, duration: 500, yoyo: true, ease: 'Sine.easeOut' });
+        flareGlow(scene, glow);
         scene.tweens.add({ targets: guardian, scaleY: sy * 1.04, scaleX: sx * 0.985, duration: 450, yoyo: true, ease: 'Sine.easeOut' });
         scene.add
           .particles(a.x, a.y - 40, 'fx-dot', {
@@ -126,87 +210,96 @@ export function addSetPieces(scene: Phaser.Scene, room: RoomDef, onIdolTap?: (po
             speed: { min: 40, max: 120 },
             angle: { min: 200, max: 340 },
             scale: { start: 0.5, end: 0 },
-            alpha: { start: 1, end: 0 },
+            alpha: { start: IDOL_FLARE.sparkAlpha, end: 0 },
             tint: [0xffe08a, 0xfff2b3, 0xc9a227],
             blendMode: Phaser.BlendModes.ADD,
             emitting: false,
           })
           .setDepth(a.y + 1)
-          .explode(36);
+          .explode(IDOL_FLARE.sparks);
       },
-    };
+    });
+    // The carving's picture goes on last: it stands, is tapped and takes the room's light exactly as the painting does.
+    if (carving) guardian.setTexture(carving);
   }
-  if (room.id === 'market' && anchors['robot']) {
+  if (realms.includes('market') && anchors['robot']) {
     const a = anchors['robot'];
-    const glow = scene.add.image(a.x, a.y - 420, 'fx-glow').setTint(0xff2aa1).setAlpha(0.22).setScale(5, 5).setDepth(a.y - 1).setBlendMode(Phaser.BlendModes.ADD);
+    const kr = fitBelowTop('robot-owl', a.y, tallest);
+    const glow = scene.add.image(a.x, a.y - 420 * kr, 'fx-glow').setTint(0xff2aa1).setAlpha(0.22).setScale(5 * kr, 5 * kr).setDepth(a.y - 1).setBlendMode(Phaser.BlendModes.ADD);
     const robot = piece(scene, a.x, a.y, 'robot-owl').setDepth(a.y);
-    const kr = fitBelowTop('robot-owl', a.y);
     robot.setScale(robot.scaleX * kr, robot.scaleY * kr);
-    tappable(robot);
-    pieces.idol = {
+    tappable(robot, 'market');
+    stood('market', {
       image: robot,
       react: () => {
-        // The robot owl flares: a cyan flash and a swell of its glow.
-        robot.setTint(0x9ffcff);
-        scene.time.delayedCall(180, () => robot.clearTint());
-        scene.tweens.add({ targets: glow, alpha: 0.7, scaleX: 6.5, scaleY: 6.5, duration: 450, yoyo: true, ease: 'Sine.easeOut' });
+        // The robot owl hums: a slow swell of its glow (OP-324: no flash on the owl itself).
+        flareGlow(scene, glow);
         scene.add
           .particles(a.x, a.y - 320, 'fx-dot', {
             lifespan: { min: 600, max: 1200 },
             speed: { min: 120, max: 260 },
             scale: { start: 0.45, end: 0 },
-            alpha: { start: 1, end: 0 },
+            alpha: { start: IDOL_FLARE.sparkAlpha, end: 0 },
             tint: [0x00e5ff, 0xff2aa1, 0xc7ceda],
             blendMode: Phaser.BlendModes.ADD,
             emitting: false,
           })
           .setDepth(a.y + 1)
-          .explode(40);
+          .explode(IDOL_FLARE.sparks);
       },
-    };
+    });
     scene.tweens.add({ targets: robot, y: a.y - 6, duration: 5200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     scene.tweens.add({ targets: glow, alpha: 0.4, tint: 0x00e5ff, duration: 2800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   }
-  if (room.id === 'glass' && anchors['idol'] && scene.textures.exists('glass-idol')) {
+  if (realms.includes('glass') && anchors['idol'] && scene.textures.exists(GLASS_IDOL)) {
     // The stained-glass owl on its plinth: lit from within, it brightens when a visitor pledges.
     const a = anchors['idol'];
-    const glow = scene.add.image(a.x, a.y - 230, 'fx-glow').setTint(0x9fd0ff).setAlpha(0.24).setScale(4, 3.2).setDepth(a.y - 1).setBlendMode(Phaser.BlendModes.ADD);
-    const idol = piece(scene, a.x, a.y, 'glass-idol').setDepth(a.y);
-    const ki = fitBelowTop('glass-idol', a.y);
+    const ki = fitBelowTop(GLASS_IDOL, a.y, tallest);
+    const glow = scene.add.image(a.x, a.y - 230 * ki, 'fx-glow').setTint(0x9fd0ff).setAlpha(0.24).setScale(4 * ki, 3.2 * ki).setDepth(a.y - 1).setBlendMode(Phaser.BlendModes.ADD);
+    const idol = piece(scene, a.x, a.y, GLASS_IDOL).setDepth(a.y);
     idol.setScale(idol.scaleX * ki, idol.scaleY * ki);
-    tappable(idol);
-    pieces.idol = {
+    tappable(idol, 'glass');
+    stood('glass', {
       image: idol,
       react: () => {
-        // The panes flare white-gold and a scatter of glass light rises from the owl.
-        idol.setTint(0xfff2c2);
-        scene.time.delayedCall(220, () => idol.clearTint());
-        scene.tweens.add({ targets: glow, alpha: 0.7, scaleX: 5, scaleY: 4, duration: 450, yoyo: true, ease: 'Sine.easeOut' });
+        // The panes glow brighter and a scatter of glass light rises from the owl.
+        flareGlow(scene, glow);
         scene.add
           .particles(a.x, a.y - 200, 'fx-dot', {
             lifespan: { min: 900, max: 1800 },
             speed: { min: 60, max: 180 },
             angle: { min: 200, max: 340 },
             scale: { start: 0.5, end: 0 },
-            alpha: { start: 1, end: 0 },
+            alpha: { start: IDOL_FLARE.sparkAlpha, end: 0 },
             tint: [0x9fd0ff, 0xffd36a, 0xff8ad0, 0x7be0c8, 0xcdb0ff],
             blendMode: Phaser.BlendModes.ADD,
             emitting: false,
           })
           .setDepth(a.y + 1)
-          .explode(36);
+          .explode(IDOL_FLARE.sparks);
       },
-    };
+    });
     scene.tweens.add({ targets: glow, alpha: 0.4, duration: 3200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+  }
+  // A realm start's pieces (OP-276): its quest post, trading nest and decor, each standing at its foot among the owls.
+  for (const p of room.pieces ?? []) {
+    if (!scene.textures.exists(p.key)) continue;
+    const img = piece(scene, p.x, p.y, p.key).setDepth(p.y).setFlipX(!!p.flip);
+    if (p.scale) img.setDisplaySize(img.displayWidth * p.scale, img.displayHeight * p.scale);
+    if (p.tint !== undefined) tintImage(scene, img, p.key, p.tint);
+    standing.push(img);
   }
   for (const door of room.doors) {
     const m = door.marker;
     if (!m) continue;
     if (door.closedSign) {
+      // A room seen from the side (the tree) draws its own barriers (treeView, OP-220), never this art.
+      if (seenFromSide(room)) continue;
       // A construction blockade stands in the closed arch, its phrase on its board. An arch into a
       // gated realm also has a doorway's glow, shown instead of the blockade once the realm opens.
       const key = blockadeKey(door.closedSign);
       const blockade = scene.textures.exists(key) ? piece(scene, m.x, m.y, key).setDepth(m.y) : null;
+      if (blockade) standing.push(blockade);
       if (door.to) (pieces.arches ??= {})[door.id] = { blockade, glow: doorGlow(scene, m, door.to.room).setVisible(false) };
     } else if (room.id === 'hub' && door.id === WAY_OUT_DOOR) {
       // The way out of the park (C43): a soft gold ring on the floor where the owls came in.
@@ -236,13 +329,13 @@ export function addSetPieces(scene: Phaser.Scene, room: RoomDef, onIdolTap?: (po
             lifespan: { min: 600, max: 1200 },
             speed: { min: 100, max: 240 },
             scale: { start: 0.5, end: 0 },
-            alpha: { start: 1, end: 0 },
+            alpha: { start: IDOL_FLARE.sparkAlpha, end: 0 },
             tint: [0xffd36a, 0xf6f1e3, 0xc9a227],
             blendMode: Phaser.BlendModes.ADD,
             emitting: false,
           })
           .setDepth(m.y + 1)
-          .explode(36);
+          .explode(IDOL_FLARE.sparks);
       },
     };
   }
@@ -280,7 +373,28 @@ export function addAmbience(scene: Phaser.Scene, room: RoomDef): Ambience {
       })
       .setDepth(h + 10);
     drifting.push(dust);
-  } else if (room.mood === 'neon') {
+  }
+  // Rain across a room seen from the side (the ink-wash course's act 2, OP-235): grey streaks over the river, under the overlay.
+  if (room.weather === 'rain') {
+    const rain = scene.add
+      .particles(0, 0, 'fx-rain', {
+        x: { min: -100, max: w + 100 },
+        y: -30,
+        lifespan: 1100,
+        speedY: { min: 900, max: 1200 },
+        speedX: { min: -50, max: -30 },
+        rotate: 3,
+        alpha: { start: 0.4, end: 0.08 },
+        scaleY: { min: 0.8, max: 1.5 },
+        tint: [0xc7ceda, 0x9aa3b2, 0xe8ebf0],
+        frequency: 26 / k,
+        quantity: 2,
+        maxAliveParticles: Math.round(120 * k),
+      })
+      .setDepth(h + 20);
+    drifting.push(rain);
+  }
+  if (room.mood === 'neon') {
     const rain = scene.add
       .particles(0, 0, 'fx-rain', {
         x: { min: -100, max: w + 100 },

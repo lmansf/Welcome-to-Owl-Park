@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { frames, openPark, state } from './helpers';
+import { frames, openPark, settleCamera, state, toScreen } from './helpers';
 
 /** Give a collector a variant before the park loads (as if earned earlier), stored the way the local mode keeps it. */
 async function seed(page: Page, collector: string, variant: string): Promise<void> {
@@ -104,6 +104,8 @@ test.describe('quests, NPC owls and leaf piles (this device)', () => {
   });
 
   test('every owl gets the Bat pet as a Halloween present, and hears about it once', async ({ page }) => {
+    // Halloween week: the present's greeting is in season (it ends with Halloween, OP-297).
+    await page.clock.setFixedTime(new Date(Date.UTC(2026, 9, 25, 12)));
     // A collection from before the present.
     await seedFeathers(page, 'e2e-present', 0);
     await openPark(page, { collector: 'e2e-present', tz: 'UTC' });
@@ -122,12 +124,42 @@ test.describe('quests, NPC owls and leaf piles (this device)', () => {
     expect(await owns(page, 'bat~0')).toBe(true);
   });
 
+  test('after Halloween a new owl still gets the Bat pet, and hears no Halloween greeting (OP-297)', async ({ page }) => {
+    await page.clock.setFixedTime(new Date(Date.UTC(2026, 10, 7, 20)));
+    await seedFeathers(page, 'e2e-present-late', 0);
+    await openPark(page, { collector: 'e2e-present-late', tz: 'UTC' });
+    await page.waitForFunction(() => window.owlPark?.collection() !== null, null, { timeout: 20_000 });
+    await expect.poll(() => owns(page, 'bat~0'), { timeout: 15_000 }).toBe(true);
+    await page.waitForTimeout(1500);
+    await expect(page.getByText(/^Happy Halloween!/)).toHaveCount(0);
+  });
+
   test('walking up to a leaf pile on the far side of a doorway does not take the doorway', async ({ page }) => {
     // From the clearing's arrival point the way to this pile crosses the hollow's doorway.
     await openPark(page, { collector: 'e2e-doorway', tz: 'UTC', room: 'grove' });
     expect(await page.evaluate(() => window.owlPark.use('grove-leaves-2'))).toBe(true);
     await expect.poll(async () => (await state(page)).objects.find((o) => o.id === 'grove-leaves-2')?.here, { timeout: 15_000 }).toBe(false);
     expect((await state(page)).room).toBe('grove');
+  });
+
+  test('standing at the Party Grove’s floor-level leaf pile, the pile is clear of Menu, Emotes and Say (OP-292)', async ({ page }) => {
+    await openPark(page, { collector: 'e2e-pile-hud', tz: 'UTC', room: 'hub' });
+    expect(await page.evaluate(() => window.owlPark.use('hub-leaves-1'))).toBe(true);
+    await expect.poll(async () => (await state(page)).objects.find((o) => o.id === 'hub-leaves-1')?.here, { timeout: 15_000 }).toBe(false);
+    await settleCamera(page);
+    // The top of the HUD's controls along the bottom of the screen (a touch screen has none there).
+    const hudBottom = await page.evaluate(() =>
+      Math.min(
+        window.innerHeight,
+        ...[...document.querySelectorAll('#hud .bar .pill, #hud [data-menu-btn], #hud [data-emotes-btn], #hud [data-say-btn]')]
+          .map((el) => el.getBoundingClientRect())
+          .filter((r) => r.height > 0 && r.top + r.height / 2 >= window.innerHeight / 2)
+          .map((r) => r.top),
+      ),
+    );
+    const pile = await toScreen(page, 1930, 820);
+    // The pile's foot, with room to see it above the buttons (on main it sat right at their top edge).
+    expect(pile.y).toBeLessThan(hudBottom - 24);
   });
 
   test('the feather shop gives a gift a day and sells today’s three, the featured shelf and the week', async ({ page }) => {
@@ -188,7 +220,7 @@ test.describe('quests, NPC owls and leaf piles (this device)', () => {
     // Your owl as the first run opens it, over the room (mirror.spec.ts opens it at the nest's mirror).
     await page.evaluate(() => window.owlPark.openBuilder());
     const builder = page.getByRole('dialog', { name: 'Your owl' });
-    await expect(builder.getByText(/of 1190 collected · \d+ feathers/)).toBeVisible();
+    await expect(builder.getByText(/of 1192 collected · \d+ feathers/)).toBeVisible();
     // The owl is drawn big while the builder is open, over the room.
     await expect.poll(() => page.evaluate(() => window.owlPark.game.scene.isActive('builder'))).toBe(true);
     await builder.locator('[data-tab="wear"]').click();
@@ -269,5 +301,54 @@ test.describe('quests, NPC owls and leaf piles (this device)', () => {
     await other.close();
     await openPark(page, { id: 'owl-a', collector: 'e2e-species', tz: 'UTC' });
     expect((await state(page)).look).toMatchObject({ species: 'screech', body: '#6B6B6B' });
+  });
+});
+
+test.describe('puzzle quests (this device, OP-255)', () => {
+  test('a puzzle run starts from the Quests tab, and its pieces in the room are worked by standing at them', async ({ page }) => {
+    test.slow(); // walks across the hub, drawn with software WebGL on CI runners
+    const quest = 'puzzle-moon-gate';
+    await openPark(page, { collector: 'e2e-puzzle', tz: 'UTC' });
+    expect(await page.evaluate(() => window.owlPark.talk('pip'))).toBe(true);
+    const dialogue = page.locator('.dialogue[data-npc="pip"]');
+    await expect(dialogue).toBeVisible({ timeout: 15_000 });
+    await dialogue.locator(`[data-offer="${quest}"]`).getByRole('button', { name: 'Take it on' }).click();
+    await expect(page.locator('.notice').filter({ hasText: /^New quest:/ })).toBeVisible();
+
+    // The Quests tab shows the puzzle with no run yet; Start a run deals fresh clues and codes.
+    await page.keyboard.press('KeyJ');
+    const card = page.locator(`.journal [data-quest="${quest}"]`);
+    await expect(card.locator('.pbox')).toContainText('0 of 3 locks opened by you');
+    await card.getByRole('button', { name: 'Start a run' }).click();
+    await expect(card.locator('[data-run]')).toContainText('You are in a run on your own');
+    await expect(card.locator('[data-lock]')).toHaveCount(3);
+    await expect(card.locator('[data-lock="moon-gate"]')).toContainText('Opens once the locks before it are open');
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-puzzle-journal.png` });
+    await page.keyboard.press('Escape');
+
+    // This room holds the root door's key and the moth dial; a piece up on the bench needs a jump, so walk to those on the floor.
+    const view = await page.evaluate((q) => window.owlPark.puzzle(q), quest);
+    const key = view!.locks.find((l) => l.id === 'root-door')!.key!;
+    const dial = view!.locks.find((l) => l.id === 'moth-dial')!.post;
+    let worked = 0;
+    if (!key.top) {
+      expect(await page.evaluate((q) => window.owlPark.walkToPiece(q, 'root-door', 'key'), quest)).toBe(true);
+      await expect.poll(() => page.evaluate((q) => window.owlPark.puzzle(q)?.locks.find((l) => l.id === 'root-door')?.hasKey ?? false, quest), { timeout: 30_000 }).toBe(true);
+      await expect(page.locator('.toast').filter({ hasText: /You found the key to The root door/ })).toBeVisible();
+      worked++;
+    }
+    if (!dial.top) {
+      expect(await page.evaluate((q) => window.owlPark.walkToPiece(q, 'moth-dial', 'lock'), quest)).toBe(true);
+      const pad = page.locator('.sheet.pad[data-lock="moth-dial"]');
+      await expect(pad).toBeVisible({ timeout: 30_000 });
+      await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-puzzle-pad.png` });
+      for (let i = 0; i < 3; i++) await pad.locator('[data-symbol="moon"]').click();
+      await expect(pad.locator('[data-code]')).toHaveAttribute('data-code', 'moon,moon,moon');
+      await pad.getByRole('button', { name: 'Try' }).click();
+      // The room checks the code: a wrong one says how many tries are left (a lucky guess opens it).
+      await expect.poll(async () => (await pad.locator('.note').textContent()) || (await page.evaluate((q) => window.owlPark.puzzle(q)?.locks.find((l) => l.id === 'moth-dial')?.open ?? false, quest) ? 'open' : ''), { timeout: 10_000 }).toMatch(/tries before it jams|open/);
+      worked++;
+    }
+    expect(worked).toBeGreaterThan(0);
   });
 });

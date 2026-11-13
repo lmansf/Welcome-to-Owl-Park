@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CATALOGUE,
   DUPLICATE_FEATHERS,
+  GOLDEN_MOUSE,
   PRESENTS,
   STARTER_PACK,
   allVariants,
@@ -18,6 +19,7 @@ import {
   variantsByRarity,
 } from './collectibles';
 import { DEFAULT_LOOK, sanitizeLook } from './look';
+import { QUESTS } from './questCatalog';
 import { isLook, isParkMessage } from './validate';
 
 const seedOf = (k: number): Uint8Array => {
@@ -34,27 +36,30 @@ const seedOf = (k: number): Uint8Array => {
 };
 
 describe('catalogue', () => {
-  it('has 59 wearables, 24 pets, 24 effects and 24 emotes: 1190 variants', () => {
+  it('has 59 wearables, 26 pets, 24 effects and 24 emotes: 1192 variants', () => {
     const by = (k: string) => CATALOGUE.filter((i) => i.kind === k).length;
-    expect([by('wear'), by('pet'), by('fx'), by('emote')]).toEqual([59, 24, 24, 24]);
+    expect([by('wear'), by('pet'), by('fx'), by('emote')]).toEqual([59, 26, 24, 24]);
     expect(CATALOGUE.filter((i) => i.slot === 'head')).toHaveLength(36);
     expect(CATALOGUE.filter((i) => i.slot === 'face')).toHaveLength(11);
     expect(CATALOGUE.filter((i) => i.slot === 'neck')).toHaveLength(12);
-    expect(allVariants()).toHaveLength(590 + 192 + 384 + 24);
-    expect(new Set(allVariants()).size).toBe(1190);
+    // The Golden Mouse and the Hollow Moth come in their one colourway each.
+    expect(allVariants()).toHaveLength(590 + 192 + 2 + 384 + 24);
+    expect(new Set(allVariants()).size).toBe(1192);
     expect(new Set(CATALOGUE.map((i) => i.id)).size).toBe(CATALOGUE.length);
   });
 
   it('gives wearables and pets an art key and nothing else one', () => {
     for (const i of CATALOGUE) {
-      if (i.kind === 'wear' || i.kind === 'pet') expect(i.art).toBe(`item-${i.id}`);
+      // A gilded item (the Golden Mouse) is another item's art drawn in gold.
+      if (i.gild) expect(CATALOGUE.some((o) => o.id !== i.id && o.art === i.art)).toBe(true);
+      else if (i.kind === 'wear' || i.kind === 'pet') expect(i.art).toBe(`item-${i.id}`);
       else expect(i.art).toBeUndefined();
     }
   });
 
   it('parses exactly the catalogue spellings', () => {
     for (const id of allVariants()) expect(parseVariant(id)?.id).toBe(id);
-    for (const bad of ['witch-hat', 'witch-hat~10', 'witch-hat~01', 'hoot~0', 'nope~1', 'mouse~8', 'aura~16', '', 'Witch-Hat~1', 42, null]) expect(parseVariant(bad)).toBeNull();
+    for (const bad of ['witch-hat', 'witch-hat~10', 'witch-hat~01', 'hoot~0', 'nope~1', 'mouse~8', 'golden-mouse~1', 'aura~16', '', 'Witch-Hat~1', 42, null]) expect(parseVariant(bad)).toBeNull();
     expect(equipSlotOf(parseVariant('witch-hat~3')!)).toBe('head');
     expect(equipSlotOf(parseVariant('monocle~0')!)).toBe('face');
     expect(equipSlotOf(parseVariant('cape~9')!)).toBe('neck');
@@ -72,8 +77,23 @@ describe('catalogue', () => {
     expect(variantName('flip')).toBe('Backflip');
   });
 
-  it('starts every collector with two emotes and an effect, all real variants', () => {
+  it('starts every collector with two emotes, an effect and a plain wearable for each slot, all real variants', () => {
     for (const v of STARTER_PACK) expect(parseVariant(v)).not.toBeNull();
+    const kinds = STARTER_PACK.map((v) => parseVariant(v)!);
+    expect(kinds.filter((x) => x.item.kind === 'emote')).toHaveLength(2);
+    expect(kinds.filter((x) => x.item.kind === 'fx')).toHaveLength(1);
+    // The free starter look (OP-243): one common wearable per slot, in its original colours.
+    const wear = kinds.filter((x) => x.item.kind === 'wear');
+    expect(wear.map((x) => x.item.slot).sort()).toEqual(['face', 'head', 'neck']);
+    for (const x of wear) {
+      expect(x.rarity).toBe('common');
+      expect(x.colour?.n).toBe(0);
+    }
+  });
+
+  it('keeps the starter pieces out of every quest reward, so none is ever given as a prize (OP-243)', () => {
+    const rewards = new Set(QUESTS.map((q) => q.reward.item));
+    for (const v of STARTER_PACK) expect(rewards.has(v)).toBe(false);
   });
 
   it("gives the park's presents as real variants, each with a note for the visitor", () => {
@@ -90,10 +110,14 @@ describe('catalogue', () => {
     expect(duplicatePayout('nope')).toBe(0);
   });
 
-  it('lists every variant by rarity, once each', () => {
+  it('lists every variant by rarity, once each, but the rewards of their own (no prize is ever the Golden Mouse)', () => {
     const by = variantsByRarity();
     const all = [...by.common, ...by.uncommon, ...by.rare, ...by.epic];
-    expect(all.length).toBe(allVariants().length);
+    expect(all.length).toBe(allVariants().length - 2);
+    expect(all).not.toContain(GOLDEN_MOUSE);
+    expect(all).not.toContain('hollow-moth~0');
+    expect(allVariants()).toContain(GOLDEN_MOUSE);
+    expect(variantName(GOLDEN_MOUSE)).toBe('Golden Mouse');
     expect(new Set(all).size).toBe(all.length);
     for (const v of by.epic) expect(parseVariant(v)!.rarity).toBe('epic');
   });

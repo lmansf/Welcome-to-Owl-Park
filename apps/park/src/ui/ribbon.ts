@@ -1,7 +1,8 @@
 /**
  * The busy ribbon (OP-075): a thin banner across the top of the home screen and every room, with the
  * keepers' words (or the ribbon's own) while they have it on, and on its own while the park has a
- * line. An owl may hide it for the rest of its visit; new words bring it back.
+ * line. An owl may hide it, and on that device the same words stay hidden for good, across visits
+ * (OP-309; the owner, Nov 8: the note kept coming back on his phone); new words bring it back.
  */
 
 /** Every word the ribbon shows beside the keepers' (for the owner's approval). */
@@ -10,8 +11,8 @@ export const RIBBON_UI_WORDS = {
   hide: 'Hide this note',
 } as const;
 
-/** The words this tab hid, so the same note stays hidden for the visit. */
-const HIDDEN_KEY = 'owl-park:ribbon-hidden';
+/** The words this device hid, so the same note stays hidden on later visits too. */
+export const HIDDEN_KEY = 'owl-park:ribbon-hidden';
 
 export interface Ribbon {
   /** The ribbon's words now; null takes it away. */
@@ -20,9 +21,12 @@ export interface Ribbon {
   shown(): string | null;
 }
 
+/** Where the hidden words are kept: this device's storage, not just this tab's (OP-309). */
+type Store = Pick<Storage, 'getItem' | 'setItem'>;
+
 // In the HUD's flow right under the top bar, so what follows (the welcome card, the activity cards on a
 // phone) moves down for it and a wrapped bar on a phone is never covered; over the home screen it is the
-// first thing at the top. The 2 s notices at the top move below it while it shows (--ribbon-bottom). On
+// first thing at the top. The 2 s notices and a course's objective strip move below it where they would lie over it (topStack.ts). On
 // a wide screen, where the activity cards stand at the top right, it keeps to the left of them.
 const CSS = `
 #hud .ribbon{position:relative;z-index:6;margin:8px auto 0;width:max-content;max-width:min(92vw,560px);display:flex;align-items:center;gap:8px;
@@ -34,26 +38,36 @@ const CSS = `
 @media (min-width:761px){#hud .ribbon{margin:8px 0 0;max-width:min(560px,calc(100vw - 452px))}}
 #hud.at-home .ribbon{margin:0 auto;max-width:min(92vw,560px)}
 #hud.covered .ribbon{visibility:hidden}
-#hud.ribbon-on .notices{top:calc(var(--ribbon-bottom) + 6px)}
 `;
 
-function readHidden(): string | null {
+/** This device's lasting storage, or none where the browser keeps nothing. */
+export function deviceStore(): Store | null {
   try {
-    return sessionStorage.getItem(HIDDEN_KEY);
+    return globalThis.localStorage ?? null;
   } catch {
     return null;
   }
 }
 
-function saveHidden(words: string): void {
+/** The words hidden on this device, if any. */
+export function readHidden(store: Store | null): string | null {
   try {
-    sessionStorage.setItem(HIDDEN_KEY, words);
+    return store?.getItem(HIDDEN_KEY) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Keep these words hidden on this device. */
+export function saveHidden(store: Store | null, words: string): void {
+  try {
+    store?.setItem(HIDDEN_KEY, words);
   } catch {
     /* hidden until this page closes */
   }
 }
 
-export function createRibbon(root: HTMLElement): Ribbon {
+export function createRibbon(root: HTMLElement, store: Store | null = deviceStore()): Ribbon {
   const style = document.createElement('style');
   style.textContent = CSS;
   document.head.appendChild(style);
@@ -85,7 +99,7 @@ export function createRibbon(root: HTMLElement): Ribbon {
   el.addEventListener('animationend', place);
 
   let words: string | null = null;
-  let hidden = readHidden();
+  let hidden = readHidden(store);
   const draw = () => {
     const show = words !== null && words !== hidden;
     text.textContent = show ? words : '';
@@ -95,7 +109,7 @@ export function createRibbon(root: HTMLElement): Ribbon {
   hide.addEventListener('click', () => {
     if (words === null) return;
     hidden = words;
-    saveHidden(words);
+    saveHidden(store, words);
     draw();
   });
   return {

@@ -68,6 +68,11 @@
     // email and restored by a magic link. On since 2026-10-31, the owner's go once ACCOUNT_SECRET,
     // RESEND_API_KEY and MAIL_FROM (secrets, below) were set; "off" leaves every page as it was before.
     "ACCOUNTS": "on",
+    // Sign in with Google (OP-313, src/google.ts): an optional button beside the email box that lets
+    // Google say which email is the player's instead of a mailed link. "off" until the owner turns it
+    // on, after the OAuth client's GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET (secrets) are set; without
+    // both, or with accounts off, it stays off whatever this says.
+    "GOOGLE_SIGNIN": "off",
     // How much the Worker and the room server log (OP-134): one JSON line per event, "info" in
     // production; "debug" adds a line for every pass taken and for the realms switch reaching each room object.
     "LOG_LEVEL": "info",
@@ -80,7 +85,11 @@
     "SPECTATORS": "on",
     // The share of a room's cap a spectator may join up to (0 to 1): past floor(cap x share) owls only
     // ticket holders come in, up to the full cap. Nobody already inside is sent out.
-    "SPECTATOR_SHARE": "0.75"
+    "SPECTATOR_SHARE": "0.75",
+    // Bring a friend (OP-056): "off", "preview" (it works for everyone, but the page shows it only with
+    // ?friends=1, for a play-with-your-friends night) or "on". Its free Day Ticket needs REFERRAL_CODE
+    // (a secret, below): the store's discount code that takes one Day Ticket off.
+    "REFERRALS": "preview"
     // Optional: "ROOM_CAPS": "{\"hub\":80,\"grove\":40,\"market\":40}"
     // Local load tests only: run  wrangler dev --var TRUST_FORWARDED_FOR:true  so the swarm's --ip-header works.
   },
@@ -90,8 +99,10 @@
   // warning) until they are set. The store's (SHOPIFY_SHOP, the app's SHOPIFY_CLIENT_ID and
   // SHOPIFY_CLIENT_SECRET or an older app's SHOPIFY_ADMIN_TOKEN, and SHOPIFY_WEBHOOK_SECRET) are set
   // the same way once the store's app exists; until then the ticket webhooks are refused. So is
-  // OPENING_PASS_CODE, opening night's code for the annual pass at half price (C42, OP-062), and the
-  // accounts' ACCOUNT_SECRET, RESEND_API_KEY and MAIL_FROM (OP-139). All are typed as optional in src/env.ts.
+  // OPENING_PASS_CODE, opening night's code for the annual pass at half price (C42, OP-062), REFERRAL_CODE
+  // (OP-056), the free Day Ticket's code, the accounts' ACCOUNT_SECRET, RESEND_API_KEY and MAIL_FROM
+  // (OP-139), and Google sign-in's GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET (OP-313). All are typed as
+  // optional in src/env.ts.
   // Workers Logs and Traces (free tier included). Traces are sampled; logs are kept whole.
   "observability": {
     "enabled": true,

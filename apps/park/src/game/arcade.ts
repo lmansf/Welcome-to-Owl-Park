@@ -125,23 +125,30 @@ const KNOCK_GOAL = `Knock the crates and the nest to the ground: three targets, 
 /** How to play, under each game's field, on a touch screen and on a keyboard. Visitor-facing. */
 const HINTS: Readonly<Record<ArcadeGame, { touch: string; keys: string }>> = {
   crossing: { touch: 'Flick the stick to hop', keys: 'Arrow keys to hop' },
-  flight: { touch: 'Tap to flap', keys: 'Tap to flap' },
-  sling: { touch: 'Pull the stick, let go', keys: 'Pull back and let go, or arrows and space' },
+  flight: { touch: 'Tap to flap', keys: 'Space to flap' },
+  sling: { touch: 'Pull the stick, let go', keys: 'Pull back and let go, or aim with the arrows and press Space' },
 };
+
+/**
+ * What a game is for, in a visitor's terms: the first line of each how-to card. Visitor-facing. Each
+ * game is played by one owl against the day's best on the wall; it used to say the game was played
+ * "with whoever is in the park right now", which it is not (OP-345).
+ */
+export const ARCADE_JOB = "A quick game for one owl. Beat today's best and your score goes up on the wall.";
 
 /** How to play, on a card before a game's first run on this device (OP-137). Visitor-facing. */
 const HOW_TO: Readonly<Record<ArcadeGame, { touch: readonly string[]; keys: readonly string[] }>> = {
   crossing: {
-    touch: [HOP_GOAL, 'Flick the stick to hop up, down, left or right, or swipe the screen. Three lives.'],
-    keys: [HOP_GOAL, 'The arrow keys or WASD hop up, down, left or right. Three lives.'],
+    touch: [ARCADE_JOB, HOP_GOAL, 'Flick the stick to hop up, down, left or right, or swipe the screen. Three lives.'],
+    keys: [ARCADE_JOB, HOP_GOAL, 'The arrow keys or WASD hop up, down, left or right. Three lives.'],
   },
   flight: {
-    touch: ['Fly through the gaps between the branches.', 'Tap to flap. A branch or the ground ends the run.'],
-    keys: ['Fly through the gaps between the branches.', 'Tap to flap. A branch or the ground ends the run.'],
+    touch: [ARCADE_JOB, 'Fly through the gaps between the branches.', 'Tap to flap. A branch or the ground ends the run.'],
+    keys: [ARCADE_JOB, 'Fly through the gaps between the branches.', 'Press Space to flap, or click. A branch or the ground ends the run.'],
   },
   sling: {
-    touch: [KNOCK_GOAL, 'Pull the stick back to aim (the dots show where the owl will fly) and let go to launch. You can pull back on the screen too.'],
-    keys: [KNOCK_GOAL, 'Pull back on the screen and let go, or aim with the arrow keys and launch with space.'],
+    touch: [ARCADE_JOB, KNOCK_GOAL, 'Pull the stick back to aim (the dots show where the owl will fly) and let go to launch. You can pull back on the screen too.'],
+    keys: [ARCADE_JOB, KNOCK_GOAL, 'Pull back on the screen and let go. Or use the keys: Up and Down aim, Left and Right set how hard, and Space launches.'],
   },
 };
 
@@ -336,6 +343,7 @@ export class Arcade {
         input: (i) => this.input(i),
         frame: (rect) => this.frame(rect),
         again: () => void this.play(game),
+        pause: (on) => (this.host.scene.scene.get('arcade') as ArcadeScene | null)?.setPaused(on),
       },
     );
     const view = this.view();

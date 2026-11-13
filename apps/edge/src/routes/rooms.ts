@@ -1,13 +1,14 @@
 /** The rooms: the park's health, the owls in each room, and the sockets that walk into them. */
-import { CLOSE, type Logger, hashForLog } from '@owl-park/shared';
+import { CLOSE, STUMP_ROOM, type Logger, hashForLog, isPartyRoom } from '@owl-park/shared';
 import type { OverflowState } from '../Overflow';
+import { isTestVisit } from '../collectLog';
 import { NESTS_OBJECT, copiesIn, pickCopy } from '../copies';
 import type { Env } from '../env';
-import { mayEnter, spectating, spectatorsOn } from '../gate';
+import { isFreeRoom, mayEnter, spectating, spectatorsOn } from '../gate';
 import { health } from '../health';
 import { countIn, countedOneMore } from '../overflowState';
 import { isLocalHost } from '../guard';
-import { mintEntry, passRefusal, requireSecret, signingKeySet, verifyEntry, verifyPass } from '../pass';
+import { type PassPayload, mintEntry, passRefusal, requireSecret, signingKeySet, verifyEntry, verifyPass } from '../pass';
 import { NESTS_COUNT, ROOMS, isRoomId, roomCap } from '../rooms';
 import { CORS, adminKeySet, clientIp, json, whoOf } from './http';
 import { collections, gateOf, objectFor, objectName, overflowOf, readGate } from './park';
@@ -117,6 +118,16 @@ export async function counts(c: RouteCtx): Promise<Response> {
   return new Response(r.body, { headers: { ...CORS, 'Content-Type': 'application/json' } });
 }
 
+/**
+ * When a room socket's ticket time runs out, in ms (OP-237), or null when nothing ends it: the gate
+ * takes tickets, a ticket admitted the pass, and the room is past the turnstiles. A spectator, a free
+ * room, or an open gate has no ticket time to keep.
+ */
+export function ticketUntil(mode: 'open' | 'ticket', pass: Pick<PassPayload, 'adm' | 'exp'>, roomId: string, spectator: boolean): number | null {
+  if (mode !== 'ticket' || !pass.adm || spectator || isFreeRoom(roomId)) return null;
+  return pass.exp * 1000;
+}
+
 export async function socket(c: RouteCtx): Promise<Response> {
   const { request, env, ctx, url, log } = c;
   const roomId = url.pathname.slice(4);
@@ -143,7 +154,8 @@ export async function socket(c: RouteCtx): Promise<Response> {
   // through it, opens a room; a newcomer is sent to wait on the home screen.
   const busy = await overflowOf(env);
   const who = whoOf(pass);
-  if (busy.active && !(await verifyEntry(secret, url.searchParams.get('entry'), who))) {
+  const cameThrough = await verifyEntry(secret, url.searchParams.get('entry'), who);
+  if (busy.active && !cameThrough) {
     log.info('room.join', 'room_join_refused', 'A room socket was sent to wait in the line.', { ...seen, reason: 'queue' });
     return turnedAway(ctx, log, CLOSE.QUEUED, 'line');
   }
@@ -167,6 +179,23 @@ export async function socket(c: RouteCtx): Promise<Response> {
   if (pass.cid) headers.set('X-Collector-Id', pass.cid);
   if (pass.tz) headers.set('X-Collector-Tz', pass.tz);
   if (pass.dev) headers.set('X-Collector-Dev', pass.dev);
+  // When the ticket that let this owl in runs out (OP-237): the room closes its socket then. Only the
+  // pass says so, and only where the ticket is what opened the room; whatever the page sent goes.
+  headers.delete('X-Ticket-Until');
+  const until = ticketUntil(gate.mode, pass, roomId, spectator);
+  if (until !== null) headers.set('X-Ticket-Until', String(until));
   headers.set('X-Visitor-Ip', clientIp(request, env));
+  // A newcomer (no entry: not inside lately, not through the line), by the Worker's word only (OP-322):
+  // a full room sends it to the line when the line has just started, rather than saying the room is full.
+  headers.delete('X-Newcomer');
+  if (!cameThrough) headers.set('X-Newcomer', '1');
+  // One of our own test visits (the page's `test=1`, or a headless browser): only the Worker says so, whatever the page sent under the name goes.
+  headers.delete('X-Test-Visit');
+  if (isTestVisit(url.searchParams.get('test'), request.headers.get('User-Agent'))) headers.set('X-Test-Visit', '1');
+  // A party game's room (OP-314) lives in the object of the Party Grove it was started in: the page names that copy.
+  if (isPartyRoom(roomId)) return objectFor(env, STUMP_ROOM, Number.isInteger(askedCopy) && askedCopy > 1 && askedCopy <= MAX_PARTY_COPY ? askedCopy : 1).fetch(new Request(request, { headers }));
   return objectFor(env, roomId, copy).fetch(new Request(request, { headers }));
 }
+
+/** The highest copy of the Party Grove a page may name for its game's room (OP-314). */
+const MAX_PARTY_COPY = 16;

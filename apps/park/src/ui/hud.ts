@@ -1,11 +1,12 @@
-import { NEST_WORDS, type ArcadeGame, type ClimbInput, type EquipSlot, type FeedbackDraft, type NestSpotId, type NpcDef, type OwlAccount, type OwlLook, type TravelRefusal, type TravelState, type Vec2, type Wear } from '@owl-park/shared';
+import { getPhrase, NEST_WORDS, type ArcadeGame, type ClimbInput, type EquipSlot, type FeedbackDraft, type FeedbackRewardView, type LockView, type NestSpotId, type NpcDef, type OwlAccount, type OwlLook, type TravelRefusal, type TravelState, type Vec2, type Wear } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { TaskState } from '../collect/tasks';
 import type { CollectionState } from '../collect/state';
-import type { AccountLink, ConnectionStatus } from '../net';
-import type { FeedbackOutcome } from '../net/feedback';
+import type { AccountLink, ConnectionStatus, ReferralLink, ReferralState } from '../net';
+import type { FeedbackSent } from '../net/feedback';
 import type { WalletEntry } from '../net/transport';
 import type { SettingsStore } from '../settings';
+import { createInfoScreens, type InfoKind } from './about';
 import { accountCard, createAccountScreens, type AccountScreenDeps, type AccountScreens } from './account';
 import { createActivityCards, type CopyView, type QuizView } from './activities';
 import { createArcadeScreen, type ArcadeHandlers, type ArcadeResultView, type ArcadeView } from './arcadeScreen';
@@ -13,8 +14,12 @@ import { createClimbScreen, type ClimbBandView, type ClimbHandlers, type ClimbRe
 import { createDecorateSheet, type DecorateActions, type DecorateSheet, type DecorateView } from './decorate';
 import { createEmoteWheel, wheelEmotes, type EmoteWheel } from './emoteWheel';
 import { createFeedbackScreen, type FeedbackScreen } from './feedback';
-import { createFeedbackBug } from './feedbackBug';
-import { createJoystick } from './joystick';
+import { createFeedbackBug, feedbackIcon } from './feedbackBug';
+import { afterReward, createFeedbackCard, type FeedbackCard } from './feedbackReward';
+import { coveredBy, type CoveredEdges } from '../game/hudInset';
+import { walkingMap } from '../game/walkingMap';
+import { createTreeMinimap } from './treeMinimap';
+import { createJoystick, underStick } from './joystick';
 import { eventTime } from './keyboard';
 import { createLeaveCard } from './leaveCard';
 import { createMenuShell } from './menuShell';
@@ -27,9 +32,12 @@ import { createWhichOwlScreen, type WhichOwlRun } from './whichOwl';
 import { createShopPanel, type ShopPanel } from './shop';
 import { GATE_WORDS, createFreePassCard, createTicketCard, type FreePassCard, type FreePassOffer, type GateCard, type TicketCard } from './tickets';
 import { createGateSale, withBring, type GateSale, type GateSalePanel } from './gateSale';
-import { createStoreCard, type StoreGo } from './storeCard';
+import { createStoreCard, openWindow, type StoreGo } from './storeCard';
+import { startCheckout } from './checkout';
+import { REFERRAL_WORDS, referralCard } from './referral';
 import { createGatePrompt, type GateAsk } from './gatePrompt';
 import { SPECTATOR_WORDS, createSpectatorBadge } from './spectator';
+import { watchTopStack } from './topStack';
 import { createTurnPhone } from './turnPhone';
 
 /** What the HUD asks of the park for the visitor's collection: wearing things, emotes, messages. */
@@ -75,6 +83,12 @@ export interface HudHint {
   text?: string;
 }
 
+/** The thanks ladder for feedback (OP-272): where the owl stands, and closing the card beside the bug. */
+export interface FeedbackRewardLink {
+  load(): Promise<FeedbackRewardView | null>;
+  close(): Promise<FeedbackRewardView | null>;
+}
+
 export interface Hud {
   setCount(n: number): void;
   /** Owls in the whole park, when known (authoritative transports). */
@@ -85,9 +99,11 @@ export interface Hud {
   /** Wire the emote wheel, the owl builder, the feather count and the shop to the visitor's collection. */
   attachCollection(state: CollectionState, actions: CollectionActions): void;
   /** Feedback in the Menu; each note goes with the room the owl is in and the screen's size. */
-  attachFeedback(send: (draft: FeedbackDraft) => Promise<FeedbackOutcome>): void;
+  attachFeedback(send: (draft: FeedbackDraft) => Promise<FeedbackSent>, rewards?: FeedbackRewardLink): void;
   /** The owl's account (OP-139): its card in the Menu's Nest and Settings tabs, and the screens that protect and bring back an owl. */
   attachAccount(link: AccountLink, deps: Pick<AccountScreenDeps, 'restart' | 'startOver'>): AccountScreens;
+  /** Bring a friend (OP-056): its card in the Menu's Nest tab, shown with the park's REFERRALS on, or as a preview when `preview` (?friends=1). */
+  attachReferrals(link: ReferralLink, preview: boolean): void;
   /** The Menu's ways out: what "Leave the park" and travel from the map do. */
   attachWayOut(actions: WayOutActions): void;
   /** The tickets on this device, for the Menu's Settings tab (null: the page has no park server keeping them). */
@@ -103,6 +119,11 @@ export interface Hud {
   closeDialogue(): void;
   /** The NPC whose dialogue is open, if any. */
   dialogueNpc(): string | null;
+  /** A code lock's pad, when the owl walks up to it (OP-255), and how a try went. */
+  openLock(quest: string, lock: LockView): void;
+  closeLock(): void;
+  lockShowing(): { quest: string; lock: string } | null;
+  lockNote(text: string): void;
   /** The Menu button: open or close the Menu (closing the other screens). */
   toggleMenu(): void;
   /** M: open the Menu on its map (OP-130), or close it there. */
@@ -113,6 +134,8 @@ export interface Hud {
   toggleSay(): void;
   /** The Say wheel says a phrase through this (false: it was not said). */
   onSay(cb: (n: number) => boolean): void;
+  offerReply(n: number): void;
+  clearReply(): void;
   /**
    * 1 to 8: play that emote of the wheel (its page, while it is open), unless another screen is open;
    * while the Say wheel is open, 1 to 4 say a phrase of its group.
@@ -135,6 +158,8 @@ export interface Hud {
   /** The home screen's buttons: the owl builder and Settings, without the way back to the Menu. */
   openOwl(opener: HTMLElement): void;
   openSettings(opener: HTMLElement): void;
+  /** About the park or Safety and privacy (about.ts), from the home screen. */
+  openInfo(kind: InfoKind, opener: HTMLElement): void;
   /** Which owl are you (OP-076): a new owl's first run (from Make your owl), drawn over everything. */
   openWhichOwl(run: Omit<WhichOwlRun, 'preview'>, opener: HTMLElement): void;
   /** The feather shop. */
@@ -174,6 +199,8 @@ export interface Hud {
   /** The run is over: how it ended and what it paid. */
   arcadeResult(result: ArcadeResultView): void;
   closeArcade(): void;
+  /** Escape while an arcade game is open (OP-345): a run under way pauses (a paused one goes on) and this answers true; false when there is nothing to pause. */
+  escapeArcade(): boolean;
   /** The climb screen over everything while a climb is played; it owns its stick, button and keys. */
   openClimb(view: ClimbView, handlers: ClimbHandlers): void;
   /** The climb screen's held controls right now (`jumpPressed` once per press). */
@@ -202,6 +229,12 @@ export interface Hud {
    * between two tree rooms; the next room says again, and the home screen never shows it.
    */
   setSideways(on: boolean): void;
+  /**
+   * The tree's minimap (OP-213, a computer's screen only): the owl in room `room` at `x` (room px),
+   * every frame in a room of the tree; null out of it, which hides the map. It hides too while the
+   * Menu or another panel is open.
+   */
+  setTreeSpot(spot: { room: string; x: number } | null): void;
   /** The action buttons for where the owl stands (gift shop, Realm Vote, ...); empty hides them. */
   setActions(actions: HudAction[]): void;
   onAction(cb: (id: string) => void): void;
@@ -212,6 +245,10 @@ export interface Hud {
    * lifts (each with when), so a tap jumps, a second tap flaps and a hold glides, as the space bar does.
    */
   onJump(press: (at?: number) => void, release: (at?: number) => void): void;
+  /** The pad's Dash button (touch screens, OP-224): above Jump, shown only while the owl holds the dash (in a parkour course); `press` as the thumb goes down. */
+  onDash(press: (at?: number) => void): void;
+  /** Whether the owl holds the dash: shows or hides the pad's Dash. */
+  setDash(on: boolean): void;
   /**
    * Quest news (OP-083): a new quest taken on, or one ready to hand in. A short line at the top of
    * the screen, and a dot on the Menu button and its Quests tile until the quests screen is opened.
@@ -221,6 +258,16 @@ export interface Hud {
   closePanels(): void;
   /** The off-screen hint chips; an empty list clears them. */
   setHints(hints: HudHint[]): void;
+  /**
+   * Where the visitor's own owl's feet are on the screen (CSS px), or null for nowhere (OP-349): the
+   * thumbstick goes quiet while the owl is under it (joystick.ts, underStick).
+   */
+  setOwlAt(feet: { x: number; y: number } | null): void;
+  /**
+   * The room is fading out, or the next is not in yet (OP-346): what the HUD shows of the room itself
+   * (a course's strip, the actions where the owl stands) fades with it. The Menu and the counters stay.
+   */
+  setRoomDark(on: boolean): void;
   /** The gated realms the keepers have opened (the realms switch): the Menu map draws their arches as doorways. */
   setOpenRealms(open: readonly string[]): void;
   onHint(cb: (id: string) => void): void;
@@ -239,6 +286,8 @@ export interface Hud {
   onCopy(cb: (note: string | null) => void): void;
   /** Where the thumbstick points (touch screens), one of eight ways like the walking keys; null while it rests. */
   stickDirection(): Vec2 | null;
+  /** How many times the thumbstick has come to rest from pointing a way (keyboard.ts, Keys.rests). */
+  stickRests(): number;
   /** The Decorate sheet for the owner's own nest, starting at `spot`; it hides the bottom bar while open. */
   openDecorate(view: DecorateView, spot: NestSpotId, actions: DecorateActions): void;
   /** The nest changed while the sheet is open. */
@@ -246,6 +295,8 @@ export interface Hud {
   /** The room picked a spot. */
   selectDecorateSpot(spot: NestSpotId): void;
   closeDecorate(): void;
+  /** How far the HUD's controls (the owl count, the feathers, Menu, Emotes and Say) reach in from the top and bottom of the screen, in CSS px (OP-278). */
+  coveredEdges(): CoveredEdges;
 }
 
 const CSS = `
@@ -278,11 +329,14 @@ const CSS = `
 #hud .say-btn svg{width:30px;height:30px}
 #hud .say-btn[aria-expanded=true]{background:#C9A227}
 #hud .say-btn kbd{position:absolute;top:-6px;right:-8px;margin:0;color:#F6F1E3;background:rgba(12,30,54,.92)}
+#hud .say-reply{min-height:44px;padding:6px 12px;border-radius:18px;background:rgba(12,30,54,.94);color:#F6F1E3;border:1px solid rgba(255,211,106,.65);white-space:nowrap}
+#hud .say-reply[hidden]{display:none}
 #hud .badge{position:absolute;top:-3px;right:-3px;width:13px;height:13px;border-radius:50%;background:#FF6B81;box-shadow:0 0 0 2px #0C1E36,0 0 8px rgba(255,107,129,.8)}
 #hud .badge[hidden]{display:none}
-#hud .pad{display:none}
+#hud .controller-pad{display:none}
 #hud.covered .bar,#hud.covered .welcome,#hud.covered .welcome.show,#hud.covered .nest-welcome,#hud.covered .bottom,#hud.covered .hints,#hud.covered .cards,#hud.covered .notices{visibility:hidden}
 #hud.no-stick .stick{display:none}
+#hud.just-in .fb-bug,#hud.just-in .fb-card{pointer-events:none}
 #hud.at-home .bar,#hud.at-home .welcome,#hud.at-home .welcome.show,#hud.at-home .nest-welcome.show,#hud.at-home .bottom,#hud.at-home .hints,#hud.at-home .cards,#hud.at-home .notices{display:none}
 @media (pointer:coarse){#hud.no-stick .bottom .actions{bottom:0}}
 #hud .toasts{position:absolute;z-index:10;left:50%;transform:translateX(-50%);bottom:calc(max(12px,env(safe-area-inset-bottom)) + 64px);display:flex;flex-direction:column;gap:6px;align-items:center;width:min(92vw,520px)}
@@ -292,49 +346,61 @@ const CSS = `
 #hud kbd{display:none;margin-left:8px;padding:0 6px;border:1px solid currentColor;border-radius:5px;font:700 11px/1.5 system-ui,sans-serif;opacity:.7;vertical-align:1px}
 @media (hover:hover) and (pointer:fine){#hud kbd{display:inline-block}}
 #hud .actions{display:flex;gap:8px;align-items:flex-end}
+#hud .actions,#objective-strip{transition:opacity .2s ease-out}
+.room-dark #hud .actions,.room-dark #objective-strip{opacity:0}
 #hud .left{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
 #hud .feathers{display:none;font-size:14px;font-weight:700}
 #hud .feathers.show{display:flex}
 #hud .feathers svg{width:18px;height:18px;filter:drop-shadow(0 0 4px rgba(255,211,106,.7))}
 #hud .toast.accent{border-left:6px solid var(--accent)}
-#hud .notices{position:absolute;z-index:10;left:50%;transform:translateX(-50%);top:calc(max(10px,env(safe-area-inset-top)) + 54px);display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none}
+#hud .notices{position:absolute;z-index:10;left:50%;transform:translateX(-50%);top:var(--notices-top,calc(max(10px,env(safe-area-inset-top)) + 54px));display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none}
 #hud .notice{background:rgba(12,30,54,.92);color:#FFD36A;border:1px solid rgba(255,211,106,.55);border-radius:999px;padding:7px 16px;font-size:14px;font-weight:700;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.4);animation:hud-in .25s ease-out}
 /*
- * Touch screens: a pad like a handheld's (OP-082, OP-114). The thumbstick stays in the bottom-right
- * corner; on the left three of a handheld's face buttons (Logan, 2026-10-27): Interact on the right
- * (nearer the middle), the Menu outside (darker, a handheld's Start) and, below between them, Jump
- * (OP-084: a tap jumps, a tap in the air flaps, held on the way down it glides). Going home and the
- * Map are the Menu's. Three 56 px buttons whose centres sit 45.25 px from the cluster's middle
- * (81.25 px in, 73.25 px up), so Jump is 8 px from each; Emotes and Say, 44 px, sit above the Menu
- * and Interact, 9 px clear of them. All see-through, like the stick.
+ * Touch screens: a pad laid out like a game controller's (OP-082, OP-114; Logan, 2026-11-03, OP-242).
+ * The thumbstick keeps the bottom-left corner; the face buttons keep the bottom-right: Jump the big one
+ * in the corner, where a controller's main button sits (OP-084: a tap jumps, a tap in the air flaps,
+ * held on the way down it glides), Interact up and to its left, and Dash, in a parkour course only,
+ * straight above Jump. Jump is 68 px and the others 56 px; each sits 7 px or more clear of the next.
+ * The Menu and Say are small (44 px) and up in the top-right corner, away from the thumbs. All
+ * see-through, like the stick.
  */
 @media (pointer:coarse){
-  #hud .bottom .left{position:absolute;left:0;bottom:0;display:block;width:161px;height:153px;max-width:none}
-  #hud .pad{display:block;position:absolute;left:0;bottom:0;width:161px;height:153px}
-  #hud .pad-btn{position:absolute;width:56px;height:56px;min-height:0;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#F6F1E3;background:rgba(12,30,54,.28);border:2px solid rgba(246,241,227,.32);box-shadow:inset 0 0 18px rgba(0,0,0,.25);touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+  #hud .bar{min-height:44px;padding-right:100px}
+  #hud .bottom .left{position:fixed;left:auto;bottom:auto;top:max(10px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));display:flex;flex-direction:row-reverse;gap:8px;width:auto;height:auto;max-width:none}
+  #hud .controller-pad{display:block;position:absolute;right:0;bottom:0;width:158px;height:132px}
+  /* No browser gesture starts on the pad (touch-action none): two thumbs at once must never read as a pinch or a pan (OP-242). */
+  #hud .controller-pad{touch-action:none}
+  #hud .pad-btn{position:absolute;width:56px;height:56px;min-height:0;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#F6F1E3;background:rgba(12,30,54,.28);border:2px solid rgba(246,241,227,.32);box-shadow:inset 0 0 18px rgba(0,0,0,.25);touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
   #hud .pad-btn[hidden]{display:none}
   #hud .pad-btn svg{width:30px;height:30px}
   #hud .pad-btn .i1{fill:#F6F1E3;stroke:#F6F1E3}
   #hud .pad-btn .i2{fill:#FFD36A}
-  #hud .pad-btn.interact{left:98.5px;bottom:45.25px;border-color:rgba(255,211,106,.7);box-shadow:inset 0 0 18px rgba(0,0,0,.25),0 0 12px rgba(255,211,106,.35)}
+  #hud .pad-btn.interact{right:64px;bottom:50px;border-color:rgba(255,211,106,.7);box-shadow:inset 0 0 18px rgba(0,0,0,.25),0 0 12px rgba(255,211,106,.35)}
   #hud .pad-btn.interact.idle{opacity:.55;border-color:rgba(246,241,227,.32);box-shadow:inset 0 0 18px rgba(0,0,0,.25)}
-  #hud .pad-btn.jump{left:53.25px;bottom:0}
+  #hud .pad-btn.jump{right:0;bottom:0;width:68px;height:68px}
+  #hud .pad-btn.jump svg{width:36px;height:36px}
+  /* Dash (OP-224), in a parkour course only: straight above Jump. */
+  #hud .pad-btn.dash{right:6px;bottom:76px}
   #hud .pad-btn.on{background:rgba(12,30,54,.4);border-color:rgba(255,211,106,.6)}
-  #hud .menu-btn{position:absolute;left:8px;bottom:45.25px;width:56px;height:56px;min-height:56px;padding:0;gap:0;justify-content:center;font-size:0;background:rgba(4,10,20,.5);border:2px solid rgba(246,241,227,.26);box-shadow:inset 0 0 14px rgba(0,0,0,.3)}
-  #hud .menu-btn i{width:20px;height:14px}
-  #hud .emote-btn{position:absolute;left:1.5px;bottom:109px;width:44px;height:44px;min-height:44px;background:rgba(12,30,54,.28);border:2px solid rgba(246,241,227,.32);box-shadow:inset 0 0 18px rgba(0,0,0,.25)}
+  #hud .menu-btn{position:relative;width:44px;height:44px;min-height:44px;padding:0;gap:0;justify-content:center;font-size:0;background:rgba(4,10,20,.5);border:2px solid rgba(246,241,227,.26);box-shadow:inset 0 0 14px rgba(0,0,0,.3)}
+  #hud .menu-btn i{width:18px;height:13px}
+  #hud .emote-btn{position:relative;width:44px;height:44px;min-height:44px;background:rgba(12,30,54,.28);border:2px solid rgba(246,241,227,.32);box-shadow:inset 0 0 18px rgba(0,0,0,.25)}
   #hud .emote-btn svg{width:28px;height:28px}
-  #hud .say-btn{position:absolute;left:117px;bottom:109px;width:44px;height:44px;min-height:44px;background:rgba(4,10,20,.5);border:2px solid rgba(246,241,227,.26);box-shadow:inset 0 0 14px rgba(0,0,0,.3)}
+  #hud .say-btn{position:relative;width:44px;height:44px;min-height:44px;background:rgba(4,10,20,.5);border:2px solid rgba(246,241,227,.26);box-shadow:inset 0 0 14px rgba(0,0,0,.3)}
   #hud .say-btn svg{width:24px;height:24px}
+  #hud .say-reply{position:absolute;top:calc(100% + 6px);right:0}
+  /* The row of further actions keeps above the face buttons, stick or no stick. */
+  #hud .bottom .actions,#hud.no-stick .bottom .actions{position:absolute;right:0;bottom:146px;flex-direction:column;align-items:flex-end}
   #hud .toasts{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 186px)}
   /* A game played on the pad (OP-137): its Interact over the arcade screen, lit, the rest of the pad away. */
-  #hud.arcade-pad .pad{visibility:visible;z-index:25}
+  #hud.arcade-pad .controller-pad{visibility:visible;z-index:25}
   #hud.arcade-pad .pad-btn.interact,#hud.arcade-pad .pad-btn.interact.idle{opacity:1;pointer-events:auto;border-color:rgba(255,211,106,.7);box-shadow:inset 0 0 18px rgba(0,0,0,.25),0 0 12px rgba(255,211,106,.35)}
-  #hud.arcade-pad .pad-btn.jump{display:none}
+  #hud.arcade-pad .pad-btn.jump,#hud.arcade-pad .pad-btn.dash{display:none}
   /* Hoot & Hop and Talon Toss on the pad (OP-137): the stick over the arcade screen, each flick a hop or a pull to aim (even with the stick off for walking). */
   #hud.arcade-stick .stick{display:block;visibility:visible;z-index:25}
-  /* The line on how to play keeps to the left of the stick or the Interact the game is played with. */
-  #hud.arcade-stick .arcade .a-hint,#hud.arcade-pad .arcade .a-hint{left:12px;transform:none;max-width:calc(100% - 176px);white-space:normal;text-align:left}
+  /* The line on how to play keeps clear of the stick (on the left) or the Interact (on the right) the game is played with. */
+  #hud.arcade-pad .arcade .a-hint{left:12px;transform:none;max-width:calc(100% - 176px);white-space:normal;text-align:left}
+  #hud.arcade-stick .arcade .a-hint{left:auto;right:12px;transform:none;max-width:calc(100% - 176px);white-space:normal;text-align:right}
 }
 /* The '!' that stands for Interact, before the first action (what E and the pad's Interact do). */
 #hud .actions .bang{display:inline-flex;width:18px;height:18px;margin:0 6px 0 -4px;vertical-align:-3px}
@@ -355,6 +421,32 @@ const CSS = `
 #hud .nest-welcome b{display:block;font-size:12px;color:#FFD36A;letter-spacing:.02em}
 #hud .nest-welcome i{position:absolute;top:6px;right:11px;font-style:normal;font-size:16px;line-height:1;opacity:.7}
 @media (max-width:520px){#hud .bar{flex-wrap:wrap}#hud .feathers{order:3}}
+#hud .pill .alone{display:none;align-items:center}
+#hud .pill .alone svg{width:18px;height:18px}
+/*
+ * The phone's screen, decluttered (OP-242, Logan, 2026-11-03): in sight are the stick, Jump, the Menu,
+ * one Say button (Emotes are a tap away inside it), the feathers and, only where the owl can do
+ * something, Interact wearing what it does. The owl count is the Menu's (under its title), and so is
+ * Feedback (its own button by Close); the connection line shows for a few seconds as before and then
+ * leaves only a small mark in the bar while the owl wanders alone.
+ */
+@media (pointer:coarse){
+  #hud .brand{font-size:16px}
+  #hud .feathers{padding:5px 11px;font-size:13px;gap:6px}
+  #hud .feathers svg{width:15px;height:15px}
+  #hud .bar .pill{display:none}
+  #hud.net-off .bar .pill{display:flex;padding:6px 9px;gap:6px}
+  #hud.net-off .bar .pill [data-count]{display:none}
+  #hud.net-off .bar .pill .alone{display:inline-flex}
+  #hud .emote-btn{display:none}
+  #hud .pad-btn.interact.idle{opacity:0;pointer-events:none}
+  #hud .pad-btn.interact .lbl{display:none}
+  #hud .pad-btn.interact.labelled{width:max-content;min-width:56px;max-width:min(240px,calc(100vw - 232px));padding:0 14px 0 12px;gap:4px;justify-content:flex-start;border-radius:28px;background:rgba(12,30,54,.78)}
+  #hud .pad-btn.interact.labelled svg{flex:none}
+  #hud .pad-btn.interact.labelled .lbl{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;font-size:13px;font-weight:700;line-height:1.15;text-align:left;color:#F6F1E3}
+  /* The first action is Interact's own, so its button in the row would say it twice. */
+  #hud .actions button:first-child{display:none}
+}
 `;
 
 /** The Say button's face: a speech bubble with two lines of words, like the wheel of phrases it opens. */
@@ -373,13 +465,22 @@ const EMOTES_ICON =
 const INTERACT_ICON =
   '<svg viewBox="0 0 32 32" aria-hidden="true"><path class="i1" d="M16 5.5v13.5" stroke-width="4.6" stroke-linecap="round" fill="none"/><circle class="i2" cx="16" cy="25.6" r="2.9"/></svg>';
 
+/** The bar's mark while the owl wanders alone (OP-242): a cloud crossed out. */
+const ALONE_ICON =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18h10a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.2 9.1 4.5 4.5 0 0 0 7 18z" fill="none" stroke="#F6F1E3" stroke-width="1.8" stroke-linejoin="round" opacity=".8"/><path d="M4 4l16 16" stroke="#FF6B81" stroke-width="2.2" stroke-linecap="round"/></svg>';
+
 /** A keyboard's click on the pad's Jump is a tap this long: a jump, not a glide. */
 const KEY_TAP_MS = 150;
+/** How long after the home screen a press on the feedback bug or its card is still taken as one meant for Play. */
+const JUST_IN_MS = 2000;
 
 /** How long a place newly lit on the map sparkles, however often the map is drawn again meanwhile (OP-130). */
 const SPARKLE_MS = 4000;
 
 /** The pad's Jump button: up from a little arc. */
+const DASH_ICON =
+  '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4 11h9M2 16h11M4 21h9" fill="none" stroke="#F6F1E3" stroke-width="2.4" stroke-linecap="round"/><path d="M15 9l11 7-11 7z" fill="#FFD36A" stroke="#FFD36A" stroke-width="1.6" stroke-linejoin="round"/></svg>';
+
 const JUMP_ICON =
   '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 26c3.2-10 18.8-10 22 0" fill="none" stroke="#F6F1E3" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="3 3.4"/><path d="M16 21V7m-5.5 5.5L16 7l5.5 5.5" fill="none" stroke="#FFD36A" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
@@ -397,21 +498,23 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     <div class="bar">
       <div class="brand" aria-label="Owl Park"><i aria-hidden="true"></i>Owl Park</div>
       <div class="feathers" role="status" aria-label="Feathers" data-feathers><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 28C6 16 15 6 28 3C27 15 18 24 7 27Z" fill="#FFD36A"/><path d="M4 30Q15 18 28 3" stroke="#0C1E36" stroke-width="1.6" fill="none"/></svg><span data-feathers-text>0</span></div>
-      <div class="pill" role="status" aria-live="polite"><span class="dot connecting" data-dot></span><span data-count>1 owl here</span></div>
+      <div class="pill" role="status" aria-live="polite"><span class="dot connecting" data-dot></span><span data-count>1 owl here</span><span class="alone" data-alone title="Wandering alone: the park could not connect">${ALONE_ICON}</span></div>
     </div>
     <button class="nest-welcome" data-nest-welcome><b></b><span></span><i aria-hidden="true">×</i></button>
     <div class="hints" data-hints></div>
     <div class="notices" aria-live="polite" data-notices></div>
     <div class="toasts" aria-live="polite" data-toasts></div>
-    <div class="bottom">
-      <div class="pad">
-        <button class="pad-btn interact idle" data-pad-interact aria-label="Interact" aria-disabled="true">${INTERACT_ICON}</button>
+    <div class="bottom" data-park-keys>
+      <div class="controller-pad">
+        <button class="pad-btn interact idle" data-pad-interact aria-label="Interact" aria-disabled="true">${INTERACT_ICON}<span class="lbl" data-pad-interact-label aria-hidden="true"></span></button>
         <button class="pad-btn jump" data-pad-jump aria-label="Jump" aria-keyshortcuts="Space">${JUMP_ICON}</button>
+        <button class="pad-btn dash" data-pad-dash aria-label="Dash" aria-keyshortcuts="Shift" hidden>${DASH_ICON}</button>
       </div>
       <div class="left">
         <button class="menu-btn" data-menu-btn aria-haspopup="dialog" aria-expanded="false" aria-keyshortcuts="M"><i aria-hidden="true"></i>Menu<kbd aria-hidden="true">M</kbd><span class="badge" data-quest-dot hidden></span></button>
         <button class="emote-btn" data-emotes-btn aria-label="Emotes" aria-haspopup="dialog" aria-expanded="false">${EMOTES_ICON}</button>
         <button class="say-btn" data-say-btn aria-label="Say" aria-haspopup="dialog" aria-expanded="false" aria-keyshortcuts="T">${SAY_ICON}<kbd aria-hidden="true">T</kbd></button>
+        <button class="say-reply" data-say-reply hidden></button>
       </div>
       <div class="actions" data-actions></div>
     </div>`;
@@ -424,8 +527,11 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   const menuBtn = $<HTMLButtonElement>('[data-menu-btn]');
   const emotesBtn = $<HTMLButtonElement>('[data-emotes-btn]');
   const sayBtn = $<HTMLButtonElement>('[data-say-btn]');
+  const sayReply = $<HTMLButtonElement>('[data-say-reply]');
   const interactBtn = $<HTMLButtonElement>('[data-pad-interact]');
+  const interactLabel = $<HTMLElement>('[data-pad-interact-label]');
   const jumpBtn = $<HTMLButtonElement>('[data-pad-jump]');
+  const dashBtn = $<HTMLButtonElement>('[data-pad-dash]');
   const questDot = $<HTMLElement>('[data-quest-dot]');
   const notices = $<HTMLElement>('[data-notices]');
   const actionsEl = $<HTMLElement>('[data-actions]');
@@ -441,6 +547,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   const bar = $<HTMLElement>('.bar');
   const cards = createActivityCards(root, bar);
   const stick = createJoystick($<HTMLElement>('.bottom'));
+  const treeMap = createTreeMinimap(root);
   let questUi: QuestUi | null = null;
   let questState: QuestState | null = null;
   let taskState: TaskState | null = null;
@@ -453,6 +560,10 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   let spectator = false;
   let getTicket: ((line: string) => void) | null = null;
   let roomId = '';
+  // The thanks ladder for feedback (OP-272), as last heard, its card, and a fresh look at it.
+  let rewardView: FeedbackRewardView | null = null;
+  let feedbackCard: FeedbackCard | null = null;
+  let loadRewards: (() => void) | null = null;
   let wheel: EmoteWheel | null = null;
   let feedback: FeedbackScreen | null = null;
   let accountScreens: AccountScreens | null = null;
@@ -503,6 +614,9 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     return tickets.list;
   };
   let previewCb: ((frame: PreviewFrame | null, mirror: boolean) => void) | null = null;
+  let justInTimer: ReturnType<typeof setTimeout> | undefined;
+  /** When the owl last left the home screen (performance.now()), for presses meant for Play. */
+  let leftHomeAt = Number.NEGATIVE_INFINITY;
   let decorate: DecorateSheet | null = null;
   /** The room scene that opened the Decorate sheet answers it (the sheet outlives a scene). */
   let decorateActions: DecorateActions | null = null;
@@ -527,6 +641,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   /** While a game plays on the pad (OP-137): what the pad's Interact does in it (Moon Flap: a flap). */
   let arcadeTap: (() => void) | null = null;
   let jumpCbs: { press: (at?: number) => void; release: (at?: number) => void } | null = null;
+  let dashCb: ((at?: number) => void) | null = null;
   /** Quest news not seen yet: the dot on the Menu button and its Quests tab. */
   let questNews = false;
   /** The gated realms the keepers have opened (the realms switch), for the Menu map. */
@@ -537,18 +652,30 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   const renderCount = () => {
     const base = here === 1 ? '1 owl here' : `${here} owls here`;
     count.textContent = park !== null && park > here ? `${base} · ${park} in the park` : base;
+    // The Menu says it too, under its title: a phone's bar leaves the count out (OP-242).
+    menu.subtitle(count.textContent);
+  };
+
+  let reply: { phrase: number; until: number } | null = null;
+  let replyTimer: ReturnType<typeof setTimeout> | undefined;
+  const clearReply = () => {
+    clearTimeout(replyTimer);
+    reply = null;
+    sayReply.hidden = true;
   };
 
   // Settings: what the screen shows.
   const applySettings = () => {
     root.classList.toggle('no-stick', !settings.get().thumbstick);
+    if (!settings.get().bubbles) clearReply();
   };
   settings.onChange(applySettings);
   applySettings();
 
   // ---- the Menu and its screens: one open at a time ----
   let sayCb: ((n: number) => boolean) | null = null;
-  const sayWheel = createSayWheel(root, (n) => sayCb?.(n) ?? false);
+  // One button for both on a phone (OP-242): Say opens with a way to the emotes, and the emotes with a way back.
+  const sayWheel = createSayWheel(root, (n) => sayCb?.(n) ?? false, { label: 'Emotes', go: () => openScreen('emotes') });
   // The Menu (OP-108): its tabs, each drawn as it is shown.
   const menu = createMenuShell(
     root,
@@ -582,14 +709,14 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
         id: 'nest',
         label: 'Nest',
         render: (panel) =>
-          renderNest(panel, { away: waysOut.home, account: accountCards() }, () => {
+          renderNest(panel, { away: waysOut.home, account: accountCards(), friends: friendCards() }, () => {
             // Travel home is on the map now (OP-130): its card is open there.
             picked = 'nest';
             menu.show('map');
           }),
       },
       // In a nest, the owl's own is Your nest; another owl's is on the nests' street.
-      { id: 'map', label: 'Map', render: (panel) => renderMap(panel, mapPlaceOf(roomId, !waysOut.home, openRealms), openRealms, mapTravel()) },
+      { id: 'map', label: 'Map', render: (panel) => renderMap(panel, mapPlaceOf(roomId, !waysOut.home, openRealms, walkingMap()), openRealms, mapTravel(), walkingMap()) },
       {
         id: 'settings',
         label: 'Settings',
@@ -605,6 +732,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   );
   settings.onChange(() => menu.refresh());
   const leaveCard = createLeaveCard(root, () => wayOut?.leave());
+  /** About the park and Safety and privacy (about.ts): the home screen's two small screens. */
+  const info = createInfoScreens(root);
   /** The card before the store (OP-153), before a purchase at the turnstiles, the pass offer or the gift shop; it closes alone on Escape. */
   const storeCard = createStoreCard(root);
   /** The turnstiles' question (OP-198), before the card before the store. */
@@ -616,10 +745,12 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   // A tree room on a phone held upright (OP-156): a card over the game asking to turn the phone.
   const turnPhone = createTurnPhone(root);
   menu.onClose(() => menuBtn.setAttribute('aria-expanded', 'false'));
+  menu.subtitle(count.textContent ?? '');
 
   /** The big sheets (dialogue, shop, Decorate) share the bottom of the screen: one at a time. */
   const closeSheets = () => {
     questUi?.closeDialogue();
+    questUi?.closeLock();
     shop?.close();
     // Decorating ends with the sheet: the room puts its camera back.
     if (decorate?.isOpen()) decorateActions?.done();
@@ -656,11 +787,33 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     whichOwl.close();
     feedback?.close();
     accountScreens?.close();
+    info.close();
     leaveCard.close();
     storeCard.close();
     gatePrompt.close();
   };
-  const isBlocking = () => storeCard.isOpen() || gatePrompt.isOpen() || menu.isOpen() || !!wheel?.isOpen() || sayWheel.isOpen() || !!builder?.isOpen() || settingsScreen.isOpen() || whichOwl.isOpen() || !!feedback?.isOpen() || !!accountScreens?.isOpen() || leaveCard.isOpen() || arcade.isOpen() || climb.isOpen();
+  const isBlocking = () => storeCard.isOpen() || gatePrompt.isOpen() || menu.isOpen() || !!wheel?.isOpen() || sayWheel.isOpen() || !!builder?.isOpen() || settingsScreen.isOpen() || whichOwl.isOpen() || !!feedback?.isOpen() || !!accountScreens?.isOpen() || info.isOpen() || leaveCard.isOpen() || arcade.isOpen() || climb.isOpen();
+  /** Bring a friend (OP-056): the park's word on this owl's card, the line it last said, and its link. */
+  let referral: { link: ReferralLink; state: ReferralState; said: string } | null = null;
+  function friendCards(): HTMLElement[] | null {
+    if (!referral) return null;
+    const r = referral;
+    return referralCard(r.state, {
+      invite: async (code) => {
+        const answer = await r.link.invite(code);
+        if (answer.ok) {
+          referral = { ...r, state: answer.state, said: REFERRAL_WORDS.welcome };
+          menu.refresh();
+        }
+        return answer;
+      },
+      freeTicket: () =>
+        void startCheckout({ open: openWindow, link: () => r.link.freeTicket(), fallbackUrl: null }).then((s) => {
+          if (s.kind === 'blocked') toast(REFERRAL_WORDS.blocked, 6000);
+          if (s.kind === 'none') toast(REFERRAL_WORDS.none, 4500);
+        }),
+    }, r.said);
+  }
   /** The account's cards for the Menu (OP-139): none while accounts are off. */
   function accountCards(): HTMLElement[] | null {
     if (!account || !accountScreens) return null;
@@ -727,8 +880,10 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       menu.open(id === 'menu' ? undefined : id, menuBtn);
       menuBtn.setAttribute('aria-expanded', 'true');
     } else if (id === 'emotes' && wheel) {
-      wheel.open(emotesBtn);
-      emotesBtn.setAttribute('aria-expanded', 'true');
+      // A phone has no Emotes button (OP-242): the emotes came from Say's, which takes the focus back.
+      const opener = emotesBtn.offsetParent ? emotesBtn : sayBtn;
+      wheel.open(opener);
+      opener.setAttribute('aria-expanded', 'true');
     } else if (id === 'say') {
       sayWheel.open(sayBtn);
       sayBtn.setAttribute('aria-expanded', 'true');
@@ -752,6 +907,10 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   menuBtn.addEventListener('click', () => toggle('menu', () => menu.isOpen()));
   emotesBtn.addEventListener('click', () => toggle('emotes', () => !!wheel?.isOpen()));
   sayBtn.addEventListener('click', () => toggle('say', () => sayWheel.isOpen()));
+  sayReply.addEventListener('click', () => {
+    if (!reply || !settings.get().bubbles || Date.now() >= reply.until || isBlocking()) return;
+    if (sayCb?.(reply.phrase)) sayBtn.focus({ preventScroll: true });
+  });
   sayWheel.onClose(() => sayBtn.setAttribute('aria-expanded', 'false'));
   interactBtn.addEventListener('click', () => {
     if (!arcadeTap) interactCb?.();
@@ -764,7 +923,10 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   });
   // Jump goes down with the thumb and comes up with it (a hold glides); held onto the button, so a
   // thumb that drifts off it while held still holds. A click from a keyboard (no pointer) is a tap.
+  /** The finger holding Jump down, so its lift is heard wherever it lands (quick taps can lose it, OP-242). */
+  let jumpPointer: number | null = null;
   jumpBtn.addEventListener('pointerdown', (e) => {
+    jumpPointer = e.pointerId;
     try {
       jumpBtn.setPointerCapture(e.pointerId);
     } catch {
@@ -772,7 +934,21 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     }
     jumpCbs?.press(eventTime(e));
   });
-  for (const t of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) jumpBtn.addEventListener(t, (e) => jumpCbs?.release(eventTime(e)));
+  for (const t of ['pointerup', 'pointercancel', 'lostpointercapture'] as const)
+    jumpBtn.addEventListener(t, (e) => {
+      if (jumpPointer === e.pointerId) jumpPointer = null;
+      jumpCbs?.release(eventTime(e));
+    });
+  for (const t of ['pointerup', 'pointercancel'] as const)
+    window.addEventListener(
+      t,
+      (e) => {
+        if (jumpPointer === null || e.pointerId !== jumpPointer || e.target === jumpBtn) return;
+        jumpPointer = null;
+        jumpCbs?.release(eventTime(e));
+      },
+      true,
+    );
   jumpBtn.addEventListener('click', (e) => {
     if (e.detail !== 0 || !jumpCbs) return;
     const { press, release } = jumpCbs;
@@ -780,8 +956,17 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     setTimeout(release, KEY_TAP_MS);
   });
   jumpBtn.addEventListener('contextmenu', (e) => e.preventDefault()); // a long press is a glide, not the browser's menu
+  // Dash goes as the thumb goes down: a dash cannot wait for the lift. A click from a keyboard is one too.
+  dashBtn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    dashCb?.(eventTime(e));
+  });
+  dashBtn.addEventListener('click', (e) => {
+    if (e.detail === 0) dashCb?.();
+  });
+  dashBtn.addEventListener('contextmenu', (e) => e.preventDefault());
   // A pressed look while the thumb is down (touch screens do not all show :active).
-  for (const b of [interactBtn, jumpBtn]) {
+  for (const b of [interactBtn, jumpBtn, dashBtn]) {
     b.addEventListener('pointerdown', () => b.classList.add('on'));
     for (const t of ['pointerup', 'pointercancel', 'pointerleave'] as const) b.addEventListener(t, () => b.classList.remove('on'));
   }
@@ -827,6 +1012,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     setTimeout(() => el.remove(), ms);
   };
   const badge = createSpectatorBadge(root, () => getTicket?.(SPECTATOR_WORDS.keep));
+  // One safe area along the top (OP-369): the strip and the notices are kept clear of the ribbon, the badge and the cards.
+  watchTopStack(root);
 
   return {
     setCount(n) {
@@ -841,13 +1028,32 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       dot.className = `dot ${s === 'online' ? '' : s}`.trim();
       dot.title = s === 'online' ? (kind === 'local' ? 'Connected (this device only)' : 'Connected') : s === 'connecting' ? 'Connecting…' : 'Offline';
       dot.dataset['status'] = s;
+      // A phone's bar keeps only a small mark for it (OP-242).
+      root.classList.toggle('net-off', s === 'offline');
+      if (s !== 'online') clearReply();
     },
+    offerReply(n) {
+      const phrase = getPhrase(n);
+      // The first three Hello phrases are greetings; Good night is not an invitation to reply.
+      if (!phrase || phrase.group !== 'hello' || n === 4 || !settings.get().bubbles || isBlocking()) return;
+      clearReply();
+      const duration = 4_000;
+      reply = { phrase: n, until: Date.now() + duration };
+      sayReply.textContent = phrase.text;
+      sayReply.setAttribute('aria-label', `Say back: ${phrase.text}`);
+      sayReply.hidden = false;
+      replyTimer = setTimeout(clearReply, duration);
+    },
+    clearReply,
     toast,
     attachCollection(state, actions) {
       collectionState = state;
       collectionActions = actions;
-      wheel = createEmoteWheel(root, state, (e) => actions.emote(e));
-      wheel.onClose(() => emotesBtn.setAttribute('aria-expanded', 'false'));
+      wheel = createEmoteWheel(root, state, (e) => actions.emote(e), { label: 'Say', go: () => openScreen('say') });
+      wheel.onClose(() => {
+        emotesBtn.setAttribute('aria-expanded', 'false');
+        if (!sayWheel.isOpen()) sayBtn.setAttribute('aria-expanded', 'false');
+      });
       builder = createOwlBuilder(
         root,
         state,
@@ -874,20 +1080,60 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       state.onChange(showFeathers);
       showFeathers();
     },
-    attachFeedback(send) {
+    attachFeedback(send, rewards) {
+      const showReward = (view: FeedbackRewardView | null) => {
+        rewardView = view;
+        feedback?.setReward(view);
+        feedbackCard?.refresh(view);
+      };
       feedback = createFeedbackScreen(
         root,
-        (kind, text) => send({ kind, text, room: roomId || null, screen: `${window.innerWidth}x${window.innerHeight}` }),
+        async (kind, text) => {
+          const sent = await send({ kind, text, room: roomId || null, screen: `${window.innerWidth}x${window.innerHeight}` });
+          if (sent.reward) showReward(afterReward(rewardView, sent.reward));
+          return sent;
+        },
         toast,
         () => openScreen('menu'),
       );
+      // Feedback by the Menu's Close, on every tab (Logan, 2026-11-03: prominent in the Menu, OP-242).
+      const menuFeedback = document.createElement('button');
+      menuFeedback.type = 'button';
+      menuFeedback.className = 'mfeedback';
+      menuFeedback.dataset['menuFeedback'] = '';
+      menuFeedback.innerHTML = `${feedbackIcon('currentColor')}<span>Send feedback</span>`;
+      menuFeedback.addEventListener('click', () => openScreen('feedback', true));
+      menu.headButton(menuFeedback);
       // The feedback bug (OP-208): on screen everywhere until the full opening. Over a game or a
       // covering screen the form opens on top and leaves it as it was; anywhere else it opens as Settings' does.
-      createFeedbackBug(root, (button) => {
+      const openFeedback = (button: HTMLElement) => {
         if (!feedback || feedback.isOpen()) return;
         if (arcade.isOpen() || climb.isOpen() || builder?.isOpen() || whichOwl.isOpen() || accountScreens?.isOpen()) feedback.open(false, button);
         else openScreen('feedback', false, button);
-      });
+      };
+      createFeedbackBug(root, openFeedback);
+      // A press made before, or just after, the owl left the home screen was meant for Play, even when a
+      // busy page hands it over late (its timeStamp says when it was made): it never opens Feedback.
+      root.addEventListener(
+        'click',
+        (e) => {
+          if (!(e.target instanceof Element) || !e.target.closest('.fb-bug,.fb-card')) return;
+          if (e.timeStamp < leftHomeAt + JUST_IN_MS) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        },
+        true,
+      );
+      // The thanks ladder (OP-272): a grey mouse's card beside the bug until it is won or closed.
+      if (rewards) {
+        feedbackCard = createFeedbackCard(root, openFeedback, () => {
+          if (rewardView) showReward({ ...rewardView, closed: true });
+          void rewards.close().then((v) => v && showReward(v));
+        });
+        loadRewards = () => void rewards.load().then((v) => v && showReward(v));
+        loadRewards();
+      }
     },
     attachAccount(link, deps) {
       const refresh = () =>
@@ -898,6 +1144,13 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       accountScreens = createAccountScreens(root, link, { ...deps, toast, changed: refresh });
       refresh();
       return accountScreens;
+    },
+    attachReferrals(link, preview) {
+      void link.view().then((state) => {
+        if (!state || (state.mode === 'preview' && !preview)) return;
+        referral = { link, state, said: '' };
+        menu.refresh();
+      });
     },
     attachWayOut(actions) {
       wayOut = actions;
@@ -930,6 +1183,10 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       questUi?.closeDialogue();
     },
     dialogueNpc: () => questUi?.dialogueNpc() ?? null,
+    openLock: (quest, lock) => questUi?.openLock(quest, lock),
+    closeLock: () => questUi?.closeLock(),
+    lockShowing: () => questUi?.lockShowing() ?? null,
+    lockNote: (text) => questUi?.lockNote(text),
     toggleMenu: () => toggle('menu', () => menu.isOpen()),
     toggleMap: () => toggle('map', () => menu.isOpen() && menu.tab() === 'map'),
     toggleEmotes: () => toggle('emotes', () => !!wheel?.isOpen()),
@@ -958,10 +1215,20 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       previewCb = cb;
     },
     setHome(on) {
+      if (on) clearReply();
+      // Fresh into the park, the presses still landing where Play was (a slow nest, a rage-click) must not
+      // open Feedback from the bug or its card, which now sit where Play stood: they take presses a moment later.
+      if (!on && root.classList.contains('at-home')) {
+        leftHomeAt = performance.now();
+        root.classList.add('just-in');
+        clearTimeout(justInTimer);
+        justInTimer = setTimeout(() => root.classList.remove('just-in'), JUST_IN_MS);
+      }
       root.classList.toggle('at-home', on);
     },
     openOwl: (opener) => openScreen('owl', false, opener),
     openSettings: (opener) => openScreen('settings', false, opener),
+    openInfo: (kind, opener) => info.open(kind, opener),
     openWhichOwl,
     openShop() {
       // The feather shop and its free gift are ticket holders' (OP-191).
@@ -974,6 +1241,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     setSpectator(on) {
       if (on === spectator) return;
       spectator = on;
+      loadRewards?.();
       badge.set(on);
       if (on) shop?.close();
       menu.refresh();
@@ -1010,6 +1278,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       arcade.result(r);
     },
     closeArcade: () => arcade.close(),
+    escapeArcade: () => arcade.isOpen() && arcade.escape(),
     openClimb(view, handlers) {
       if (!climb.isOpen()) makeRoom();
       root.classList.add('covered');
@@ -1028,12 +1297,17 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     },
     setRoom(id) {
       roomId = id;
+      // Past the turnstiles a note starts to earn: look again until it does.
+      if (!rewardView?.earns) loadRewards?.();
       questUi?.setRoom(id);
       // The map's "You are here".
       menu.refresh();
     },
     setSideways(on) {
       turnPhone.set(on);
+    },
+    setTreeSpot(spot) {
+      treeMap.set(spot, spot !== null && isBlocking());
     },
     setActions(list) {
       const key = list.map((a) => `${a.id}:${a.label}`).join('|');
@@ -1042,7 +1316,12 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       // The pad's Interact button does the first of them (as E does), and says which.
       interactBtn.classList.toggle('idle', list.length === 0);
       interactBtn.setAttribute('aria-disabled', String(list.length === 0));
-      interactBtn.setAttribute('aria-label', list[0] ? `Interact: ${list[0].label}` : 'Interact');
+      interactBtn.setAttribute('aria-label', list[0]?.label ?? 'Interact'); // on a phone the row's first button is tucked away, so this one carries its name
+      // On a phone it wears what it does (OP-242), in place of the first button of the row.
+      interactLabel.textContent = list[0]?.label ?? '';
+      interactBtn.classList.toggle('labelled', list.length > 0);
+      if (list[0]) interactBtn.dataset['act'] = list[0].id;
+      else delete interactBtn.dataset['act'];
       actionsEl.innerHTML = '';
       list.forEach((a, i) => {
         const b = document.createElement('button');
@@ -1073,8 +1352,23 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     onJump(press, release) {
       jumpCbs = { press, release };
     },
+    onDash(press) {
+      dashCb = press;
+    },
+    setDash(on) {
+      dashBtn.hidden = !on;
+    },
     setOpenRealms(open) {
       openRealms = [...open];
+    },
+    setRoomDark(on) {
+      document.documentElement.classList.toggle('room-dark', on);
+    },
+    setOwlAt(feet) {
+      const el = root.querySelector<HTMLElement>('.stick');
+      if (!el) return;
+      const box = el.getBoundingClientRect();
+      el.classList.toggle('quiet', feet !== null && box.width > 0 && underStick(feet, box));
     },
     setHints(list) {
       const seen = new Set<string>();
@@ -1117,6 +1411,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
         b.remove();
         hintEls.delete(id);
       }
+      unstackHints([...hintEls.values()]);
     },
     onHint(cb) {
       hintCb = cb;
@@ -1139,6 +1434,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     setCopy: (v) => cards.setCopy(v),
     onCopy: (cb) => cards.onCopy(cb),
     stickDirection: () => stick.direction(),
+    stickRests: () => stick.rests(),
     openDecorate(view, spot, actions) {
       decorateActions = actions;
       decorate ??= createDecorateSheet(
@@ -1155,5 +1451,37 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     updateDecorate: (view) => decorate?.update(view),
     selectDecorateSpot: (spot) => decorate?.select(spot),
     closeDecorate: () => decorate?.close(),
+    coveredEdges: () =>
+      coveredBy(
+        [...root.querySelectorAll<HTMLElement>('.bar .pill, .bar .feathers, [data-menu-btn], [data-emotes-btn], [data-say-btn]')].map((el) => el.getBoundingClientRect()),
+        window.innerHeight,
+      ),
   };
+}
+
+/**
+ * Chips that would lie over one another, a doorway's words reaching from one edge across a narrow
+ * screen to a chip on the other (a phone in the Party Grove): each one lower down moved below the
+ * ones it would cover, so every chip's words read whole.
+ */
+function unstackHints(chips: HTMLElement[]): void {
+  const GAP = 6;
+  const laid = chips.map((el) => ({ el, r: el.getBoundingClientRect() })).sort((a, b) => a.r.top - b.r.top || a.r.left - b.r.left);
+  const kept: Array<{ left: number; right: number; top: number; bottom: number }> = [];
+  for (const { el, r } of laid) {
+    let top = r.top;
+    for (let moved = true; moved; ) {
+      moved = false;
+      for (const k of kept) {
+        if (r.left < k.right && r.right > k.left && top < k.bottom + GAP && top + r.height > k.top - GAP) {
+          top = k.bottom + GAP;
+          moved = true;
+        }
+      }
+    }
+    // No room below on the screen: it stays where it was put.
+    if (top + r.height > window.innerHeight - 4) top = r.top;
+    if (top !== r.top) el.style.top = `${(parseFloat(el.style.top) + top - r.top).toFixed(1)}px`;
+    kept.push({ left: r.left, right: r.right, top, bottom: top + r.height });
+  }
 }

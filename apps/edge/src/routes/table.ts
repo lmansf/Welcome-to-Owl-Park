@@ -10,13 +10,16 @@ import { gatePage } from '../gatePage';
 import { CSP_REPORT_PATH } from '../guard';
 import { openingPage } from '../openingPage';
 import { account } from './account';
+import { referral } from './referral';
 import { adminCapacity, adminClimb, adminCollectLog, adminGate, adminGrant, adminKeeper, adminOpening, adminPing, adminRestart, adminStore, adminTickets } from './admin';
+import { clientError } from './clientErrors';
 import { collection, nest, nestGift } from './collection';
 import { adminFeedback, feedback } from './feedback';
-import { line, notice } from './line';
+import { closed, line, notice } from './line';
 import { adminMasks, masks } from './masks';
 import { counts, healthRoute, socket } from './rooms';
 import type { Route } from './router';
+import { googleVerification, GOOGLE_VERIFY_PATH } from './siteVerification';
 import { storeWebhookRoute } from './store';
 import { tickets } from './tickets';
 import { cspReport, entry, guestPass, travel } from './visit';
@@ -25,6 +28,7 @@ import { vote } from './vote';
 export const ROUTES: readonly Route[] = [
   // ---- A visit: what the page's policy blocked (OP-140), its pass, the front gate, the map's places ----
   { path: CSP_REPORT_PATH, handle: cspReport },
+  { path: '/api/client-error', handle: clientError },
   { path: '/api/pass', handle: guestPass },
   { path: '/api/entry', handle: entry },
   { path: '/api/travel', handle: travel },
@@ -51,11 +55,18 @@ export const ROUTES: readonly Route[] = [
 
   // ---- Accounts (OP-139) and feedback ----
   { prefix: '/api/account/', handle: account },
+  // Bring a friend (OP-056, with REFERRALS not off).
+  { path: '/api/referral', handle: referral },
+  { path: '/api/referral/invite', handle: referral },
   { path: '/api/feedback', handle: feedback },
+  // The thanks ladder's state and the page card's close (OP-272).
+  { path: '/api/feedback/reward', handle: feedback },
+  { path: '/api/feedback/close', handle: feedback },
 
-  // ---- Busy nights (OP-075) ----
+  // ---- Busy nights (OP-075), and closed for setup (OP-233) ----
   { path: '/api/line', handle: line },
   { path: '/api/notice', handle: notice },
+  { path: '/api/closed', handle: closed },
 
   // ---- The store's webhooks and tickets (C35) ----
   { path: '/api/store/webhook', handle: storeWebhookRoute },
@@ -72,6 +83,9 @@ export const ROUTES: readonly Route[] = [
 
   // ---- The Realm Vote ----
   { prefix: '/api/vote', handle: vote },
+
+  // ---- Google Search Console's ownership check (OP-393) ----
+  { path: GOOGLE_VERIFY_PATH, handle: googleVerification },
 
   // ---- The rooms ----
   { path: '/api/health', handle: healthRoute },

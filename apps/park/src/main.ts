@@ -1,21 +1,25 @@
+import { analytics } from '@heycatch/sdk';
 import Phaser from 'phaser';
-import { LEFT_PARK_SPAWN, LOBBY_ROOM, RESTART_HOME, TREE_STREET_ROOM, nestRoomId, parseVariant, putOn, type BuyResult, type GiftResult, type Inventory, type LineStatus, type OwlLook, type QuestBoard, type ShopView, type TaskView } from '@owl-park/shared';
+import { LEFT_PARK_SPAWN, LOBBY_ROOM, RESTART_HOME, SETUP_WORDS, TICKET_ENDED_HOME, TREE_STREET_ROOM, nestRoomId, parseVariant, putOn, type BuyResult, type ClosedView, type GiftResult, type Inventory, type LineStatus, type OwlLook, type PuzzleView, type QuestBoard, type ShopView, type TaskView } from '@owl-park/shared';
 import { createCollections } from './collect';
 import { QuestState } from './collect/quests';
 import { CollectionState } from './collect/state';
 import { TaskState } from './collect/tasks';
 import { readConfig } from './config';
+import { useSizeBoxes, useSkinTrial } from './game/art';
 import { BootScene } from './game/BootScene';
 import { BuilderScene } from './game/BuilderScene';
 import { HOME_SHOWN, HomeScene } from './game/HomeScene';
 import { mirrorKey } from './game/nestPlan';
-import { NEST_SPAWN, RESTARTED_KEY, RoomScene, SETUP_KEY, type RoomStart } from './game/RoomScene';
+import { NEST_SPAWN, RESTARTED_KEY, RoomScene, SETUP_KEY, TICKET_ENDED_KEY, type RoomStart } from './game/RoomScene';
 import { startWalking, walkingMap } from './game/walkingMap';
 import { TREE_ARRIVAL } from './rooms';
 import { forgetOwl, holdsOwl, loadLook, loadPlayerId, saveLook } from './identity';
 import { OPEN_ENTRY, createTransport, type ScanReply, type WalletEntry } from './net';
-import { sendFeedback } from './net/feedback';
-import { readAccountLink, withoutAccountLink } from './net/accountLinks';
+import { closeFeedbackCard, feedbackRewards, sendFeedbackNote } from './net/feedback';
+import { storedKeeper } from './net/keeper';
+import { readAccountLink, readGoogleNote, withoutAccountLink } from './net/accountLinks';
+import { flagOn } from './flags';
 import { readTicketLink, withoutTicketLink } from './net/ticketLinks';
 import { HOME_WORDS, createHomeScreen, walletSummary } from './ui/home';
 import { createHud } from './ui/hud';
@@ -29,6 +33,23 @@ import { linkToast } from './ui/tickets';
 import { createRibbon } from './ui/ribbon';
 import { createAway } from './ui/away';
 import { deviceSettings } from './settings';
+import { guardZoom } from './ui/noZoom';
+
+// HeyCatch analytics (heycatch.ai/agents.md): once, at module scope, before anything else runs, so the
+// page's visits and clicks and the reserved short links (/a to /z, /0 to /9) are seen from the first
+// load. The key is publishable. The page's policy lets the SDK reach its host (apps/edge/src/guard.ts).
+analytics.init({
+  projectKey: 'hck_pk_um42q9Cyv2nIM-aHBobpaoE1rupLU1dm',
+  site: 'landing',
+  install: {
+    framework: 'web',
+    agent: 'claude-code',
+  },
+});
+
+// The page's intro (index.html, #intro: the SEO audit's h1, definition and links for crawlers and pages
+// without scripts) goes once the park runs, so the home screen's own h1 is the page's only one.
+document.getElementById('intro')?.remove();
 
 // Back from the store's checkout (OP-190, ui/checkoutReturn.ts): the store sends the buyer to
 // `?checkout=done`. A game page watching for the ticket answers, and this window (checkout's own)
@@ -45,6 +66,10 @@ const checkoutBack = isCheckoutReturn(location.search)
   : null;
 
 const cfg = readConfig();
+// Size boxes (`?sizes=1`): the map's art as boxes of its sizes, set before anything loads.
+useSizeBoxes(cfg.sizes);
+// A skin trial (`?skin=<name>`): a realm artist's cut skin sheet in place of the realm's slots.
+useSkinTrial(cfg.skin);
 const playerId = loadPlayerId(cfg);
 const look = loadLook(cfg, playerId);
 const parent = document.getElementById('game') as HTMLElement;
@@ -52,6 +77,8 @@ const settings = deviceSettings();
 // The load screen (OP-129), up since the page's first paint: the boot and every room show their art coming on it.
 const loadScreen = createLoadScreen({ sound: () => settings.get().sound, calm: () => settings.get().calm });
 loadScreen.colour(look);
+// A pinch never leaves the page zoomed on a phone (noZoom.ts).
+guardZoom(document, window);
 const hud = createHud(document.body, look, settings);
 // The busy ribbon (OP-075) across the top of the home screen and every room.
 const ribbon = createRibbon(document.getElementById('hud') as HTMLElement);
@@ -158,8 +185,13 @@ const jump = (at?: number) => {
 };
 // Letting go always reaches the owl, whatever has opened since.
 const jumpEnd = (at?: number) => roomScene()?.jumpUp(at);
+// Shift, or the pad's Dash: a dash, in a parkour course only (OP-224); the room scene says whether the owl holds it.
+const dash = (at?: number) => {
+  if (!atHome && !hud.isBlocking()) roomScene()?.dashDown(at);
+};
 hud.onInteract(interact);
 hud.onJump(jump, jumpEnd);
+hud.onDash(dash);
 const keyboard = attachKeyboard(window, {
   // W or the up arrow (OP-212): in the tree, through the doorway or up the stair the owl stands in.
   up: (at) => {
@@ -168,6 +200,7 @@ const keyboard = attachKeyboard(window, {
   interact,
   jump,
   jumpEnd,
+  dash,
   menu: () => {
     if (!atHome) hud.toggleMap();
   },
@@ -186,9 +219,14 @@ const keyboard = attachKeyboard(window, {
   journal: () => {
     if (!atHome) hud.toggleJournal();
   },
-  close: () => hud.closePanels(),
+  // Escape: an arcade run under way pauses first (OP-345); anything else open closes.
+  close: () => void (hud.escapeArcade() || hud.closePanels()),
 });
-game.registry.set('keys', { direction: () => (hud.isBlocking() ? null : (keyboard.direction() ?? hud.stickDirection())), detach: () => keyboard.detach() } satisfies Keys);
+game.registry.set('keys', {
+  direction: () => (hud.isBlocking() ? null : (keyboard.direction() ?? hud.stickDirection())),
+  rests: () => keyboard.rests() + hud.stickRests(),
+  detach: () => keyboard.detach(),
+} satisfies Keys);
 
 let resizeTimer: ReturnType<typeof setTimeout> | null = null;
 window.addEventListener('resize', () => {
@@ -207,7 +245,8 @@ declare global {
       playerId: string;
       transport: string;
       state(): ReturnType<RoomScene['debugState']> | null;
-      walkTo(x: number, y: number): void;
+      /** `asKeys`: walk there as the held keys walk, which never take a doorway by themselves (OP-212). */
+      walkTo(x: number, y: number, asKeys?: boolean): void;
       /** The room camera: what of the room it shows, and where on the canvas it draws it (`port`, game pixels). */
       camera(): { viewX: number; viewY: number; viewW: number; viewH: number; zoom: number; dpr: number; port: { x: number; y: number; w: number; h: number } } | null;
       /** Texture resolution actually loaded for an art key (tests check per-device rasterization). */
@@ -240,6 +279,10 @@ declare global {
       handIn(quest: string): Promise<boolean>;
       /** Walk to a quest item in this room (arriving picks it up). */
       gather(quest: string, n: number): boolean;
+      /** A puzzle quest's run as the page has it (OP-255), a Quests-tab button on it, and a walk to one of its pieces here. */
+      puzzle(quest: string): PuzzleView | null;
+      puzzleAction(op: 'start' | 'near' | 'join' | 'leave', quest: string, owl?: string): Promise<boolean>;
+      walkToPiece(quest: string, lock: string, kind: 'lock' | 'clue' | 'key', n?: number): boolean;
       /** The feather shop as this collector sees it, buying from it, and today's free gift. */
       shop(): Promise<ShopView>;
       buy(variant: string): Promise<BuyResult>;
@@ -358,6 +401,16 @@ let backSay: string | null = null;
  * An owl the keepers send into the tree (OP-156's entries setting, its pass says so) walks the tree
  * from here: its nest's door leads out into the tree, and without a nest it starts at the tree's arrival.
  */
+/** How long Play waits for the owl's nest before it takes the owl to the lobby instead. */
+const NEST_WAIT_MS = 6_000;
+/** The promise's answer, or `fallback` once `ms` have passed without one (the request itself runs on). */
+function answerWithin<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallback), ms);
+  });
+  return Promise.race([p, late]).finally(() => clearTimeout(timer));
+}
 async function playStart(): Promise<RoomStart> {
   if (backFromCheckout) {
     // Back from checkout in this page (OP-190): in front of the turnstiles, and through them with the ticket.
@@ -367,9 +420,13 @@ async function playStart(): Promise<RoomStart> {
     // An owl of the tree came from the tree's front gate (TREE_STREET_ROOM), and goes back before it.
     return { room: walkingMap() === 2 ? TREE_STREET_ROOM : LOBBY_ROOM, spawn: LEFT_PARK_SPAWN, ticket };
   }
-  const map = transport.entryMap ? await transport.entryMap().catch(() => 1 as const) : 1;
+  // A keeper's tab that asked for the new map (`?keeper=1&newmap=1`) walks it; anyone else, as their pass
+  // says, and an owl the tree takes walks the new map unless its tab asked for the tree as it was (`?newmap=0`).
+  const entry = newMapTab() ? 3 : transport.entryMap ? await transport.entryMap().catch(() => 1 as const) : 1;
+  const map = entry === 2 && !cfg.oldMap ? 3 : entry;
   startWalking(map);
-  const nest = await collection.service.homeNest().catch(() => null);
+  // A nest that has not answered in NEST_WAIT_MS counts as none: Play never hangs on the home screen.
+  const nest = await answerWithin(collection.service.homeNest(), NEST_WAIT_MS, null).catch(() => null);
   const room = nest ? nestRoomId(nest) : null;
   if (room) return { room, spawn: NEST_SPAWN };
   return map === 2 ? { room: TREE_ARRIVAL.room, spawn: TREE_ARRIVAL.spawn } : { room: LOBBY_ROOM, spawn: undefined };
@@ -404,6 +461,8 @@ async function refreshWallet(): Promise<void> {
 let lineTimer: ReturnType<typeof setTimeout> | null = null;
 /** The number this owl holds in the line, while it waits. */
 let lineNumber: number | null = null;
+/** How long a page told its network holds its share of the line waits before asking again (OP-244). */
+const LINE_FULL_RETRY_MS = 30_000;
 const lineSoon = (fn: () => void, ms: number) => {
   if (lineTimer) clearTimeout(lineTimer);
   lineTimer = setTimeout(() => {
@@ -427,6 +486,8 @@ const enterPark = async () => {
     leaveHome(await playStart());
   } finally {
     entering = false;
+    // Still home (the park said nothing to go on): Play is itself again, ready for another press.
+    if (atHome) home.opening(false);
   }
 };
 /** What the line said: in the park, its turn, a turn that passed, or its place (and when to look again). */
@@ -442,6 +503,13 @@ const onLine = (s: LineStatus) => {
     lineNumber = null;
     home.line({ message: 'passed' });
     lineSoon(() => void askLine(true), 2_500);
+    return;
+  }
+  if (s.state === 'full') {
+    // This network holds its share of the line already (OP-244): no number yet, so ask again later.
+    lineNumber = null;
+    home.line({ message: 'full' });
+    lineSoon(() => void askLine(true), LINE_FULL_RETRY_MS);
     return;
   }
   lineNumber = s.n;
@@ -465,9 +533,16 @@ async function askLine(join: boolean): Promise<void> {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && atHome && lineNumber !== null) lineSoon(() => void askLine(false), 0);
 });
-/** Play: into the owl's own nest, through the line when the park has one (the server says), else straight in. */
+/**
+ * Play: into the owl's own nest, through the line when the park has one (the server says), else straight in.
+ * Play says Opening the park the moment it is pressed, and takes no second press until the park has
+ * answered: the line's answer and the nest can each take a moment on a slow phone, and with nothing to
+ * show for a press a visitor presses again and again (and each press asked the line for a new place).
+ */
 const startPlay = () => {
-  if (!atHome || home.inLine() || lineTimer || entering) return;
+  // Closed for setup (OP-233): no way in from here (Enter, Q, a kept owl's Keep it) while the card is up.
+  if (!atHome || home.isShut() || home.inLine() || home.isOpening() || lineTimer || entering) return;
+  home.opening(true);
   if (!transport.line) return void enterPark();
   void askLine(true);
 };
@@ -479,6 +554,52 @@ const refreshNotice = async () => {
 setInterval(() => {
   if (atHome) void refreshNotice();
 }, 60_000);
+
+// ---- closed for setup (OP-233): no Play on the home screen while the keepers have the park shut ----
+/** How often the home screen asks whether the park is closed, while it is up and in view. */
+const CLOSED_POLL_MS = 15_000;
+/**
+ * Sent home by the room because the park closed (OP-205): the room's word stands over an "open" from
+ * the park for this long, since a Worker that has not heard of the closing yet may say so for up to
+ * half a minute (overflowState.ts) and a browser keep it five seconds more: Play must not come back
+ * for a moment and bounce the owl.
+ */
+const SENT_HOME_TRUST_MS = 35_000;
+let sentHomeAt = Number.NEGATIVE_INFINITY;
+/** A keeper's tab (OP-156: `?keeper=1`, or a token kept from earlier in the tab): its Play still walks in. */
+const keeperTab = () => cfg.keeper || storedKeeper() !== null;
+/** A keeper's tab that asked for the new map (`?newmap=1`): it walks it from the first room. */
+function newMapTab(): boolean {
+  return cfg.newMap && keeperTab();
+}
+// Opened straight into a room (`?room=`), the new map is walked from the first room.
+if (newMapTab()) startWalking(3);
+const showClosed = (v: ClosedView) => {
+  if (!v.closed && Date.now() - sentHomeAt < SENT_HOME_TRUST_MS) return;
+  home.closed(v.closed ? { words: v.words ?? SETUP_WORDS, reopenAt: v.reopenAt, keeper: keeperTab() } : null);
+};
+/** Ask the park whether it is closed; with no answer, the home screen stays as it was. */
+const refreshClosed = async () => {
+  const v = (await transport.closed?.()) ?? null;
+  if (v && atHome) showClosed(v);
+};
+/** The home screen's presence line (the site audit's D3.1): the park's own count, as it stands. */
+const refreshPresence = async () => {
+  const n = (await transport.parkCount?.()) ?? null;
+  if (atHome) home.presence(n);
+};
+setInterval(() => {
+  if (atHome && document.visibilityState === 'visible') {
+    void refreshClosed();
+    void refreshPresence();
+  }
+}, CLOSED_POLL_MS);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && atHome) {
+    void refreshClosed();
+    void refreshPresence();
+  }
+});
 const home = createHomeScreen(document.getElementById('hud') as HTMLElement, {
   logIn: (opener) => {
     // Which owl are you (OP-076) first: the owl is made on this device at its reveal (or at Skip),
@@ -511,6 +632,20 @@ const home = createHomeScreen(document.getElementById('hud') as HTMLElement, {
       opener,
     );
   },
+  // Look around free (the second site audit, D2.1): what Skip makes, with no quiz and no builder, then
+  // Play. Every visit starts in the owl's own nest, and the turnstiles offer Enter as a guest.
+  lookAround: () => {
+    if (!atHome || loggedIn) return;
+    loggedIn = true;
+    startCollection();
+    void refreshWallet();
+    const look = lookNow();
+    keepLook(look);
+    hud.setLook(look);
+    home.show(loggedIn);
+    drawOwl(home.frame(), false);
+    startPlay();
+  },
   play: () => startPlay(),
   settings: (opener) => hud.openSettings(opener),
   restore: (opener) => accountScreens?.openEmail('restore', opener),
@@ -518,13 +653,24 @@ const home = createHomeScreen(document.getElementById('hud') as HTMLElement, {
     if (atHome && loggedIn && !hud.isBlocking()) drawOwl(frame, false);
   },
   blocked: () => hud.isBlocking(),
+  info: (kind, opener) => hud.openInfo(kind, opener),
 });
+// An account link that opened the page on the home screen waits for the home scene: it closes every
+// panel as it comes up, which would close the link's box (the owls to tap, or the offer) at once.
+let homeCameUp = !cfg.home;
+let waitingAccountLink: (() => void) | null = null;
 // The home scene came up (at the start, or from the Menu): its buttons, and the owl beside them.
 game.events.on(HOME_SHOWN, () => {
   atHome = true;
   loadScreen.hide();
   hud.setHome(true);
   hud.closePanels();
+  homeCameUp = true;
+  if (waitingAccountLink) {
+    const take = waitingAccountLink;
+    waitingAccountLink = null;
+    take();
+  }
   // Turned away by the line from a room: the owl is this device's, and it takes its place in the line.
   const queued = game.registry.get('queued') === true;
   if (queued) {
@@ -542,6 +688,8 @@ game.events.on(HOME_SHOWN, () => {
     void refreshWallet();
   }
   void refreshNotice();
+  void refreshClosed();
+  void refreshPresence();
   // Back from checkout (OP-190): the ticket came while the park was starting.
   if (backSay) {
     hud.toast(backSay, 6000);
@@ -553,12 +701,18 @@ game.events.on(HOME_SHOWN, () => {
     game.registry.set(RESTARTED_KEY, false);
     hud.toast(RESTART_HOME, 8000);
   }
-  // Closed for setup (OP-205): the keepers' words stay over Play; Play asks the park again, and the
-  // room sends the owl back here with them until the park opens.
+  // Sent home because its ticket ran out mid-visit (OP-237): said once; Play brings the owl to the gate.
+  if (game.registry.get(TICKET_ENDED_KEY) === true) {
+    game.registry.set(TICKET_ENDED_KEY, false);
+    hud.toast(TICKET_ENDED_HOME, 8000);
+  }
+  // Closed for setup (OP-205): the room sent the owl here with the keepers' words. The closed card
+  // takes Play's place at once (OP-233), and the park's own answer fills in the reopen time.
   const setup = game.registry.get(SETUP_KEY) as string | undefined;
   if (setup) {
     game.registry.set(SETUP_KEY, undefined);
-    home.note(setup);
+    sentHomeAt = Date.now();
+    home.closed({ words: setup, reopenAt: null, keeper: keeperTab() });
     hud.toast(setup, 8000);
   }
 });
@@ -572,9 +726,20 @@ hud.attachQuests(quests, {
   handIn: (quest) => roomScene()?.handInQuest(quest) ?? Promise.resolve(false),
   collect: (quest) => roomScene()?.collectQuest(quest) ?? Promise.resolve(false),
   openShop: () => hud.openShop(),
+  puzzle: (op, quest, owl) => roomScene()?.puzzleAction(op, quest, owl) ?? Promise.resolve(false),
+  tryCode: (quest, lock, code) => roomScene()?.tryCode(quest, lock, code) ?? Promise.resolve(false),
 }, tasks);
 // Feedback goes to the park's keepers through the room server (kept in this browser without one).
-hud.attachFeedback((draft) => sendFeedback(transport, draft, storage));
+// A note that counts climbs the owl's thanks ladder (OP-272): the grey mouse, then feathers.
+hud.attachFeedback(
+  async (draft) => {
+    const sent = await sendFeedbackNote(transport, draft, storage);
+    if (sent.reward?.item && !sent.reward.dup) collection.added(sent.reward.item, sent.reward.total);
+    else if (sent.reward) collection.setFeathers(sent.reward.total);
+    return sent;
+  },
+  { load: () => feedbackRewards(transport), close: () => closeFeedbackCard(transport) },
+);
 
 // Accounts (OP-139, with the park's ACCOUNTS on): the Menu's friend code and Protect this owl, the
 // home screen's I already have an owl, the links the park's mail carries, and the card a screen gets
@@ -593,6 +758,8 @@ const accountScreens = accounts
       },
     })
   : null;
+// Bring a friend (OP-056): the Menu's card, with the park's REFERRALS on (a preview shows it only with ?friends=1).
+if (transport.referrals) hud.attachReferrals(transport.referrals, flagOn('friends'));
 if (accounts && accountScreens) {
   accounts.onMoved(() => accountScreens.showMoved());
   void accounts.account().then((a) => home.setAccounts(a !== null));
@@ -600,13 +767,22 @@ if (accounts && accountScreens) {
 // An account link carries its token in the address's fragment, as a ticket link does: out of the
 // address bar at once, then the owls it brings (restore) or the owl it protects (protect). One opened
 // in the tab the park is already in changes only the fragment, so the page listens for that too.
+// Sign in with Google (OP-313) comes back the same way: the link its email would have been mailed, an
+// offer to protect this screen's owl (the email protects none yet), or a kind line when it went no further.
 const takeAccountLink = () => {
   const link = readAccountLink(location.hash);
-  if (!link) return;
+  const google = link ? null : readGoogleNote(location.hash);
+  if (!link && !google) return;
   history.replaceState(history.state, '', withoutAccountLink(location.href));
-  if (!accountScreens) hud.toast("Owl links work on the park's own server.", 5000);
-  else if (link.kind === 'restore') accountScreens.openPictures(link.token);
-  else void accountScreens.confirm(link.token);
+  const take = () => {
+    if (!accountScreens) hud.toast("Owl links work on the park's own server.", 5000);
+    else if (google) accountScreens.googleEnded(google);
+    else if (link?.kind === 'restore') accountScreens.openPictures(link.token);
+    else if (link?.kind === 'offer') accountScreens.openOffer(link.token);
+    else if (link) void accountScreens.confirm(link.token);
+  };
+  if (homeCameUp) take();
+  else waitingAccountLink = take;
 };
 takeAccountLink();
 window.addEventListener('hashchange', takeAccountLink);
@@ -651,7 +827,7 @@ window.owlPark = {
   playerId,
   transport: transport.kind,
   state: () => roomScene()?.debugState() ?? null,
-  walkTo: (x, y) => roomScene()?.walkTo({ x, y }),
+  walkTo: (x, y, asKeys) => (asKeys ? roomScene()?.walkAsKeys({ x, y }) : roomScene()?.walkTo({ x, y })),
   camera: () => {
     const s = roomScene();
     if (!s) return null;
@@ -678,6 +854,9 @@ window.owlPark = {
   abandon: (quest) => roomScene()?.abandonQuest(quest) ?? Promise.resolve(false),
   handIn: (quest) => roomScene()?.handInQuest(quest) ?? Promise.resolve(false),
   gather: (quest, n) => roomScene()?.walkToItem(quest, n) ?? false,
+  puzzle: (quest) => roomScene()?.puzzleView(quest) ?? null,
+  puzzleAction: (op, quest, owl) => roomScene()?.puzzleAction(op, quest, owl) ?? Promise.resolve(false),
+  walkToPiece: (quest, lock, kind, n) => roomScene()?.walkToPiece(quest, lock, kind, n) ?? false,
   shop: () => collection.shop(),
   buy: (variant) => collection.buy(variant),
   gift: () => collection.claimGift(),

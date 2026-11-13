@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { CollectLog, saltedHash, type LogConfig, type PlayerRow, type RealmVisitRow, type SessionRow } from '../src/collectLog';
-import { ParkStats, REALM_VISITS_MAX, VISIT_GRACE_MS, visitMaps, type Sighting } from '../src/parkStats';
+import { CollectLog, saltedHash, saltedUuid, type LogConfig, type PlayerRow, type RealmVisitRow, type RoomStayRow, type SessionRow } from '../src/collectLog';
+import { ParkStats, REALM_VISITS_MAX, VISIT_GRACE_MS, stayMap, visitMaps, type Sighting } from '../src/parkStats';
 import { SqlCollectionStore } from '../src/sqlStore';
 import { sqlStorage } from './sqlite';
 
@@ -93,6 +93,7 @@ describe('the player stats (OP-111)', () => {
         collectibles_gained: 2,
         // The room server said nothing of spectators: a visit from before OP-192 goes without a kind.
         visitor_kind: null,
+        is_test: false,
       },
     ]);
     // Nothing that names the owl or its pass leaves.
@@ -132,6 +133,38 @@ describe('the player stats (OP-111)', () => {
       [new Date(MON + 1_000).toISOString()]: 'visitor',
       [new Date(MON + 2_000).toISOString()]: null,
     });
+  });
+
+  it('marks a visit one of our own tests once any of its sockets said so, and only that visit', async () => {
+    const t = rig();
+    const marks = async () => Object.fromEntries((await t.sent<SessionRow>('session')).map((s) => [s.started_at, s.is_test]));
+    // A scripted check: its first socket already says so.
+    t.stats.seen({ ...ME, pass: 'v_scripted01', room: 'm3-hall', test: true }, BARN, MON);
+    // A test that says so only from its second room on is still one, for the whole visit.
+    t.stats.seen({ ...ME, pass: 'v_scripted02', room: 'lobby' }, BARN, MON + 1_000);
+    t.stats.alive([{ ...ME, pass: 'v_scripted02', room: 'hub', test: true }], MON + 61_000);
+    t.stats.alive([{ ...ME, pass: 'v_scripted02', room: 'grove' }], MON + 62_000);
+    // A player's visit.
+    t.stats.seen({ ...ME, pass: 'v_player0001', room: 'lobby' }, BARN, MON + 2_000);
+    t.stats.close(MON + 3600_000);
+    expect(await marks()).toEqual({
+      [new Date(MON).toISOString()]: true,
+      [new Date(MON + 1_000).toISOString()]: true,
+      [new Date(MON + 2_000).toISOString()]: false,
+    });
+  });
+
+  it('adds the test mark to an object that kept visits before it, and sends those as players\' visits', async () => {
+    const sql = sqlStorage();
+    new SqlCollectionStore(sql);
+    sql.exec(`CREATE TABLE stats_visits (pass TEXT PRIMARY KEY, cid TEXT NOT NULL, started INTEGER NOT NULL, seen INTEGER NOT NULL, device TEXT, rooms TEXT NOT NULL, gained INTEGER NOT NULL DEFAULT 0, kind TEXT)`);
+    sql.exec(`INSERT INTO stats_visits (pass, cid, started, seen, device, rooms) VALUES (?, ?, ?, ?, ?, ?)`, PASS, CID, MON, MON, 'phone', '["hub"]');
+    const bodies: Array<{ kind: string; rows?: SessionRow[] }> = [];
+    const log = new CollectLog(sql, CONFIG, { fetch: async (_u, init) => (bodies.push(JSON.parse(String(init.body))), new Response('{"ok":true}')), now: () => MON, wake: () => undefined });
+    const stats = new ParkStats(sql, log);
+    stats.close(MON + 3600_000);
+    await log.flush();
+    expect(bodies.filter((b) => b.kind === 'session').flatMap((b) => b.rows!).map((r) => r.is_test)).toEqual([false]);
   });
 
   it('adds the visit kind to an object that kept visits before OP-192, and sends those without one', async () => {
@@ -251,6 +284,17 @@ describe('time per room (OP-113)', () => {
     expect(visitMaps(['market', 'l1', 'hub', 'nest-abcdefgh'])).toEqual([2, 2, 1, 1]);
   });
 
+  it('reports the Great Hollow and its shared rooms in the tree bucket', async () => {
+    const t = rig();
+    t.stats.seen(into('m3-hall', { map: 2 }), BARN, MON);
+    t.stats.seen(into('market', { map: 2 }), BARN, MON + MIN);
+    t.stats.close(MON + MIN + VISIT_GRACE_MS);
+    const expected = [['m3-hall', 2], ['market', 2]];
+    expect((await t.sent<RealmVisitRow>('realm_visit')).map((r) => [r.realm, r.map_id])).toEqual(expected);
+    const stays = await t.sent<RoomStayRow>('room_stay');
+    expect(stays.flatMap((r) => r.event === 'enter' ? [[r.realm, r.map_id]] : [])).toEqual(expected);
+  });
+
   it("walks from one nest into another, though the log names both the same: Go home from another owl's nest", async () => {
     const t = rig();
     t.stats.seen(into('nest-otherowl1'), BARN, MON);
@@ -273,6 +317,167 @@ describe('time per room (OP-113)', () => {
     t.stats.seen(into('hub'), BARN, MON);
     t.stats.gained(PASS);
     expect(t.sql.exec(`SELECT COUNT(*) AS n FROM stats_rooms`).one()).toEqual({ n: 0 });
+  });
+});
+
+describe('room stays, live (OP-265)', () => {
+  const MIN = 60_000;
+  const NEST = 'nest-abcdefgh';
+  const into = (room: string, extra: Partial<Sighting> = {}): Sighting => ({ ...ME, room, entered: true, ...extra });
+  const at = (ms: number) => new Date(ms).toISOString();
+  /** Each event as [event, room or why, when], in the order sent. */
+  const events = (rows: RoomStayRow[]) => rows.map((r) => (r.event === 'enter' ? ['enter', r.realm, r.entry_source, r.at] : ['leave', r.exit_reason, r.at]));
+
+  it('sends an enter as the owl comes into a room and closes the stay before as moved, at the same moment', async () => {
+    const t = rig();
+    t.stats.seen(into(NEST, { own: true }), BARN, MON);
+    t.stats.seen(into('homes'), BARN, MON + 2 * MIN);
+    t.stats.alive([{ ...ME, room: NEST, left: 'bye' }], MON + 2 * MIN + 500); // the nest's socket closes after the street's hello
+    t.stats.seen(into('hub', { travel: true }), BARN, MON + 3 * MIN);
+    const rows = await t.sent<RoomStayRow>('room_stay');
+    expect(events(rows)).toEqual([
+      ['enter', 'nest', 'spawn', at(MON)],
+      ['leave', 'moved', at(MON + 2 * MIN)],
+      ['enter', 'homes', 'walked', at(MON + 2 * MIN)],
+      ['leave', 'moved', at(MON + 3 * MIN)],
+      ['enter', 'hub', 'travel', at(MON + 3 * MIN)],
+    ]);
+    // Each leave closes the stay the enter before it opened, all under the visit's session.
+    const stays = rows.map((r) => r.stay_id);
+    expect(stays[1]).toBe(stays[0]);
+    expect(stays[3]).toBe(stays[2]);
+    expect(new Set(stays).size).toBe(3);
+    const enter = rows[0] as Extract<RoomStayRow, { event: 'enter' }>;
+    expect(enter.session_id).toBe(await saltedUuid(CONFIG.salt, 'session', PASS));
+    expect(enter.collector_id).toBe(await saltedHash(CONFIG.salt, 'collector', CID));
+    expect(enter.stay_id).toBe(await saltedUuid(CONFIG.salt, 'room-stay', `${PASS}|1`));
+    for (const text of [CID, PASS, NEST]) expect(JSON.stringify(rows)).not.toContain(text);
+  });
+
+  it('continues the stay when a dropped line comes back into the same room: no new row, and a timeout only if it never does', async () => {
+    const t = rig();
+    t.stats.seen(into('grove'), BARN, MON);
+    t.stats.alive([{ ...ME, room: 'grove', left: 'drop' }], MON + MIN);
+    t.stats.seen(into('grove'), BARN, MON + MIN + 5000); // back in
+    t.stats.alive([{ ...ME, room: 'grove' }], MON + 2 * MIN); // the minute heartbeat
+    t.stats.alive([{ ...ME, room: 'grove', left: 'drop' }], MON + 4 * MIN); // lost again, for good
+    t.stats.close(MON + 4 * MIN + VISIT_GRACE_MS);
+    expect(events(await t.sent<RoomStayRow>('room_stay'))).toEqual([
+      ['enter', 'grove', 'deep_link', at(MON)],
+      ['leave', 'timeout', at(MON + 4 * MIN)],
+    ]);
+    expect(t.sql.exec(`SELECT COUNT(*) AS n FROM stats_live`).one()).toEqual({ n: 0 });
+  });
+
+  it('ends a stay as a log off when the page said goodbye and the owl did not come back, at when it was last seen', async () => {
+    const t = rig();
+    t.stats.seen(into('lobby'), BARN, MON);
+    t.stats.alive([{ ...ME, room: 'lobby', left: 'bye' }], MON + 7 * MIN);
+    t.stats.close(MON + 7 * MIN + VISIT_GRACE_MS - 1); // not quiet long enough yet
+    expect(await t.sent<RoomStayRow>('room_stay')).toHaveLength(1);
+    t.stats.close(MON + 7 * MIN + VISIT_GRACE_MS);
+    expect(events(await t.sent<RoomStayRow>('room_stay'))).toEqual([
+      ['enter', 'lobby', 'spawn', at(MON)],
+      ['leave', 'logoff', at(MON + 7 * MIN)],
+    ]);
+  });
+
+  it('counts a goodbye only from the room the owl is in: a heartbeat there after a goodbye from the last room leaves a timeout', async () => {
+    const t = rig();
+    t.stats.seen(into('hub'), BARN, MON);
+    t.stats.seen(into('grove'), BARN, MON + MIN);
+    t.stats.alive([{ ...ME, room: 'hub', left: 'bye' }], MON + MIN + 200); // the hub's page socket, closed as it walked on
+    t.stats.alive([{ ...ME, room: 'grove' }], MON + 2 * MIN);
+    t.stats.close(MON + 2 * MIN + VISIT_GRACE_MS); // the grove's line went quiet with no close
+    expect(events(await t.sent<RoomStayRow>('room_stay')).at(-1)).toEqual(['leave', 'timeout', at(MON + 2 * MIN)]);
+  });
+
+  it('ends every stay with the nightly restart, and starts a new one when the owl comes back in, even into the same room', async () => {
+    const t = rig();
+    t.stats.seen(into('l1'), BARN, MON);
+    t.stats.alive([{ ...ME, room: 'l1', left: 'restart' }], MON + 5 * MIN);
+    t.stats.alive([{ ...ME, room: 'l1', left: 'drop' }], MON + 5 * MIN + 100); // the restart's close itself: nothing more
+    t.stats.seen(into('lobby'), BARN, MON + 6 * MIN); // Play again from the home screen
+    t.stats.seen(into('l1'), BARN, MON + 7 * MIN);
+    t.stats.alive([{ ...ME, room: 'l1', left: 'restart' }], MON + 8 * MIN);
+    t.stats.seen(into('l1'), BARN, MON + 9 * MIN); // the same room again, after a restart: a new stay
+    t.stats.close(MON + 9 * MIN + VISIT_GRACE_MS);
+    const rows = await t.sent<RoomStayRow>('room_stay');
+    expect(events(rows)).toEqual([
+      ['enter', 'l1', 'deep_link', at(MON)],
+      ['leave', 'server_restart', at(MON + 5 * MIN)],
+      ['enter', 'lobby', 'spawn', at(MON + 6 * MIN)],
+      ['leave', 'moved', at(MON + 7 * MIN)],
+      ['enter', 'l1', 'walked', at(MON + 7 * MIN)],
+      ['leave', 'server_restart', at(MON + 8 * MIN)],
+      ['enter', 'l1', 'walked', at(MON + 9 * MIN)],
+      ['leave', 'timeout', at(MON + 9 * MIN)],
+    ]);
+    // The visit's stays keep counting across the restart, so no two share an id.
+    expect(new Set(rows.map((r) => r.stay_id)).size).toBe(4);
+    const enters = rows.filter((r): r is Extract<RoomStayRow, { event: 'enter' }> => r.event === 'enter');
+    // The lobby is today's park; the tree's level 1 is the tree's.
+    expect(enters.map((r) => r.map_id)).toEqual([2, 1, 2, 2]);
+  });
+
+  it("keeps two visits' stays apart, and changes nothing for the times per room sent with each visit", async () => {
+    const t = rig();
+    t.stats.seen(into('hub'), BARN, MON);
+    t.stats.seen({ ...into('grove'), pass: 'v_visitBBBB2' }, BARN, MON + MIN);
+    t.stats.seen(into('market'), BARN, MON + 2 * MIN);
+    t.stats.close(MON + 2 * MIN + VISIT_GRACE_MS);
+    const rows = await t.sent<RoomStayRow>('room_stay');
+    expect(events(rows).slice(0, 4)).toEqual([
+      ['enter', 'hub', 'deep_link', at(MON)],
+      ['enter', 'grove', 'deep_link', at(MON + MIN)],
+      ['leave', 'moved', at(MON + 2 * MIN)],
+      ['enter', 'market', 'walked', at(MON + 2 * MIN)],
+    ]);
+    // Both visits end together, in either order, each at when it was last seen.
+    expect(events(rows).slice(4)).toEqual(expect.arrayContaining([['leave', 'timeout', at(MON + MIN)], ['leave', 'timeout', at(MON + 2 * MIN)]]));
+    expect(rows).toHaveLength(6);
+    expect((await t.sent<RealmVisitRow>('realm_visit')).map((r) => r.realm).sort()).toEqual(['grove', 'hub', 'market']);
+  });
+
+  it('logs a tree owl\'s nest, its visit\'s first stay, in the tree when the page says the owl walks the tree', async () => {
+    const t = rig();
+    t.stats.seen(into(NEST, { own: true, map: 2 }), BARN, MON); // Play lands it in its nest; it walks the tree
+    t.stats.seen(into('l5-street'), BARN, MON + MIN);
+    t.stats.seen(into('market', { map: 2 }), BARN, MON + 2 * MIN); // a realm both parks share, walked from the tree
+    t.stats.seen(into('hub', { map: 2 }), BARN, MON + 3 * MIN); // a room of today's park alone is in today's park, whatever the page says
+    t.stats.close(MON + 3 * MIN + VISIT_GRACE_MS);
+    const enters = (await t.sent<RoomStayRow>('room_stay')).filter((r): r is Extract<RoomStayRow, { event: 'enter' }> => r.event === 'enter');
+    expect(enters.map((r) => [r.realm, r.map_id])).toEqual([
+      ['nest', 2],
+      ['l5-street', 2],
+      ['market', 2],
+      ['hub', 1],
+    ]);
+  });
+
+  it('logs a nest in today\'s park when the page says so, or says nothing', async () => {
+    const t = rig();
+    t.stats.seen(into(NEST, { own: true, map: 1 }), BARN, MON);
+    t.stats.seen({ ...into(NEST, { own: true }), pass: 'v_visitBBBB2' }, BARN, MON + MIN);
+    t.stats.close(MON + MIN + VISIT_GRACE_MS);
+    const enters = (await t.sent<RoomStayRow>('room_stay')).filter((r): r is Extract<RoomStayRow, { event: 'enter' }> => r.event === 'enter');
+    expect(enters.map((r) => r.map_id)).toEqual([1, 1]);
+  });
+
+  it('puts a shared room in the park of the stay before it, and a first one in today\'s park', () => {
+    expect(stayMap('l3', null)).toBe(2);
+    expect(stayMap('hub', 2)).toBe(1);
+    expect(stayMap('market', 2)).toBe(2);
+    expect(stayMap('market', null)).toBe(1);
+    expect(stayMap(NEST, 2)).toBe(2);
+  });
+
+  it('sends nothing while the log is off', () => {
+    const t = rig(null);
+    t.stats.seen(into('hub'), BARN, MON);
+    t.stats.alive([{ ...ME, room: 'hub', left: 'restart' }], MON + MIN);
+    expect(t.sql.exec(`SELECT COUNT(*) AS n FROM stats_live`).one()).toEqual({ n: 0 });
+    expect(t.log.waiting()).toBe(0);
   });
 });
 

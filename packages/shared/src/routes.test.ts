@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { ROOMS } from '../rooms';
-import { JUMP_RISE } from './flight';
+import { FLAP_RISE, JUMP_RISE } from './flight';
 import type { Polygon } from './geometry';
 import type { Perch } from './perches';
-import { ROUTE_MARGIN, gapBetween, hopTier, perchTiers } from './routes';
+import { ROUTE_MARGIN, gapBetween, hopFlaps, hopTier, perchTiers, roomFlaps } from './routes';
 
 const box = (x: number, y: number, w: number, h: number): Polygon => [
   { x, y },
@@ -32,6 +32,31 @@ describe('route tiers (OP-084)', () => {
     expect(hopTier(-150, 160)).toBe(1);
   });
 
+  it("gives the tree's hops both flaps (OP-239): higher and farther than today's park, and says when a hop takes the second", () => {
+    expect(roomFlaps({})).toBe(1);
+    expect(roomFlaps({ map: 2 })).toBe(2);
+    // Both flaps go with the side view, not the park (OP-284).
+    expect(roomFlaps({ map: 2, view: 'top' })).toBe(1);
+    expect(roomFlaps({ view: 'side' })).toBe(2);
+    // Straight up: past a jump and a flap, the second flap still reaches; past both, nothing.
+    expect(hopTier(264, 0)).toBeNull();
+    expect(hopTier(264, 0, 2)).toBe(2);
+    expect(hopTier(JUMP_RISE + 2 * FLAP_RISE - ROUTE_MARGIN, 0, 2)).toBe(2);
+    expect(hopTier(JUMP_RISE + 2 * FLAP_RISE - ROUTE_MARGIN + 1, 0, 2)).toBeNull();
+    // Across: the second flap keeps the owl up longer, so it crosses more before a glide is needed.
+    expect(hopTier(0, 300)).toBe(3);
+    expect(hopTier(0, 300, 2)).toBe(2);
+    // Which of the two a tier 2 hop takes: one flap where one reaches, two where only both do.
+    expect(hopFlaps(184, 0)).toBe(1);
+    expect(hopFlaps(300, 0)).toBe(2);
+    expect(hopFlaps(0, 300)).toBe(2);
+    expect(hopFlaps(80, 0)).toBeNull(); // a jump alone
+    // A room of the tree reckons its perches with both flaps.
+    const high = { id: 'high', area: box(500, 450, 50, 50), top: 330 };
+    expect(perchTiers(room(high))).toEqual({ high: null });
+    expect(perchTiers({ ...room(high), map: 2 as const })).toEqual({ high: 2 });
+  });
+
   it('measures the gap between two areas on the plan: none when they meet, overlap or cross', () => {
     expect(gapBetween(box(0, 0, 100, 100), box(100, 0, 50, 50))).toBe(0);
     expect(gapBetween(box(0, 0, 100, 100), box(50, 50, 100, 100))).toBe(0);
@@ -55,11 +80,12 @@ describe('route tiers (OP-084)', () => {
   });
 
   it("finds the hub's bench a jump up and its lantern beam a jump and a flap from the bench", () => {
-    expect(perchTiers(ROOMS['hub']!)).toEqual({ 'hub-bench': 1, 'hub-beam': 2 });
+    // The plaza's stump and log (plazaFloor.ts) are a jump up from its floor.
+    expect(perchTiers(ROOMS['hub']!)).toEqual({ 'hub-bench': 1, 'hub-beam': 2, 'hub-mushrooms-perch': 1, 'hub-bath-perch': 1 });
   });
 
   it("finds the grove's ladder single jumps to the loft, and its far treehouse a glide from there", () => {
-    expect(perchTiers(ROOMS['grove']!)).toEqual({ 'grove-log': 1, 'grove-rung': 1, 'grove-porch': 1, 'grove-loft': 1, 'grove-hut': 3 });
+    expect(perchTiers(ROOMS['grove']!)).toEqual({ 'grove-log': 1, 'grove-rung': 1, 'grove-porch': 1, 'grove-loft': 1, 'grove-hut': 3, 'grove-bank-west': 1, 'grove-lantern-mound': 1, 'grove-mushrooms': 1, 'grove-bank-east': 1, 'grove-stump-perch': 1, 'grove-log-perch': 1 });
   });
 
   it("finds the market's roofs single jumps up, and its food stall and tent a jump and the flap from the plaza", () => {
@@ -70,6 +96,7 @@ describe('route tiers (OP-084)', () => {
       'market-food': 2,
       'market-roofs': 1,
       'market-tent': 2,
+      'market-coin-perch': 1,
     });
   });
 });

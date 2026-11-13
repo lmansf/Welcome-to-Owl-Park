@@ -1,13 +1,14 @@
 /** The park's objects as the routes reach them, and the work the routes hand them after answering. */
-import { type Logger, hashForLog } from '@owl-park/shared';
+import { type Logger, hashForLog, referralEmailKey } from '@owl-park/shared';
 import type { OverflowState } from '../Overflow';
-import { accountsOn, emailKeys, mailSender, offerOrderProtect, orderEmail } from '../accounts';
+import { accountsOn, emailKeys, keyed, mailSender, offerOrderProtect, orderEmail } from '../accounts';
 import { type PurchaseData, logConfig } from '../collectLog';
 import { roomObjectName } from '../copies';
 import type { Env } from '../env';
 import { type GateRead, type GateSet, gateNow } from '../gateSwitch';
 import { overflowNow } from '../overflowState';
 import { signingSecret } from '../pass';
+import { checkoutHash, referralCode, referralRewardCode } from '../referrals';
 import { type TicketMirror, storeConfig } from '../storeApi';
 import { type Desk, type HookDeps, claimLink, mirrorTickets } from '../storeHooks';
 
@@ -92,7 +93,25 @@ export function deskOf(env: Env): Desk {
 /** What the store webhooks need, once the store is set up; null until then. */
 export function storeDeps(env: Env, origin: string): HookDeps | null {
   const store = storeConfig(env);
-  return store ? { store, desk: deskOf(env), claimUrl: (secret) => claimLink(origin, secret), ...(env.OPENING_PASS_CODE ? { openingCode: env.OPENING_PASS_CODE } : {}) } : null;
+  if (!store) return null;
+  // Bring a friend (OP-056): the free Day Ticket's codes, and the offers their checkouts spend. A friend's
+  // ticket is tied to its order's email, read so one inbox is one friend (referralEmailKey: no +tags, no
+  // Gmail dots) and kept only as a keyed hash (null when the store will not say).
+  const code = referralCode(env);
+  const rewardCode = referralRewardCode(env);
+  const emailHashOf = async (order: string): Promise<string | null> => {
+    const keys = emailKeys(env);
+    const email = keys ? referralEmailKey(await orderEmail(store, order)) : null;
+    return keys && email ? keyed(await keys, 'e', `referral:${email}`) : null;
+  };
+  const referral = code
+    ? {
+        referralCode: code,
+        ...(rewardCode ? { referralRewardCode: rewardCode } : {}),
+        referralSpend: async (token: string, order: string) => collections(env).referralSpend(await checkoutHash(token), order, await emailHashOf(order)),
+      }
+    : {};
+  return { store, desk: deskOf(env), claimUrl: (secret) => claimLink(origin, secret), ...(env.OPENING_PASS_CODE ? { openingCode: env.OPENING_PASS_CODE } : {}), ...referral };
 }
 
 /** Brings the store's copy of a ticket (or of an order's tickets) up to date after answering. */

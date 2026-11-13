@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { monitorEventLoopDelay } from 'node:perf_hooks';
 import WebSocket from 'ws';
 
-const USAGE = 'usage: swarm.mjs [--url http://localhost:8787] [--bots 3] [--seconds 30] [--tap-every 5000] [--room lobby|hub|grove|market] [--ip-header] [--json <file>]';
+const USAGE = 'usage: swarm.mjs [--url http://localhost:8787] [--bots 3] [--seconds 30] [--tap-every 5000] [--room lobby|hub|grove|market|m3-hall|m3-ground|...] [--ip-header] [--json <file>]';
 // The room server's protocol version, read from the shared source so the bots never fall behind it.
 const EDGE = readFileSync(new URL('../../packages/shared/src/edge.ts', import.meta.url), 'utf8');
 const VERSION = Number(/EDGE_PROTOCOL_VERSION = (\d+)/.exec(EDGE)?.[1]);
@@ -32,6 +32,14 @@ const TARGETS = {
   hub: { x: [200, 1800], y: [770, 870] },
   grove: { x: [500, 2100], y: [680, 760] },
   market: { x: [300, 1900], y: [730, 830] },
+  // The new map (packages/shared/src/newMap.ts): the Great Hollow, seen from above, its middle (checked
+  // wholly on its floor), and the side-view rooms along their ground line, clear of the ends.
+  'm3-hall': { x: [1000, 4400], y: [900, 1800] },
+  'm3-stair-1': { x: [400, 3900], y: [766, 774] },
+  'm3-stair-2': { x: [300, 2800], y: [766, 774] },
+  'm3-stair-3': { x: [500, 4200], y: [766, 774] },
+  'm3-ground': { x: [800, 6200], y: [766, 774] },
+  'm3-cave': { x: [300, 4400], y: [766, 774] },
 };
 
 function parseArgs(argv) {

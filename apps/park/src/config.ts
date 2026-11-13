@@ -2,7 +2,11 @@
  * Runtime configuration. Everything here is public: it ships in the browser bundle.
  * Query-string overrides exist for tests and demos (e.g. ?transport=local&room=grove).
  */
+import { roomForLink } from '@owl-park/shared';
 import { PHONE_ROOM_BUDGET } from './game/artFiles';
+import { sizeBoxesWanted } from './game/sizeBoxes';
+import { skinTrialWanted } from './game/skinTrial';
+import { artLookWanted } from './game/artLooks';
 
 /**
  * How the page reaches other owls: the room server, or tabs on this device. The page holds no key to
@@ -79,6 +83,36 @@ export interface ParkConfig {
    * token (`?keeper=1`, now or earlier in the tab): game/ledgePainter.ts.
    */
   paint: boolean;
+  /**
+   * Rooms built from the art kit (OP-234): a painted room that has a kit room standing in for it
+   * (KIT_DEMOS, packages/shared/rooms/kit.ts: every room of the tree) is drawn from the kit. The room's
+   * layout is the same, so only the look changes. On for every visitor since the whole tree map was
+   * built in the kit (the owner's rule: all rooms switch together); `?kit=0` shows the painted rooms.
+   */
+  kit: boolean;
+  /**
+   * The new map (map 3): the park laid out as one tree, from the Treetop Commons down past the realms to
+   * the ground (packages/shared/rooms/index.ts, NEW_MAP). Every owl the tree takes walks it; a keeper's
+   * tab (`?keeper=1`, now or earlier in the tab) walks it from the first room with `?newmap=1`.
+   */
+  newMap: boolean;
+  /** `?newmap=0`: an owl the tree takes walks the tree as it was (map 2), not the new map. */
+  oldMap: boolean;
+  /**
+   * Size boxes (`?sizes=1`, kept for the tab until `?sizes=0`): the map's art drawn as plain boxes
+   * labelled with each piece's name, its size in the game and the size to deliver (game/sizeBoxes.ts).
+   */
+  sizes: boolean;
+  /**
+   * A skin trial (`?skin=<name>`, kept for the tab until `?skin=0`): a realm artist's skin sheet, cut
+   * by tools/kit/skin_sheet.py, drawn in place of the realm's kit slots (game/skinTrial.ts). Null for every visitor.
+   */
+  skin: string | null;
+  /**
+   * The layered room look this page draws (game/artLooks.ts): the Party Grove's four painted layers for
+   * every visitor; `?art=old` draws the rooms' earlier paintings instead (null).
+   */
+  art: string | null;
 }
 
 export function readConfig(): ParkConfig {
@@ -91,6 +125,9 @@ export function readConfig(): ParkConfig {
   else if (requested === 'edge') transport = 'edge';
   else if (edgeUrl) transport = 'edge';
   else transport = 'local';
+  // A link to a room folded into another (OP-306) lands in that one, at its own way in.
+  const linked = q.get('room');
+  const room = linked === null ? 'lobby' : roomForLink(linked);
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
   return {
     transport,
@@ -98,8 +135,8 @@ export function readConfig(): ParkConfig {
     shopUrl: ((env.VITE_SHOP_URL as string | undefined) ?? '').trim(),
     ticketsUrl: ((env.VITE_TICKETS_URL as string | undefined) ?? '').trim(),
     home: !q.has('room') && q.get('home') !== '0',
-    room: q.get('room') ?? 'lobby',
-    spawn: q.get('spawn') ?? undefined,
+    room,
+    spawn: room === linked || linked === null ? (q.get('spawn') ?? undefined) : undefined,
     id: q.get('id') ?? undefined,
     look: q.get('look') ?? undefined,
     collector: q.get('collector') ?? undefined,
@@ -117,5 +154,11 @@ export function readConfig(): ParkConfig {
     pos: q.get('pos') === '1',
     keeper: q.get('keeper') === '1',
     paint: q.get('paint') === '1',
+    kit: q.get('kit') !== '0',
+    newMap: q.get('newmap') === '1',
+    oldMap: q.get('newmap') === '0',
+    sizes: sizeBoxesWanted(q.get('sizes')),
+    skin: skinTrialWanted(q.get('skin')),
+    art: artLookWanted(q.get('art')),
   };
 }

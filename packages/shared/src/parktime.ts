@@ -35,6 +35,12 @@ export function parkWeek(at: number): string {
   return `W${monday.getUTCFullYear()}-${pad(monday.getUTCMonth() + 1)}-${pad(monday.getUTCDate())}`;
 }
 
+/** The park month at a moment (OP-254): `M` and its year and month, e.g. `M2026-11`. Turns at midnight Eastern on the 1st. */
+export function parkMonth(at: number): string {
+  const p = parts(at);
+  return `M${p.y}-${pad(p.m)}`;
+}
+
 /** The first instant after `at` whose key differs: the next park midnight (or Monday midnight). */
 function nextChange(at: number, key: (t: number) => string, maxHours: number): number {
   const k = key(at);
@@ -63,6 +69,14 @@ export function nextParkWeekAt(at: number): number {
   const week = parkWeek(at);
   let t = nextParkDayAt(at);
   for (let i = 0; i < 7 && parkWeek(t) === week; i++) t = nextParkDayAt(t);
+  return t;
+}
+
+/** When the next park month starts (ms), OP-254. */
+export function nextParkMonthAt(at: number): number {
+  const month = parkMonth(at);
+  let t = nextParkDayAt(at);
+  for (let i = 0; i < 32 && parkMonth(t) === month; i++) t = nextParkDayAt(t);
   return t;
 }
 
