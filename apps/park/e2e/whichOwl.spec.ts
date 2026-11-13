@@ -17,8 +17,8 @@ const tap = async (page: Page, selector: string, isMobile: boolean) => {
 };
 const storedLook = (page: Page) => page.evaluate(() => JSON.parse(localStorage.getItem('owl-park:look') ?? 'null') as { body: string; species?: string } | null);
 
-async function openHome(page: Page): Promise<void> {
-  await page.goto('/?transport=local');
+async function openHome(page: Page, more = ''): Promise<void> {
+  await page.goto(`/?transport=local${more}`);
   await page.waitForFunction(() => window.owlPark?.home?.().shown === true, null, { timeout: 20_000 });
 }
 
@@ -95,7 +95,7 @@ async function answerCards(page: Page, pick: number, isMobile: boolean): Promise
   const ids: string[] = [];
   for (let i = 1; i <= 8; i++) {
     await expect(page.locator('.which-owl .wo-count')).toHaveText(`${i} of 8`);
-    // One look at the card (its id, each answer's size and picture box, its words): one round trip, so
+    // One look at the card (its id, each answer's size, any picture box, its words): one round trip, so
     // the runs that ask two whole quizzes stay well inside their time on a slow machine.
     const seen = await page.locator('[data-wo-card]').evaluate((el) => {
       const answers = [...el.querySelectorAll('[data-wo-answer]')];
@@ -105,7 +105,7 @@ async function answerCards(page: Page, pick: number, isMobile: boolean): Promise
           const r = a.getBoundingClientRect();
           return Math.min(r.width, r.height);
         }),
-        art: answers.map((a) => a.querySelector('[data-wo-art]')?.textContent ?? ''),
+        boxes: el.querySelectorAll('.wo-pic, [data-wo-art]').length,
         text: (el as HTMLElement).innerText,
       };
     });
@@ -120,9 +120,11 @@ async function answerCards(page: Page, pick: number, isMobile: boolean): Promise
       expect(count).toBeGreaterThanOrEqual(2);
       expect(count).toBeLessThanOrEqual(4);
     }
-    // Every answer is a big enough target for a thumb, its picture a box with its size until it is painted (OP-326).
+    // Every answer is a big enough target for a thumb, and a card of words: no picture slot, and no box
+    // with its size written on it, which a visitor read as a park not finished (OP-365).
     for (const size of seen.sizes) expect(size).toBeGreaterThanOrEqual(44);
-    expect(seen.art).toEqual(Array<string>(count).fill('96 × 96'));
+    expect(seen.boxes).toBe(0);
+    expect(seen.text).not.toMatch(/\d+\s*[×x]\s*\d+/);
     // No emoji anywhere on the card.
     expect(seen.text).not.toMatch(/\p{Extended_Pictographic}/u);
     await tap(page, `[data-wo-answer="${Math.min(pick, count - 1)}"]`, isMobile);
@@ -204,6 +206,24 @@ test.describe('which owl are you (OP-076)', () => {
     await page.keyboard.press('Escape');
     await expect(builder).toBeHidden();
     await expect(page.locator('[data-home-btn="play"]')).toBeVisible();
+  });
+
+  test('on a painter’s tab every answer keeps its box, with the size to paint it at and its art key (OP-365)', async ({ page, isMobile }) => {
+    await openHome(page, '&paint=1');
+    await tap(page, '[data-home-btn="login"]', isMobile);
+    await expect(quiz(page)).toBeVisible();
+    for (let i = 0; i < 3; i++) await tap(page, '[data-wo-next]', isMobile);
+    await expect(page.locator('.which-owl .wo-count')).toHaveText('1 of 8');
+    const seen = await page.locator('[data-wo-card]').evaluate((el) => ({
+      answers: el.querySelectorAll('[data-wo-answer]').length,
+      boxes: [...el.querySelectorAll('.wo-pic')].map((box) => ({ words: box.textContent ?? '', key: box.getAttribute('data-wo-art') ?? '', wide: box.getBoundingClientRect().width })),
+    }));
+    expect(seen.answers).toBe(2);
+    expect(seen.boxes.map((box) => box.words)).toEqual(['96 × 96', '96 × 96']);
+    // Each box names its picture for the artist (docs/QUIZ-ART.md), and no two answers share one.
+    for (const box of seen.boxes) expect(box.key).toMatch(/^[a-z][a-z0-9-]*$/);
+    expect(new Set(seen.boxes.map((box) => box.key)).size).toBe(2);
+    for (const box of seen.boxes) expect(box.wide).toBeGreaterThanOrEqual(64);
   });
 
   test('Retake the quiz in Settings: a new kind and colours on the same owl, and a close leaves it as it was', async ({ page, isMobile }) => {
