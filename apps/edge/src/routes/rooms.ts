@@ -2,14 +2,14 @@
 import { CLOSE, STUMP_ROOM, type Logger, hashForLog, isPartyRoom } from '@owl-park/shared';
 import type { OverflowState } from '../Overflow';
 import { isTestVisit } from '../collectLog';
-import { copiesIn, pickCopy } from '../copies';
+import { NESTS_OBJECT, copiesIn, pickCopy } from '../copies';
 import type { Env } from '../env';
 import { isFreeRoom, mayEnter, spectating, spectatorsOn } from '../gate';
 import { health } from '../health';
 import { countIn, countedOneMore } from '../overflowState';
 import { isLocalHost } from '../guard';
 import { type PassPayload, mintEntry, passRefusal, requireSecret, signingKeySet, verifyEntry, verifyPass } from '../pass';
-import { ROOMS, isRoomId, roomCap } from '../rooms';
+import { NESTS_COUNT, ROOMS, isRoomId, roomCap } from '../rooms';
 import { CORS, adminKeySet, clientIp, json, whoOf } from './http';
 import { collections, gateOf, objectFor, objectName, overflowOf, readGate } from './park';
 import type { RouteCtx } from './router';
@@ -109,6 +109,9 @@ export async function counts(c: RouteCtx): Promise<Response> {
         out[id] = each.reduce((a, b) => a + b, 0);
       }),
     );
+    // Every nest is in one object (OP-106), summed under `nests` as with the whole park in one object.
+    const nests = (await (await env.ROOMS.get(env.ROOMS.idFromName(NESTS_OBJECT)).fetch('https://park/counts')).json()) as Record<string, number>;
+    if (nests[NESTS_COUNT]) out[NESTS_COUNT] = nests[NESTS_COUNT];
     return Response.json(out, { headers: CORS });
   }
   const r = await objectFor(env, 'hub').fetch('https://park/counts');

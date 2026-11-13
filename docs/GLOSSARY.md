@@ -86,7 +86,7 @@ defines it. Alphabetical. Grep the term.
 - **Hibernation**: Durable Object WebSockets that survive the object being evicted; everything a visitor needs is in the socket attachment; `apps/edge/src/RoomObject.ts`.
 - **Protocol version**: `EDGE_PROTOCOL_VERSION` (15) in `packages/shared/src/edge.ts`; a mismatch makes the page reload itself once.
 - **Room server**: the Worker plus the `RoomObject`; authoritative for positions, quests and activities; `apps/edge`.
-- **`ROOM_SHARDING`**: `single` (the whole park in one object, today) or `room` (one object per room); `wrangler.jsonc`, `docs/CAPACITY.md`.
+- **`ROOM_SHARDING`**: `room` (one object per room and copy, the nests sharing one; today, since OP-106) or `single` (the whole park in one object); `wrangler.jsonc`, `docs/CAPACITY.md`.
 - **Secrets**: `PASS_SIGNING_KEY`, `ADMIN_KEY`, `SHOPIFY_SHOP`, `SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET`, `SHOPIFY_ADMIN_TOKEN`, `SHOPIFY_WEBHOOK_SECRET`, `OPENING_PASS_CODE`; set with `wrangler secret put` or as GitHub repository secrets, never in a file; `apps/edge/src/env.ts`.
 - **Walk**: a straight move at `WALK_SPEED` (260 px/s, `packages/shared/src/walk.ts`) from a tap, clamped to the walkable area by `resolveTarget`.
 - **Worker**: the Cloudflare Worker that serves the client, the API and the sockets; its front door is `apps/edge/src/index.ts` and its routes are in `apps/edge/src/routes/`, listed in `table.ts` (OP-201).

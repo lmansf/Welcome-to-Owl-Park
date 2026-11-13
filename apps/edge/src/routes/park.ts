@@ -3,7 +3,7 @@ import { type Logger, hashForLog, referralEmailKey } from '@owl-park/shared';
 import type { OverflowState } from '../Overflow';
 import { accountsOn, emailKeys, keyed, mailSender, offerOrderProtect, orderEmail } from '../accounts';
 import { type PurchaseData, logConfig } from '../collectLog';
-import { copyObjectName } from '../copies';
+import { roomObjectName } from '../copies';
 import type { Env } from '../env';
 import { type GateRead, type GateSet, gateNow } from '../gateSwitch';
 import { overflowNow } from '../overflowState';
@@ -128,9 +128,9 @@ export function mirrorLater(ctx: ExecutionContext, env: Env, log: Logger, origin
   );
 }
 
-/** The room object for a room (or one of its copies, OP-075): one object for the park, or one per room and copy. */
+/** The room object for a room (or one of its copies, OP-075): one object for the park, or one per room and copy, the nests sharing one (OP-106). */
 export function objectName(env: Env, roomId: string, copy = 1): string {
-  return env.ROOM_SHARDING === 'room' ? copyObjectName(roomId, copy) : 'park';
+  return roomObjectName(env.ROOM_SHARDING, roomId, copy);
 }
 
 export function objectFor(env: Env, roomId: string, copy = 1): DurableObjectStub {
