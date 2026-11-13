@@ -37,6 +37,50 @@ function linkIn(page: LocalCollections, room: string, pos: Vec2) {
   return { link: page.questLink(room, null, pushes, () => where), where, pushed };
 }
 
+describe("a course's fall in this browser's own park (OP-343)", () => {
+  /** A course link in `room` with the owl at `where`, `z` up, in by `entry`: all three movable. */
+  function courseIn(page: LocalCollections, room: string, at: Vec2, entry?: string) {
+    const me = { pos: { ...at }, z: 0, ground: 0, entry };
+    const link = page.courseLink(room, null, () => me.pos, () => me.ground, () => ({ z: me.z, entry: me.entry }))!;
+    return { link, me };
+  }
+
+  it('is a fall as the room server sees one: down in a pit or in thorns at any height, and nowhere else', async () => {
+    const { page } = rig();
+    const { link, me } = courseIn(page, 'canopy-1', { x: 120, y: 770 }, 'from-gate');
+    expect((await link.start()).ok).toBe(true);
+    // On the walk before the bramble: no fall.
+    expect(await link.fall()).toEqual({ ok: false, reason: 'far' });
+    // Down in the bramble: a fall, back at the way in.
+    me.pos.x = 900;
+    expect(await link.fall()).toMatchObject({ ok: true, at: { x: 120, y: 770 } });
+    // Up on a frond over the bramble (standing 160 up): not one.
+    me.ground = 160;
+    me.z = 160;
+    expect(await link.fall()).toEqual({ ok: false, reason: 'far' });
+    // In the thorns that hang over safe floor (H1, from 260 up), which a preview used to let an owl fly through.
+    me.pos.x = 1990;
+    me.ground = 0;
+    me.z = 400;
+    expect(await link.fall()).toMatchObject({ ok: true });
+    // Under them, well clear: not one.
+    me.z = 100;
+    expect(await link.fall()).toEqual({ ok: false, reason: 'far' });
+  });
+
+  it('goes back the way the owl came into the room, as the room server sends it', async () => {
+    const { page } = rig();
+    const gate = courseIn(page, 'canopy-1', { x: 120, y: 770 }, 'from-gate');
+    expect((await gate.link.start()).ok).toBe(true);
+    // In again at the far end (down from the trunk), into the bramble near there: back at that way in.
+    const far = courseIn(page, 'canopy-1', { x: 3900, y: 770 }, 'from-trunk');
+    expect(await far.link.fall()).toMatchObject({ ok: true, at: { x: 4660, y: 770 } });
+    // No way in known: the act's own, the gate.
+    const plain = courseIn(page, 'canopy-1', { x: 3900, y: 770 });
+    expect(await plain.link.fall()).toMatchObject({ ok: true, at: { x: 120, y: 770 } });
+  });
+});
+
 describe('LocalCollections', () => {
   it('keeps one collection per browser and remembers its id', () => {
     const storage = new MemoryStorage();

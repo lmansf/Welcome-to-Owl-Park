@@ -20,7 +20,7 @@ import { HALL_ID, courseDoor, fromCourse } from './hollowHall';
 import { RAIN_BRIDGE_MS, brushPerches, type BrushArrow, type BrushStone } from '../src/brush';
 import type { CourseDef, CoursePiece, CourseThorns, RoomCourse } from '../src/course';
 import { kitPerches, kitRoom } from '../src/kit';
-import { ROOM_W, type DoorDef, type KitBackdrop, type KitDecal, type KitLedge, type RoomDef, type RoomKit } from '../src/room';
+import { ROOM_W, type DoorDef, type KitBackdrop, type KitLedge, type KitRun, type RoomDef, type RoomKit } from '../src/room';
 import { inRealmKit } from '../src/kitSlots';
 import { withCourseAir } from './courseAir';
 
@@ -28,6 +28,10 @@ export const BRUSH_COURSE_ID = 'brush';
 /** The tree's ground line (TREE_GROUND in rooms/index.ts, which this file cannot import: index.ts imports it). */
 export const BRUSH_GROUND = 770;
 const G = BRUSH_GROUND;
+/** How deep under the walking line the water over a flooded stretch of the walk is drawn (room px). */
+const WATER_DEEP = 62;
+/** The water's colour: a wash of ink-blue. */
+const WATER = 0x6f93ad;
 
 /** A walk along the ground line. */
 function floor(x0: number, x1: number) {
@@ -46,9 +50,9 @@ function ledge(id: string, x: number, w: number, top: number, look: Omit<KitLedg
 
 /** The looks of the course's ledges, from the ink-wash kit. */
 const STONE = { cap: 'kit-ink-brush-stone' };
-/** A dry stone: a plain stone where a brush stone would be, its ink long gone. */
-const DRY = { row: 'kit-cut-stone' };
-const ROCK = { row: 'kit-cut-stone' };
+/** A dry stone: a plain rock where a brush stone would be, its ink long gone. Both are the ink realm's own washed rock (OP-348). */
+const DRY = { row: 'kit-cut-ink-bank' };
+const ROCK = { row: 'kit-cut-ink-bank' };
 const CLIFF = { cap: 'kit-ink-paper-cliff' };
 const REED = { cap: 'kit-ink-reed-tuft' };
 const PINE = { cap: 'kit-ink-pine-bough' };
@@ -61,6 +65,8 @@ const PLANK = { row: 'kit-cut-plank-thin' };
 const pillar = (top: number) => ({ cap: 'kit-ink-rock-pillar', mid: 'kit-tex-ink-ink-stone', depth: top });
 /** A terrace of planks, down to the ground line. */
 const terrace = (top: number) => ({ row: 'kit-cut-plank', mid: 'kit-tex-planks', depth: top });
+/** An island of the realm's washed rock standing in the water: the bank's own run, and ink stone down to the ground line. */
+const island = (top: number) => ({ row: 'kit-cut-ink-bank', mid: 'kit-tex-ink-ink-stone', depth: top });
 
 /** A brush stone: its ledge, and the stone itself (what it paints and for how long). */
 function stone(id: string, x: number, w: number, top: number, arrow: BrushArrow, ms?: number): { ledge: KitLedge; stone: BrushStone } {
@@ -82,13 +88,6 @@ function piece(id: string, x: number, top = 0): CoursePiece {
 /** A hazard in the air over `x0` to `x1`, from `z0` up (z 940: higher than an owl may be): the waterfall, a cloud bank. */
 function hazard(id: string, x0: number, x1: number, z0: number, look: NonNullable<CourseThorns['look']>, z1 = 940): CourseThorns {
   return { id, x0, x1, z0, z1, look };
-}
-
-/** Ink-wash water over a stretch of the ground line, half see-through so the floor still reads: the game marks the hazard. */
-function water(x0: number, x1: number, step = 320): KitDecal[] {
-  const out: KitDecal[] = [];
-  for (let x = x0 + step / 2, i = 0; x < x1; x += step, i++) out.push({ piece: i % 3 === 1 ? 'kit-ink-lotus-pads' : 'kit-ink-pond-edge', x, y: G - 20, alpha: 0.45, ...(i % 2 ? { flip: true } : {}) });
-  return out;
 }
 
 const layer = (key: string, rate: number, screens: readonly [number, number], fade?: KitBackdrop['fade']): KitBackdrop => ({ key, rate, screens, ...(fade ? { fade } : {}) });
@@ -140,27 +139,73 @@ function brushRoom(
 }
 
 /**
- * The ground line's walk, drawn: a path along the whole room over ink-washed stone, the water over its
- * hazards laid on as decals. Up the mountain (act 3) the path is mossy stone.
+ * The ground line's walk, drawn: a bank of the ink realm's own washed rock (OP-348) over ink-washed
+ * stone wherever an owl may stand, and water wherever it may not. Up the mountain (act 3) it is the
+ * same rock.
  */
-const groundPath = (w: number, row = 'kit-cut-earth-path') => ({ id: 'ground', x0: 0, x1: w, top: 0, row, mid: 'kit-tex-ink-ink-stone' });
-const MOUNTAIN_PATH = 'kit-cut-stone-mossy';
+const bank = (id: string, x0: number, x1: number, row = 'kit-cut-ink-bank') => ({ id, x0, x1, top: 0, row, mid: 'kit-tex-ink-ink-stone' });
+/**
+ * The water between the banks, the course's pit (OP-343): the walk flooded, still water lying in it
+ * from its line down, with nothing on it that looks stood on (no lily pad, no rim of stones). The game
+ * paints the water; the realm kit's hazard slot has no art for the ink realm yet, and its strip takes
+ * over when it does. Its ends are plain lengths of the walk, not caps: the banks either side end in theirs.
+ */
+const river = (id: string, x0: number, x1: number): KitRun => ({ id, x0, x1, top: 0, row: 'kit-cut-ink-bank', left: 'kit-cut-ink-bank-mid-320', right: 'kit-cut-ink-bank-mid-320', mid: 'kit-tex-ink-ink-stone', flood: { depth: WATER_DEEP, color: WATER } });
+/**
+ * Inside the cave behind the falls the floor and the shelves are fitted stone, as they were: the room
+ * is one screen of wall, and the ink rock there takes the walkway's contrast over what the style
+ * check allows (14.44 against 14), where the stone holds it at 13.96.
+ */
+const CAVE_PATH = 'kit-cut-stone-mossy';
+const CAVE_ROCK = { row: 'kit-cut-stone' };
 
 // ---------- Act 1: the paper garden ----------
 
-const S1 = [stone('k1', 480, 140, 100, 'R'), stone('k2', 1700, 140, 140, 'R'), stone('k3', 2360, 140, 120, 'R'), stone('k4', 4100, 160, 100, 'U')];
+/** How high over the water the way across the pond runs: the first stone's top, and every piece after it. */
+const WAY = 100;
+/** Where the pond's water lies: from under k1's far end to the foot of the second cliff. */
+const POND = { x0: 580, x1: 3540 } as const;
+/**
+ * The first screen a visitor meets of the course, laid so the plays a newcomer makes first get across
+ * (OP-360; the play log, Nov 12: the only phone runs since the cleanup fell at every crossing, eleven
+ * times in two runs). Its beats are the plan's: a bridge, two bridges in a row, an upward stroke.
+ *
+ *  - The way across is level, each piece starting where the one before it ends, so an owl that only
+ *    walks east after its first jump crosses: k1's bridge runs onto an island, the island onto k2,
+ *    k2's bridge onto k3, k3's bridge onto a second island, and that one steps down onto the far
+ *    bank. (A step up over water is a fall for an owl that walks on under it, and a walk over a gap
+ *    of 40 px dropped under the stone beyond it. Level, there is no lip to miss on the way back.)
+ *  - Each paper cliff stands on its island, the bench at its foot. The cliffs are the high road: rising
+ *    air beside each (courseAir.ts) carries a held Jump up, both flaps climb them as before, and a
+ *    miss comes down on the island, not in the water.
+ *  - k1 reaches 40 px out over the water, so a jump from the bank's last stride still passes over it
+ *    (brush.ts: a pass over a stone paints it).
+ *  - The far bank begins under the second cliff: the long glide off it comes down on the bank
+ *    however short it is flown, and the upward stroke (k4) stands on dry ground.
+ *
+ * The newcomer bot holds it to that (bots/sim/newcomer.test.ts): the plays a visitor makes first, none
+ * of them a fall. What it gives up: with no ink painted the cliffs and the stones past the first can
+ * be reached from the door by an owl that glides well (they could not be reached at all), and the seal
+ * still cannot without the upward stroke (brushstrokeBridges.test.ts).
+ *
+ * TODO-DOCS (OP-360): docs/levels/brushstroke-bridges.md, section 3 (act 1): its drawing, its tables
+ * and its "what each mechanic is for", as the screen is laid here.
+ */
+const S1 = [stone('k1', 480, 140, WAY, 'R'), stone('k2', 1700, 140, WAY, 'R'), stone('k3', 2320, 180, WAY, 'R'), stone('k4', 4100, 160, 100, 'U')];
 
 const GARDEN: RoomKit = {
   ground: G,
   backdrops: inkAir(3),
-  paths: [groundPath(3 * ROOM_W)],
+  paths: [bank('ground', 0, POND.x0), river('pond', POND.x0, POND.x1), bank('far-bank', POND.x1, 3 * ROOM_W)],
   ledges: [
     ledge('g1', 300, 120, 70, ROCK),
     ...S1.map((s) => s.ledge),
     ledge('reed1', 1060, 80, 450, REED),
+    ledge('isle1', 1100, 600, WAY, island(WAY)),
     ledge('c1', 1360, 260, 360, CLIFF),
     ledge('crane-rock', 2050, 160, 40, ROCK),
-    ledge('reed2', 2000, 80, 250, REED),
+    ledge('reed2', 2000, 80, 220, REED),
+    ledge('isle2', 2980, 580, WAY, island(WAY)),
     ledge('c2', 3240, 300, 380, CLIFF),
     ledge('c3', 4540, 260, 540, PINE),
     ledge('t1', 4300, 500, 160, terrace(160)),
@@ -180,7 +225,6 @@ const GARDEN: RoomKit = {
     { id: 'crane', story: 'A paper crane sleeps on a rock in the middle of the pond, its head tucked under a wing.', props: ['crane'], about: ['crane-rock'] },
     { id: 'painting', story: 'On the tea terrace an easel holds an ink painting of this very garden, one stroke short of finished.', props: ['easel', 'tea'], about: ['t1'] },
   ],
-  decals: water(700, 4300),
 };
 
 // ---------- Act 2: the washing rain ----------
@@ -198,7 +242,7 @@ const S2 = [
 const RIVER: RoomKit = {
   ground: G,
   backdrops: inkAir(3),
-  paths: [groundPath(3 * ROOM_W)],
+  paths: [bank('ground', 0, 500), river('river', 500, 4400), bank('far-bank', 4400, 3 * ROOM_W)],
   ledges: [
     ...S2.map((s) => s.ledge),
     ledge('r1', 1280, 140, 380, pillar(380)),
@@ -214,20 +258,22 @@ const RIVER: RoomKit = {
   ],
   props: [
     { id: 'dock-lantern', piece: 'kit-ink-paper-lantern', x: 340, top: 0, scale: 0.7 },
+    { id: 'far-lantern', piece: 'kit-ink-paper-lantern', x: 4640, top: 0, scale: 0.7 },
     { id: 'heron', piece: 'kit-landmark-heron-ink', x: 2150, top: 60, scale: 0.5 },
   ],
   scenes: [
     { id: 'west-dock', story: 'A paper lantern burns on the west dock for travellers waiting out the rain.', props: ['dock-lantern'], about: ['back'] },
+    // The far bank's lantern (OP-343): the one light across the river, so an owl crossing sees where the crossing ends.
+    { id: 'east-dock', story: 'Its twin burns on the far bank, by the door up the mountain: the light to cross the river by.', props: ['far-lantern'], about: ['to-mountain'] },
     { id: 'porch', story: 'Under the temple eave a grey heron in a straw hat waits out the rain on the one dry step.', props: ['heron'], about: ['porch'] },
   ],
   decals: [
-    ...water(500, 4400),
     // The temple across the river: its eaves keep the rain off the stones under them, painted far behind, never stood on.
     { piece: 'kit-ink-temple-eave', x: 1560, y: G - 330, alpha: 0.7 },
     { piece: 'kit-ink-eave-shelter', x: 2260, y: G - 260, alpha: 0.7 },
-    // The waterfall from the cliff top to the river, with the dry band behind it where the ledge runs.
-    { piece: 'kit-ink-waterfall-curtain', x: 4270, y: G - 640, alpha: 0.85 },
-    { piece: 'kit-ink-waterfall-curtain', x: 4270, y: G - 220, alpha: 0.85 },
+    // The waterfall from the cliff top down into the river (its foot in the water, OP-343), with the dry band behind it where the ledge runs.
+    { piece: 'kit-ink-waterfall-curtain', x: 4270, y: G - 598 },
+    { piece: 'kit-ink-waterfall-curtain', x: 4270, y: G - 198 },
   ],
 };
 
@@ -235,8 +281,8 @@ const FALLS_CAVE: RoomKit = {
   ground: G,
   backdrops: [layer('kit-ink-sky-b', 1, [0, 0])],
   surfaces: [{ id: 'cave', texture: 'kit-tex-ink-ink-stone', rect: { x: 0, y: 0, w: ROOM_W, h: G } }],
-  paths: [groundPath(ROOM_W, MOUNTAIN_PATH)],
-  ledges: [ledge('seal-shelf', 700, 200, 200, ROCK), ledge('high-shelf', 1150, 160, 380, ROCK)],
+  paths: [bank('ground', 0, ROOM_W, CAVE_PATH)],
+  ledges: [ledge('seal-shelf', 700, 200, 200, CAVE_ROCK), ledge('high-shelf', 1150, 160, 380, CAVE_ROCK)],
   doors: [{ door: 'out', piece: 'kit-ink-waterfall-curtain', scale: 0.5 }],
   props: [{ id: 'tower-scroll', piece: 'kit-landmark-scroll-tower', x: 1000, top: 0, scale: 0.6 }],
   scenes: [{ id: 'scroll', story: 'Hung on the cave wall, dry behind the falls, a scroll shows a tall tower of coloured glass, painted in ink.', props: ['tower-scroll'] }],
@@ -249,7 +295,7 @@ const S3A = [stone('k11', 420, 120, 100, 'R'), stone('k12', 1060, 120, 150, 'L')
 const PANEL_1: RoomKit = {
   ground: G,
   backdrops: inkAir(2),
-  paths: [groundPath(2 * ROOM_W, MOUNTAIN_PATH)],
+  paths: [bank('ground', 0, 400), river('tarn', 400, 2 * ROOM_W)],
   ledges: [
     ...S3A.map((s) => s.ledge),
     ledge('pine', 40, 100, 540, PINE),
@@ -264,7 +310,6 @@ const PANEL_1: RoomKit = {
   ],
   props: [{ id: 'foot-lantern', piece: 'kit-ink-stone-lantern', x: 300, top: 0, scale: 0.5 }],
   scenes: [{ id: 'foot', story: "A stone lantern marks the mountain's foot, where the scroll's first panel begins.", props: ['foot-lantern'], about: ['back'] }],
-  decals: water(400, 2 * ROOM_W),
 };
 
 const S3B = [stone('k16', 360, 160, 110, 'U'), stone('k18', 1000, 120, 60, 'R')];
@@ -272,7 +317,7 @@ const S3B = [stone('k16', 360, 160, 110, 'U'), stone('k18', 1000, 120, 60, 'R')]
 const PANEL_2: RoomKit = {
   ground: G,
   backdrops: inkAir(2),
-  paths: [groundPath(2 * ROOM_W, MOUNTAIN_PATH)],
+  paths: [bank('ground', 0, 300), river('tarn', 300, 2 * ROOM_W)],
   ledges: [...S3B.map((s) => s.ledge), ledge('n1', 620, 200, 520, ROCK), ledge('n2', 1700, 160, 260, DRY), ledge('n3', 2360, 200, 540, CLIFF), ledge('n4', 2610, 590, 540, terrace(540))],
   doors: [
     { door: 'back', piece: 'kit-ink-door-paper-open', scale: 0.7 },
@@ -280,7 +325,6 @@ const PANEL_2: RoomKit = {
   ],
   props: [{ id: 'summit-lantern', piece: 'kit-ink-paper-lantern', x: 2700, top: 540, scale: 0.6 }],
   scenes: [{ id: 'pavilion', story: "A paper lantern hangs by the pavilion's moon gate, the way home down the mountain.", props: ['summit-lantern'], about: ['home'] }],
-  decals: water(300, 2 * ROOM_W),
 };
 
 export const BRUSH_ROOMS: Record<string, RoomDef> = inRealmKit('ink', withCourseAir('ink', {
@@ -291,10 +335,11 @@ export const BRUSH_ROOMS: Record<string, RoomDef> = inRealmKit('ink', withCourse
     stones: S1.map((s) => s.stone),
     course: {
       act: 1,
-      pits: [floor(700, 4300)],
-      benches: [piece('bench-1', 1500, 360), piece('bench-1b', 3300, 380)],
+      pits: [floor(POND.x0, POND.x1)],
+      // Each bench at the foot of its cliff, on the way every owl takes (OP-360): up on the cliff it was past the climb a newcomer fell at.
+      benches: [piece('bench-1', 1500, WAY), piece('bench-1b', 3390, WAY)],
       parts: [piece('seal-1', 4670, 540)],
-      feathers: [piece('feather-1', 1100, 450), piece('feather-2', 2040, 250)],
+      feathers: [piece('feather-1', 1100, 450), piece('feather-2', 2040, 220)],
     },
   }),
   'brush-2': brushRoom('brush-2', 3, RIVER, {

@@ -171,9 +171,12 @@ class FakeCollections {
     this.courseCalls.push(`shortcut:${room}:${id}`);
     return this.answer(this.courses.open(cid, room, id, Date.now()));
   }
-  courseFall(cid: string, room: string) {
+  /** The way in the room object named with each fall (OP-343), null when it named none. */
+  readonly fallEntries: (string | null)[] = [];
+  courseFall(cid: string, room: string, pos?: { x: number; y: number }, entry?: string) {
     this.courseCalls.push(`fall:${room}`);
-    return this.answer(this.courses.fall(cid, room, Date.now()));
+    this.fallEntries.push(entry ?? null);
+    return this.answer(this.courses.fall(cid, room, Date.now(), { ...(entry !== undefined ? { entry } : {}), ...(pos ? { pos } : {}) }));
   }
   courseFinish(cid: string, room: string, _visit?: unknown, practice?: boolean) {
     this.practiceOnly(cid, practice, 'courseFinish');
@@ -2218,6 +2221,35 @@ describe('a parkour course in the room object (OP-224)', () => {
     await send(obj, ws, { t: 'course', a: 'state', r: 8 });
     await settle();
     expect(course(ws, 8)).toMatchObject({ ok: false, reason: 'offline' });
+  });
+
+  it('sends a fall back the way the owl came into the room, when it saw it come in (OP-343)', async () => {
+    const obj = roomObject();
+    // Down from the trunk into the first act's far end, then west into the bramble: back at that way in, not at the gate four screens off.
+    const ws = connect('canopy-1', 'v_far', OWNER);
+    await send(obj, ws, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK, spawn: 'from-trunk' });
+    expect(ws.last('welcome')).toBeDefined();
+    await walkTo(obj, ws, { x: 3900, y: 770 }, 1);
+    await send(obj, ws, { t: 'course', a: 'fall', r: 1 });
+    await settle();
+    expect(course(ws, 1)).toMatchObject({ ok: true, at: PARK_ROOMS['canopy-1']!.spawns['from-trunk'] });
+    expect(collections.fallEntries).toEqual(['from-trunk']);
+    // An owl the room did not see come in by a doorway (no way in named): the act's own way in, as before.
+    const plain = connect('canopy-1', 'v_plain', OTHER);
+    await send(obj, plain, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK, pos: { x: 4660, y: 770 } });
+    await walkTo(obj, plain, { x: 3900, y: 770 }, 1);
+    await send(obj, plain, { t: 'course', a: 'fall', r: 1 });
+    await settle();
+    expect(course(plain, 1)).toMatchObject({ ok: true, at: PARK_ROOMS['canopy-1']!.spawns['from-gate'] });
+    expect(collections.fallEntries).toEqual(['from-trunk', null]);
+    // A way in the room does not have is not kept.
+    const odd = connect('canopy-1', 'v_odd', GUEST);
+    await send(obj, odd, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK, spawn: 'from-nowhere' });
+    await walkTo(obj, odd, { x: 900, y: 770 }, 1);
+    await send(obj, odd, { t: 'course', a: 'fall', r: 1 });
+    await settle();
+    expect(course(odd, 1)).toMatchObject({ ok: true, at: PARK_ROOMS['canopy-1']!.spawns['from-gate'] });
+    expect(collections.fallEntries).toEqual(['from-trunk', null, null]);
   });
 
   it('takes a dash only in the air, and tells the others it was one', async () => {

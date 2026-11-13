@@ -1,7 +1,7 @@
-import { TRAVEL_WORDS, doorTarget } from '@owl-park/shared';
+import { TRAVEL_WORDS, doorLabel, doorTarget, mapOf, placeShown } from '@owl-park/shared';
 import { ROOMS } from '../rooms';
 import { describe, expect, it } from 'vitest';
-import { MAP_LIT_KEY, MAP_PLACES, NEW_MAP_COURSE_PLACES, mapLayout, mapNote, mapPlaceOf, newlyLit, placeCard } from './menuTabs';
+import { ARCADE_PLACE, MAP_LIT_KEY, MAP_PLACES, NEW_MAP_COURSE_PLACES, mapLayout, mapNote, mapPlaceOf, newlyLit, placeCard } from './menuTabs';
 
 const walked = (places: string[], gate = false) => ({ places, gate });
 
@@ -134,5 +134,41 @@ describe('the map note on the way in', () => {
     expect(mapNote(3)).not.toContain('front gate');
     expect(mapNote(1)).toBe(TRAVEL_WORDS.map);
     expect(mapNote(2)).toBe(TRAVEL_WORDS.map);
+  });
+});
+
+describe('one name per place on the new map (OP-346)', () => {
+  const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+  it('gives each place on the Menu\'s map the name quest text shows for it', () => {
+    for (const p of mapLayout(3).places) {
+      const name = placeShown(p.id, 3);
+      if (name === 'the park') continue;
+      expect(same(p.name, name), `${p.id}: the map says "${p.name}", quest text "${name}"`).toBe(true);
+    }
+  });
+
+  it('words each doorway\'s sign with the name of the place it leads to', () => {
+    let signs = 0;
+    for (const room of Object.values(ROOMS)) {
+      if (mapOf(room) === 2) continue;
+      for (const d of room.doors) {
+        const to = doorTarget(d, 3);
+        const label = doorLabel(d, 3);
+        if (!to || !label) continue;
+        const name = placeShown(to.room, 3);
+        if (name === 'the park') continue;
+        signs += 1;
+        expect(label.toLowerCase(), `${room.id}/${d.id}: "${label}"`).toContain(name.toLowerCase());
+      }
+    }
+    expect(signs).toBeGreaterThan(5);
+  });
+
+  it('calls the arcade the arcade on the map, as its doorway\'s sign in the Great Hollow does', () => {
+    expect(mapLayout(3).places.find((p) => p.id === 'arcade')!.name).toBe(ARCADE_PLACE);
+    expect(ARCADE_PLACE).toContain('the arcade');
+    const sign = doorLabel(ROOMS['m3-hall']!.doors.find((d) => d.id === 'down')!, 3)!;
+    expect(sign).toContain('the arcade');
   });
 });

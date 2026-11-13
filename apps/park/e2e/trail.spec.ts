@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures';
-import { frames, openPark, state, walkToDoor } from './helpers';
+import { frames, openPark, state, walkAndStop, walkToDoor } from './helpers';
 
 /**
  * The feather trail (OP-307): in a room seen from above, feathers lead from the owl toward the nearest
@@ -24,7 +24,9 @@ test.describe('the feather trail (OP-307)', () => {
     await expect.poll(async () => (await state(page)).trail?.feathers.length ?? 0, { timeout: 15_000 }).toBeGreaterThan(0);
   });
 
-  test('through the turnstiles the feathers lead across the Great Hollow to the arcade’s hatch, a place to play, and no sign names the way back until the owl has stepped away (OP-337)', async ({ page }) => {
+  test('through the turnstiles the feathers lead a new owl to the Great Hollow’s roots, then on to the arcade’s hatch, a place to play, and no sign names the way back until the owl has stepped away (OP-337, OP-347)', async ({ page }) => {
+    // Two rooms, three walks across the hall and the trail laid twice: more than the suite's 45 s on a slow phone.
+    test.setTimeout(100_000);
     await openPark(page, { room: 'lobby', keeper: '1', newmap: '1' });
     await page.evaluate(() => window.owlPark.walkTo(2595, 800));
     await expect.poll(async () => (await state(page)).walking, { timeout: 15_000 }).toBe(false);
@@ -38,27 +40,48 @@ test.describe('the feather trail (OP-307)', () => {
     expect(hall.doors.map((d) => d.id)).not.toContain('to-ink');
     expect(hall.doors.map((d) => d.id)).not.toContain('course-glass');
 
-    // The feathers come out toward the hatch at the front, past the realms' doorways either side of the knothole.
+    // The feathers come out down the hall to its own roots, a thing to do before any doorway (OP-347):
+    // the first root of the inner run on either side of the hall's middle (rooms/hollowHall.ts).
     await expect.poll(async () => (await state(page)).trail?.feathers.length ?? 0, { timeout: 15_000 }).toBeGreaterThan(3);
     const { trail, pos, doors } = await state(page);
-    const hatch = doors.find((d) => d.id === 'down')!;
-    const along = Math.hypot(hatch.x - pos.x, hatch.y - pos.y);
-    for (const f of trail!.feathers) {
-      // On the straight way from the owl to the hatch: no further off it than a feather's drift.
-      const off = Math.abs((hatch.x - pos.x) * (f.y - pos.y) - (hatch.y - pos.y) * (f.x - pos.x)) / along;
-      expect(off, `feather at ${f.x},${f.y}`).toBeLessThan(40);
-      expect(f.y).toBeGreaterThan(pos.y);
-    }
+    const roots = [
+      { x: 2300, y: 1238 },
+      { x: 3140, y: 1238 },
+    ];
+    const end = trail!.feathers[trail!.feathers.length - 1]!;
+    const root = roots.reduce((a, b) => (Math.hypot(end.x - a.x, end.y - a.y) < Math.hypot(end.x - b.x, end.y - b.y) ? a : b));
+    expect(Math.hypot(end.x - root.x, end.y - root.y), `the trail ends at ${end.x},${end.y}`).toBeLessThan(260);
+    for (const f of trail!.feathers) expect(f.y, `feather at ${f.x},${f.y}`).toBeGreaterThan(pos.y);
+    expect(trail!.glints).toContain('play-roots');
     expect(trail!.glints).toContain('to-glass');
     expect(trail!.glints).toContain('down');
 
     // Where it arrived, by the knothole it came in by: no sign for the way back.
     await frames(page, 40);
     expect((await state(page)).signShown).toBeNull();
+
+    // Stood at the roots, they are found: the feathers lead on to the hatch at the front, a place to
+    // play, past the realms' doorways either side of the knothole.
+    await walkAndStop(page, root.x, root.y + 90);
+    await expect.poll(async () => (await state(page)).trail?.glints ?? ['play-roots'], { timeout: 10_000 }).not.toContain('play-roots');
+    const hatch = doors.find((d) => d.id === 'down')!;
+    await expect
+      .poll(
+        async () => {
+          const s = await state(page);
+          const feathers = s.trail?.feathers ?? [];
+          const last = feathers[feathers.length - 1];
+          return feathers.length > 3 && !!last && Math.hypot(last.x - hatch.x, last.y - hatch.y) < 260 && feathers.every((f) => f.y > s.pos.y);
+        },
+        { timeout: 20_000 },
+      )
+      .toBe(true);
+
     // Out onto the floor, clear of every doorway, and back: now the knothole is named.
     const up = doors.find((d) => d.id === 'up')!;
     await page.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), { x: up.x, y: up.y + 570 });
-    await expect.poll(async () => (await state(page)).pos.y, { timeout: 15_000 }).toBeGreaterThan(up.y + 550);
+    await expect.poll(async () => (await state(page)).pos.y, { timeout: 15_000 }).toBeLessThan(up.y + 590);
+    await expect.poll(async () => (await state(page)).walking, { timeout: 15_000 }).toBe(false);
     expect((await state(page)).signShown).toBeNull();
     await page.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), { x: up.x, y: up.y + 170 });
     await expect.poll(async () => (await state(page)).signShown, { timeout: 15_000 }).toBe('Up to the Treetop Commons');

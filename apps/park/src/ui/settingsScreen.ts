@@ -8,6 +8,7 @@ export interface SettingsScreen {
 }
 
 const CSS = `
+#hud .modal.settings .x{min-height:44px}
 #hud .settings h3{margin:4px 0 0;font-size:12px;letter-spacing:.06em;text-transform:uppercase;opacity:.7}
 #hud .settings .opt{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:14px;background:rgba(246,241,227,.06);border:1px solid rgba(246,241,227,.12)}
 #hud .settings .opt > span{flex:1;display:flex;flex-direction:column;gap:2px;font-size:15px;font-weight:700}
@@ -126,7 +127,7 @@ export function settingsRows(store: SettingsStore, redraw: () => void, feedback:
       toggle('bubbles', 'Show what owls say', ''),
       toggle('trail', 'Feather trail', 'Feathers lead to a doorway you haven’t been through yet.'),
       h('Sound'),
-      toggle('sound', 'Sounds', 'A soft knock as the Menu opens.'),
+      toggle('sound', 'Sounds', 'Your owl’s wings and landings, bells, feathers and doorways.'),
       h('Motion'),
       toggle('calm', 'Calm motion', 'No drifting fireflies, gold dust or neon rain.'),
     );

@@ -15,6 +15,8 @@ import {
   type RoomDef,
   type Vec2,
 } from '@owl-park/shared';
+import { HALL_ROOM } from '@owl-park/shared/rooms';
+import { rootSpots } from './hallTips';
 
 /**
  * The feather trail (OP-307): a faint line of drifting feathers from where the owl stands toward a
@@ -155,6 +157,9 @@ const QUIZ_FLOOR: Rect = (() => {
  * seconds between them). The treehouse clearing has its fishing jetty and the neon street the robot
  * owl's copy game, as easy to miss.
  */
+/** The Great Hollow's roots as a place to play (OP-347, hallTips.ts): both inner runs are the one find, so the trail leads on from whichever an owl comes to. */
+export const ROOTS_SPOT = 'play-roots';
+
 export const PLAY_SPOTS: Readonly<Record<string, readonly PlaySpot[]>> = (() => {
   const all: Array<[string, PlaySpot]> = [
     [LANTERN_ROOM, { id: 'play-lanterns', rect: LANTERN_FLOOR }],
@@ -162,6 +167,8 @@ export const PLAY_SPOTS: Readonly<Record<string, readonly PlaySpot[]>> = (() => 
     // The square that fits inside the fishing spot's reach: anywhere in it the jetty's Fish is there to press.
     [FISHING_ROOM, { id: 'play-fishing', rect: { x: FISHING_SPOT.x - FISH_HALF, y: FISHING_SPOT.y - FISH_HALF, w: FISH_HALF * 2, h: FISH_HALF * 2 } }],
     [COPY_ROOM, { id: 'play-copy', rect: COPY_SPOT }],
+    // The Great Hollow's roots (OP-347): the floor before each inner run's first root, one find between them.
+    ...rootSpots(HALL_ROOM).map((rect): [string, PlaySpot] => [HALL_ROOM.id, { id: ROOTS_SPOT, rect }]),
   ];
   const by: Record<string, PlaySpot[]> = {};
   for (const [room, spot] of all) (by[room] ??= []).push(spot);

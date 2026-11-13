@@ -1023,7 +1023,8 @@ test('the art kit (OP-229): kit.json, the jobs, the loader table and the assets 
   // The area sets: accent textures, prop sheets and seven sideways-repeating backdrop layers each.
   for (const [areaName, area] of Object.entries(K.KIT_AREAS)) {
     assert.deepEqual(Object.keys(area.layers), ['sky-a', 'sky-b', 'far-a', 'far-b', 'mid-a', 'mid-b', 'mid-c'], `${areaName}: seven layers`);
-    assert.equal(Object.keys(area.textures).length, 3); assert.equal(Object.keys(area.sheets).length, 3);
+    // Three accent textures each; the neon street has a fourth, the wall of its own buildings (OP-348).
+    assert.equal(Object.keys(area.textures).length, areaName === 'neon' ? 4 : 3); assert.equal(Object.keys(area.sheets).length, 3);
     for (const name of Object.keys(area.layers)) {
       const key = `kit-${areaName}-${name}`;
       const [w, h] = K.LAYER_SIZES[name.split('-')[0]];
@@ -1069,7 +1070,8 @@ test('the recut (OP-251): run images and join sheets carry their target as a ref
   const K = await import('../kit.mjs');
   const art = parseArtTable();
   const jobs = new Map(G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS }).map((j) => [j.key, j]));
-  assert.equal(K.KIT_RECUT_RUN_KEYS.length, 4);
+  // Four runs of the tree's, and one each of the neon street's and the ink realm's own (OP-348).
+  assert.equal(K.KIT_RECUT_RUN_KEYS.length, 6);
   assert.equal(K.KIT_RECUT_SHEET_KEYS.length, 5);
   assert.equal(K.KIT_RECUT_COLUMN_KEYS.length, 1);
   for (const key of [...K.KIT_RECUT_RUN_KEYS, ...K.KIT_RECUT_SHEET_KEYS, ...K.KIT_RECUT_COLUMN_KEYS]) {
@@ -1077,7 +1079,10 @@ test('the recut (OP-251): run images and join sheets carry their target as a ref
     assert.ok(P.HELPER_KEYS.includes(key) && job?.kind === 'sheet' && job.key_colour === K.KIT_KEY_COLOUR, `${key} is a helper key with a keyed sheet job`);
     assert.equal(job.size, K.KIT_RECUT_RUN_KEYS.includes(key) ? K.RUN_SIZE : K.KIT_RECUT_COLUMN_KEYS.includes(key) ? '2048x2048' : K.SHEET_SIZE);
     assert.equal(job.refs.length, 1);
-    assert.match(job.refs[0].ref, /^@guide:target-(l4|plaza|clearing)-ref$/, `${key} is painted from a target`);
+    // A run of a realm's own is painted from a published painting of that realm, the rest from a target.
+    const ownRealm = K.KIT_RECUT.runs[key.replace('kit-sheet-cut-run-', '')]?.area;
+    if (ownRealm) assert.match(job.refs[0].ref, new RegExp(`^@final:kit-${ownRealm}-`), `${key} is painted from its realm's own art`);
+    else assert.match(job.refs[0].ref, /^@guide:target-(l4|plaza|clearing)-ref$/, `${key} is painted from a target`);
     assert.ok(job.derives.length > 0 && job.derives.every((d) => d.startsWith('kit-cut-')));
   }
   for (const p of K.KIT_RECUT_PIECES) {
@@ -1085,8 +1090,8 @@ test('the recut (OP-251): run images and join sheets carry their target as a ref
     assert.equal(ASSETS.keys[p.key].key_colour, K.KIT_KEY_COLOUR);
     assert.ok(!jobs.has(p.key), `${p.key} is cut, not generated on its own`);
   }
-  assert.equal(K.KIT_RECUT_PIECES.length, 90);
-  assert.equal(new Set(K.KIT_RECUT_PIECES.map((p) => p.key)).size, 90, 'every cut piece comes from one sheet');
+  assert.equal(K.KIT_RECUT_PIECES.length, 120);
+  assert.equal(new Set(K.KIT_RECUT_PIECES.map((p) => p.key)).size, 120, 'every cut piece comes from one sheet');
   assert.deepEqual(K.KIT_RECUT_PIECES.filter((p) => p.column).map((p) => p.key), ['kit-cut-trunk-edge-left', 'kit-cut-trunk-mid', 'kit-cut-trunk-edge-right']);
 });
 

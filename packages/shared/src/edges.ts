@@ -95,6 +95,8 @@ export const EDGE_ART: Readonly<Record<string, EdgeArt>> = {
   'edge-hollow-litter': { w: 380, h: 300, kind: 'litter' },
   // The worn ring in the middle of each Commons' plaza, round the moonbeam where owls gather.
   'edge-hollow-plaza-ring': { w: 760, h: 380, kind: 'ring' },
+  // The Great Hollow's own plaza ring (OP-348): on its painted heartwood floor, a pool of the moonbeam's light ringed with stones.
+  'edge-hall-plaza-ring': { w: 760, h: 380, kind: 'ring' },
   // The ragged rim of the hollow along the top of its wall, one a screen.
   'edge-hollow-rim': { w: 1600, h: 150, kind: 'rim' },
   // The Treetop Commons' plaza (the lobby, grown to hold a crowd, Nov 8): a worn ring round its moonbeam,
@@ -275,6 +277,15 @@ export interface EdgeStrip {
  */
 export const STRIP_OUT = { side: 0, under: 20 } as const;
 
+/** The least height of free side worth a strip (room px), and how near two bodies' sides are to be one join. */
+export const SIDE_LEAST = 40;
+const ABUT_PX = 2;
+
+/** A platform's body: the textured block under a path, a ledge or a hill. */
+function isBody(o: Pick<KitDraw, 'key' | 'role'>): boolean {
+  return (o.role === 'path' || o.role === 'ledge' || o.role === 'hill') && KIT_ART[o.key]?.kind === 'texture';
+}
+
 /**
  * The strips that soften one of a kit room's platform bodies seen from the side (the textured block
  * under a path, a ledge or a hill: a kit draw of a texture): shade and creepers down each side that
@@ -282,11 +293,16 @@ export const STRIP_OUT = { side: 0, under: 20 } as const;
  * lie over the body's own edges (only the roots hang a little below a foot), behind everything an owl meets
  * (the caps it stands on are drawn over them), so nothing an owl stands on or must see moves or hides:
  * the top edge, where an owl lands, is left alone.
+ *
+ * A side is one only where it stands free (OP-348). Where another body begins at it (a course's pit
+ * beside the walk it is cut from, two stretches of one floor), the two are one mass of earth: the side
+ * is framed down to where the neighbour's body begins and no further, and not at all when that leaves
+ * less than a strip is worth. Shade and a creeper down the join read as a slit in the ground.
  */
 export function kitFrames(
   d: Pick<KitDraw, 'key' | 'x' | 'y' | 'w' | 'h' | 'role' | 'id'>,
   room: { w: number; h: number },
-  plan: readonly Pick<KitDraw, 'x' | 'y' | 'w' | 'role' | 'id'>[] = [],
+  plan: readonly Pick<KitDraw, 'key' | 'x' | 'y' | 'w' | 'h' | 'role' | 'id'>[] = [],
 ): EdgeStrip[] {
   if (d.role !== 'path' && d.role !== 'ledge' && d.role !== 'hill') return [];
   if (KIT_ART[d.key]?.kind !== 'texture' || d.h < 48 || d.w < 96) return [];
@@ -300,10 +316,15 @@ export function kitFrames(
   const bottom = standsOn ? foot - 60 : foot;
   // Down from just under the cap's walking line, so the cap's own art stays the edge an owl lands on.
   const top = d.y + 12;
-  if (bottom - top >= 40) {
-    if (d.x > 2) out.push({ id: `${d.id}:left`, key: 'edge-ledge-side', x: d.x - STRIP_OUT.side, y: top, w: side.w, h: bottom - top, tile: 'y', flip: false });
-    if (d.x + d.w < room.w - 2) out.push({ id: `${d.id}:right`, key: 'edge-ledge-side', x: d.x + d.w + STRIP_OUT.side - side.w, y: top, w: side.w, h: bottom - top, tile: 'y', flip: true });
-  }
+  // Where a body that begins at this side starts (its top), if one does: the side is free only above it.
+  const meets = (at: number, edge: (o: (typeof plan)[number]) => number): number =>
+    plan
+      .filter((o) => o.id !== d.id && isBody(o) && Math.abs(edge(o) - at) <= ABUT_PX && o.y < bottom && o.y + o.h > top)
+      .reduce((y, o) => Math.min(y, o.y), bottom);
+  const leftFoot = meets(d.x, (o) => o.x + o.w);
+  const rightFoot = meets(d.x + d.w, (o) => o.x);
+  if (d.x > 2 && leftFoot - top >= SIDE_LEAST) out.push({ id: `${d.id}:left`, key: 'edge-ledge-side', x: d.x - STRIP_OUT.side, y: top, w: side.w, h: leftFoot - top, tile: 'y', flip: false });
+  if (d.x + d.w < room.w - 2 && rightFoot - top >= SIDE_LEAST) out.push({ id: `${d.id}:right`, key: 'edge-ledge-side', x: d.x + d.w + STRIP_OUT.side - side.w, y: top, w: side.w, h: rightFoot - top, tile: 'y', flip: true });
   if (foot < room.h - 4 && !standsOn) out.push({ id: `${d.id}:under`, key: 'edge-ledge-under', x: d.x + 6, y: foot + STRIP_OUT.under - under.h, w: d.w - 12, h: under.h, tile: 'x', flip: false });
   return out;
 }
@@ -400,8 +421,38 @@ function litterOps(key: string, a: EdgeArt): KitOp[] {
   return ops;
 }
 
+/**
+ * The Great Hollow's plaza ring (OP-348). Its floor is a painting of amber heartwood, and the mossy
+ * ring lay over it as a green film with nothing of the room's light in it. This one is made of what
+ * the painting has: the moonbeam's light pooled on the wood, brightest at its middle, and a ring of
+ * flat stones round it, each with its shadow, so they sit on the floor.
+ */
+export const HALL_RING = { light: 0xffe9b8, stone: 0x9a7a55, stoneDark: 0x6b5238, shadow: 0x2a1708 } as const;
+
+function hallRingOps(key: string, a: EdgeArt): KitOp[] {
+  const rnd = seeded(`${key}:paint`);
+  const cx = a.w / 2;
+  const cy = a.h / 2;
+  // The pool: soft steps of light, each inside the last.
+  const ops: KitOp[] = [0.96, 0.8, 0.62, 0.44, 0.26].map((k) => ell(cx, cy, Math.round(cx * k), Math.round(cy * k), HALL_RING.light, 0.07));
+  const n = 22;
+  for (let i = 0; i < n; i++) {
+    const t = (i / n) * Math.PI * 2 + rnd() * 0.12;
+    const r = 0.87 + rnd() * 0.06;
+    const x = Math.round(cx + Math.cos(t) * cx * r);
+    const y = Math.round(cy + Math.sin(t) * cy * r);
+    const rx = 14 + Math.round(rnd() * 8);
+    const ry = 8 + Math.round(rnd() * 4);
+    ops.push(ell(x + 2, y + 4, rx + 2, ry + 1, HALL_RING.shadow, 0.35));
+    ops.push(ell(x, y, rx, ry, i % 4 ? HALL_RING.stone : HALL_RING.stoneDark, 0.95));
+    ops.push(ell(x - 2, y - 2, Math.round(rx * 0.55), Math.round(ry * 0.45), HALL_RING.light, 0.25));
+  }
+  return ops;
+}
+
 /** A plaza's ring: a worn, paler band of moss round a mossy middle, set with flat stones, flat on the floor. */
 function ringOps(key: string, a: EdgeArt): KitOp[] {
+  if (key.startsWith('edge-hall-')) return hallRingOps(key, a);
   const rnd = seeded(`${key}:paint`);
   const cx = a.w / 2;
   const cy = a.h / 2;

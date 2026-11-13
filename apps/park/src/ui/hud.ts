@@ -19,7 +19,7 @@ import { afterReward, createFeedbackCard, type FeedbackCard } from './feedbackRe
 import { coveredBy, type CoveredEdges } from '../game/hudInset';
 import { walkingMap } from '../game/walkingMap';
 import { createTreeMinimap } from './treeMinimap';
-import { createJoystick } from './joystick';
+import { createJoystick, underStick } from './joystick';
 import { eventTime } from './keyboard';
 import { createLeaveCard } from './leaveCard';
 import { createMenuShell } from './menuShell';
@@ -37,6 +37,7 @@ import { startCheckout } from './checkout';
 import { REFERRAL_WORDS, referralCard } from './referral';
 import { createGatePrompt, type GateAsk } from './gatePrompt';
 import { SPECTATOR_WORDS, createSpectatorBadge } from './spectator';
+import { watchTopStack } from './topStack';
 import { createTurnPhone } from './turnPhone';
 
 /** What the HUD asks of the park for the visitor's collection: wearing things, emotes, messages. */
@@ -198,6 +199,8 @@ export interface Hud {
   /** The run is over: how it ended and what it paid. */
   arcadeResult(result: ArcadeResultView): void;
   closeArcade(): void;
+  /** Escape while an arcade game is open (OP-345): a run under way pauses (a paused one goes on) and this answers true; false when there is nothing to pause. */
+  escapeArcade(): boolean;
   /** The climb screen over everything while a climb is played; it owns its stick, button and keys. */
   openClimb(view: ClimbView, handlers: ClimbHandlers): void;
   /** The climb screen's held controls right now (`jumpPressed` once per press). */
@@ -255,6 +258,16 @@ export interface Hud {
   closePanels(): void;
   /** The off-screen hint chips; an empty list clears them. */
   setHints(hints: HudHint[]): void;
+  /**
+   * Where the visitor's own owl's feet are on the screen (CSS px), or null for nowhere (OP-349): the
+   * thumbstick goes quiet while the owl is under it (joystick.ts, underStick).
+   */
+  setOwlAt(feet: { x: number; y: number } | null): void;
+  /**
+   * The room is fading out, or the next is not in yet (OP-346): what the HUD shows of the room itself
+   * (a course's strip, the actions where the owl stands) fades with it. The Menu and the counters stay.
+   */
+  setRoomDark(on: boolean): void;
   /** The gated realms the keepers have opened (the realms switch): the Menu map draws their arches as doorways. */
   setOpenRealms(open: readonly string[]): void;
   onHint(cb: (id: string) => void): void;
@@ -333,12 +346,14 @@ const CSS = `
 #hud kbd{display:none;margin-left:8px;padding:0 6px;border:1px solid currentColor;border-radius:5px;font:700 11px/1.5 system-ui,sans-serif;opacity:.7;vertical-align:1px}
 @media (hover:hover) and (pointer:fine){#hud kbd{display:inline-block}}
 #hud .actions{display:flex;gap:8px;align-items:flex-end}
+#hud .actions,#objective-strip{transition:opacity .2s ease-out}
+.room-dark #hud .actions,.room-dark #objective-strip{opacity:0}
 #hud .left{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
 #hud .feathers{display:none;font-size:14px;font-weight:700}
 #hud .feathers.show{display:flex}
 #hud .feathers svg{width:18px;height:18px;filter:drop-shadow(0 0 4px rgba(255,211,106,.7))}
 #hud .toast.accent{border-left:6px solid var(--accent)}
-#hud .notices{position:absolute;z-index:10;left:50%;transform:translateX(-50%);top:calc(max(10px,env(safe-area-inset-top)) + 54px);display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none}
+#hud .notices{position:absolute;z-index:10;left:50%;transform:translateX(-50%);top:var(--notices-top,calc(max(10px,env(safe-area-inset-top)) + 54px));display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none}
 #hud .notice{background:rgba(12,30,54,.92);color:#FFD36A;border:1px solid rgba(255,211,106,.55);border-radius:999px;padding:7px 16px;font-size:14px;font-weight:700;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.4);animation:hud-in .25s ease-out}
 /*
  * Touch screens: a pad laid out like a game controller's (OP-082, OP-114; Logan, 2026-11-03, OP-242).
@@ -426,7 +441,7 @@ const CSS = `
   #hud .emote-btn{display:none}
   #hud .pad-btn.interact.idle{opacity:0;pointer-events:none}
   #hud .pad-btn.interact .lbl{display:none}
-  #hud .pad-btn.interact.labelled{width:auto;min-width:56px;max-width:min(240px,calc(100vw - 232px));padding:0 14px 0 12px;gap:4px;justify-content:flex-start;border-radius:28px;background:rgba(12,30,54,.78)}
+  #hud .pad-btn.interact.labelled{width:max-content;min-width:56px;max-width:min(240px,calc(100vw - 232px));padding:0 14px 0 12px;gap:4px;justify-content:flex-start;border-radius:28px;background:rgba(12,30,54,.78)}
   #hud .pad-btn.interact.labelled svg{flex:none}
   #hud .pad-btn.interact.labelled .lbl{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;font-size:13px;font-weight:700;line-height:1.15;text-align:left;color:#F6F1E3}
   /* The first action is Interact's own, so its button in the row would say it twice. */
@@ -997,6 +1012,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     setTimeout(() => el.remove(), ms);
   };
   const badge = createSpectatorBadge(root, () => getTicket?.(SPECTATOR_WORDS.keep));
+  // One safe area along the top (OP-369): the strip and the notices are kept clear of the ribbon, the badge and the cards.
+  watchTopStack(root);
 
   return {
     setCount(n) {
@@ -1261,6 +1278,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       arcade.result(r);
     },
     closeArcade: () => arcade.close(),
+    escapeArcade: () => arcade.isOpen() && arcade.escape(),
     openClimb(view, handlers) {
       if (!climb.isOpen()) makeRoom();
       root.classList.add('covered');
@@ -1342,6 +1360,15 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     },
     setOpenRealms(open) {
       openRealms = [...open];
+    },
+    setRoomDark(on) {
+      document.documentElement.classList.toggle('room-dark', on);
+    },
+    setOwlAt(feet) {
+      const el = root.querySelector<HTMLElement>('.stick');
+      if (!el) return;
+      const box = el.getBoundingClientRect();
+      el.classList.toggle('quiet', feet !== null && box.width > 0 && underStick(feet, box));
     },
     setHints(list) {
       const seen = new Set<string>();

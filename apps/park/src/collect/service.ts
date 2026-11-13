@@ -229,7 +229,7 @@ export interface CourseLink {
   reach(kind: PieceKind, id: string): Promise<CourseReply>;
   /** A shortcut's opener reached from its far side. */
   open(id: string): Promise<CourseReply>;
-  /** The owl is over a pit: `at` is where it goes back to. */
+  /** The owl is down in a pit, or in thorns: `at` is where it goes back to. */
   fall(): Promise<CourseReply>;
   /** The finish shrine: what the clear paid. */
   finish(): Promise<CourseReply>;
@@ -303,8 +303,12 @@ export interface CollectionService {
    * browser's (`look` gives the owl's colours for its portrait on the arcade's wall).
    */
   activityLink(room: string, conn: RoomConnection | null, pushes: ActivityPushes, where: () => Vec2, look: () => OwlLook): ActivityLink | null;
-  /** The parkour course in a room that is one of its acts, the same way (null in any other room). */
-  courseLink(room: string, conn: RoomConnection | null, where: () => Vec2, ground: () => number): CourseLink | null;
+  /**
+   * The parkour course in a room that is one of its acts, the same way (null in any other room). `air`
+   * gives how high the owl is and the way it came into the room, which the room server sees for itself
+   * and this browser's own course needs to judge a fall as the server does (OP-343).
+   */
+  courseLink(room: string, conn: RoomConnection | null, where: () => Vec2, ground: () => number, air?: () => { z: number; entry: string | undefined }): CourseLink | null;
   /**
    * The nests, the same way, on the street and in a nest (null in any other room). `look` gives the
    * visitor's colours for the flag on its own door.

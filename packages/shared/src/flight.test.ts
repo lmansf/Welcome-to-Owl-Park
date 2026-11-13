@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { DOUBLE_JUMP_IMPULSE, GRAVITY, JUMP_CUT_SPEED, JUMP_IMPULSE } from './jump';
-import { AIRBORNE, ALL_FLIGHT, FLAP_RISE, FLIGHT_STEP_MS, GLIDE_SINK, GLIDING, GROUNDED, JUMP_RISE, LIFTED, MAX_RISE, ON_GROUND, PARK_FLIGHT, airOut, carryOn, checkAir, flightFor, newFlier, stepFlier, type Air, type Flier, type FlightAbilities, type FlightInput } from './flight';
+import { COYOTE_MS, DOUBLE_JUMP_IMPULSE, GRAVITY, JUMP_CUT_SPEED, JUMP_IMPULSE } from './jump';
+import { WALK_SPEED } from './walk';
+import { AIRBORNE, ALL_FLIGHT, EDGE_GRACE_MS, FLAP_RISE, FLIGHT_STEP_MS, GLIDE_SINK, GLIDING, GROUNDED, JUMP_RISE, LIFTED, MAX_RISE, ON_GROUND, PARK_FLIGHT, airOut, carryOn, checkAir, flightFor, newFlier, stepFlier, type Air, type Flier, type FlightAbilities, type FlightInput } from './flight';
 import { UPDRAFT_RISE } from './updraft';
 
 const NONE: FlightInput = { pressed: false, held: false };
@@ -31,11 +32,27 @@ describe('flight (OP-084)', () => {
     expect(path.at(-1)!.air).toEqual(ON_GROUND);
   });
 
-  it('a tap rises less than a press held: let go on the way up and the rise is cut', () => {
+  it('a tap is a jump: let go on the way up, the rise is cut, and it still clears a first step (OP-343)', () => {
     const tap = run(newFlier(), [[PRESS, 1], [NONE, steps(800)]]);
+    const quick = run(newFlier(), [[PRESS, steps(50)], [NONE, steps(800)]]);
     const held = run(newFlier(), [[PRESS, steps(340)], [NONE, steps(800)]]);
     expect(tap[1]!.air.vz).toBeLessThanOrEqual(JUMP_CUT_SPEED);
-    expect(top(tap)).toBeLessThan(top(held) / 4);
+    // The shortest press there is, one step: over 80 px, and less than a press held.
+    expect(top(tap)).toBeGreaterThan(80);
+    expect(top(tap)).toBeLessThan(top(held) - 40);
+    // A quick tap, a twentieth of a second: over 110 px. A tenth of a second: the whole jump.
+    expect(top(quick)).toBeGreaterThan(110);
+    expect(top(quick)).toBeLessThan(top(held) - 20);
+    expect(top(run(newFlier(), [[PRESS, steps(100)], [NONE, steps(800)]]))).toBeCloseTo(top(held), 0);
+  });
+
+  it('a tapped flap is nearly a whole flap (OP-343)', () => {
+    const park = (plan: Array<[FlightInput, number]>) => run(newFlier(), plan, 0, PARK_FLIGHT);
+    const jump = top(park([[PRESS, steps(340)], [NONE, steps(800)]]));
+    const heldFlap = top(park([[PRESS, steps(340)], [PRESS, steps(300)], [NONE, steps(1200)]]));
+    const tappedFlap = top(park([[PRESS, steps(340)], [PRESS, steps(50)], [NONE, steps(1200)]]));
+    expect(heldFlap - jump).toBeGreaterThan(100);
+    expect(tappedFlap - jump).toBeGreaterThan((heldFlap - jump) * 0.9);
   });
 
   it("flaps once more in today's park, and only once", () => {
@@ -110,6 +127,25 @@ describe('flight (OP-084)', () => {
     const dropped = run(late, [[NONE, steps(200)]]).at(-1)!;
     expect(dropped.air.s === AIRBORNE || dropped.air.s === GROUNDED).toBe(true);
     expect(dropped.air.vz).toBeLessThan(-GLIDE_SINK);
+  });
+
+  it('a step off a ledge still jumps for the edge grace, the same however the page draws, and not after it (OP-353)', () => {
+    // On a ledge 200 up, then nothing under it: the owl walked off its end.
+    const onLedge: Flier = { ...newFlier(), air: { z: 200, vz: 0, s: GROUNDED, f: 0 } };
+    const stood = run(onLedge, [[NONE, 3]], 200).at(-1)!;
+    const jumpAfter = (ms: number) => run(stood, [[NONE, steps(ms)], [PRESS, steps(360)], [NONE, steps(60)]], 0, PARK_FLIGHT);
+    // Within the grace: a whole jump, from where the fall has taken it, with its flap still to come.
+    const late = jumpAfter(EDGE_GRACE_MS - FLIGHT_STEP_MS);
+    expect(top(late)).toBeGreaterThan(200 + JUMP_RISE - 30);
+    expect(late.at(-1)!.air.f).toBe(1);
+    // After it the press is the flap, not a jump: the one flap is spent on it.
+    const tooLate = jumpAfter(EDGE_GRACE_MS + 2 * FLIGHT_STEP_MS);
+    expect(tooLate.at(-1)!.air.f).toBe(0);
+    // The grace is a step off a ledge's end and no more: under an owl's own width of walk.
+    expect((EDGE_GRACE_MS / 1000) * WALK_SPEED).toBeGreaterThan(24);
+    expect((EDGE_GRACE_MS / 1000) * WALK_SPEED).toBeLessThan(40);
+    // And it is not shorter than the climb's.
+    expect(EDGE_GRACE_MS).toBeGreaterThanOrEqual(COYOTE_MS);
   });
 
   it('honours a press a moment before landing, and lands on what is under it', () => {

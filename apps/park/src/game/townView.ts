@@ -1,25 +1,28 @@
 /**
- * The town view (OP-336, flag-hidden behind `?town=1`): how much of a room seen from above a screen
- * shows. The owner's rule is that those rooms "feel big, like a town center, rather than a room.
- * somewhere that 80 people could gather", and the Great Hollow is laid out to be read whole, its ways
- * all round the rim. Without the town view every screen shows one screen's depth of a room (ROOM_H),
- * its owls as big as in a room one screen deep: a computer sees an eighth of the Great Hollow's floor
- * and a phone held upright 416 of its 6,400 px across.
+ * The town view (OP-336): how much of a room seen from above a screen shows. The owner's rule is that
+ * those rooms "feel big, like a town center, rather than a room. somewhere that 80 people could
+ * gather", and the Great Hollow is laid out to be read whole, its ways all round the rim. Before the
+ * town view every screen showed one screen's depth of a room (ROOM_H), its owls as big as in a room
+ * one screen deep: a computer saw an eighth of the Great Hollow's floor and a phone held upright 416
+ * of its 6,400 px across.
  *
  * The town view draws back, by three rules:
  *
  * - a screen shows up to TOWN_VIEW.depth of a room's depth, the whole depth of most rooms;
  * - a phone held upright shows up to TOWN_VIEW.across of the room across, where the room is deep
  *   enough to fill the screen at that size;
- * - an owl is never drawn smaller than TOWN_VIEW.minCss (what a phone held sideways draws today), and
- *   no screen ever shows less than it does without the town view.
+ * - an owl is never drawn smaller than TOWN_VIEW.minCss (what a phone held sideways drew before it),
+ *   and no screen ever shows less than it did without the town view.
  *
  * Coming through the turnstiles the Great Hollow opens on the whole oval for a moment and eases in on
  * the owl (the opening look). Rooms seen from the side keep their camera. Pure, so it is unit-tested;
  * the room scene sets its camera by it.
  *
- * TODO-DOCS (OP-336): README.md's list of addresses gains `?town=1`; docs/ARCHITECTURE.md's camera notes
- * gain the town view's three rules and the opening look, once it is switched on for everyone.
+ * On for every visitor since the owner's word of Nov 12 (OP-356; it was behind a `?town=1` flag until
+ * then).
+ *
+ * TODO-DOCS (OP-336): docs/ARCHITECTURE.md's camera notes gain the town view's three rules and the
+ * opening look.
  */
 import { ROOM_H } from '@owl-park/shared';
 
@@ -37,7 +40,7 @@ export interface Size {
   h: number;
 }
 
-/** The zoom every room has without the town view: the room covers the screen across, and a screen of it down. */
+/** The zoom of a room seen from the side, and of every room before the town view: the room covers the screen across, and a screen of it down. */
 export function screenZoom(room: Size, screen: Size): number {
   return Math.max(screen.w / room.w, screen.h / Math.min(room.h, ROOM_H));
 }
@@ -69,8 +72,16 @@ export interface Look {
   y: number;
 }
 
-/** The opening look's timing (ms): how long the whole room holds, how long it eases in, and how fast a player's first move ends it. */
-export const OPENING = { holdMs: 900, easeMs: 1100, cutMs: 260 } as const;
+/**
+ * The opening look's timing (ms), counted from when the room has faded in: how long the whole room
+ * holds, how long it eases in, the least the whole room shows whatever the player does, and how long a
+ * player's first move takes to bring the camera in.
+ *
+ * Long enough to read the oval. The first timings (0.9 s held, counted from the start of the room's
+ * fade, and a quarter second on a move) left about half a second of it: on the owner's look it was
+ * over before he could see what was on the map (OP-336).
+ */
+export const OPENING = { holdMs: 2400, easeMs: 1600, minMs: 1200, cutMs: 600 } as const;
 
 /** Smooth at both ends. */
 function ease(t: number): number {
@@ -79,14 +90,18 @@ function ease(t: number): number {
 }
 
 /**
- * How far drawn back the opening look is `ms` after the room came in: 1 the whole room, 0 the owl's
- * own view. It holds, then eases in. `cutAt` is when the player first moved, if it has: from then it
- * eases in over OPENING.cutMs from wherever it was, and never slower than it would have anyway.
+ * How far drawn back the opening look is `ms` after the room came in (before that, while it fades in,
+ * `ms` is under 0): 1 the whole room, 0 the owl's own view. It holds, then eases in. `cutAt` is when
+ * the player first moved, if it has. The owl moves at once; the camera comes in over OPENING.cutMs
+ * from wherever it was, but not before the whole room has shown for OPENING.minMs, and never slower
+ * than it would have anyway.
  */
 export function openingAt(ms: number, cutAt: number | null = null): number {
   const plain = (t: number) => 1 - ease((t - OPENING.holdMs) / OPENING.easeMs);
-  if (cutAt === null || ms <= cutAt) return plain(ms);
-  return Math.min(plain(ms), plain(cutAt) * (1 - ease((ms - cutAt) / OPENING.cutMs)));
+  if (cutAt === null) return plain(ms);
+  const from = Math.max(cutAt, OPENING.minMs);
+  if (ms <= from) return plain(ms);
+  return Math.min(plain(ms), plain(from) * (1 - ease((ms - from) / OPENING.cutMs)));
 }
 
 /** When the opening look is over, `ms` after the room came in. */

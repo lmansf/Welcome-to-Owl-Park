@@ -245,18 +245,27 @@ export class CourseBook {
   }
 
   /**
-   * A fall (the caller has checked the owl is over a pit): where it goes back to, the last bench of its
-   * run in this room, else the act's way in (the trail gate's spawn in the first act, the default
-   * spawn in any other). A bench up on a ledge puts the owl back standing on that ledge (`top`), not on
-   * the floor under it, which over a pit would be a fall again.
+   * A fall (the caller has checked the owl is over a pit): where it goes back to. The last bench of its
+   * run in this room, or the way it came into this room (`from.entry`, a spawn of the room: where the
+   * room server or the page saw it arrive), whichever is nearer to where it fell (`from.pos`); with no
+   * bench here, the way in; with neither, the act's way in (the trail gate's spawn in the first act, the
+   * default spawn in any other). Both are places this owl has stood, so a fall never carries it on, and
+   * an owl that came in at a room's far end no longer goes back to its other end (OP-343). A bench up on
+   * a ledge, or a way in up on one, puts the owl back standing on it (`top`), not on the floor under it,
+   * which over a pit would be a fall again.
    */
-  fall(cid: string, roomId: string, now: number): FallAnswer {
+  fall(cid: string, roomId: string, now: number, from: { entry?: string; pos?: Vec2 } = {}): FallAnswer {
     const at = this.where(roomId);
     if (!at) return { ok: false, reason: 'unknown' };
     const run = this.runIn(cid, at.def.id, now);
     const bench = run?.bench && run.bench.room === roomId ? pieceIn(at.room, 'bench', run.bench.id) : undefined;
-    const back = bench ? bench.at : findSpawn(at.room, roomId === at.def.acts[0] ? at.def.gate.spawn : undefined);
-    const top = bench?.top ?? 0;
+    const entry = from.entry !== undefined && Object.hasOwn(at.room.spawns, from.entry) ? from.entry : undefined;
+    const way = entry ?? (roomId === at.def.acts[0] ? at.def.gate.spawn : undefined);
+    const wayAt = findSpawn(at.room, way);
+    const far = (p: Vec2) => (from.pos ? Math.hypot(p.x - from.pos.x, p.y - from.pos.y) : 0);
+    const toBench = bench !== undefined && (entry === undefined || !from.pos || far(bench.at) <= far(wayAt));
+    const back = toBench ? bench.at : wayAt;
+    const top = (toBench ? bench.top : way !== undefined ? at.room.spawnTops?.[way] : undefined) ?? 0;
     return { ok: true, view: this.view(cid, at.def.id, now), at: { x: back.x, y: back.y }, ...(top > 0 ? { top } : {}) };
   }
 

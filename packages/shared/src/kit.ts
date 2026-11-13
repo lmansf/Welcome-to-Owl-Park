@@ -39,8 +39,13 @@ export const KIT_SCENE_GAP = 40;
 /** The longest a scene's one-line story may be. */
 export const KIT_STORY_MAX = 140;
 
-/** Where a kit room draws a piece, from back to front (the park's depths, kitView.ts). */
-export type KitLayer = 'back' | 'play' | 'piece' | 'front';
+/**
+ * Where a kit room draws a piece, from back to front (the park's depths, kitView.ts). `hazard` (OP-343)
+ * is what an owl must not land in: a course's drop and the danger that fills it. It lies over the back
+ * scenery and under everything an owl stands on, at full strength, and the style check (tools/kit
+ * preview.py) counts it as neither backdrop nor walkway.
+ */
+export type KitLayer = 'back' | 'hazard' | 'play' | 'piece' | 'front';
 
 /** One piece as the room draws it: its art, its box in room pixels and how it fills that box. */
 export interface KitDraw {
@@ -59,6 +64,12 @@ export interface KitDraw {
   alpha?: number;
   /** A colour it is drawn multiplied by (a surface's own tint, KitSurface.tint). */
   tint?: number;
+  /**
+   * The part of the piece shown, across (its own px, from `x`, `w` wide), for a piece drawn to its box
+   * and not mirrored: the rest of its box is left empty. An end piece on a run too short for both its
+   * ends shows only its outer part (OP-348).
+   */
+  crop?: { x: number; w: number };
   /** What it is drawn for, and that thing's id (the greybox shades by it, the tests count by it). */
   role: 'surface' | 'path' | 'ledge' | 'hill' | 'stair' | 'door' | 'barrier' | 'prop' | 'decal';
   id: string;
@@ -249,6 +260,51 @@ function artSpan(s: KitArtSpec): { left: number; right: number; w: number } {
 }
 
 /**
+ * How far over a flooded walk's walking line its water stands (room px, OP-343): over the grass that
+ * grows on the walk, so none of it shows above the water as a line of ground to walk on. A bank's own
+ * grass stands as high beside it.
+ */
+export const KIT_FLOOD_OVER = 18;
+
+/** A piece cut from a painted row (OP-251): `<row>-cap-left`, `-cap-right` or `-mid-<length>`. */
+const ROW_PIECE = /^(kit-cut-.+)-(?:cap-left|cap-right|mid-\d+)$/;
+
+/** The painted row a piece was cut from (a realm slot's stand-in counts as the piece standing in), or null for any other piece. */
+export function rowOfPiece(key: string): string | null {
+  return ROW_PIECE.exec(KIT_ART[key]?.standIn ?? key)?.[1] ?? null;
+}
+
+const ROW_TOPS = new Map<string, number | null>();
+
+/**
+ * The one upper edge the pieces of a painted row share (OP-348), in a piece's own px; null for a row
+ * with no measured piece. A row's caps and middles are cut from one painting of one run, each at the
+ * row's height, so side by side in their boxes they are that painting again. Their measured tops are
+ * not one number, though: a top is the highest thing in the piece, and grass, moss and an end board
+ * stand a little higher in one piece than the next (the earth path's run from 14 to 37). Each piece
+ * laid by its own top put neighbours as much as 23 px apart, a step in the ground at every join.
+ * So a row is laid on one line: the middle one of its pieces' tops, which is where most of the run's
+ * upper edge is and moves the caps least.
+ */
+export function rowTop(row: string): number | null {
+  const known = ROW_TOPS.get(row);
+  if (known !== undefined) return known;
+  const tops = ['cap-left', 'cap-right', ...KIT_ROW_LENGTHS.map((l) => `mid-${l}`)]
+    .map((part) => KIT_ART[`${row}-${part}`]?.top)
+    .filter((t): t is number => typeof t === 'number')
+    .sort((a, b) => a - b);
+  const top = tops.length ? tops[Math.floor((tops.length - 1) / 2)]! : null;
+  ROW_TOPS.set(row, top);
+  return top;
+}
+
+/** A piece's upper edge as a run lays it: its row's shared one (rowTop), or its own. */
+function layTop(key: string, s: KitArtSpec): number {
+  const row = rowOfPiece(key);
+  return (row ? rowTop(row) : null) ?? artBand(s).top;
+}
+
+/**
  * How far into a run piece's art, below its upper edge, an owl's feet stand (its own px): the kit's
  * platforms are seen a little from above, so the walking line is a step into the top face, not on
  * its back edge.
@@ -273,16 +329,21 @@ function runDraws(given: KitRun, ground: number, depth: number, role: 'path' | '
     return {
       key,
       ...(repeats ? { x: x0, w: x1 - x0 } : { x: Math.round(x0 - (flip ? s.w - span.right : span.left) * k), w: Math.round(s.w * k) }),
-      y: Math.round(walk - (artBand(s).top + KIT_STAND_SINK) * k),
+      y: Math.round(walk - (layTop(key, s) + KIT_STAND_SINK) * k),
       h: Math.round(s.h * k),
       tile: repeats ? 'x' : 'none',
       layer: 'play',
       ...(flip ? { flip: true } : {}),
+      ...(run.tint !== undefined ? { tint: run.tint } : {}),
       role,
       id: run.id,
     };
   };
-  if (run.mid) out.push({ key: run.mid, x: run.x0, y: walk, w: run.x1 - run.x0, h: depth, tile: sizeOf(run.mid).tile, layer: 'play', role, id: run.id });
+  // A drop's texture begins below the walking line, in its shade, in the hazard layer (OP-343); a path's or a ledge's, at the line, with what an owl stands on.
+  const sunk = run.sunk ?? 0;
+  if (run.mid && depth > sunk) {
+    out.push({ key: run.mid, x: run.x0, y: walk + sunk, w: run.x1 - run.x0, h: depth - sunk, tile: sizeOf(run.mid).tile, layer: sunk > 0 ? 'hazard' : 'play', role, id: run.id, ...(run.shade !== undefined ? { tint: run.shade } : {}) });
+  }
   const lw = run.left ? artSpan(sizeOf(run.left)).w : 0;
   const rw = run.right ? artSpan(sizeOf(run.right)).w : 0;
   const pieces: KitDraw[] = [];
@@ -306,9 +367,28 @@ function runDraws(given: KitRun, ground: number, depth: number, role: 'path' | '
     const single = c.tile === 'none' || (!run.left && !run.right && x1 - x0 < artSpan(c).w * 0.75);
     if (x1 > x0) pieces.push(single ? at(run.cap, run.x0, run.x1, (run.x1 - run.x0) / artSpan(c).w) : at(run.cap, x0, x1, 1, { repeats: true }));
   }
-  if (run.left) pieces.push(at(run.left, run.x0, run.x0 + lw, 1));
+  // A run shorter than one of its ends (OP-348: a stone step 120 across, each end 160): the ends were
+  // laid whole, one over the other, their art out past the run on both sides, so the step looked wider
+  // than it stands. Each now shows only its outer part, as much of the run as its length earns it, and
+  // the two meet between. A mirrored end is laid whole, as before; so are the ends of a run at least
+  // an end long, which stay inside it (one lies over the other's inner part: left as it is, since the
+  // one screen of such steps the style check holds closest, in `brush-falls`, has no room for the
+  // seam two half ends make; a short piece of the row's own is the artists').
+  const len = run.x1 - run.x0;
+  const fit = run.left && run.right && (lw > len || rw > len) ? len / (lw + rw) : 1;
+  if (run.left) {
+    const s = sizeOf(run.left);
+    const d = at(run.left, run.x0, run.x0 + lw, 1);
+    pieces.push(fit < 1 ? { ...d, crop: { x: 0, w: artSpan(s).left + lw * fit } } : d);
+  }
   // A realm's perch end (OP-275) is painted for the left end and mirrored for the right, once delivered.
-  if (run.right) pieces.push(at(run.right, run.x1 - rw, run.x1, 1, { flip: KIT_ART[run.right]?.slot === 'perch-end' && !KIT_ART[run.right]?.standIn }));
+  if (run.right) {
+    const s = sizeOf(run.right);
+    const flip = KIT_ART[run.right]?.slot === 'perch-end' && !KIT_ART[run.right]?.standIn;
+    const d = at(run.right, run.x1 - rw, run.x1, 1, { flip });
+    const from = artSpan(s).left + rw * (1 - fit);
+    pieces.push(fit < 1 && !flip ? { ...d, crop: { x: from, w: s.w - from } } : d);
+  }
   if (run.trim && pieces[0]) {
     const cap = pieces[0];
     const t = sizeOf(run.trim);
@@ -509,7 +589,7 @@ export function kitDrawPlan(room: Pick<RoomDef, 'kit' | 'doors' | 'size'>): KitD
     const k = d.scale ?? 1;
     const w = Math.round(s.w * k);
     const h = Math.round(s.h * k);
-    out.push({ key: d.piece, x: Math.round(d.x - w / 2), y: Math.round(d.y - h / 2), w, h, tile: 'none', layer: d.front ? 'front' : 'piece', ...(d.flip ? { flip: true } : {}), ...(d.alpha === undefined ? {} : { alpha: d.alpha }), role: 'decal', id: `${d.piece}-${i}` });
+    out.push({ key: d.piece, x: Math.round(d.x - w / 2), y: Math.round(d.y - h / 2), w, h, tile: 'none', layer: d.front ? 'front' : d.hazard ? 'hazard' : 'piece', ...(d.flip ? { flip: true } : {}), ...(d.alpha === undefined ? {} : { alpha: d.alpha }), role: 'decal', id: `${d.piece}-${i}` });
   }
   return out;
 }
@@ -525,7 +605,7 @@ export function kitDrawPlan(room: Pick<RoomDef, 'kit' | 'doors' | 'size'>): KitD
 export function kitCells(d: KitDraw): KitCell[] {
   const s = sizeOf(d.key);
   const whole = { x: 0, y: 0, w: s.w, h: s.h };
-  if (d.tile === 'none') return [{ x: d.x, y: d.y, w: d.w, h: d.h, crop: whole }];
+  if (d.tile === 'none') return [{ x: d.x, y: d.y, w: d.w, h: d.h, crop: d.crop && !d.flip ? { x: d.crop.x, y: 0, w: d.crop.w, h: s.h } : whole }];
   if (d.tile === 'x' || d.tile === 'y') {
     // Copies meet art to art: each is laid one art width on from the last, its margins over its neighbours'.
     // Down a column (y) each copy is first scaled to the box's width, so the piece keeps its shape.
@@ -750,6 +830,27 @@ export function kitProblems(room: RoomDef): string[] {
 
   // The floor an owl walks is drawn.
   const floorPaths = (kit.paths ?? []).filter((p) => p.top === 0);
+  // A course's pits (OP-343): each is drawn as a drop (a stretch of the ground line a step below the walk,
+  // with nothing over it that looks stood on) or as a flooded walk (still water over its top), and
+  // neither is drawn anywhere an owl may stand.
+  // TODO-DOCS (OP-343): docs/MAP.md gains the drop and the flooded walk (KitRun's sunk, shade and flood) and this rule.
+  const isDrop = (p: KitRun) => (p.sunk ?? 0) > 0;
+  const isPit = (p: KitRun) => isDrop(p) || p.flood !== undefined;
+  const pits = (room.course?.pits ?? []).map((pit) => ({ x0: Math.min(...pit.map((v) => v.x)), x1: Math.max(...pit.map((v) => v.x)) }));
+  for (const d of floorPaths.filter(isPit)) {
+    const what = isDrop(d) ? 'drop' : 'flooded walk';
+    if (isDrop(d) && (d.row || d.cap || d.left || d.right || d.mids?.length)) out.push(`drop ${d.id} has a top piece: it would look stood on`);
+    if (isDrop(d) && d.flood) out.push(`drop ${d.id} is flooded too: a pit is drawn one way`);
+    if (!pits.some((pit) => pit.x0 <= d.x0 && d.x1 <= pit.x1)) out.push(`${what} ${d.id} is drawn where an owl may stand: no pit of the course spans it`);
+  }
+  for (const pit of pits) {
+    for (let x = pit.x0 + 8; x <= pit.x1 - 8; x += 8) {
+      if (floorPaths.some((p) => !isPit(p) && p.x0 <= x && x <= p.x1)) {
+        out.push(`the pit at x ${x} is drawn as a walk: the path over it should be a drop or a flooded walk`);
+        break;
+      }
+    }
+  }
   for (const [a, b] of walkedAt(room, g, 0, 0, room.size.w)) {
     for (let x = a; x <= b; x += 8) {
       if (!floorPaths.some((p) => p.x0 <= x && x <= p.x1)) {

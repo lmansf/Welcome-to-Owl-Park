@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { HALL_ROOM, HALL_W } from '../rooms/hollowHall';
 import { ROOMS } from '../rooms/index';
-import { EDGE_ART, STRIP_OUT, bumpProfile, edgeArt, edgeDraws, edgePlaceholder, kitFrames, shapedEdge } from './edges';
+import { EDGE_ART, HALL_RING, SIDE_LEAST, STRIP_OUT, bumpProfile, edgeArt, edgeDraws, edgePlaceholder, kitFrames, shapedEdge } from './edges';
 import { pointInPolygon } from './geometry';
 import { INTERACTABLES } from './interactables';
 import { kitDrawPlan } from './kit';
@@ -122,6 +122,49 @@ describe("kit rooms' platform frames", () => {
     const strips = kitFrames(flat, { w: 1600, h: 900 });
     expect(strips.map((s) => s.id)).toEqual(['p:right']);
   });
+
+  it('frames a side only where it stands free: not where another body begins at it (OP-348)', () => {
+    const size = { w: 1600, h: 900 };
+    const walk = { key: 'kit-tex-earth', x: 100, y: 770, w: 600, h: 130, role: 'path' as const, id: 'walk' };
+    // A course's pit: the same earth, a step lower, from the walk's very end.
+    const pit = { key: 'kit-tex-earth', x: 700, y: 800, w: 400, h: 100, role: 'path' as const, id: 'pit' };
+    const far = { key: 'kit-tex-earth', x: 1100, y: 770, w: 300, h: 130, role: 'path' as const, id: 'far' };
+    const plan = [walk, pit, far];
+    // Alone, the walk has both its sides; beside the pit, only the one that stands free.
+    expect(kitFrames(walk, size).map((s) => s.id)).toEqual(['walk:left', 'walk:right']);
+    expect(kitFrames(walk, size, plan).map((s) => s.id)).toEqual(['walk:left']);
+    expect(kitFrames(pit, size, plan)).toEqual([]);
+    expect(kitFrames(far, size, plan).map((s) => s.id)).toEqual(['far:right']);
+    // A neighbour that begins well down the side leaves the side above it framed, down to it and no further.
+    const low = { ...pit, y: 850, h: 50 };
+    const right = kitFrames(walk, size, [walk, low]).find((s) => s.id === 'walk:right')!;
+    expect(right.y + right.h).toBe(850);
+    expect(right.h).toBeGreaterThanOrEqual(SIDE_LEAST);
+    // A body a gap away is no neighbour: the side stands free.
+    const apart = { ...pit, x: 760 };
+    expect(kitFrames(walk, size, [walk, apart]).map((s) => s.id)).toEqual(['walk:left', 'walk:right']);
+    // Nor is a cap, a prop or a backdrop piece at the side: only a body of earth is.
+    const cap = { key: 'kit-plank-mid', x: 700, y: 760, w: 300, h: 60, role: 'path' as const, id: 'cap' };
+    expect(kitFrames(walk, size, [walk, cap]).map((s) => s.id)).toEqual(['walk:left', 'walk:right']);
+  });
+
+  it('leaves no strip down the join of a walk and a pit in any course', () => {
+    let pits = 0;
+    for (const room of kitRooms.filter((r) => r.course)) {
+      const plan = kitDrawPlan(room);
+      const bodies = plan.filter((d) => (d.role === 'path' || d.role === 'ledge' || d.role === 'hill') && KIT_ART[d.key]?.kind === 'texture');
+      for (const d of bodies.filter((b) => b.layer === 'hazard')) {
+        pits++;
+        expect(kitFrames(d, room.size, plan).filter((s) => s.tile === 'y'), `${room.id} ${d.id}`).toEqual([]);
+        for (const o of bodies.filter((b) => b.id !== d.id && (Math.abs(b.x + b.w - d.x) <= 2 || Math.abs(b.x - (d.x + d.w)) <= 2))) {
+          const atJoin = kitFrames(o, room.size, plan).filter((s) => s.tile === 'y' && ((s.id.endsWith(':right') && Math.abs(o.x + o.w - d.x) <= 2) || (s.id.endsWith(':left') && Math.abs(o.x - (d.x + d.w)) <= 2)));
+          for (const s of atJoin) expect(s.y + s.h, `${room.id} ${s.id}`).toBeLessThanOrEqual(d.y);
+        }
+      }
+    }
+    // The canopy's and the neon course's drops (the ink course's pits are flooded walks, with no body of their own).
+    expect(pits).toBeGreaterThan(5);
+  });
 });
 
 describe("the arcade's edge stand-ins", () => {
@@ -130,5 +173,36 @@ describe("the arcade's edge stand-ins", () => {
     const keys = Object.keys(EDGE_ART).filter((k) => k.startsWith('edge-arcade-'));
     expect(keys.length).toBeGreaterThan(0);
     for (const key of keys) for (const op of edgePlaceholder(key) ?? []) expect(tree.has(op.c), key).toBe(false);
+  });
+});
+
+describe('the Great Hollow\'s plaza rings sit in its painting (OP-348)', () => {
+  const ring = edgePlaceholder('edge-hall-plaza-ring')!;
+  const mossy = edgePlaceholder('edge-hollow-plaza-ring')!;
+
+  it('rings each of the hall\'s plazas with the hall\'s own ring, not the mossy one', () => {
+    const rings = (HALL_ROOM.edges ?? []).filter((e) => EDGE_ART[e.key]?.kind === 'ring');
+    expect(rings.length).toBeGreaterThan(0);
+    for (const r of rings) expect(r.key).toBe('edge-hall-plaza-ring');
+    expect(EDGE_ART['edge-hall-plaza-ring']).toEqual(EDGE_ART['edge-hollow-plaza-ring']);
+  });
+
+  it('is a pool of light and a ring of stones with their shadows: none of the moss that lay on the painting as a green film', () => {
+    const ellipses = (ops: typeof ring) => ops.flatMap((o) => (o.op === 'ellipse' ? [o] : []));
+    const all = ellipses(ring);
+    expect(all).toHaveLength(ring.length);
+    const colours = new Set(all.map((o) => o.c));
+    expect([...colours].sort()).toEqual([HALL_RING.light, HALL_RING.shadow, HALL_RING.stone, HALL_RING.stoneDark].sort());
+    for (const o of ellipses(mossy)) if (o.rx > 100) expect(colours.has(o.c)).toBe(false);
+    // The pool: steps of light, each inside the last, none strong enough to lie on the floor as a disc.
+    const pool = all.filter((o) => o.c === HALL_RING.light && o.rx > 60);
+    expect(pool.length).toBeGreaterThanOrEqual(4);
+    for (let i = 1; i < pool.length; i++) expect(pool[i]!.rx).toBeLessThan(pool[i - 1]!.rx);
+    for (const o of pool) expect(o.a ?? 1).toBeLessThanOrEqual(0.1);
+    // Each stone lies over its own shadow.
+    const stones = all.filter((o) => o.c === HALL_RING.stone || o.c === HALL_RING.stoneDark);
+    const shadows = all.filter((o) => o.c === HALL_RING.shadow);
+    expect(stones.length).toBe(22);
+    expect(shadows.length).toBe(stones.length);
   });
 });

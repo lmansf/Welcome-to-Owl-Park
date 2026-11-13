@@ -31,6 +31,7 @@ import {
   findSpawn,
   isWalkable,
   inExit,
+  walkCrossesExit,
   positionAlongWalk,
   resolveTarget,
   snapToWalkable,
@@ -94,6 +95,8 @@ interface Visitor {
   /** Session id of the socket that currently owns this visitor; a replacement gets a new one. */
   sid: string;
   st: VisitorState;
+  /** The way it came into the room (the spawn its page named on arriving through a doorway, OP-343); unknown for one re-attached after the host was recycled. */
+  cameIn?: string;
   seq: number;
   tokens: number;
   refilledAt: number;
@@ -377,6 +380,14 @@ export class Room {
    * where the page has its owl when the room will not let it in there: a point whose straight walk
    * reaches it comes first, so the room's copy walks over to the owl and the page never has to move
    * its owl back to the room's spot (OP-138).
+   *
+   * No point is picked whose straight walk from where the owl stands (`toward`, else the spawn) passes
+   * through a way out. The page walks its owl over to the room's spot (its step aside), and that walk
+   * took it through the doorway and out of the room it had only just come into: in the grove, one
+   * arrival in fifteen of those that come in beside another owl with no doorway named (OP-342).
+   *
+   * TODO-DOCS (OP-342): docs/ARCHITECTURE.md, "Entering a room": the scatter also passes over any spot
+   * whose straight walk from where the owl stands would go through a way out.
    */
   scatter(spawn: Vec2, radius: number, except?: string, toward?: Vec2): Vec2 {
     let r = radius;
@@ -384,13 +395,14 @@ export class Room {
     let walled: Vec2 | null = null; // free, but its straight walk to `toward` meets a wall
     // The straight walk from a spot on the floor, as the page asks it of an owl on the ground (OP-084: a solid perch is a wall below its top).
     const ground = toward ? footing(this.def, 0) : null;
-    for (let i = 0; i < LIMITS.scatterAttempts && r > 0; i++) {
+    const stands = toward ?? spawn;
+    for (let i = 0; i < LIMITS.scatterAttempts && r > 0; i++, r -= LIMITS.scatterShrink) {
       const p = { x: Math.round(spawn.x + (this.rnd() * 2 - 1) * r), y: Math.round(spawn.y + (this.rnd() * 2 - 1) * r * 0.5) };
+      if (walkCrossesExit(this.def, stands, p)) continue;
       if (this.free(p, except)) {
         if (!toward || !ground || distance(resolveTarget(p, toward, ground.walkable, ground.shut), toward) < 3) return p;
         walled ??= p;
       } else if (!fallback && isWalkable(p, this.def.walkable) && !inExit(this.def, p)) fallback = p;
-      r -= LIMITS.scatterShrink;
     }
     if (walled) return walled;
     if (isWalkable(spawn, this.def.walkable) && !inExit(this.def, spawn)) return { ...spawn };
@@ -444,6 +456,7 @@ export class Room {
 
     const now = this.now();
     const v: Visitor = { peer, sid, st: { id, look: hello.look, pos, walk: null }, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, airTokens: LIMITS.airBurst, airRefilledAt: now, saidAt: 0, usedAt: 0, arrangedAt: 0, dash: { ...FRESH_DASH } };
+    if (hello.spawn !== undefined && Object.hasOwn(this.def.spawns, hello.spawn)) v.cameIn = hello.spawn;
     this.visitors.set(id, v);
     this.leavers.delete(id);
     peer.persist?.(v.st);
@@ -717,6 +730,11 @@ export class Room {
   /** The visitor's current look (what everyone else sees), if present. */
   lookOf(id: string): OwlLook | null {
     return this.visitors.get(id)?.st.look ?? null;
+  }
+
+  /** The way a visitor came into the room (a spawn of the room), when the room saw it arrive by one (OP-343: a course's fall goes back there). */
+  cameInBy(id: string): string | undefined {
+    return this.visitors.get(id)?.cameIn;
   }
 
   /** Where a visitor stands right now on the server clock (mid-walk positions included). */

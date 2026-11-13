@@ -202,7 +202,7 @@ function css(): string {
 #hud .home h1 .h-tag{display:block;margin-top:4px;font-size:clamp(14px,2.3vh,18px);font-weight:600;line-height:1.25;color:#F6F1E3}
 #hud .home .h-side button{width:100%}
 #hud .home .h-main{min-height:clamp(52px,8vh,64px);font-size:clamp(18px,2.8vh,22px)}
-#hud .home .h-small{min-height:40px;font-size:14px}
+#hud .home .h-small{min-height:44px;font-size:15px}
 /* Pressed: a press shows at once, on a phone too (data-pressed, as touch screens do not all show :active). */
 #hud .home .h-main:active,#hud .home .h-main[data-pressed]{transform:translateY(1px) scale(.985);box-shadow:0 1px 4px rgba(0,0,0,.35)}
 /* Opening the park: Play says so and pulses gently until the park answers; it takes no second press. */
@@ -216,7 +216,7 @@ function css(): string {
 #hud .home .h-sub .h-presence{color:#FFD36A;opacity:.95}
 #hud .home .h-sub>span:not([hidden])~span:not([hidden])::before{content:" · ";color:#F6F1E3}
 /* Quiet links: I already have an owl under Play, and the footer's three. Still 40 px tall to tap. */
-#hud .home .h-side button.h-link{width:auto;min-height:40px;padding:8px 10px;background:none;border:0;box-shadow:none;color:#F6F1E3;
+#hud .home .h-side button.h-link{width:auto;min-height:44px;padding:8px 10px;background:none;border:0;box-shadow:none;color:#F6F1E3;
   font-size:13px;font-weight:600;opacity:.85;text-decoration:underline;text-decoration-color:rgba(246,241,227,.35);text-underline-offset:3px}
 #hud .home .h-side button.h-link:hover{opacity:1;text-decoration-color:currentColor}
 #hud .home .h-side button.h-link:focus-visible{opacity:1;outline:2px solid #FFD36A;outline-offset:2px;border-radius:8px}
@@ -238,6 +238,17 @@ function css(): string {
 #hud .home .h-closed .h-closed-words{margin:0;font-size:clamp(17px,2.6vh,21px);font-weight:700;line-height:1.3}
 #hud .home .h-closed p{margin:0;font-size:14px;line-height:1.35;opacity:.92}
 #hud .home .h-stage{min-width:0;min-height:0}
+/* The keepers' ribbon lies across the top of the home screen (OP-369): the side's block keeps clear of it, moved down only as far
+   as it must be. Two spacers share the room left over as the centring did; the upper one is never shorter than the ribbon. */
+#hud.ribbon-on .home .h-side{justify-content:flex-start}
+#hud.ribbon-on .home .h-side::before,#hud.ribbon-on .home .h-side::after{content:'';flex:1 1 0px}
+#hud.ribbon-on .home .h-side::before{min-height:max(0px,calc(var(--ribbon-bottom,0px) + 8px - max(16px,env(safe-area-inset-top))))}
+/* A phone on its side: the block fills its side from top to bottom, and moved down its last links would leave the screen. There
+   the ribbon stands over the owl's side instead, and the block stays where it is. */
+@media (max-height:480px) and (min-width:641px){
+  #hud.at-home.ribbon-on .ribbon{margin:0 max(8px,env(safe-area-inset-right)) 0 auto;max-width:calc(100vw - min(440px,56vw) - 24px)}
+  #hud.ribbon-on .home .h-side::before{min-height:0}
+}
 /* After every rule that sets a display, so a hidden part (the line, its message, the note) stays hidden. */
 #hud .home [hidden]{display:none}
 @media (max-width:520px){

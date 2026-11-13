@@ -34,7 +34,7 @@ const CSS = `
 #hud .say .phrase{position:relative;min-height:48px;padding:8px 30px 8px 12px;border-radius:16px;font-size:15px;line-height:1.2;text-align:left;background:rgba(12,30,54,.92);color:#F6F1E3;border:1px solid rgba(255,211,106,.55)}
 #hud .say .phrase:disabled{opacity:.45;cursor:default}
 #hud .say .phrase kbd{position:absolute;top:8px;right:8px;margin:0}
-#hud .say [data-close],#hud .say [data-swap]{min-height:40px}
+#hud .say [data-close],#hud .say [data-swap]{min-height:44px}
 #hud .say .wfoot{display:flex;gap:8px;justify-content:center}
 @media (max-width:420px),(max-height:620px){#hud .say .ring{--r:104px}#hud .say .group{width:72px;height:72px;margin:-36px 0 0 -36px;font-size:11px}#hud .say .hub{width:96px;margin-left:-48px}#hud .say .phrases{grid-template-columns:1fr}}
 `;

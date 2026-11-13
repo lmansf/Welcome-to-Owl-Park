@@ -36,7 +36,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'tools' / 'art'))
@@ -90,11 +90,15 @@ def faded(im, fade, w):
     return im
 
 
-def paste(dst, im, x, y, w, h, k, flip=False, alpha=1.0):
+def paste(dst, im, x, y, w, h, k, flip=False, alpha=1.0, tint=None):
     w2, h2 = max(1, round(w * k)), max(1, round(h * k))
     im = im.resize((w2, h2), Image.LANCZOS)
     if flip:
         im = im.transpose(Image.FLIP_LEFT_RIGHT)
+    if tint is not None:
+        # A colour the piece is drawn multiplied by (a drop's shade, a surface's tint), as the park draws it.
+        shade = Image.new('RGBA', im.size, ((tint >> 16) & 255, (tint >> 8) & 255, tint & 255, 255))
+        im = ImageChops.multiply(im, shade)
     if alpha < 1:
         im = im.copy()
         im.putalpha(im.getchannel('A').point(lambda v: round(v * alpha)))
@@ -139,11 +143,18 @@ def render(p, cam_x, view_w, k, marks, owl_marker=True):
             if im is not None:
                 paste(out, faded(im, t.get('fade'), ROOM_W), t['x'] - cam_x, t.get('y', 0), ROOM_W, ROOM_H, k)
     fronts = []
+    watered = False
     for c in p['images']:
         if c['layer'] == 'front':
             fronts.append(c)
             continue
+        # A flooded walk's water lies over the walk (the play cells) and under the pieces on it.
+        if not watered and c['layer'] == 'piece':
+            draw_floods(out, p, cam_x, k)
+            watered = True
         draw_cell(out, c, cam_x, k)
+    if not watered:
+        draw_floods(out, p, cam_x, k)
     for s in p['spawns'].values() if marks else [p['spawns'].get('default')]:
         if s and owl_marker:
             owl(out, s['x'] - cam_x, s['y'], k, p['owlScale'])
@@ -177,9 +188,28 @@ def draw_cell(out, c, cam_x, k):
     # A texture's crop is in its logical px, which its 1x file is.
     if c['tile'] == 'xy':
         sub = im.crop((round(cr['x']), round(cr['y']), round(cr['x'] + cr['w']), round(cr['y'] + cr['h'])))
-        paste(out, sub, c['x'] + cr['x'] - cam_x, c['y'] + cr['y'], cr['w'], cr['h'], k, c['flip'], c['alpha'])
+        paste(out, sub, c['x'] + cr['x'] - cam_x, c['y'] + cr['y'], cr['w'], cr['h'], k, c['flip'], c['alpha'], c.get('tint'))
     else:
-        paste(out, im, c['x'] - cam_x, c['y'], c['w'], c['h'], k, c['flip'], c['alpha'])
+        # A piece drawn to its box shows all of itself, but for an end piece on a run too short for both
+        # its ends (KitDraw.crop, OP-348): that one shows only its part across, where that part lies.
+        scale = c['h'] / cr['h'] if cr['h'] else 1
+        piece_w = c['w'] / scale if scale else c['w']
+        if not c['flip'] and (cr['x'] > 0.5 or cr['w'] < piece_w - 0.5):
+            fx = im.width / piece_w
+            sub = im.crop((round(cr['x'] * fx), 0, round((cr['x'] + cr['w']) * fx), im.height))
+            paste(out, sub, c['x'] + cr['x'] * scale - cam_x, c['y'], cr['w'] * scale, c['h'], k, False, c['alpha'], c.get('tint'))
+        else:
+            paste(out, im, c['x'] - cam_x, c['y'], c['w'], c['h'], k, c['flip'], c['alpha'], c.get('tint'))
+
+
+def draw_floods(out, p, cam_x, k):
+    """The flooded walks' still water (OP-343): each a box of its colour over the walk, as the park paints it."""
+    d = ImageDraw.Draw(out)
+    for f in p.get('floods', []):
+        c = f['color']
+        box = [round((f['x'] - cam_x) * k), round(f['y'] * k), round((f['x'] + f['w'] - cam_x) * k) - 1, round((f['y'] + f['h']) * k) - 1]
+        if box[2] >= box[0] and box[3] >= box[1]:
+            d.rectangle(box, fill=((c >> 16) & 255, (c >> 8) & 255, c & 255, 255))
 
 
 def beside(screen, target, gap=8):
@@ -226,8 +256,11 @@ def with_stories(im, scenes, cam_x, k, mark=False):
 
 
 #: The cells of the walkable layer: the floor and platforms (play) and the props on them (piece, and front,
-#: the props an owl walks behind). The back cells (the trunk, a wall) are neither backdrop nor walkway.
+#: the props an owl walks behind). The back cells (the trunk, a wall) are neither backdrop nor walkway, and
+#: neither is the hazard layer (OP-343): a course's drop and the danger in it. A flooded walk's water is no
+#: layer of cells: the park paints it over the walk, and the walk is measured as seen, under its water.
 WALK_LAYERS = ('play', 'piece', 'front')
+BEHIND_LAYERS = ('back', 'hazard')
 #: How much lighter (L mean) the walkable layer reads than the backdrop on every screen: a step darker (section 1).
 ORDER_GAP = 5.0
 #: The walkable layer's contrast floor (docs/TREE_STYLE.md section 2b: "14, and at least 7.5").
@@ -280,7 +313,7 @@ def check_screen(p, s, k):
     blk = bands.block_for(size[0])
     walk = alpha_of(p, cam, k, size, WALK_LAYERS) >= bands.OPAQUE
     front = alpha_of(p, cam, k, size, foregrounds=True)
-    covered = (alpha_of(p, cam, k, size, ('back',) + WALK_LAYERS) >= 8) | (front >= 8)
+    covered = (alpha_of(p, cam, k, size, BEHIND_LAYERS + WALK_LAYERS) >= 8) | (front >= 8)
     nums = {'backdrop': bands.stats_of(rgb, ~covered, blk), 'walk': bands.stats_of(rgb, walk, blk)}
     if (front >= bands.OPAQUE).any():
         nums['overlay'] = bands.stats_of(rgb, front >= bands.OPAQUE, blk)

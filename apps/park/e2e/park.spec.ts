@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { cameraView, dist, frames, openGround, openPark, settleCamera, state, tapRoomPoint, waitForArrival, walkToDoor } from './helpers';
+import { cameraView, dist, frames, openGround, openPark, settleCamera, state, tapRoomPoint, waitForArrival, walkAndStop, walkToDoor } from './helpers';
 
 /** A finger drawn down the screen from (x, y), `by` pixels, in a few steps, then lifted. */
 async function swipeDown(page: Page, x: number, y: number, by: number): Promise<void> {
@@ -485,6 +485,28 @@ test.describe('single visitor', () => {
   });
 });
 
+test.describe('the prompt at the owl (OP-344)', () => {
+  test('what an owl can do where it stands shows at its own feet, with the key on a computer, and goes when it talks or walks off', async ({ page }) => {
+    await openPark(page);
+    const touch = await page.evaluate(() => matchMedia('(pointer: coarse)').matches);
+    // At the way in the owl stands in the moonbeam: the prompt says what Interact does there.
+    await expect.poll(async () => (await state(page)).promptShown, { timeout: 10_000 }).toBe(touch ? 'Bask in the moonbeam' : 'E: Bask in the moonbeam');
+    // Out on the open floor nothing is in reach: no prompt.
+    await walkAndStop(page, 2600, 880);
+    await expect.poll(async () => (await state(page)).promptShown, { timeout: 10_000 }).toBeNull();
+    // Beside Elder Bramble: what Interact does, in words, where the visitor is looking.
+    await walkAndStop(page, 2280, 760);
+    await expect.poll(async () => (await state(page)).promptShown, { timeout: 10_000 }).toBe(touch ? 'Talk to Elder Bramble' : 'E: Talk to Elder Bramble');
+    // Talking to him: the prompt is gone while the two talk.
+    expect(await page.evaluate(() => window.owlPark.talk('bramble'))).toBe(true);
+    await expect(page.locator('.dialogue[data-npc="bramble"]')).toBeVisible({ timeout: 15_000 });
+    await expect.poll(async () => (await state(page)).promptShown, { timeout: 10_000 }).toBeNull();
+    // Walked well away: nothing in reach, no prompt.
+    await walkAndStop(page, 2800, 900);
+    await expect.poll(async () => (await state(page)).promptShown, { timeout: 10_000 }).toBeNull();
+  });
+});
+
 test.describe('two visitors on one device', () => {
   test('owls see each other appear, walk, and leave', async ({ context }) => {
     // Two live parks in one browser, both drawn with software WebGL: on a loaded runner the walk
@@ -545,3 +567,322 @@ test.describe('two visitors on one device', () => {
     });
   }
 });
+
+test.describe('the Great Hollow reads (OP-346)', () => {
+  test.describe.configure({ timeout: 120_000 });
+
+  test('tall art goes see-through while the visitor\'s own owl is behind it, and a doorway at the hall\'s end has its sign beside it', async ({ page }) => {
+    await openPark(page, { room: 'm3-hall', keeper: '1', newmap: '1' });
+    const doors = (await state(page)).doors;
+    const idol = doors.find((d) => d.id === 'idol-market')!;
+    const way = doors.find((d) => d.id === 'to-market')!;
+    // Out on the open floor nothing hides the owl.
+    expect((await state(page)).seeThrough).toEqual([]);
+    // Behind the neon street's idol (north of its foot, inside its picture): it fades so the owl shows.
+    await walkAndStop(page, idol.x + 10, idol.y - 130);
+    await expect.poll(async () => (await state(page)).seeThrough, { timeout: 10_000 }).toContain('robot-owl');
+    // Out from behind it, the idol stands solid again.
+    await walkAndStop(page, idol.x - 420, idol.y - 130);
+    await expect.poll(async () => (await state(page)).seeThrough, { timeout: 10_000 }).toEqual([]);
+
+    // By the doorway at the hall's east end: its sign stands beside the doorway, not out over the idol.
+    await walkAndStop(page, way.x - 150, way.y + 30);
+    await expect.poll(async () => (await state(page)).signShown, { timeout: 10_000 }).toBe('The neon street');
+    const box = (await state(page)).signBox!;
+    expect(box.right, 'the sign ends just in from the doorway').toBeLessThan(way.x);
+    expect(way.x - box.right, 'and stands by it').toBeLessThan(140);
+    expect(box.top, 'level with the doorway, or under the owl standing on it').toBeGreaterThan(way.y - 80);
+  });
+});
+
+test.describe('a first flight where owls arrive (OP-347)', () => {
+  test.describe.configure({ timeout: 120_000 });
+
+  test('the trail leads a new owl to the Great Hollow\'s roots, tips say how to hop up and glide, and the first glide is marked once', async ({ page }) => {
+    const touch = await (async () => {
+      await openPark(page, { room: 'm3-hall', spawn: 'from-lobby', keeper: '1', newmap: '1' });
+      return page.evaluate(() => matchMedia('(pointer: coarse)').matches);
+    })();
+    // Come in from the Treetop Commons: no tip yet, and the feathers lead down the hall to the roots, not to a doorway.
+    expect((await state(page)).tipShown).toBeNull();
+    expect((await state(page)).firstFlight).toBe(false);
+    await expect.poll(async () => (await state(page)).trail?.feathers.length ?? 0, { timeout: 15_000 }).toBeGreaterThan(3);
+    const s0 = await state(page);
+    const last = s0.trail!.feathers[s0.trail!.feathers.length - 1]!;
+    // The first root of the inner run on each side of the hall's middle (rooms/hollowHall.ts, ROOT_RUNS and RUN_Y).
+    const roots = [
+      { x: 2300, y: 1238 },
+      { x: 3140, y: 1238 },
+    ];
+    const near = roots.map((p) => Math.hypot(last.x - p.x, last.y - p.y));
+    expect(Math.min(...near), 'the trail ends by an inner run\'s first root').toBeLessThan(260);
+    expect(s0.trail!.glints).toContain('play-roots');
+
+    // Walked down to the roots: how to get up them, in this device's words.
+    const log = roots.reduce((a, b) => (Math.hypot(last.x - a.x, last.y - a.y) < Math.hypot(last.x - b.x, last.y - b.y) ? a : b));
+    await walkAndStop(page, log.x, log.y + 90);
+    await expect.poll(async () => (await state(page)).tipShown, { timeout: 10_000 }).toBe(touch ? 'Hop up the roots. Tap Jump, and again in the air to flap.' : 'Hop up the roots. Space to jump, and again in the air to flap.');
+    // Stood there, the roots are found: the trail leads on to a doorway.
+    await expect.poll(async () => (await state(page)).trail?.glints.includes('play-roots') ?? true, { timeout: 10_000 }).toBe(false);
+
+    // Up on the stump: how to leave it. Then the glide itself.
+    await openPark(page, { room: 'm3-hall', spawn: 'on-stump', keeper: '1', newmap: '1' });
+    await expect.poll(async () => (await state(page)).tipShown, { timeout: 10_000 }).toBe(touch ? 'Jump off the top and hold Jump to glide.' : 'Jump off the top and hold Space to glide.');
+    const from = (await state(page)).pos;
+    // The line that marks the glide is up for four seconds, and the page notes it as it comes. Looked for after
+    // the fact it was raced for: each of this test's steps takes up to a second on a slow runner, and the five
+    // between the glide being marked and the look once took longer than the line lasts.
+    await page.evaluate(() => {
+      const said: string[] = [];
+      (window as unknown as { __said: string[] }).__said = said;
+      new MutationObserver((changes) => {
+        for (const change of changes) for (const line of change.addedNodes) said.push(line.textContent ?? '');
+      }).observe(document.querySelector('#hud [data-toasts]')!, { childList: true });
+    });
+    // Jump first, then the push west. Whenever the push comes the owl is in the air over the stump, or back
+    // down on it with Jump still held, so it glides off the stump however far apart the two keys land. The
+    // push first, an owl on a slow runner had walked off the stump and down to the floor before the jump came.
+    await page.keyboard.down('Space');
+    await page.keyboard.down('ArrowLeft');
+    await expect.poll(async () => (await state(page)).firstFlight, { timeout: 15_000, intervals: [100] }).toBe(true);
+    await page.keyboard.up('ArrowLeft');
+    await page.keyboard.up('Space');
+    const landed = (await state(page)).pos;
+    expect(from.x - landed.x, 'a glide, not a step off').toBeGreaterThan(320);
+    const said = await page.evaluate(() => (window as unknown as { __said: string[] }).__said);
+    expect(said.filter((line) => line.includes('That is flying!')), 'the line that marks the first glide, said once').toHaveLength(1);
+    // The tips have done their work: none now, and none on the next visit of this device.
+    expect((await state(page)).tipShown).toBeNull();
+    await openPark(page, { room: 'm3-hall', spawn: 'on-stump', keeper: '1', newmap: '1' });
+    await frames(page, 30);
+    expect((await state(page)).firstFlight).toBe(true);
+    expect((await state(page)).tipShown).toBeNull();
+  });
+});
+
+test.describe('the park’s sounds for the visitor’s own owl (OP-350)', () => {
+  test('a jump, a flap, a glide and a landing are heard, and a doorway; the Sounds switch turns them off', async ({ page }) => {
+    await openPark(page, { room: 'hub' });
+    expect((await state(page)).sounds).toEqual([]);
+    // A tap of Jump: off the ground, and down again.
+    await page.keyboard.press('Space');
+    await expect.poll(async () => (await state(page)).sounds, { timeout: 10_000 }).toEqual(['jump', 'land']);
+
+    // Jump, again in the air (a flap), and held on the way down (the wings spread): each heard once, in order.
+    // The second press is made when the owl is up, by its own flight and not by the clock: on a slow
+    // runner a press timed from outside the page comes after the hop has landed, and is a second jump.
+    const flight = await page.evaluate(
+      () =>
+        new Promise<string>((resolve) => {
+          const space = (type: 'keydown' | 'keyup') => window.dispatchEvent(new KeyboardEvent(type, { code: 'Space', key: ' ', bubbles: true }));
+          const t0 = performance.now();
+          let step = 0;
+          space('keydown');
+          const tick = () => {
+            const s = window.owlPark.state();
+            if (!s || performance.now() - t0 > 12_000) return resolve(`stopped at step ${step}`);
+            if (step === 0 && s.air.s === 1 && s.air.z > 60) {
+              space('keyup');
+              space('keydown');
+              step = 1;
+            } else if (step === 1 && s.air.s === 2) {
+              space('keyup');
+              step = 2;
+            } else if (step === 2 && s.air.s === 0) return resolve('down');
+            requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        }),
+    );
+    expect(flight).toBe('down');
+    expect((await state(page)).sounds).toEqual(['jump', 'land', 'jump', 'flap', 'glide', 'land']);
+
+    // The Sounds switch (Settings) turns every one of them off, and on again.
+    await page.evaluate(() => (window.owlPark.game.registry.get('settings') as { set(p: { sound: boolean }): void }).set({ sound: false }));
+    await page.keyboard.press('Space');
+    await expect.poll(async () => (await state(page)).flown.n, { timeout: 10_000 }).toBe(3);
+    await expect.poll(async () => (await state(page)).air.s, { timeout: 10_000 }).toBe(0);
+    expect((await state(page)).sounds).toHaveLength(6);
+    await page.evaluate(() => (window.owlPark.game.registry.get('settings') as { set(p: { sound: boolean }): void }).set({ sound: true }));
+
+    // Through a doorway: heard as the room is left, and kept by the page into the next room.
+    await walkToDoor(page, 'to-grove');
+    await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe('grove');
+    expect((await state(page)).sounds[6]).toBe('door');
+  });
+});
+
+test.describe('the side camera (OP-351)', () => {
+  test.describe.configure({ timeout: 90_000 });
+
+  test('the view leads the way the owl travels, swings round when it turns, and holds its height through a hop', async ({ page }) => {
+    await openPark(page, { room: 'canopy-1' });
+    await page.waitForFunction(() => window.owlPark.state()?.sideCam != null);
+    // Standing where it came in, facing into the course: the view looks a little that way.
+    const rest = (await state(page)).sideCam!;
+    expect(rest.lead).toBeGreaterThan(10);
+    expect(rest.level).toBe(0);
+
+    // Walked, turned and hopped from inside the page, each key let go on the frame that shows what it was
+    // held for. A key timed from outside the page comes late on a slow runner, and a late one here walks
+    // the owl out again by the doorway it came in by (it stands 80 px from it: the room is left and
+    // nothing jumps), or on into the course's first pit (at 700).
+    const seen = await page.evaluate(
+      ({ restLead, turnAt, hopAt }) =>
+        new Promise<{
+          stage: string;
+          room: string | null;
+          walking: { lead: number; x: number; camX: number; viewX: number; viewW: number } | null;
+          turned: { lead: number; x: number } | null;
+          hop: { peak: number; moved: number };
+        }>((resolve) => {
+          const key = (type: 'keydown' | 'keyup', code: string) => window.dispatchEvent(new KeyboardEvent(type, { code, key: code === 'Space' ? ' ' : code, bubbles: true }));
+          const t0 = performance.now();
+          let stage: 'right' | 'left' | 'stop' | 'up' | 'down' | 'landed' = 'right';
+          let walking: { lead: number; x: number; camX: number; viewX: number; viewW: number } | null = null;
+          let turned: { lead: number; x: number } | null = null;
+          let from = 0;
+          const hop = { peak: 0, moved: 0 };
+          const end = () => {
+            for (const code of ['ArrowRight', 'ArrowLeft', 'Space']) key('keyup', code);
+            resolve({ stage, room: window.owlPark.state()?.room ?? null, walking, turned, hop });
+          };
+          key('keydown', 'ArrowRight');
+          const tick = () => {
+            const s = window.owlPark.state();
+            const cam = window.owlPark.camera();
+            if (!s?.sideCam || !cam || performance.now() - t0 > 30_000) return end();
+            if (stage === 'right' && s.sideCam.lead > restLead * 1.4 && s.pos.x >= turnAt) {
+              // Walking into the course: the lead has grown to well past what a still owl has.
+              walking = { lead: s.sideCam.lead, x: s.pos.x, camX: s.sideCam.x, viewX: cam.viewX, viewW: cam.viewW };
+              key('keyup', 'ArrowRight');
+              key('keydown', 'ArrowLeft');
+              stage = 'left';
+            } else if (stage === 'left') {
+              // Turned round: the lead has swung to the other side.
+              if (!turned && s.sideCam.lead < -restLead) turned = { lead: s.sideCam.lead, x: s.pos.x };
+              // And on to where the hop is made.
+              if (turned && s.pos.x <= hopAt) {
+                key('keyup', 'ArrowLeft');
+                stage = 'stop';
+              }
+            } else if (stage === 'stop' && !s.walking) {
+              // A jump on the spot, let go at the top so the owl comes straight down and does not glide off.
+              from = s.sideCam.level;
+              key('keydown', 'Space');
+              stage = 'up';
+            } else if (stage === 'up' || stage === 'down') {
+              hop.peak = Math.max(hop.peak, s.air.z);
+              hop.moved = Math.max(hop.moved, Math.abs(s.sideCam.level - from));
+              if (stage === 'up' && s.air.s !== 0 && s.air.vz <= 0) {
+                key('keyup', 'Space');
+                stage = 'down';
+              } else if (stage === 'down' && s.air.s === 0) {
+                stage = 'landed';
+                return end();
+              }
+            }
+            requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        }),
+      // The owl turns at 560, far enough in for the view to be clear of the room's west wall, and hops at 260,
+      // on floor with no ledge in a jump's reach over it (the first step is over 300 to 460): what a hop
+      // lands on is where the view goes, so a hop under a ledge would be a climb.
+      { restLead: rest.lead, turnAt: 560, hopAt: 260 },
+    );
+    // Every step was reached, and the owl is still in the course.
+    expect(seen.stage).toBe('landed');
+    expect(seen.room).toBe('canopy-1');
+    // Walking, the lead is well past a still owl's, and wherever the room's west wall does not hold it the
+    // view is where the camera's rules put it: ahead of the owl by the whole lead, at a slow runner's few
+    // frames a second as at sixty (OP-352: the view is carried with the owl, so its ease trails nothing).
+    const walking = seen.walking!;
+    expect(walking.lead).toBeGreaterThan(rest.lead * 1.4);
+    if (walking.viewX > 1) {
+      expect(Math.abs(walking.viewX + walking.viewW / 2 - walking.camX)).toBeLessThan(2);
+      expect(walking.viewX + walking.viewW / 2 - walking.x).toBeGreaterThan(walking.lead - 6);
+    }
+    // Turned round, the lead is on the other side, and it took the owl some way to bring it there (it swings in its own time).
+    expect(seen.turned!.lead).toBeLessThan(-rest.lead);
+    expect(walking.x - seen.turned!.x).toBeGreaterThan(40);
+    // The hop: the owl went up and came down, and the height the view holds did not move.
+    expect(seen.hop.peak).toBeGreaterThan(100);
+    expect(seen.hop.moved).toBeLessThan(1);
+  });
+
+  test('the view is with the owl down a drop and up a gust (OP-352)', async ({ page }) => {
+    // Off the high bough of the fern floor (500) onto the twig under its end (120), as the course's own
+    // test of that drop goes (air.spec.ts). Watched from inside the page, every frame.
+    await openPark(page, { room: 'canopy-1', spawn: 'on-l5' });
+    await page.waitForFunction(() => window.owlPark.state()?.sideCam != null);
+    await expect.poll(async () => (await state(page)).air.z, { timeout: 10_000 }).toBe(500);
+    const drop = await page.evaluate(
+      () =>
+        new Promise<{ under: number; fell: number; landed: number }>((resolve) => {
+          const t0 = performance.now();
+          const from = window.owlPark.state()!.air.z;
+          let under = 0;
+          let low = from;
+          let flew = false;
+          window.owlPark.walkTo(2660, window.owlPark.state()!.pos.y);
+          const tick = () => {
+            const s = window.owlPark.state();
+            if (!s?.sideCam || performance.now() - t0 > 20_000) return resolve({ under, fell: from - low, landed: s?.air.z ?? -1 });
+            low = Math.min(low, s.air.z);
+            if (s.air.s !== 0) {
+              flew = true;
+              under = Math.max(under, s.sideCam.level - s.air.z);
+            } else if (flew && !s.walking) return resolve({ under, fell: from - low, landed: s.air.z });
+            requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        }),
+    );
+    expect(drop.fell).toBe(380);
+    expect(drop.landed).toBe(120);
+    // The owl was never more than the view's band (24 px) and a frame's rounding under the height the view
+    // held: eased alone, the view was 100 to 250 px behind it by the foot of this drop.
+    expect(drop.under).toBeLessThan(40);
+
+    // Off a twig into the first column of the trunk's third storey, up to its top (600), as the course's
+    // own test of the gust goes.
+    await openPark(page, { room: 'canopy-3', spawn: 'on-c2' });
+    await page.waitForFunction(() => window.owlPark.state()?.sideCam != null);
+    await expect.poll(async () => (await state(page)).air.z, { timeout: 10_000 }).toBe(160);
+    const rise = await page.evaluate(
+      () =>
+        new Promise<{ lifted: boolean; top: number; over: number }>((resolve) => {
+          const space = (type: 'keydown' | 'keyup') => window.dispatchEvent(new KeyboardEvent(type, { code: 'Space', key: ' ', bubbles: true }));
+          const t0 = performance.now();
+          let lifted = false;
+          const end = () => {
+            const s = window.owlPark.state();
+            space('keyup');
+            resolve({ lifted, top: s?.air.z ?? -1, over: s?.sideCam ? s.air.z - s.sideCam.level : -1 });
+          };
+          space('keydown');
+          window.owlPark.walkTo(1220, window.owlPark.state()!.pos.y);
+          const tick = () => {
+            const s = window.owlPark.state();
+            if (!s?.sideCam || performance.now() - t0 > 20_000) return end();
+            lifted ||= s.air.s === 3;
+            if (s.air.s === 3 && s.air.z >= 599) return end();
+            requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        }),
+    );
+    expect(rise.lifted).toBe(true);
+    expect(rise.top).toBeGreaterThanOrEqual(599);
+    // At the top of the column the view has come up with the owl: it is a little over the height held
+    // (40 px in rising air), not a whole jump's band and the ease's lag over it (220 px and more).
+    expect(rise.over).toBeLessThan(70);
+  });
+
+  test('in a room seen from above the camera is on the owl as ever', async ({ page }) => {
+    await openPark(page, { room: 'hub' });
+    expect((await state(page)).sideCam).toBeNull();
+  });
+});
+

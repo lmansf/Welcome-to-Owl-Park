@@ -5,7 +5,7 @@ import { CANOPY_COURSE } from '../rooms/updraftCanopy';
 import { PLAY_FEATHERS_PER_DAY } from './activities';
 import { CollectionBook, MemoryCollectionStore } from './book';
 import { GOLDEN_MOUSE } from './collectibles';
-import { COURSE_FIRST_FEATHERS, COURSE_REPEAT_FEATHERS, COURSE_RUN_MAX_MS, LOST_FEATHERS, courseParts, courseProblems, holdsDash, inPit, inThorns, mouseCourses, openerAt, shutShortcuts, type CourseDef } from './course';
+import { COURSE_FIRST_FEATHERS, COURSE_REPEAT_FEATHERS, COURSE_RUN_MAX_MS, LOST_FEATHERS, courseParts, courseProblems, holdsDash, inPit, inThorns, mouseCourses, openerAt, shutShortcuts, thornsBetween, type CourseDef } from './course';
 import { CourseBook, MemoryCourseStore } from './coursebook';
 import { nextParkDayAt } from './parktime';
 
@@ -103,8 +103,52 @@ describe('the course book: runs and checkpoints', () => {
     expect(courses.start(CID, 'brush-1', MON).ok).toBe(true);
     // A bench on the ground: no height, as before.
     expect(courses.fall(CID, 'brush-1', MON + 1)).not.toHaveProperty('top');
+    // The ink course's first bench stands on the island at the foot of its cliff, over the water.
+    const bench = ROOMS['brush-1']!.course!.benches!.find((b) => b.id === 'bench-1')!;
+    expect(bench.top).toBeGreaterThan(0);
     courses.reach(CID, 'brush-1', 'bench', 'bench-1', MON + 2);
-    expect(courses.fall(CID, 'brush-1', MON + 3)).toMatchObject({ ok: true, at: { x: 1500 }, top: 360 });
+    expect(courses.fall(CID, 'brush-1', MON + 3)).toMatchObject({ ok: true, at: { x: bench.at.x }, top: bench.top });
+  });
+
+  it('sends a fall back the way the owl came into the room, not to its other end, and never onward (OP-343)', () => {
+    const { courses } = setup();
+    const room = ROOMS['canopy-1']!;
+    expect(courses.start(CID, 'canopy-1', MON).ok).toBe(true);
+    // In at the gate with no bench yet: the gate's way in, with or without the way in being named.
+    expect(courses.fall(CID, 'canopy-1', MON + 1, { entry: 'from-gate', pos: { x: 900, y: 770 } })).toMatchObject({ ok: true, at: room.spawns['from-gate'] });
+    expect(courses.fall(CID, 'canopy-1', MON + 1)).toMatchObject({ ok: true, at: room.spawns['from-gate'] });
+    // A bench reached further on: back at the bench, which is nearer than the way in.
+    courses.reach(CID, 'canopy-1', 'bench', 'bench-1', MON + 2);
+    expect(courses.fall(CID, 'canopy-1', MON + 3, { entry: 'from-gate', pos: { x: 2500, y: 770 } })).toMatchObject({ ok: true, at: { x: 1800 } });
+    // Back in from the room's far end (down from the trunk), a fall near there: that way in, not the bench
+    // two screens back, and not the gate four screens back as it was before.
+    expect(courses.fall(CID, 'canopy-1', MON + 4, { entry: 'from-trunk', pos: { x: 3900, y: 770 } })).toMatchObject({ ok: true, at: room.spawns['from-trunk'] });
+    // The same owl on towards the bench it has reached: the bench, once it is the nearer of the two.
+    expect(courses.fall(CID, 'canopy-1', MON + 5, { entry: 'from-trunk', pos: { x: 2200, y: 770 } })).toMatchObject({ ok: true, at: { x: 1800 } });
+    // The last bench is in another room now: the way in, where before it was the gate.
+    courses.reach(CID, 'canopy-2a', 'bench', 'bench-2', MON + 6);
+    expect(courses.fall(CID, 'canopy-1', MON + 7, { entry: 'from-trunk', pos: { x: 2200, y: 770 } })).toMatchObject({ ok: true, at: room.spawns['from-trunk'] });
+    expect(courses.fall(CID, 'canopy-1', MON + 7, { pos: { x: 2200, y: 770 } })).toMatchObject({ ok: true, at: room.spawns['from-gate'] });
+    // A way in the room does not have is no way in: the act's own.
+    expect(courses.fall(CID, 'canopy-1', MON + 8, { entry: 'from-nowhere', pos: { x: 2200, y: 770 } })).toMatchObject({ ok: true, at: room.spawns['from-gate'] });
+    // A way in up on a ledge puts the owl back up on it.
+    expect(courses.fall(CID, 'brush-1', MON + 9, { entry: 'from-rain', pos: { x: 4000, y: 770 } })).toMatchObject({ ok: true, at: ROOMS['brush-1']!.spawns['from-rain'], top: 160 });
+    // With no place told, a bench in the room is where a fall goes, as it always was.
+    courses.reach(CID, 'canopy-1', 'bench', 'bench-1b', MON + 10);
+    expect(courses.fall(CID, 'canopy-1', MON + 11, { entry: 'from-trunk' })).toMatchObject({ ok: true, at: { x: 3285 }, top: 120 });
+  });
+
+  it('no way into a room of a course stands in one of its pits or its thorns: a fall back there would fall again', () => {
+    for (const def of Object.values(COURSES)) {
+      for (const id of [...def.acts, ...(def.rooms ?? [])]) {
+        const room = ROOMS[id]!;
+        for (const [name, at] of Object.entries(room.spawns)) {
+          const top = room.spawnTops?.[name] ?? 0;
+          expect(top === 0 && inPit(room, at), `${id} ${name} is in a pit`).toBe(false);
+          expect(inThorns(room, at.x, top), `${id} ${name} is in thorns`).toBe(false);
+        }
+      }
+    }
   });
 
   it('reads thorns hanging in a side-view act as a fall at any height inside them, and nowhere else', () => {
@@ -114,6 +158,33 @@ describe('the course book: runs and checkpoints', () => {
     expect(inThorns(act, 1990, 250)).toBe(false);
     expect(inThorns(act, 2030, 300)).toBe(false);
     expect(inThorns({}, 1990, 300)).toBe(false);
+  });
+
+  it('reads a move through thorns as a fall, however long the move is: no hazard is stepped over (OP-353)', () => {
+    const act = { course: { id: 'x', act: 1, thorns: [{ id: 'stalk', x0: 650, x1: 680, z0: 0, z1: 450 }, { id: 'hanging', x0: 960, x1: 990, z0: 280, z1: 940 }] } };
+    const at = (x: number, z: number) => ({ x, z });
+    // A dash at ten frames a second is 90 px a frame: from before the hanging thorns to past them.
+    expect(inThorns(act, 942, 600)).toBe(false);
+    expect(inThorns(act, 1032, 600)).toBe(false);
+    expect(thornsBetween(act, at(942, 600), at(1032, 600))).toBe(true);
+    expect(thornsBetween(act, at(1032, 600), at(942, 600))).toBe(true);
+    // Under the hanging thorns the same move is clear, and so is one that stops short of them or starts past them.
+    expect(thornsBetween(act, at(942, 200), at(1032, 200))).toBe(false);
+    expect(thornsBetween(act, at(860, 600), at(950, 600))).toBe(false);
+    expect(thornsBetween(act, at(1000, 600), at(1090, 600))).toBe(false);
+    // A fall straight down beside them, and one that drops into the stalk's top from above it.
+    expect(thornsBetween(act, at(700, 600), at(700, 100))).toBe(false);
+    expect(thornsBetween(act, at(665, 600), at(665, 440))).toBe(true);
+    // A glide down across the corner of the stalk: over its top at the near side, in it by the far side.
+    expect(thornsBetween(act, at(640, 470), at(690, 420))).toBe(true);
+    // And one that clears the corner.
+    expect(thornsBetween(act, at(640, 520), at(690, 470))).toBe(false);
+    // Standing still is where the owl is: the same as the look at a point, the edges included.
+    for (const [x, z] of [[665, 100], [650, 0], [680, 450], [649, 100], [665, 451], [975, 280], [975, 279]] as const) {
+      expect(thornsBetween(act, at(x, z), at(x, z)), `${x}, ${z}`).toBe(inThorns(act, x, z));
+    }
+    expect(thornsBetween({}, at(0, 0), at(5000, 900))).toBe(false);
+    expect(thornsBetween(undefined, at(0, 0), at(5000, 900))).toBe(false);
   });
 
   it('reads a pit as a fall, a shut shortcut as floor no owl crosses, and its opener from the far side', () => {

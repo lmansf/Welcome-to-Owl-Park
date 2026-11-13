@@ -1,5 +1,5 @@
 import type Phaser from 'phaser';
-import { EDGE_ART, KIT_ART, kitCells, kitDrawPlan, kitFrames, seenFromSide, type EdgeStrip, type KitDraw, type KitLayer, type KitOp, type RoomDef } from '@owl-park/shared';
+import { EDGE_ART, KIT_ART, KIT_FLOOD_OVER, kitCells, kitDrawPlan, kitFrames, seenFromSide, type EdgeStrip, type KitDraw, type KitLayer, type KitOp, type RoomDef } from '@owl-park/shared';
 import { kitDemoFor } from '@owl-park/shared/rooms/kit';
 import { TREE_PLAY_TINT } from './treeView';
 import { artLookRoom } from './artLooks';
@@ -60,7 +60,32 @@ export function drawKit(scene: Phaser.Scene, room: RoomDef, depths: KitDepths): 
     // Drawn straight after the body they frame, at its depth, so the caps an owl lands on (drawn later) stay over them.
     for (const s of kitFrames(d, room.size, plan)) frames += drawStrip(scene, s, depths[d.layer], tint);
   }
+  // A flooded walk's still water (OP-343): over the walk and what stands in it, under the pieces on it and the owls.
+  const ground = room.kit?.ground ?? room.size.h;
+  for (const p of room.kit?.paths ?? []) {
+    if (p.flood) drawWater(scene, p.x0, p.x1, ground - p.top - KIT_FLOOD_OVER, ground - p.top + p.flood.depth, p.flood.color, (depths.play + depths.piece) / 2);
+  }
   return { pieces: plan.length, images, frames };
+}
+
+/**
+ * Still water from `y0` down to `y1`, in plain shapes until a realm has art for it: its colour, a
+ * pale line where its surface is, darker towards its foot, and a few short ripples (the same ones on
+ * every visit: they are placed by where they are, not by chance).
+ */
+function drawWater(scene: Phaser.Scene, x0: number, x1: number, y0: number, y1: number, color: number, depth: number): void {
+  if (x1 <= x0 || y1 <= y0) return;
+  const g = scene.add.graphics().setDepth(depth);
+  const w = x1 - x0;
+  const h = y1 - y0;
+  g.fillStyle(color, 1).fillRect(x0, y0, w, h);
+  g.fillStyle(0x000000, 0.1).fillRect(x0, y0 + h * 0.45, w, h * 0.55);
+  g.fillStyle(0x000000, 0.1).fillRect(x0, y0 + h * 0.75, w, h * 0.25);
+  g.fillStyle(0xffffff, 0.3).fillRect(x0, y0, w, 4);
+  for (let x = x0 + 30, i = 0; x < x1 - 60; x += 110, i++) {
+    const y = y0 + 16 + ((i * 7) % 4) * 14;
+    g.lineStyle(3, 0xffffff, 0.24).lineBetween(x + ((i * 29) % 40), y, x + ((i * 29) % 40) + 30 + ((i * 13) % 3) * 12, y);
+  }
 }
 
 /** One frame strip, repeated down or along its box at its piece's own size; 1 if drawn. */
@@ -95,7 +120,8 @@ function drawPiece(scene: Phaser.Scene, d: KitDraw, depth: number, tint: number 
       .setOrigin(0)
       .setDisplaySize(c.w + (across ? 1 : 0), c.h + (down ? 1 : 0))
       .setDepth(depth);
-    if (d.tile !== 'none') img.setCrop(c.crop.x * sx, c.crop.y * sy, c.crop.w * sx, c.crop.h * sy);
+    // A texture's cell shows its part of the box; so does an end piece on a run too short for it (KitDraw.crop).
+    if (d.tile !== 'none' || (d.crop && !d.flip)) img.setCrop(c.crop.x * sx, c.crop.y * sy, c.crop.w * sx, c.crop.h * sy);
     if (d.flip) img.setFlipX(true);
     if (d.alpha !== undefined) img.setAlpha(d.alpha);
     if (tint !== undefined) img.setTint(tint);

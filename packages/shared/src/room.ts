@@ -31,6 +31,8 @@ export interface RoomBowl {
   pools?: ReadonlyArray<{ x: number; y: number; r: number; color: number }>;
   /** Openings in the near wall where a way goes out at the front: a point on the rim and how wide. */
   gaps?: ReadonlyArray<{ x: number; y: number; w: number }>;
+  /** The colour of the room's light (OP-348): the idols that stand in it, each painted for its own realm, are multiplied by it. */
+  light?: number;
 }
 
 export interface RoomDef {
@@ -249,6 +251,8 @@ export interface RoomPiece {
   flip?: true;
   /** Drawn this much its art's size (1 when left out): a doorway in the near wall seen from almost straight above. */
   scale?: number;
+  /** A colour its art is multiplied by (OP-348): the room's own light on a piece painted in another, so it sits in the room. */
+  tint?: number;
 }
 
 export interface RoomKit {
@@ -365,6 +369,27 @@ export interface KitRun {
   mids?: string[];
   /** Pieces set into the run (a transition, a corner), each with its art's left edge at x; the middles fill around them. */
   joins?: { x: number; piece: string }[];
+  /**
+   * A drop (OP-343): a stretch of the ground line no owl stands on, a course's pit. It has no top
+   * piece, and its texture begins this far below the walking line, so the path beside it visibly ends
+   * and what lies here reads as below it: water, a thicket in a dip, the street between two roofs.
+   */
+  sunk?: number;
+  /** The colour the run's texture is drawn in (a tint multiplied in): a drop's shadow, or a wall borrowed from another realm's kit in this realm's light (OP-348). */
+  shade?: number;
+  /**
+   * The colour the pieces along the run's top are drawn in (a tint multiplied in, OP-348): a row
+   * borrowed from another realm's kit takes this realm's light until the realm has a row of its own.
+   * The texture under them has its own (`shade`).
+   */
+  tint?: number;
+  /**
+   * A flooded stretch of the ground line (OP-343), a course's pit of another kind: the run stays as it is
+   * drawn, and the game paints still water over its top, from just over the walking line (KIT_FLOOD_OVER)
+   * to `depth` below it in `color` (kitView.ts), until the realm's hazard art (the realm kit's hazard slot) arrives.
+   * What stands in it stands in the water; nothing of the run shows through.
+   */
+  flood?: { depth: number; color: number };
 }
 
 export interface KitLedge extends KitRun {
@@ -447,6 +472,8 @@ export interface KitDecal {
   flip?: boolean;
   alpha?: number;
   front?: boolean;
+  /** The danger itself (a course's bramble, its live tubes): drawn in the hazard layer, in the drop, under what an owl stands on (OP-343). */
+  hazard?: boolean;
 }
 
 export interface KitBackdrop {
@@ -572,6 +599,12 @@ export interface DoorDef {
   labelNew?: string;
   /** Where the doorway's sign stands (room pixels, its top middle); the marker when not given. */
   labelAt?: Vec2;
+  /**
+   * Which part of the sign stands at `labelAt`, across (OP-346): its middle (0.5) when not given. A
+   * doorway in a room's east side gives 1, the sign's right edge, and one in its west side 0, its left:
+   * the words then lie on the floor beside the doorway whatever their length, none under its art.
+   */
+  labelAnchor?: 0 | 0.5 | 1;
   /** Where to place a visual hint (sign, glow) for the door. */
   marker?: Vec2;
 }

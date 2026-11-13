@@ -7,6 +7,8 @@
  * with ?friends=1, for a play-with-your-friends night before opening) or "on" (the card for everyone).
  * The free Day Ticket is a store discount code (REFERRAL_CODE, a secret) that takes the whole Day
  * Ticket off; without it an owl can bring friends and be thanked, but no free ticket can be checked out.
+ * A thank-you ticket uses REFERRAL_REWARD_CODE when it is set: the friend's code is once per customer in
+ * the store, and an owl may be thanked with many tickets. Unset, a thank-you uses REFERRAL_CODE.
  */
 import { hashForLog, type Logger } from '@owl-park/shared';
 import type { Desk } from './storeHooks';
@@ -25,6 +27,12 @@ export function referralCode(env: { REFERRALS?: string; REFERRAL_CODE?: string }
   return referralsOn(env) && code ? code : null;
 }
 
+/** The store's code for a thank-you Day Ticket: REFERRAL_REWARD_CODE when set, else the friend's code; null when no free ticket can be checked out. */
+export function referralRewardCode(env: { REFERRALS?: string; REFERRAL_CODE?: string; REFERRAL_REWARD_CODE?: string }): string | null {
+  const code = env.REFERRAL_REWARD_CODE?.trim();
+  return referralCode(env) && code ? code : null;
+}
+
 const enc = new TextEncoder();
 
 async function sha256Hex(text: string): Promise<string> {
@@ -41,7 +49,7 @@ export const addressHash = (secret: string, ip: string) => sha256Hex(`owl-park r
 /** What the Worker asks of the collections object for bringing friends (Collections.ts). */
 export interface ReferralRpc {
   referralPending(friend: string): Promise<string | null>;
-  referralCredit(friend: string, member: boolean): Promise<{ referrer: string; reward: 'ticket' | 'feathers' | 'capped' } | null>;
+  referralCredit(friend: string, member: boolean): Promise<{ referrer: string; reward: 'ticket' | 'feathers' } | null>;
 }
 
 /**
@@ -57,7 +65,7 @@ export async function thankReferrer(rpc: ReferralRpc, desk: Desk, log: Logger, f
     if (r.status !== 200) throw new Error(`ticket desk answered ${r.status}`);
     const done = await rpc.referralCredit(friend, r.body['member'] === true);
     if (!done) return;
-    log.info('worker.tickets', 'referral_thanked', done.reward === 'capped' ? 'A friend came through the gate; the owl that brought them had been thanked for three friends this month already.' : 'A friend came through the gate for the first time: the owl that brought them was thanked.', {
+    log.info('worker.tickets', 'referral_thanked', 'A friend came through the gate for the first time: the owl that brought them was thanked.', {
       collector_hash: hashForLog(done.referrer),
       reason: done.reward,
     });

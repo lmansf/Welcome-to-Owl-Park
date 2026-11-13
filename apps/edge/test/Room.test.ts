@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { AIRBORNE, LIFTED, UPDRAFT_RISE, AIR_DASH_COOLDOWN_MS, AIR_DASH_DISTANCE, AIR_DASH_MS, AIR_DASH_SPEED, DASH_SLACK_PX, CLOSE, EDGE_PROTOCOL_VERSION, EMOTE_EVERY_MS, GROUNDED, ON_GROUND, STREET_DOORS, STREET_ROOM, WALK_SPEED, arrivalPoint, distance, isWalkable, nestDoorIndex, resolveTarget, type Air, type ClientHello, type RoomDef, type ServerFrame, type Vec2 } from '@owl-park/shared';
+import { AIRBORNE, LIFTED, UPDRAFT_RISE, AIR_DASH_COOLDOWN_MS, AIR_DASH_DISTANCE, AIR_DASH_MS, AIR_DASH_SPEED, DASH_SLACK_PX, CLOSE, EDGE_PROTOCOL_VERSION, EMOTE_EVERY_MS, GROUNDED, ON_GROUND, STREET_DOORS, STREET_ROOM, WALK_SPEED, arrivalPoint, distance, isWalkable, nestDoorIndex, resolveTarget, type Air, type ClientHello, type RoomDef, type ServerFrame, type Vec2, segmentTouchesRect, walkCrossesExit } from '@owl-park/shared';
 import { ROOMS, roomFor } from '@owl-park/shared/rooms';
 import { Room, LIMITS, type Peer, type PositionRejection, type VisitorState } from '../src/Room';
 
@@ -127,6 +127,61 @@ describe('Room', () => {
       const pos = p.last('welcome')!.you.pos;
       const inside = pos.x >= 700 && pos.x <= 900 && pos.y >= 600 && pos.y <= 800;
       expect(inside).toBe(false);
+    }
+  });
+
+  /** The spot the room gives an owl that comes in on top of another standing on the spawn, for one roll of the dice. */
+  const besideAnother = (room: RoomDef, seed: number): Vec2 => {
+    let s = seed * 7919;
+    const random = () => {
+      s = (s * 1103515245 + 12345) & 0x7fffffff;
+      return s / 0x7fffffff;
+    };
+    const r2 = new Room(room, { now: () => now, random, cap: 50, counts: () => ({}) });
+    const spawn = room.spawns['default']!;
+    // The first owl stands on the spawn, where its page has it; the second's page has it there too.
+    r2.join(new FakePeer(), 'a', hello({ pos: spawn }));
+    const b = new FakePeer();
+    r2.join(b, 'b', hello({ pos: spawn }));
+    return b.last('welcome')!.you.pos;
+  };
+
+  it('never puts an arrival where its walk over from the spawn would pass through a way out (OP-342)', () => {
+    // A way out beside the spawn, as the grove's way to the hub is: 65 px east of it and just above.
+    // The page walks its owl from where it came in to the room's spot (its step aside), and a walk
+    // through a doorway is a walk out of the room.
+    const rect = { x: 715, y: 615, w: 125, h: 80 };
+    const withExit: RoomDef = { ...def, spawns: { default: { x: 650, y: 700 } }, doors: [{ id: 'out', rect, to: { room: 'other', spawn: 'default' } }] };
+    const spawn = withExit.spawns['default']!;
+    let apart = 0;
+    for (let seed = 1; seed <= 300; seed++) {
+      const at = besideAnother(withExit, seed);
+      expect(segmentTouchesRect(spawn, at, rect), `roll ${seed}: the walk from the spawn to ${at.x},${at.y} passes through the way out`).toBe(false);
+      if (distance(at, spawn) >= 3) apart++;
+    }
+    // The room still spreads its arrivals: the second owl stands apart from the first.
+    expect(apart).toBe(300);
+  });
+
+  it('in the grove, an owl that comes in beside another is never walked out through the way to the hub (OP-342)', () => {
+    // As the park's own room has it: the way to the hub is 65 px from where owls come in, and one
+    // arrival in fifteen was given a spot across it.
+    const grove = ROOMS['grove']!;
+    const spawn = grove.spawns['default']!;
+    for (let seed = 1; seed <= 300; seed++) {
+      const at = besideAnother(grove, seed);
+      expect(walkCrossesExit(grove, spawn, at), `roll ${seed}: the walk from the spawn to ${at.x},${at.y} passes through a way out`).toBe(false);
+    }
+  });
+
+  it('gives no arrival, in any room of the park, a spot its walk over would leave the room by (OP-342)', () => {
+    for (const room of Object.values(ROOMS)) {
+      const spawn = room.spawns['default'];
+      if (!spawn || !room.doors.length) continue;
+      for (let seed = 1; seed <= 60; seed++) {
+        const at = besideAnother(room, seed);
+        expect(walkCrossesExit(room, spawn, at), `${room.id}, roll ${seed}: the walk from the spawn to ${at.x},${at.y} passes through a way out`).toBe(false);
+      }
     }
   });
 
@@ -990,8 +1045,9 @@ describe('Room: the dash, in a parkour course (OP-224)', () => {
     room.join(a, 'a', hello());
     room.join(b, 'b', hello());
     const bench = ROOMS['brush-1']!.course!.benches!.find((p) => p.id === 'bench-1')!;
+    expect(bench.top).toBeGreaterThan(0);
     expect(room.place('a', bench.at, bench.top)).toBe(true);
-    expect(b.last('air')).toMatchObject({ id: 'a', air: { z: 360, s: GROUNDED } });
+    expect(b.last('air')).toMatchObject({ id: 'a', air: { z: bench.top, s: GROUNDED } });
     const frames = b.frames.length;
     // A height with no ledge under it is the floor, as a fall always was.
     expect(room.place('a', { x: 120, y: bench.at.y }, 360)).toBe(true);

@@ -226,6 +226,12 @@ interface Place {
   noTravel?: boolean;
 }
 
+/**
+ * The arcade on the map (OP-346): its own name and what it is. The doorway's sign in the Great Hollow
+ * and the quests say "the arcade"; the map said only Neon Roost, a second name for the one place.
+ */
+export const ARCADE_PLACE = `${ARCADE_NAME}, the arcade`;
+
 /** The park as it stands: inside the turnstiles the great tree and what leads off it, outside the gate the nests. */
 export const MAP_PLACES: readonly Place[] = [
   { id: 'closed-a', name: 'Coming soon', col: 0, row: 0, closed: true },
@@ -234,7 +240,7 @@ export const MAP_PLACES: readonly Place[] = [
   { id: 'grove', name: 'The treehouse clearing', col: 0, row: 1 },
   { id: 'hub', name: 'The great tree', col: 1, row: 1 },
   { id: 'market', name: 'The neon street', col: 2, row: 1 },
-  { id: 'arcade', name: ARCADE_NAME, col: 2, row: 2 },
+  { id: 'arcade', name: ARCADE_PLACE, col: 2, row: 2 },
   { id: 'lobby', name: 'The front gate', col: 1, row: 2 },
   { id: 'homes', name: 'The nests’ street', col: 1, row: 3 },
   { id: 'nest', name: NEST_WORDS.yourNest, col: 1, row: 4 },
@@ -271,7 +277,7 @@ export const NEW_MAP_PLACES: readonly Place[] = [
   { id: 'market', name: 'The neon street', col: 2, row: 3 },
   // On the new map 'hub' is the Party Grove, and travel lands in it (NEW_MAP_LANDINGS), not at the gate.
   { id: 'hub', name: 'The Party Grove', col: 2, row: 2 },
-  { id: 'arcade', name: ARCADE_NAME, col: 2, row: 4 },
+  { id: 'arcade', name: ARCADE_PLACE, col: 2, row: 4 },
 ];
 
 /** The new map's paths, as its doorways join the places. */

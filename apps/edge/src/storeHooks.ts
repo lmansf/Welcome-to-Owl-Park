@@ -35,8 +35,9 @@ export interface HookDeps {
   openingCode?: string;
   /** Where a step that fails without failing the webhook says so (OP-134). */
   log?: Logger;
-  /** Bring a friend (OP-056): the store's code that takes a whole Day Ticket off, and whether an order's checkout token spends one of the park's offers. */
+  /** Bring a friend (OP-056): the store's codes that take a whole Day Ticket off (a friend's, and a thank-you's when it has its own), and whether an order's checkout token spends one of the park's offers. */
   referralCode?: string;
+  referralRewardCode?: string;
   referralSpend?: (token: string, order: string) => Promise<boolean>;
 }
 
@@ -153,13 +154,13 @@ async function place(deps: HookDeps, id: string, order: AdminOrder): Promise<Hoo
 const clears = (order: AdminOrder) => lowRisk(order) || freeOrder(order);
 
 /**
- * A free Day Ticket's order (OP-056): the order used the park's code for it. It goes out like any free
- * order only when it is one Day Ticket and nothing else, and came through a checkout the park opened for
- * an owl's offer still waiting (which it spends). Any other order with the code waits for the owner's
+ * A free Day Ticket's order (OP-056): the order used one of the park's codes for it. It goes out like any
+ * free order only when it is one Day Ticket and nothing else, and came through a checkout the park opened
+ * for an owl's offer still waiting (which it spends; a friend's only with an email that never had one). Any other order with the code waits for the owner's
  * check: the code may have been passed around. Null for an order without the code.
  */
 async function referralCheck(deps: HookDeps, id: string, order: AdminOrder, lines: ReturnType<typeof ticketLines>): Promise<'spent' | 'held' | null> {
-  if (!usedCode(order, deps.referralCode)) return null;
+  if (!usedCode(order, deps.referralCode) && !usedCode(order, deps.referralRewardCode)) return null;
   const token = checkoutTokenOf(order);
   const one = lines.length === 1 && lines[0]!.kind === 'day' && lines[0]!.quantity === 1;
   if (!one || !token || !deps.referralSpend) return 'held';

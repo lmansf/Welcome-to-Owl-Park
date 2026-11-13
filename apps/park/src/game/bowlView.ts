@@ -250,6 +250,13 @@ export const BOWL_SHADOW = 2.4;
 
 /** Where each of the bowl's layers is drawn: its canvas over the floor's texture, the grain over that, its lines over all. */
 export const BOWL_DEPTH = { paint: -0.92, grain: -0.915, lines: -0.91 } as const;
+/**
+ * Where the shadows at the feet of what stands on the floor are drawn (OP-348): over a painting of the
+ * whole room (artTrial.ts, between the lines and the floor's litter) and over the plaza rings, under
+ * the pieces themselves. They were drawn with the grain, and the Great Hollow's painting covered them:
+ * every root, doorway and idol stood on the floor with nothing under it.
+ */
+export const FOOT_SHADOW_DEPTH = -0.89;
 
 /** How many growth rings cross the floor from the heart to the rim. */
 export const RINGS = 14;
@@ -286,15 +293,19 @@ function drawFootShadows(g: Phaser.GameObjects.Graphics, pieces: RoomDef['pieces
   for (const p of pieces ?? []) {
     const art = KIT_ART[p.key];
     if (!art) continue;
-    const w = ((art.right ?? art.w) - (art.left ?? 0)) * (p.scale ?? 1) * 0.9;
-    const h = Math.min(70, w * 0.22);
-    for (const [k, a] of [
-      [1.25, 0.08],
-      [1, 0.12],
-      [0.7, 0.16],
-    ] as const)
-      g.fillStyle(0x000000, a).fillEllipse(p.x, p.y - h * 0.15, w * k, h * k);
+    footShadow(g, p.x, p.y, ((art.right ?? art.w) - (art.left ?? 0)) * (p.scale ?? 1) * 0.9);
   }
+}
+
+/** One foot shadow: under something `w` wide whose foot stands at (x, y), soft-edged, on the floor. */
+export function footShadow(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number): void {
+  const h = Math.min(70, w * 0.22);
+  for (const [k, a] of [
+    [1.25, 0.08],
+    [1, 0.12],
+    [0.7, 0.16],
+  ] as const)
+    g.fillStyle(0x000000, a).fillEllipse(x, y - h * 0.15, w * k, h * k);
 }
 
 /** The heartwood's grain over the floor, crisp at full size: its growth rings and the cracks across them. */
@@ -336,7 +347,7 @@ export function drawBowl(
   const image = scene.add.image(0, 0, key).setOrigin(0).setDisplaySize(room.size.w, room.size.h).setDepth(BOWL_DEPTH.paint);
   const grain = scene.add.graphics().setDepth(BOWL_DEPTH.grain);
   drawGrain(grain, b);
-  drawFootShadows(grain, room.pieces);
+  drawFootShadows(scene.add.graphics().setDepth(FOOT_SHADOW_DEPTH), room.pieces);
   // The wall's edges, crisp at full size: the lit lip of its top, the dark line of its foot along the back.
   const ts = angles(0, 2 * Math.PI, 240);
   const lines = scene.add.graphics().setDepth(BOWL_DEPTH.lines);

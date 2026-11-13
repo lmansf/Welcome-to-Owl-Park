@@ -99,9 +99,13 @@ What a visitor has in hand on `main` 01e9722. Nothing a visitor does needs typin
 feedback note and an email to protect an owl (section 8).
 
 **The home screen and the first run** (`apps/park/src/ui/home.ts`, `whichOwl.ts`). A device with no
-owl yet shows **Make your owl**. It opens the quiz first, **Which owl are you?** (OP-076): a voice
-says three lines, then eight questions, each answered with a tap on one of three pictures, then a
-card for the owl's colours, and the owl is shown big in its new kind and colours. **Keep it** goes
+owl yet shows **Make your owl**. It opens the quiz first, **Which owl are you?** (OP-076, rebuilt in
+OP-325 to OP-331): three friendly lines of welcome, then eight questions about owl life (a quick
+either/or, six cards of two to four answers, a quick either/or, the answers in a new order each run),
+each answer a picture box with its size on it until the art is painted (`docs/QUIZ-ART.md`), then a
+card for the owl's colors, a short pause, and the owl glides in big in its new kind and colors, with
+what the player shares with that owl, a true owl fact (`docs/OWL-FACTS.md`) and something to try in
+the park. **Keep it** goes
 on to Play; **Make it yours** opens the owl builder; **Not me? Try again** runs the quiz again;
 **Skip**, in the corner, opens the builder at once. Nothing typed, no score, no back button; only the
 result is kept, as the owl's look (`WHICH_OWL_WORDS`, `packages/shared/src/whichOwlBank.ts`). A
@@ -128,7 +132,8 @@ zooms the page (OP-104: `touch-action` in `apps/park/index.html`, and the viewpo
 **Jump and flight** (OP-084, `packages/shared/src/flight.ts`, `perches.ts`): every owl in every
 room can fly. Tap Jump (the space bar on a keyboard) to jump; tap it again in the air for a second
 flap; hold it on the way down to glide, the fall held to the walk's pace over `GLIDE_SLOPE` (one
-down for three along). Let go on the way up and the rise is cut short (`JUMP_CUT_SPEED`). An owl
+down for three along). Let go on the way up and the rise is cut (`JUMP_CUT_SPEED`), but a tap is
+still a jump: it rises about two thirds of a held one, enough for a first step (OP-343). An owl
 jumps onto a perch (a root, a beam, a stump, a shelf) and stands on it; it walks off the perch's
 edge to come down. A thing up on a perch (a quest spot, a leaf pile) is reached only from that
 perch. Everyone in the room sees the same arc. Nothing about flight is logged.

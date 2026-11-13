@@ -120,22 +120,45 @@ describe('the opening look over the Great Hollow (OP-336)', () => {
     }
   });
 
-  it("the player's first move ends it within a quarter of a second, from wherever it was, with no jump", () => {
-    for (const cutAt of [0, 200, OPENING.holdMs, OPENING.holdMs + 400, OPENING.holdMs + OPENING.easeMs - 30]) {
-      // No jump at the move itself.
+  it('holds long enough to read the oval, counted from when the room has faded in, and is a look and not a wait', () => {
+    // While the room fades in the look has not begun to run: the whole room, however long the fade.
+    expect(openingAt(-350)).toBe(1);
+    expect(openingAt(-1)).toBe(1);
+    // Two seconds and more on the whole oval, an unhurried second and a half in, and done inside five seconds.
+    expect(OPENING.holdMs).toBeGreaterThanOrEqual(2000);
+    expect(OPENING.easeMs).toBeGreaterThanOrEqual(1500);
+    expect(OPENING.holdMs + OPENING.easeMs).toBeLessThanOrEqual(5000);
+    // The least the whole room shows is a real look at it, and less than the look left to itself.
+    expect(OPENING.minMs).toBeGreaterThanOrEqual(1000);
+    expect(OPENING.minMs).toBeLessThan(OPENING.holdMs);
+    expect(OPENING.cutMs).toBeGreaterThanOrEqual(400);
+  });
+
+  it("the player's first move brings the camera in, but not before the whole room has shown its least", () => {
+    // A move while the room fades in, the moment it is in, or soon after: the whole room until its least, then in.
+    for (const cutAt of [-300, 0, 200, OPENING.minMs]) {
+      expect(openingAt(OPENING.minMs, cutAt), `at ${cutAt}`).toBe(1);
+      expect(openingAt(OPENING.minMs + OPENING.cutMs / 2, cutAt), `at ${cutAt}`).toBeCloseTo(0.5);
+      expect(openingAt(OPENING.minMs + OPENING.cutMs - 1, cutAt), `at ${cutAt}`).toBeGreaterThan(0);
+      expect(openingAt(OPENING.minMs + OPENING.cutMs, cutAt), `at ${cutAt}`).toBe(0);
+    }
+    // A move after that: in from wherever the look was, with no jump at the move itself.
+    for (const cutAt of [OPENING.minMs + 100, OPENING.holdMs, OPENING.holdMs + 400, OPENING.holdMs + OPENING.easeMs - 30]) {
       expect(openingAt(cutAt, cutAt), `at ${cutAt}`).toBeCloseTo(openingAt(cutAt));
       expect(openingAt(cutAt + OPENING.cutMs, cutAt), `at ${cutAt}`).toBe(0);
-      let last = openingAt(cutAt, cutAt);
-      for (let ms = cutAt; ms <= cutAt + OPENING.cutMs; ms += 10) {
+    }
+    // Whenever the move, the look never draws back again and is never slower than it would have been anyway.
+    for (const cutAt of [-300, 0, 200, OPENING.minMs, OPENING.minMs + 100, OPENING.holdMs, OPENING.holdMs + 400, OPENING.holdMs + OPENING.easeMs - 30]) {
+      let last = 1;
+      for (let ms = -350; ms <= OPENING.holdMs + OPENING.easeMs + 50; ms += 10) {
         const k = openingAt(ms, cutAt);
-        expect(k).toBeLessThanOrEqual(last + 1e-12);
-        // Never slower than it would have eased in anyway.
-        expect(k).toBeLessThanOrEqual(openingAt(ms) + 1e-12);
+        expect(k, `at ${cutAt}, ${ms}`).toBeLessThanOrEqual(last + 1e-12);
+        expect(k, `at ${cutAt}, ${ms}`).toBeLessThanOrEqual(openingAt(ms) + 1e-12);
         last = k;
       }
     }
     // A move after it is over changes nothing.
-    expect(openingAt(5000, 4000)).toBe(0);
+    expect(openingAt(OPENING.holdMs + OPENING.easeMs + 1000, OPENING.holdMs + OPENING.easeMs + 10)).toBe(0);
   });
 
   it('mixes the two looks: the zoom by ratio, the middle of the screen straight across', () => {

@@ -65,4 +65,24 @@ describe('the camera in a room taller than a screen (a plaza, Nov 8)', () => {
     expect(followLead(ROOM_H, false, ROOM_H, ROOM_H)).toBe(0);
     expect(followLead(4800, true, ROOM_H, ROOM_H)).toBe(0);
   });
+
+  it('centres on the owl in the Great Hollow, an oval with ways all round it: its owls come in at the back and most of what a newcomer is led to is on its front rim (OP-396)', () => {
+    const hall = ROOMS['m3-hall']!;
+    expect(hall.bowl).toBeDefined();
+    expect(hall.size.h).toBeGreaterThan(ROOM_H);
+    expect(followLead(hall.size.h, false, 1500, ROOM_H, true)).toBe(0);
+    // The rule's own reason, held to the room: the knothole an owl comes in by is in the back half, and of the
+    // ways to somewhere to play (the arcade's hatch and the courses) more are in the front half than the back.
+    const midY = hall.size.h / 2;
+    const at = (id: string) => {
+      const d = hall.doors.find((door) => door.id === id)!;
+      return d.rect.y + d.rect.h / 2;
+    };
+    expect(at('up')).toBeLessThan(midY);
+    const play = hall.doors.filter((d) => d.id === 'down' || d.id.startsWith('course-')).map((d) => d.rect.y + d.rect.h / 2);
+    expect(play.length).toBeGreaterThanOrEqual(3);
+    expect(play.filter((y) => y > midY).length).toBeGreaterThan(play.filter((y) => y <= midY).length);
+    // A plaza keeps its lead.
+    expect(followLead(ROOMS['market']!.size.h, false, ROOM_H, ROOM_H)).toBeGreaterThan(0);
+  });
 });

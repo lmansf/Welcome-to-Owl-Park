@@ -29,6 +29,21 @@ The owner's bar for every course: something a ten-year-old can do in a few tries
 50% a kid makes a hop every other try, so three tries clear it seven times in eight. The summary also
 gives each course's falls a kid can expect on a clear and the chance of a clean run.
 
+## The newcomer bot
+
+The kid bot answers "can a kid who flies make this hop": it takes off from about the best spot, steers
+back over the ledge in the air and lets go of Jump over it. A visitor on a first run does none of that.
+The first phone runs of the ink course after the cleanup fell eleven times on a screen the kid bot
+rates 100% (the play log, Nov 12, OP-360).
+
+So `sim/newcomer.ts` plays the other question: what comes of the plays a visitor makes first. It holds
+the stick one way from start to end and presses Jump once, where it is told and for as long as it is
+told (a tap, or held the whole flight), with at most a flap or two after it. It never steers back and
+never lets go early. `sim/newcomer.test.ts` holds the ink course's first screen to it, as part of
+`pnpm check`: an owl that only walks east from the first stone crosses, and no single jump on the way
+across, however it is held or flapped, is a fall. A course's first screen laid for newcomers passes
+both bots; its later screens are the kid bot's.
+
 ## What fails the check
 
 - a stuck spot: a ledge or stretch of floor a kid can get to with no way from it to any doorway (and,

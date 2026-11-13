@@ -21,7 +21,7 @@
       }
     },
     "ink": {
-      "rows": ["kit-cut-earth-path", "kit-cut-plank", "kit-cut-plank-thin", "kit-cut-stone", "kit-cut-stone-mossy"],
+      "rows": ["kit-cut-ink-bank", "kit-cut-ink-bank-thin", "kit-cut-ink-plank", "kit-cut-plank", "kit-cut-plank-thin", "kit-cut-stone", "kit-cut-stone-mossy"],
       "slots": {
         "texture-ground": ["kit-tex-ink-ink-stone", "kit-tex-planks"],
         "perch-small": ["kit-ink-reed-tuft", "kit-ink-paper-cliff", "kit-ink-pine-bough", "kit-ink-rock-pillar"],
@@ -39,10 +39,10 @@
       }
     },
     "neon": {
-      "rows": ["kit-cut-stone"],
+      "rows": ["kit-cut-neon-deck", "kit-cut-neon-deck-thin", "kit-cut-neon-pipe"],
       "slots": {
         "texture-ground": ["kit-tex-neon-corrugated-tin"],
-        "texture-wall": ["kit-tex-high-silvered-planks"],
+        "texture-wall": ["kit-tex-neon-lit-wall"],
         "perch-mid": ["kit-neon-rooftop-ledge", "kit-neon-sky-bridge-mid"],
         "perch-small": ["kit-neon-air-unit", "kit-neon-billboard-blank"],
         "sky": ["kit-neon-sky-a"],

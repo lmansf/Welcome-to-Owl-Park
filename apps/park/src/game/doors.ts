@@ -47,6 +47,67 @@ export function backWaits(waiting: boolean, held: boolean, covered: boolean, res
 }
 
 /**
+ * A direction held across a change of view is not a walk (OP-346). A doorway seen from the side is
+ * taken with up, and up is still held as the next room comes in: seen from above that is a walk north,
+ * and an owl out of a course marched across the Great Hollow with nothing pressed afresh (1,000 px in
+ * three seconds, measured). The other way round, the push that walked an owl into a course's doorway
+ * walked it on toward the first pit before the room had been read. Between two rooms seen the same way
+ * a held direction carries on as it always has: there it still points where the owl was going.
+ *
+ * The direction the owl came in with (`held`, as the room starts), or null when it is free to walk:
+ * the room it left was seen the same way (`fromSide`, undefined for an owl that came by no doorway),
+ * nothing is held, or the keys were let go on the way (`rested`, Keys.rests).
+ *
+ * TODO-DOCS (OP-346): docs/ARCHITECTURE.md's client rules, beside the way back (OP-333): a direction
+ * held through a doorway between a side view and a view from above does not walk the owl until it is
+ * let go or points elsewhere. The check: apps/park/e2e/wayBack.spec.ts.
+ */
+export function carriedIn(fromSide: boolean | undefined, side: boolean, held: Vec2 | null, rested: boolean): Vec2 | null {
+  if (fromSide === undefined || fromSide === side || rested || !held) return null;
+  return { x: held.x, y: held.y };
+}
+
+/**
+ * How far a held direction may turn (the cosine of the angle) and still be the one the owl came in
+ * with (carriedIn): a thumbstick wavers, a new push points elsewhere. Under the 45 degrees between two
+ * neighbouring ways of the walking keys, so any key added or let go is a new push.
+ */
+export const CARRIED_COS = Math.cos((40 * Math.PI) / 180);
+
+/** The direction the owl came in with, while it is still held (carriedIn): null once it is let go or points elsewhere. */
+export function stillCarried(carried: Vec2 | null, held: Vec2 | null): Vec2 | null {
+  if (!carried || !held) return null;
+  return carried.x * held.x + carried.y * held.y >= CARRIED_COS ? carried : null;
+}
+
+/** The push held as a course's fall put the owl back, and how often the keys had been let go by then (heldAtFall). */
+export interface HeldAtFall {
+  dir: Vec2;
+  rests: number;
+}
+
+/**
+ * A push still held as a fall puts the owl back is not a walk (OP-360). A fall puts the owl on its
+ * bench, a step from a ledge's end, and a thumbstick held through the fall walked it straight off
+ * again: the play log has falls one and two seconds apart, the owl back in the water before its
+ * player had seen where it stood. So the push held at the fall waits, as one held through a doorway
+ * between two views does (carriedIn), until it is let go or points elsewhere (stillHeldSinceFall).
+ * Null with nothing held.
+ *
+ * TODO-DOCS (OP-360): docs/ARCHITECTURE.md's client rules, beside the push held through a doorway
+ * (OP-346): a push held as a course's fall puts the owl back does not walk it until it is let go or
+ * points elsewhere. The check: apps/park/e2e/course.spec.ts.
+ */
+export function heldAtFall(held: Vec2 | null, rests: number): HeldAtFall | null {
+  return held ? { dir: { x: held.x, y: held.y }, rests } : null;
+}
+
+/** Whether the push held at a fall is still held: not let go since (the keys' rests, counted as they happen) and pointing the same way (stillCarried). */
+export function stillHeldSinceFall(then: HeldAtFall | null, held: Vec2 | null, rests: number): boolean {
+  return then !== null && rests === then.rests && stillCarried(then.dir, held) !== null;
+}
+
+/**
  * How long a press of the up key (or the Go in action) waits for the owl to stand in a doorway
  * (OP-212): pressed a moment before it lands in one, or before the frame that finds it there, it
  * still goes through.

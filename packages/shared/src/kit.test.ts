@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { KIT_DEMOS, KIT_PREVIEWS } from '../rooms/kit';
 import { ROOMS } from '../rooms/index';
-import { KIT_MID_STRETCH, KIT_SCENE_SPAN, KIT_STAND_SINK, kitArtKeys, kitCells, kitCost, kitDrawPlan, kitPerches, kitProblems, kitRoom, kitSceneProblems, kitSceneSpans, kitTiles, midFill, walkedAt, withRow, type KitDraw } from './kit';
+import { KIT_FLOOD_OVER, KIT_MID_STRETCH, KIT_SCENE_SPAN, KIT_STAND_SINK, kitArtKeys, kitCells, kitCost, kitDrawPlan, kitPerches, kitProblems, kitRoom, kitSceneProblems, kitSceneSpans, kitTiles, midFill, rowOfPiece, rowTop, walkedAt, withRow, type KitDraw } from './kit';
 import { KIT_ART, KIT_KEY, KIT_PALETTE, drawOps, kitGroup, kitMotifs, kitPlaceholder, periodShifts, shiftOp, type KitOp } from './kitArt';
 import { KIT_CATALOG } from './kitCatalog';
 import { raster } from './raster';
@@ -293,6 +293,87 @@ describe('the kit draw plan (OP-234)', () => {
 const coloursOf = (ops: readonly KitOp[]) => new Set(ops.map((o) => o.c));
 const PALETTE = new Set<number>(Object.values(KIT_PALETTE));
 
+describe("a course's pit, drawn as a drop or a flooded walk (OP-343)", () => {
+  const pit = [
+    { x: 600, y: GROUND - 4 },
+    { x: 1000, y: GROUND - 4 },
+    { x: 1000, y: GROUND + 4 },
+    { x: 600, y: GROUND + 4 },
+  ];
+  const course = { id: 'c', act: 1, pits: [pit] };
+  const walk = (id: string, x0: number, x1: number) => ({ id, x0, x1, top: 0, cap: 'kit-plank-mid', mid: 'kit-tex-earth' });
+  const drop = (id: string, x0: number, x1: number) => ({ id, x0, x1, top: 0, mid: 'kit-tex-earth', sunk: 30, shade: 0x556655 });
+  const flood = { depth: 60, color: 0x6f93ad };
+
+  it("draws a drop's texture below the walking line, in its shade, in the hazard layer, and nothing over it", () => {
+    const r = room({ paths: [walk('west', 100, 600), drop('dip', 600, 1000), walk('east', 1000, 1500)] }, { course });
+    const drawn = kitDrawPlan(r).filter((d) => d.id === 'dip');
+    expect(drawn).toEqual([{ key: 'kit-tex-earth', x: 600, y: GROUND + 30, w: 400, h: 900 - GROUND - 30, tile: 'xy', layer: 'hazard', role: 'path', id: 'dip', tint: 0x556655 }]);
+    // The walks either side begin at the line, with what an owl stands on, as ever.
+    expect(kitDrawPlan(r).find((d) => d.id === 'west' && d.key === 'kit-tex-earth')).toMatchObject({ y: GROUND, layer: 'play' });
+    expect(kitProblems(r)).toEqual([]);
+  });
+
+  it('draws the danger that fills a drop in the hazard layer too, and any other decal with the pieces', () => {
+    const r = room(
+      {
+        paths: [walk('west', 100, 600), drop('dip', 600, 1000), walk('east', 1000, 1500)],
+        decals: [
+          { piece: 'kit-barrier-rope', x: 800, y: GROUND, hazard: true },
+          { piece: 'kit-barrier-rope', x: 300, y: GROUND },
+          { piece: 'kit-barrier-rope', x: 1200, y: GROUND, front: true },
+        ],
+      },
+      { course },
+    );
+    expect(kitDrawPlan(r).filter((d) => d.role === 'decal').map((d) => d.layer)).toEqual(['hazard', 'piece', 'front']);
+  });
+
+  it('a flooded walk keeps its run as it is drawn (the game paints the water over it), and is no problem over a pit', () => {
+    const r = room({ paths: [walk('west', 100, 600), { ...walk('pond', 600, 1000), flood }, walk('east', 1000, 1500)] }, { course });
+    const dry = room({ paths: [walk('west', 100, 600), walk('pond', 600, 1000), walk('east', 1000, 1500)] }, { course });
+    expect(kitDrawPlan(r)).toEqual(kitDrawPlan(dry));
+    expect(kitDrawPlan(r).filter((d) => d.id === 'pond').every((d) => d.layer === 'play')).toBe(true);
+    expect(kitProblems(r)).toEqual([]);
+    expect(KIT_FLOOD_OVER).toBeGreaterThan(0);
+  });
+
+  it('refuses a pit drawn as a walk, a drop or a flooded walk where an owl may stand, a drop with a top piece, and a pit drawn both ways', () => {
+    expect(kitProblems(room({}, { course }))).toEqual(['the pit at x 608 is drawn as a walk: the path over it should be a drop or a flooded walk']);
+    const wide = room({ paths: [walk('west', 100, 500), drop('dip', 500, 1000), walk('east', 1000, 1500)] }, { course });
+    expect(kitProblems(wide)).toEqual(['drop dip is drawn where an owl may stand: no pit of the course spans it']);
+    const wet = room({ paths: [walk('west', 100, 500), { ...walk('pond', 500, 1000), flood }, walk('east', 1000, 1500)] }, { course });
+    expect(kitProblems(wet)).toEqual(['flooded walk pond is drawn where an owl may stand: no pit of the course spans it']);
+    const capped = room({ paths: [walk('west', 100, 600), { ...drop('dip', 600, 1000), cap: 'kit-plank-mid' }, walk('east', 1000, 1500)] }, { course });
+    expect(kitProblems(capped)).toEqual(['drop dip has a top piece: it would look stood on']);
+    const both = room({ paths: [walk('west', 100, 600), { ...drop('dip', 600, 1000), flood }, walk('east', 1000, 1500)] }, { course });
+    expect(kitProblems(both)).toEqual(['drop dip is flooded too: a pit is drawn one way']);
+    // A room with no course has no pit: a drop in it is where an owl may stand.
+    expect(kitProblems(room({ paths: [walk('west', 100, 600), drop('dip', 600, 1000), walk('east', 1000, 1500)] }))).toEqual(['drop dip is drawn where an owl may stand: no pit of the course spans it']);
+  });
+
+  it('holds in every course: every pit is drawn as a drop or as a flooded walk, and both ways are in use', () => {
+    const withPits = KIT_ROOMS.filter((r) => r.course?.pits?.length);
+    expect(withPits.length).toBeGreaterThanOrEqual(11);
+    for (const r of withPits) {
+      const pits = (r.kit!.paths ?? []).filter((p) => (p.sunk ?? 0) > 0 || p.flood);
+      expect(pits.length, r.id).toBeGreaterThanOrEqual(r.course!.pits!.length);
+    }
+    // The canopy's and the neon course's drops, the ink course's flooded walks.
+    expect(withPits.some((r) => (r.kit!.paths ?? []).some((p) => p.flood))).toBe(true);
+    expect(withPits.some((r) => (r.kit!.paths ?? []).some((p) => (p.sunk ?? 0) > 0))).toBe(true);
+  });
+
+  it('keeps every hazard of the live courses out of what an owl stands on: its drops and what fills them are in the hazard layer', () => {
+    for (const r of KIT_ROOMS.filter((k) => k.course?.pits?.length)) {
+      const plan = kitDrawPlan(r);
+      const drops = (r.kit!.paths ?? []).filter((p) => (p.sunk ?? 0) > 0);
+      for (const d of drops) for (const draw of plan.filter((x) => x.id === d.id)) expect(draw.layer, `${r.id} ${d.id}`).toBe('hazard');
+      for (const d of r.kit!.decals ?? []) if (d.hazard) expect(drops.some((p) => p.x0 <= d.x && d.x <= p.x1), `${r.id}: a hazard at x ${d.x} outside every drop`).toBe(true);
+    }
+  });
+});
+
 describe('runs and columns of the recut kit (OP-251)', () => {
   const ROW = 'kit-cut-plank';
   const mids = [320, 480, 640].map((l) => `${ROW}-mid-${l}`);
@@ -319,13 +400,119 @@ describe('runs and columns of the recut kit (OP-251)', () => {
     }
   });
 
-  it('draws a row run as its left cap, its middles and its right cap, each top at the walking line', () => {
+  it('draws a row run as its left cap, its middles and its right cap, all on the row’s one line at the walking line', () => {
     const draws = plan({ paths: [{ id: 'walk', x0: 0, x1: 2 * ROOM_W, top: 0, row: ROW }] }).filter((d) => d.id === 'walk');
     const keys = draws.map((d) => d.key);
     expect(keys).toContain(`${ROW}-cap-left`);
     expect(keys).toContain(`${ROW}-cap-right`);
     expect(keys.filter((k) => k.includes('-mid-')).length).toBeGreaterThan(3);
-    for (const d of draws) expect(d.y + ((KIT_ART[d.key]!.top ?? 0) + KIT_STAND_SINK) * (d.h / KIT_ART[d.key]!.h)).toBeCloseTo(770, 0);
+    for (const d of draws) expect(d.y + rowTop(ROW)! + KIT_STAND_SINK).toBe(770);
+  });
+
+  it('lays the pieces of one painted row in boxes that line up, top and foot, whatever stands tallest in each (OP-348)', () => {
+    // The earth path: grass stands 23 px higher in one middle than in another, and the caps lie between.
+    const EARTH = 'kit-cut-earth-path';
+    const parts = ['cap-left', 'cap-right', 'mid-320', 'mid-480', 'mid-640'].map((part) => `${EARTH}-${part}`);
+    const tops = parts.map((k) => KIT_ART[k]!.top!);
+    expect(Math.max(...tops) - Math.min(...tops)).toBeGreaterThan(15);
+    expect(rowTop(EARTH)).toBe([...tops].sort((a, b) => a - b)[2]);
+    const draws = plan({ paths: [{ id: 'walk', x0: 0, x1: 2 * ROOM_W, top: 0, row: EARTH }] }).filter((d) => d.id === 'walk');
+    expect(new Set(draws.map((d) => d.key)).size).toBeGreaterThan(3);
+    expect(new Set(draws.map((d) => d.y)).size).toBe(1);
+    expect(new Set(draws.map((d) => d.y + d.h)).size).toBe(1);
+    // The walking line stays where the row's own line puts it, a step into the art.
+    expect(draws[0]!.y + rowTop(EARTH)! + KIT_STAND_SINK).toBe(770);
+  });
+
+  it('knows the row a piece was cut from, a realm slot’s stand-in included, and lays any other piece by its own top', () => {
+    expect(rowOfPiece('kit-cut-earth-path-mid-320')).toBe('kit-cut-earth-path');
+    expect(rowOfPiece('kit-cut-plank-thin-cap-right')).toBe('kit-cut-plank-thin');
+    // A realm's perch slots stand in with the earth path's pieces until their own art comes.
+    expect(KIT_ART['kit-clearing-perch-mid']?.standIn).toBe('kit-cut-earth-path-mid-320');
+    expect(rowOfPiece('kit-clearing-perch-mid')).toBe('kit-cut-earth-path');
+    expect(rowOfPiece('kit-clearing-perch-end')).toBe('kit-cut-earth-path');
+    // The ink realm's perches stand in with its own painted row (OP-348).
+    expect(rowOfPiece('kit-ink-perch-end')).toBe('kit-cut-ink-bank');
+    expect(rowOfPiece('kit-plank-mid')).toBeNull();
+    expect(rowOfPiece('kit-cut-plank-to-stone')).toBeNull();
+    expect(rowOfPiece('kit-tex-earth')).toBeNull();
+    expect(rowTop('kit-cut-no-such-row')).toBeNull();
+    // A single platform is no row's piece: its own top is at the walking line, as ever.
+    const r = plan({ ledges: [{ id: 'low', x0: 700, x1: 940, top: 60, cap: 'kit-high-mist-platform' }] });
+    const d = r.find((x) => x.id === 'low')!;
+    const art = KIT_ART[d.key]!;
+    expect(d.y + (art.top! + KIT_STAND_SINK) * (d.h / art.h)).toBeCloseTo(770 - 60, 0);
+  });
+
+  it('draws a run’s top pieces in its tint and its texture in its shade, each its own (OP-348)', () => {
+    const draws = plan({ paths: [{ id: 'deck', x0: 0, x1: 2000, top: 0, row: ROW, tint: 0x96c0ff, mid: 'kit-tex-earth' }, { id: 'wall', x0: 2000, x1: 3000, top: 0, row: ROW, mid: 'kit-tex-earth', shade: 0x808080 }] });
+    const deck = draws.filter((d) => d.id === 'deck');
+    expect(deck.filter((d) => d.tile === 'none').every((d) => d.tint === 0x96c0ff)).toBe(true);
+    expect(deck.filter((d) => d.tile === 'none').length).toBeGreaterThan(3);
+    expect(deck.find((d) => d.key === 'kit-tex-earth')!.tint).toBeUndefined();
+    const wall = draws.filter((d) => d.id === 'wall');
+    expect(wall.filter((d) => d.tile === 'none').every((d) => d.tint === undefined)).toBe(true);
+    expect(wall.find((d) => d.key === 'kit-tex-earth')!.tint).toBe(0x808080);
+  });
+
+  it('shows only the outer part of each end on a run shorter than an end, the two meeting between (OP-348)', () => {
+    const STONE = 'kit-cut-stone';
+    const [left, right] = [`${STONE}-cap-left`, `${STONE}-cap-right`];
+    const lw = KIT_ART[left]!.right! - KIT_ART[left]!.left!;
+    const rw = KIT_ART[right]!.right! - KIT_ART[right]!.left!;
+    // A step 120 across, each end 160: laid whole they lay one over the other, 40 out past the step each side.
+    const short = plan({ ledges: [{ id: 'step', x0: 300, x1: 420, top: 60, row: STONE }] }).filter((d) => d.id === 'step' && d.tile === 'none');
+    expect(short.map((d) => d.key)).toEqual([left, right]);
+    const shown = short.map((d) => ({ from: d.x + d.crop!.x, to: d.x + d.crop!.x + d.crop!.w }));
+    expect(shown[0]!.from).toBeCloseTo(300 - (KIT_ART[left]!.left ?? 0), 6);
+    expect(shown[0]!.to).toBeCloseTo(300 + (120 * lw) / (lw + rw), 0);
+    expect(shown[1]!.from).toBeCloseTo(shown[0]!.to, 0);
+    expect(shown[1]!.to).toBeGreaterThanOrEqual(420);
+    expect(shown[1]!.to).toBeLessThanOrEqual(420 + (KIT_ART[right]!.w - KIT_ART[right]!.right!) + 1);
+    // Each image shows that part and no more.
+    for (const d of short) expect(kitCells(d)).toEqual([{ x: d.x, y: d.y, w: d.w, h: d.h, crop: { x: d.crop!.x, y: 0, w: d.crop!.w, h: KIT_ART[d.key]!.h } }]);
+    // A run with room for both ends and more is laid as ever: whole ends, middles between.
+    const long = plan({ ledges: [{ id: 'walk', x0: 300, x1: 1300, top: 60, row: STONE }] }).filter((d) => d.id === 'walk' && d.tile === 'none');
+    expect(long.every((d) => d.crop === undefined)).toBe(true);
+    expect(long.length).toBeGreaterThan(2);
+    // So is one at least an end long: its ends stay inside it, whole.
+    const one = plan({ ledges: [{ id: 'shelf', x0: 300, x1: 300 + Math.max(lw, rw), top: 60, row: STONE }] }).filter((d) => d.id === 'shelf' && d.tile === 'none');
+    expect(one.map((d) => d.crop)).toEqual([undefined, undefined]);
+    expect(Math.min(...one.map((d) => d.x + (KIT_ART[d.key]!.left ?? 0)))).toBeGreaterThanOrEqual(300);
+    expect(Math.max(...one.map((d) => d.x + (KIT_ART[d.key]!.right ?? d.w)))).toBeLessThanOrEqual(300 + Math.max(lw, rw));
+  });
+
+  it('draws no course ledge’s ends out past the ledge an owl stands on (OP-348)', () => {
+    let ends = 0;
+    for (const r of KIT_ROOMS.filter((x) => x.course)) {
+      const runs = new Map([...(r.kit!.paths ?? []), ...(r.kit!.ledges ?? [])].map((run) => [run.id, run]));
+      for (const d of kitDrawPlan(r)) {
+        const run = runs.get(d.id);
+        if (!run || d.tile !== 'none' || d.flip || !/-cap-(left|right)$/.test(KIT_ART[d.key]?.standIn ?? d.key)) continue;
+        ends++;
+        const art = KIT_ART[d.key]!;
+        const from = d.x + Math.max(d.crop?.x ?? 0, art.left ?? 0);
+        const to = d.x + Math.min((d.crop?.x ?? 0) + (d.crop?.w ?? art.w), art.right ?? art.w);
+        expect(from, `${r.id} ${d.id} ${d.key}`).toBeGreaterThanOrEqual(run.x0 - 2);
+        expect(to, `${r.id} ${d.id} ${d.key}`).toBeLessThanOrEqual(run.x1 + 2);
+      }
+    }
+    expect(ends).toBeGreaterThan(40);
+  });
+
+  it('lays every course’s ground, drawn with a realm’s stand-in pieces, with no step between neighbours (OP-348)', () => {
+    let joins = 0;
+    for (const r of KIT_ROOMS.filter((x) => x.course)) {
+      const byRun = new Map<string, KitDraw[]>();
+      for (const d of kitDrawPlan(r)) if (rowOfPiece(d.key)) byRun.set(d.id, [...(byRun.get(d.id) ?? []), d]);
+      for (const [id, pieces] of byRun) {
+        const rows = new Set(pieces.map((d) => rowOfPiece(d.key)));
+        if (rows.size !== 1) continue;
+        joins += pieces.length - 1;
+        expect(new Set(pieces.map((d) => d.y)).size, `${r.id} ${id}`).toBe(1);
+      }
+    }
+    expect(joins).toBeGreaterThan(20);
   });
 
   it('sets a join into a run with its art from its x, the middles filling around it', () => {

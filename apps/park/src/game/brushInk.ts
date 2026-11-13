@@ -1,11 +1,11 @@
 import type Phaser from 'phaser';
-import { BRUSH_FADE_MS, KIT_ART, brushStrokes, inkLeft, livePerches, stoneUnder, type BrushStone, type BrushStroke, type Perch } from '@owl-park/shared';
+import { BRUSH_FADE_MS, KIT_ART, brushStrokes, brushTouch, inkLeft, livePerches, paintsStone, type BrushStone, type BrushStroke, type BrushTouch, type Perch } from '@owl-park/shared';
 
 /**
  * The ink a room's brush stones paint (OP-235, brush.ts), on the page: which stones are painted, from
- * this owl's landings and the landings of the other owls it sees, the room's perches as they stand
- * with that ink, and each bridge and tread drawn from the kit while it lasts, greying out over its last
- * second. The page's own clock times it: what the room server believes is every stroke, so the owl
+ * this owl's landings and low passes over a stone (OP-360) and those of the other owls it sees, the
+ * room's perches as they stand with that ink, and each bridge and tread drawn from the kit while it
+ * lasts, greying out over its last second. The page's own clock times it: what the room server believes is every stroke, so the owl
  * that painted a bridge stands on it for as long as its own page draws it.
  */
 
@@ -18,8 +18,8 @@ const FADED = 0x9a9a9a;
 
 export class BrushInk {
   private readonly painted = new Map<string, number>();
-  /** Where each owl stood last frame: on a stone (its id) or not, so a landing paints once. */
-  private readonly onStone = new Map<string, string | null>();
+  /** What each owl touched of the stones last frame (brushTouch), so a landing or a pass paints once. */
+  private readonly touched = new Map<string, BrushTouch>();
   private readonly strokes: Array<{ s: BrushStroke; stone: BrushStone; img: Phaser.GameObjects.Image | null }> = [];
 
   /** `ground` is the room's ground line (screen y of height 0). */
@@ -52,14 +52,15 @@ export class BrushInk {
   }
 
   /**
-   * Each frame: a landing on a stone, by this owl or another the page sees, paints it afresh. `owls` is
-   * every owl in the room by id, where it stands across the room, how high it is and whether it is in the air.
+   * Each frame: a landing on a stone, or a pass low over it in the air (brushTouch), by this owl or
+   * another the page sees, paints it afresh. `owls` is every owl in the room by id, where it stands
+   * across the room, how high it is and whether it is in the air.
    */
   update(now: number, owls: Iterable<{ id: string; x: number; z: number; grounded: boolean }>): void {
     for (const o of owls) {
-      const stone = o.grounded ? (stoneUnder(this.stones, o.x, o.z)?.id ?? null) : null;
-      if (stone && this.onStone.get(o.id) !== stone) this.painted.set(stone, now);
-      this.onStone.set(o.id, stone);
+      const touch = brushTouch(this.stones, o.x, o.z, o.grounded);
+      if (touch.stone !== null && paintsStone(this.touched.get(o.id), touch)) this.painted.set(touch.stone, now);
+      this.touched.set(o.id, touch);
     }
     for (const { stone, img } of this.strokes) {
       if (!img) continue;
@@ -82,7 +83,7 @@ export class BrushInk {
 
   /** Forget an owl that left the room. */
   forget(id: string): void {
-    this.onStone.delete(id);
+    this.touched.delete(id);
   }
 
   destroy(): void {

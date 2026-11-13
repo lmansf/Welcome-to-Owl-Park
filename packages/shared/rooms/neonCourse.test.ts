@@ -3,7 +3,8 @@ import { CollectionBook, MemoryCollectionStore } from '../src/book';
 import { SIGN_WARN_MS, litPerches, signEnding, signLit } from '../src/circuit';
 import { courseParts, coursePieces, courseProblems, holdsDash, inPit, inThorns, LOST_FEATHERS } from '../src/course';
 import { CourseBook, MemoryCourseStore } from '../src/coursebook';
-import { kitProblems } from '../src/kit';
+import { kitDrawPlan, kitProblems } from '../src/kit';
+import { KIT_ART } from '../src/kitArt';
 import { groundAt, perchTopLimit } from '../src/perches';
 import type { Polygon } from '../src/geometry';
 import { mapOf, spawnTop, type RoomDef } from '../src/room';
@@ -40,13 +41,15 @@ const tiersFrom = (id: string, dark: readonly string[] = []) => {
 const signIds = (id: string) => (ROOMS[id]!.neonSigns ?? []).map((s) => s.id);
 
 describe("the neon realm's course", () => {
-  it('is a course with nothing wrong with it: three acts, three breakers, four benches, five lost feathers and the shrine on the tallest roof', () => {
+  it('is a course with nothing wrong with it: three acts, three breakers, five benches, five lost feathers and the shrine on the tallest roof', () => {
     expect(COURSES[CIRCUIT_COURSE.id]).toBe(CIRCUIT_COURSE);
     expect(courseProblems(CIRCUIT_COURSE, rooms)).toEqual([]);
     expect(Object.keys(CIRCUIT_ROOMS).sort()).toEqual([...ids].sort());
     expect(CIRCUIT_COURSE.objective).toBe('breakers');
     expect(courseParts(CIRCUIT_COURSE, rooms).map((p) => p.id)).toEqual(['breaker-1', 'breaker-2', 'breaker-3']);
-    expect(coursePieces(CIRCUIT_COURSE, rooms, 'bench')).toHaveLength(4);
+    expect(coursePieces(CIRCUIT_COURSE, rooms, 'bench')).toHaveLength(5);
+    // The last act's long climb has a bench up on its first roof (OP-343): a fall from the signs beyond comes back there.
+    expect(ROOMS['circuit-3']!.course!.benches).toContainEqual({ id: 'bench-5', at: { x: 840, y: CIRCUIT_GROUND }, top: 380 });
     expect(coursePieces(CIRCUIT_COURSE, rooms, 'feather')).toHaveLength(LOST_FEATHERS);
     expect(ROOMS['circuit-3']!.course!.shrine).toBeDefined();
   });
@@ -169,5 +172,21 @@ describe("the neon realm's course", () => {
     expect(courses.finish(cid, 'circuit-3', t + 50_000)).toMatchObject({ ok: false, reason: 'parts' });
     expect(courses.reach(cid, 'circuit-3', 'part', 'breaker-3', t + 51_000).ok).toBe(true);
     expect(courses.finish(cid, 'circuit-3', t + 52_000)).toMatchObject({ ok: true });
+  });
+});
+
+describe('the neon course’s ground and walls (OP-348)', () => {
+  it('are the neon realm’s own art: nothing borrowed from another realm’s kit, and drawn as painted, with no tint over them', () => {
+    let own = 0;
+    for (const id of ids) {
+      for (const d of kitDrawPlan(rooms(id)!)) {
+        if (d.role !== 'path' && d.role !== 'ledge') continue;
+        const from = KIT_ART[d.key]?.standIn ?? d.key;
+        expect(/^kit-(cut-neon|tex-neon|neon)-/.test(from), `${id} ${d.id} draws ${from}`).toBe(true);
+        if (d.layer !== 'hazard') expect(d.tint, `${id} ${d.id} ${d.key}`).toBeUndefined();
+        own++;
+      }
+    }
+    expect(own).toBeGreaterThan(40);
   });
 });

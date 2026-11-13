@@ -166,7 +166,7 @@ export function courseRoomIds(def: CourseDef): string[] {
 }
 
 /** A course's rooms in act order (an act's way in first, then its other rooms as listed). */
-function roomsByAct(def: CourseDef, rooms: (id: string) => RoomDef | undefined): string[] {
+export function roomsByAct(def: CourseDef, rooms: (id: string) => RoomDef | undefined): string[] {
   const act = (id: string) => rooms(id)?.course?.act ?? Number.MAX_SAFE_INTEGER;
   return courseRoomIds(def)
     .map((id, i) => ({ id, i }))
@@ -187,6 +187,39 @@ export function courseParts(def: CourseDef, rooms: (id: string) => RoomDef | und
 /** Whether an owl at `x`, `z` up, is in one of a room's thorns (an act seen from the side). */
 export function inThorns(room: Pick<RoomDef, 'course'> | undefined, x: number, z: number): boolean {
   return (room?.course?.thorns ?? []).some((t) => x >= t.x0 && x <= t.x1 && z >= t.z0 && z <= t.z1);
+}
+
+/**
+ * Whether an owl that went straight from `a` to `b` (x along, z up) touched one of a room's thorns on
+ * the way, its two ends included (OP-353): `inThorns` for a move. A page looks at its owl once a frame,
+ * and a frame's move can be longer than a hazard is thick: a dash goes 30 px a frame at thirty frames a
+ * second, and the thinnest stalks are 30 px. Looked for only where the owl is, such a move stepped over
+ * them on a slow device, some of the time.
+ */
+export function thornsBetween(room: Pick<RoomDef, 'course'> | undefined, a: { x: number; z: number }, b: { x: number; z: number }): boolean {
+  return (room?.course?.thorns ?? []).some((t) => {
+    // The stretch of the way, from 0 at `a` to 1 at `b`, that is inside the box: there is one, or there is not.
+    let from = 0;
+    let to = 1;
+    const sides: Array<[number, number]> = [
+      [a.x - b.x, a.x - t.x0],
+      [b.x - a.x, t.x1 - a.x],
+      [a.z - b.z, a.z - t.z0],
+      [b.z - a.z, t.z1 - a.z],
+    ];
+    for (const [along, gap] of sides) {
+      // Going along this side, not toward or away from it: inside it all the way, or outside it all the way.
+      if (along === 0) {
+        if (gap < 0) return false;
+        continue;
+      }
+      const at = gap / along;
+      if (along < 0) from = Math.max(from, at);
+      else to = Math.min(to, at);
+      if (from > to) return false;
+    }
+    return true;
+  });
 }
 
 /** Whether a point is over one of a room's pits. */
@@ -218,6 +251,33 @@ export function openerAt(room: Pick<RoomDef, 'course'> | undefined, p: Vec2, ope
 export function courseOfRoom(room: Pick<RoomDef, 'course'> | undefined, courses: Readonly<Record<string, CourseDef>>): CourseDef | undefined {
   const id = room?.course?.id;
   return id !== undefined && Object.hasOwn(courses, id) ? courses[id] : undefined;
+}
+
+/**
+ * Whether `roomId` is where a course ends and nothing else (OP-343): the room its finish shrine stands
+ * in, with no doorway back into the course (the canopy's hut). An owl that went in a part short could
+ * not finish there and could not go back for the part, and the way in again starts the run over. So a
+ * doorway into such a room waits until a run has every part (the page holds it, course.ts in the park).
+ */
+export function endsCourse(def: CourseDef, roomId: string, rooms: (id: string) => RoomDef | undefined): boolean {
+  const all = courseRoomIds(def);
+  const r = rooms(roomId);
+  if (!r || !all.includes(roomId) || r.course?.shrine === undefined) return false;
+  const leads = (to: { room: string } | undefined) => to !== undefined && all.includes(to.room);
+  return !r.doors.some((d) => leads(d.to) || leads(d.toTree) || leads(d.toNew));
+}
+
+/**
+ * What the doorway into `toRoom` waits on, for an owl whose run has done `runParts` (null: no run):
+ * how many of the course's parts are done and how many there are, when the room is one that ends the
+ * course (endsCourse) and the run is short of parts; null when the doorway takes the owl. An owl with
+ * no run goes through: it has nothing to lose there.
+ */
+export function doorWaitsOn(def: CourseDef, toRoom: string, rooms: (id: string) => RoomDef | undefined, runParts: readonly string[] | null): { done: number; of: number } | null {
+  if (!runParts || !endsCourse(def, toRoom, rooms)) return null;
+  const parts = courseParts(def, rooms);
+  const done = parts.filter((p) => runParts.includes(p.id)).length;
+  return done >= parts.length ? null : { done, of: parts.length };
 }
 
 /** Whether an owl in this room holds the dash: the room is an act of a course. */

@@ -1,6 +1,7 @@
-import { ACTIVE_SLOTS, MAX_ACTIVE_QUESTS, TASKS_BONUS, getQuest, questPuzzle, type LockView, type PuzzleSymbol, TASK_FEATHERS, getNpc, placeName, variantName, type ActiveQuestView, type NpcDef, type QuestOfferView, type QuestReward } from '@owl-park/shared';
+import { ACTIVE_SLOTS, MAX_ACTIVE_QUESTS, TASKS_BONUS, getQuest, questPuzzle, type LockView, type PuzzleSymbol, TASK_FEATHERS, getNpc, placeName, placeWords, variantName, type ActiveQuestView, type NpcDef, type QuestOfferView, type QuestReward } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { TaskState } from '../collect/tasks';
+import { walkingMap } from '../game/walkingMap';
 import { PUZZLE_CSS, createCodePad, puzzleBox } from './puzzle';
 
 export interface QuestActions {
@@ -115,10 +116,13 @@ export function progressText(q: Pick<ActiveQuestView, 'ready' | 'step' | 'steps'
   return q.ready ? 'Done' : `${q.step}/${q.steps.length}`;
 }
 
+/** Words as this owl is shown them: each place named as the park it walks names it (OP-346; shared placeWords). */
+const shown = (text: string) => placeWords(text, walkingMap());
+
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = ''): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
-  if (text) e.textContent = text;
+  if (text) e.textContent = shown(text);
   return e;
 }
 
@@ -143,7 +147,7 @@ function steps(texts: string[], current: number | null, progress?: { count: numb
   const ol = el('ol');
   texts.forEach((t, i) => {
     const li = el('li', current === null ? '' : i < current ? 'done' : i === current ? 'now' : '');
-    li.textContent = i === current && progress && progress.need > 1 ? `${t} (${progress.count} of ${progress.need})` : t;
+    li.textContent = shown(i === current && progress && progress.need > 1 ? `${t} (${progress.count} of ${progress.need})` : t);
     ol.appendChild(li);
   });
   return ol;
