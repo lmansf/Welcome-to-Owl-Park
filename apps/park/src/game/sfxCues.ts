@@ -93,6 +93,23 @@ export const CUES = {
       { wave: 'sine', at: 0.3, dur: 0.5, from: C6 * 2, gain: 0.03 },
     ],
   },
+  /**
+   * The guardian's hoot (OP-359, guardian.ts): a great horned owl's call, low and soft, three notes with the last one long. An octave rides
+   * over each so a phone, which plays little this low, still sounds it, and a breath goes with the long one.
+   */
+  guardianHoot: {
+    gapMs: 2000,
+    wander: 0.02,
+    voices: [
+      { wave: 'sine', at: 0, dur: 0.2, from: 300, to: 286, gain: 0.1, attack: 0.04 },
+      { wave: 'sine', at: 0, dur: 0.18, from: 600, to: 572, gain: 0.02, attack: 0.04 },
+      { wave: 'sine', at: 0.22, dur: 0.16, from: 300, to: 288, gain: 0.09, attack: 0.03 },
+      { wave: 'sine', at: 0.22, dur: 0.14, from: 600, to: 576, gain: 0.018, attack: 0.03 },
+      { wave: 'sine', at: 0.42, dur: 0.52, from: 292, to: 262, gain: 0.11, attack: 0.07 },
+      { wave: 'sine', at: 0.42, dur: 0.44, from: 584, to: 524, gain: 0.022, attack: 0.07 },
+      { wave: 'noise', at: 0.42, dur: 0.4, from: 520, to: 380, gain: 0.05, attack: 0.1, q: 0.8 },
+    ],
+  },
 } as const satisfies Record<string, Cue>;
 
 export type CueName = keyof typeof CUES;

@@ -1,10 +1,13 @@
 import Phaser from 'phaser';
 import { KIT_ART, ROOM_W, WAY_OUT_DOOR, idolRealms, kitFilesOf, seenFromSide, type RoomDef } from '@owl-park/shared';
+import { flagOn } from '../flags';
 import { ANCHORS } from '../rooms';
 import { ART, blockadeKey } from './art';
 import { FOOT_SHADOW_DEPTH, footShadow } from './bowlView';
 import { tintImage } from './canvasTint';
 import { footOrigin, hitArea } from './fit';
+import { GUARDIAN_ROOM } from './guardian';
+import { carvedTexture } from './guardianView';
 import { IDOL_FLARE } from './idolFlare';
 
 /** Generated helper textures shared by every room. */
@@ -189,7 +192,10 @@ export function addSetPieces(
     const sx = guardian.scaleX * k;
     const sy = guardian.scaleY * k;
     guardian.setScale(sx, sy);
-    scene.tweens.add({ targets: guardian, scaleY: sy * 1.015, scaleX: sx * 0.995, duration: 4200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    // Where the guardian itself is alive at the heart of the room (OP-359, behind ?guardian=1), this one on
+    // the rim is its carving: one tone of wood, and still. The living owl is not in the room twice.
+    const carving = room.id === GUARDIAN_ROOM && flagOn('guardian') ? carvedTexture(scene) : null;
+    if (!carving) scene.tweens.add({ targets: guardian, scaleY: sy * 1.015, scaleX: sx * 0.995, duration: 4200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     scene.tweens.add({ targets: glow, alpha: 0.48, scaleX: 5.4 * k, duration: 3600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     tappable(guardian, 'grove');
     stood('grove', {
@@ -213,6 +219,8 @@ export function addSetPieces(
           .explode(IDOL_FLARE.sparks);
       },
     });
+    // The carving's picture goes on last: it stands, is tapped and takes the room's light exactly as the painting does.
+    if (carving) guardian.setTexture(carving);
   }
   if (realms.includes('market') && anchors['robot']) {
     const a = anchors['robot'];

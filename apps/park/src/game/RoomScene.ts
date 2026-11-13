@@ -190,6 +190,8 @@ import { PUZZLE_ART_KEYS, artScale, drawnAsSizeBox, drawsSkinTrial, loadArt, ope
 import { SpeechBubbles } from './bubbles';
 import { backWaits, carriedIn, doorwayUnder, doorwaysOff, heldAtFall, roomsAhead, stillCarried, stillHeldSinceFall, takesDoorway, upCounts, type HeldAtFall } from './doors';
 import { PLAY_SPOTS, ROOTS_SPOT, TriedDoors, doorSpot, leadsToPlay, playSpotsAt, trailTo, type PlaySpot } from './featherTrail';
+import { CALLS, GUARDIAN_ROOM, guardianShade, type OwlSeen } from './guardian';
+import { GuardianView, type GuardianState } from './guardianView';
 import { FIRST_FLIGHT_MARK, glidedOff, hallTipFor, hallTips } from './hallTips';
 import { HALL_WORDS } from '../ui/hallWords';
 import { FeatherTrail } from './featherTrailView';
@@ -477,6 +479,8 @@ export class RoomScene extends Phaser.Scene {
   private fallHeld: HeldAtFall | null = null;
   /** The room's tall standing art, each see-through while the visitor's own owl is behind it (seeThrough.ts); none in a room seen from the side. */
   private seeThrough: SeeThrough | null = null;
+  /** The guardian alive at the heart of the Great Hollow (OP-359): only there, and only behind `?guardian=1` (flags.ts). */
+  private guardian: GuardianView | null = null;
   /** How the owl came: by travel from the map, or (undefined) through a doorway, Play or the page's address. */
   private via: RoomStart['via'];
   private lane: Lane | undefined;
@@ -724,6 +728,7 @@ export class RoomScene extends Phaser.Scene {
     this.pendingVote = false;
     this.pieces = {};
     this.seeThrough = null;
+    this.guardian = null;
     this.sideCam = null;
     this.opening = null;
     this.rise = null;
@@ -1093,6 +1098,11 @@ export class RoomScene extends Phaser.Scene {
     setVignette(true);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => setVignette(false));
     this.pieces = addSetPieces(this, room, (pointer, event, realm) => this.onIdolTap(pointer, event, realm));
+    // The guardian at the heart of the Great Hollow (OP-359, behind ?guardian=1): one more tall piece among the owls.
+    if (room.id === GUARDIAN_ROOM && flagOn('guardian') && !this.sideView()) {
+      this.guardian = new GuardianView(this, { light: room.bowl?.light, calm: () => this.calm(), onHoot: () => this.sfx.play('guardianHoot') });
+      (this.pieces.standing ??= []).push(this.guardian.image);
+    }
     // Seen from above, tall art an owl can stand behind goes see-through while the visitor's own owl is behind it (OP-346).
     this.seeThrough = this.sideView() ? null : new SeeThrough(this, this.pieces.standing ?? []);
     this.setRealms(this.transport.kind === 'edge' ? this.realms : { open: [...GATED_ROOMS], portal: true, night: null });
@@ -1291,6 +1301,10 @@ export class RoomScene extends Phaser.Scene {
     this.cameras.main.fadeIn(ROOM_FADE_IN_MS, 12, 30, 54);
     this.built = true;
     this.startOpening(this.registry.get('spawnName') as string | undefined);
+    // The guardian sees the visitor's own owl come in (OP-359), counted from when the room has faded in: by the
+    // knothole, or set down in the hall's middle, it is hooted to; back from one of the hall's own ways, looked at.
+    const cameBy = this.registry.get('spawnName') as string | undefined;
+    this.guardian?.arrived(this.playerId, Date.now() + ROOM_FADE_IN_MS, cameBy === undefined || cameBy === 'default' || cameBy === 'from-lobby');
     // The sign of the doorway the owl came in by waits until it has stepped away once (OP-337, updateHints).
     this.signKept = room.doors.find((d) => this.leadsBack(d))?.id ?? null;
     // The feather trail (OP-307): the doorway the owl came in by counts as tried, and the feathers come out once the room is in.
@@ -1323,6 +1337,7 @@ export class RoomScene extends Phaser.Scene {
     if (finished && this.walkGoal && distance(this.walkGoal, this.me.pos) < 3) this.walkGoal = null;
     this.posOverlay?.frame(this.me.pos, now, this.room.id);
     this.seeThrough?.frame(this.me.pos, this.flier.air.z);
+    this.guardian?.frame(now, this.owlsSeen());
     // On a touch screen the thumbstick goes quiet while the owl is under it (OP-349): told a few times a second.
     if (TOUCH_SCREEN && now - this.owlToldAt > 180) {
       this.owlToldAt = now;
@@ -1447,6 +1462,7 @@ export class RoomScene extends Phaser.Scene {
         if (!live()) return;
         this.peerEmotes.set(id, e);
         this.peers.get(id)?.playEmote(e);
+        this.guardianCalled(id, e);
       },
       onStump: (f) => live() && this.party?.onStump(f),
       onParty: (f) => live() && this.party?.onParty(f),
@@ -1647,6 +1663,7 @@ export class RoomScene extends Phaser.Scene {
       this.tweens.add({ targets: owl, alpha: 1, duration: 400 });
       this.peers.set(s.id, owl);
       this.hud.setCount(this.peers.size + 1);
+      this.guardian?.arrived(s.id, now, false);
     } else {
       owl.applyLook(s.look);
     }
@@ -1998,6 +2015,19 @@ export class RoomScene extends Phaser.Scene {
     return (PLAY_SPOTS[this.room.id] ?? []).filter((s) => !tried.has(this.room.id, s.id));
   }
 
+  /** The owls in the room as the guardian sees them (guardian.ts): the visitor's own, then the others. */
+  private owlsSeen(): OwlSeen[] {
+    const seen: OwlSeen[] = [{ id: this.playerId, pos: this.me.pos, z: this.flier.air.z, lifted: this.flier.air.s === LIFTED }];
+    for (const o of this.peers.values()) seen.push({ id: o.id, pos: o.pos, z: o.flightHeight(), lifted: o.airMode === LIFTED });
+    return seen;
+  }
+
+  /** An owl's emote, where the guardian is: a hoot, a bow or a tilt is a call to it, and it answers in kind (guardian.ts). */
+  private guardianCalled(id: string, emote: string): void {
+    const call = CALLS[emote];
+    if (call) this.guardian?.called(id, call, Date.now());
+  }
+
   /**
    * The feather trail (OP-307): a glint on each doorway not tried yet, and feathers from the owl toward
    * one of them (featherTrail.ts, trailDoor), along the way it would walk there (straight in a room seen
@@ -2019,7 +2049,9 @@ export class RoomScene extends Phaser.Scene {
     if (this.sideView()) return trail.lay([from, spot]);
     const f = this.footingNow();
     const aim = snapToWalkable(spot, f.walkable);
-    const legs = wayAround(from, aim, f.walkable, [...f.shut, ...doorwaysOff(this.room, from, aim, (id) => this.realmClosed(id), this.walking())]) ?? [];
+    // Round the guardian, where it is (OP-359): no feather is laid behind it.
+    const shade = this.guardian ? guardianShade() : [];
+    const legs = wayAround(from, aim, f.walkable, [...f.shut, ...shade, ...doorwaysOff(this.room, from, aim, (id) => this.realmClosed(id), this.walking())]) ?? [];
     trail.lay([from, ...legs, aim]);
   }
 
@@ -2465,6 +2497,8 @@ export class RoomScene extends Phaser.Scene {
     promptShown: string | null;
     /** The tall art gone see-through because the visitor's own owl is behind it (OP-346), by its art's key. */
     seeThrough: string[];
+    /** The guardian at the heart of the Great Hollow (OP-359), where it is: null on any address without `?guardian=1`. */
+    guardian: GuardianState | null;
     /** The feather trail (OP-307): the feathers out now (room px) and the doorways that glint; null in a course. */
     trail: { feathers: Vec2[]; glints: string[]; on: boolean } | null;
     floorShown: boolean;
@@ -2548,6 +2582,7 @@ export class RoomScene extends Phaser.Scene {
       firstFlight: this.firstFlown,
       promptShown: this.reach?.shown() ?? null,
       seeThrough: this.seeThrough?.faded() ?? [],
+      guardian: this.guardian?.state() ?? null,
       trail: this.trail ? { ...this.trail.debug(), on: this.trailOn } : null,
       floorShown: this.floorShown,
       edges: this.edgesDrawn,
@@ -3127,6 +3162,7 @@ export class RoomScene extends Phaser.Scene {
   emote(e: string): boolean {
     if (!this.built || !EMOTE_IDS.includes(e) || !this.collection.owns(e)) return false;
     this.me.playEmote(e);
+    this.guardianCalled(this.playerId, e);
     this.conn?.send({ t: 'emote', id: this.playerId, e });
     const near = [...this.npcs.values()].filter((n) => distance(n.def.pos, this.me.pos) <= NPC_EMOTE_RADIUS).map((n) => n.id);
     this.link?.note({ kind: 'emote', emote: e, room: this.room.id, near });

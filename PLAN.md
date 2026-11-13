@@ -17,11 +17,16 @@
   asked for: OP-358, the board's P1 from the QA walk (on a page whose room connection is down, the
   Menu map forgot the turnstiles after one trip), merged and live (PR 238); and OP-360, the ink
   course's first screen laid for a newcomer's plays, under "After the pass" below, from the first
-  phone runs since the pass went live (11 falls in two runs).
-- What comes next is the owner's to choose: on Nov 12 he asked for one larger-than-life change
-  that would make the park far more inviting to a new player or bring a player back. The one
-  recommended, and why, is in the log (Nov 12, "one larger-than-life change") and in OP-359.
-  Nothing of it is built.
+  phone runs since the pass went live (11 falls in two runs), merged and live (PR 239).
+- The larger change (OP-359): on Nov 12 the owner asked for one larger-than-life change that
+  would make the park far more inviting to a new player or bring a player back. The one
+  recommended was to bring the guardian to life, and his word the same day was "I like it, and I
+  like it living in the heart of the great hollow". Its first slice, behind `?guardian=1`, is
+  planned under "After the pass" below. Switching it on for every visitor is a change of its own,
+  after his look.
+- Asked for the same day and filed as OP-362: a critique of the art across the park against what
+  a top studio ships, with a verdict and ranked fixes. It is written in the waits on the
+  guardian's checks; nothing is generated or changed under it.
 - Still the owner's to say: OP-335 and OP-341 (each needs a change under `.github/`, which his
   rules keep his unless he says so of that change); the "at the park" quest step (naming the
   place changes a logged step's words); OP-357 (the art tool's own tests are not part of CI and
@@ -347,6 +352,58 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
     cannot be reached without the upward stroke. A room test holds both.
   - The kid sim is unchanged for the course (weakest hop 80%, in its third act; 0.2 falls on a
     clear) and passes; the room's three screens are inside the style check's bands and palette.
+
+### OP-359: the guardian alive at the heart of the Great Hollow (first slice, behind `?guardian=1`)
+
+- Goal: an owl that walks through the turnstiles meets something that looks back. A great horned
+  owl about nine owls tall sits at the heart of the first big room, breathing, and it notices the
+  newcomer: the park gets a face, and the first room a reason to look up and stay.
+- Why it beats what is there. The first big room greets a newcomer with a floor, nine doorways and
+  a line of feathers; nothing in it is alive. The park's story makes its guardians colossal and
+  living; in the game they are idols about four owls tall on the rim, and the great horned owl is
+  only the treehouse clearing's. From the play log (outside visitors, Nov 1 to 12, small numbers):
+  on a phone 11 of 13 visits never reached the arcade or a course, the six visits that did lasted
+  15 to 75 minutes against a median of 3.6 for the rest, every outside visitor was a guest, and no
+  two were ever in the park at once. A guest alone in a big room needs the room itself to answer.
+- The owner's word (Nov 12): yes, and it lives at the heart of the Great Hollow. A larger painting
+  is still his to pick and pay for; this slice uses the one painting that exists, enlarged a
+  little (soft on a big screen).
+- What the slice is, all of it in the page and behind the flag `guardian`:
+  1. Where: on the hall's middle line, its foot between the inner ends of the two root runs, as in
+     the picture the owner saw. From where an owl comes in it is seen whole, under the owl; it
+     stands clear of the knothole's sign; the heart's light and rising air are at its chest.
+  2. Alive, and an owl. An owl's eyes are fixed in its head: it looks at a thing by turning its
+     head. So the guardian's head follows the owl it attends to (the one that last called to it,
+     else a newcomer, else the nearest), slowly; it blinks; it dozes when no owl is near and wakes
+     as one comes. When an owl comes in by the knothole it lifts its head, tilts it the way owls
+     do at something new, and gives one low hoot. It answers a hoot with its own, a bow with a
+     bow, a tilt with a tilt. While an owl rides the rising air at the heart its breath deepens,
+     the motes in the column surge with it, and it watches the rider go up.
+  3. Drawn from the one painting. The page cuts it at the neck into a head and a body, draws lids
+     for the blink, and puts them together each frame into one picture. No image file is added.
+  4. It never hides the visitor's own owl: it stands among the owls with its foot as its depth and
+     goes see-through while the visitor's own owl is behind it, the rule every tall thing in the
+     park has (OP-346), over the shape of its head and body and not its frame.
+  5. The feather trail goes round it: no feather is laid behind it.
+  6. The clearing's idol on the rim is the same painting. With the flag on it stands as a carving
+     (one tone of wood, still), so the living owl is not in the room twice.
+  7. Its hoot is a cue in the sound table, low and soft, under the Sounds switch.
+- Not in it: the room server, the room's data, the gate, tickets, stored data, new art, spend. So
+  it has no footprint yet (an owl can walk where its bough lies; a footprint is room data, and
+  comes with switching it on); other owls behind it are hidden as behind any tall thing; it does
+  not know an owl that has come before, follow the moon, lift owls gathered under it, or show from
+  the gate. Those are later slices.
+- Steps: the rules as a pure file with tests (who it attends to, how its head goes there, when it
+  blinks, dozes, hoots and beats); the picture (cut, lids, one composed image); the scene's wiring
+  behind the flag; the see-through shape; the trail; the carving; the cue; a browser test with the
+  flag on and one that says a plain address has none of it; the looks at 1440x900 and 1024x768.
+- Done when: with `?guardian=1` the guardian is in the hall and does each thing in 2 to 7, the
+  tests say so, a plain address is as it was (the whole browser suite green), the pull request is
+  labelled `flag-hidden` and through the gate, and the owner has pictures and a note of what to
+  look at on his phone.
+- Should move, once it is on for every visitor (behind the flag only the owner sees it): visits
+  that end in the hall within a minute (down); visits that reach the arcade or a course (up); owls
+  back on another day (up).
 
 ## Log
 
@@ -740,3 +797,7 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   column glides back over the stones, painting them; a walker meets water at the second island's
   west end); on a phone the bench's tip and the "Checkpoint" toast overlap for a second; the second
   bridge is drawn through the sleeping crane's rock, as the higher bridge was through its neck.
+- 2026-11-12: OP-360 merged through the sweep (PR 239, 8632d91) with every check green, and is
+  live (deploy run 312 on the merge commit). The same day the owner said yes to the guardian
+  (OP-359) and where it lives, and asked for a critique of the art across the park (OP-362). The
+  guardian's first slice is planned under "After the pass".

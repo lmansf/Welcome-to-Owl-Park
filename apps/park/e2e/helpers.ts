@@ -59,6 +59,20 @@ export interface ParkState {
   promptShown: string | null;
   /** The tall art gone see-through because the visitor's own owl is behind it (OP-346), by its art's key. */
   seeThrough: string[];
+  /** The guardian at the heart of the Great Hollow (OP-359): null on any address without `?guardian=1`. */
+  guardian: {
+    at: { x: number; y: number };
+    scale: number;
+    parts: boolean;
+    attending: string | null;
+    lids: 'open' | 'half' | 'closed';
+    dozing: boolean;
+    hoots: number;
+    beat: number;
+    head: { roll: number; dx: number; dy: number };
+    alpha: number;
+    boxes: Array<{ x: number; y: number; w: number; h: number }>;
+  } | null;
   /** The sounds played for the visitor's own owl on this page, the newest last (OP-350). */
   sounds: string[];
   /** The side camera (OP-351): its lead (room px, to the right is positive), the height it holds and where it looks; null in a room seen from above. */
