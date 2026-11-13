@@ -34,10 +34,11 @@
 - OP-396, found while building the guardian: the Great Hollow's camera rested two ways in one
   visit. Merged and live (PR 241, Nov 13). Under "After the pass" below.
 - From the owner's audit of Nov 12 (tickets OP-363 to OP-395, filed by another session), this
-  session takes the ones in its remit, one pull request at a time: OP-365 first (the quiz's size
-  boxes, his yes on the ticket), under "After the pass" below; then OP-369 (the HUD's chips
-  overlapping) and OP-370 (the hall at arrival). OP-368 (the second click at the turnstiles) is in
-  the gate's code, which his rules keep his, so it is left for his word.
+  session takes the ones in its remit, one pull request at a time. OP-365 (the quiz's size boxes,
+  his yes on the ticket) is merged and live (PR 242, Nov 13). OP-369 (one safe area along the top
+  of the screen) is built and in its pull request. Both are under "After the pass" below. Next is
+  OP-370 (the hall at arrival). OP-368 (the second click at the turnstiles) is in the gate's code,
+  which his rules keep his, so it is left for his word.
 - Still the owner's to say: OP-335 and OP-341 (each needs a change under `.github/`, which his
   rules keep his unless he says so of that change); the "at the park" quest step (naming the
   place changes a logged step's words); OP-357 (the art tool's own tests are not part of CI and
@@ -524,6 +525,45 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   numbers: read owl by owl.
 - Seen and left: the feedback button at the screen's left edge sits over the first answer on a
   phone held upright, before and after. That is OP-369's (one safe area for the HUD).
+
+### OP-369: one safe area along the top of the screen
+
+- What was wrong (the owner's audit of Nov 12, and seen here on a guest's screen with the room
+  server run as the live park is: the gate taking tickets, the keepers' ribbon on, every new owl on
+  the new map): each thing laid over the top of the game was placed by its own file at a height of
+  its own. On a computer a guest's "Just looking" badge lay over the ribbon's words everywhere
+  inside the park. In a course the objective strip lay over the ribbon's end at every size. On a
+  phone held sideways the ribbon lay over the home screen's title. And through the quiz the
+  feedback button, halfway down the left edge, sat on the first answer on a phone.
+- The change, in four parts:
+  - `ui/topStack.ts` (new): the things that stand down the left under the top bar (the welcome
+    card, the ribbon, the guest's badge, an activity's cards on a phone) are in the HUD's own flow,
+    so they stack by themselves. The two that stand in the middle, a course's objective strip and
+    the two-second notices, are put under whatever they would lie over (`clearTop`), the strip
+    first and the notices under it, and again whenever any piece comes, goes or changes size.
+  - `ui/spectator.ts`: the badge stands in the flow at every size. It had a height of its own on
+    a computer. On a phone it still waits while the ribbon shows (OP-242).
+  - `ui/home.ts`: with the ribbon on, the home screen's block keeps clear of it, moved down only
+    as far as it must be (two spacers share the room left over as the centring did; the upper one
+    is never shorter than the ribbon). On a computer and an upright phone nothing moves. On a
+    phone on its side the block fills its side from top to bottom, and moved down its last links
+    would leave the screen, so there the ribbon stands over the owl's side instead.
+  - `ui/whichOwl.ts`: while the quiz is up the feedback button keeps to the row the quiz already
+    keeps clear for Skip, at its other end.
+- Tests: `e2e/hudStack.spec.ts` (the room server's project) walks a new owl from the home screen
+  out of its nest, along the street, through the turnstiles as a guest, into the Great Hollow and
+  on into a course, and at every stop measures everything laid over the game, with a notice up and
+  without, at 1363x936, 1440x900 and 1024x768 on a computer and 390x844 and 844x390 on a phone:
+  no two may lie over one another. On main it fails on the badge, on the strip and on the home
+  screen's title. `topStack.test.ts` holds the rule. The quiz's browser test fails if the feedback
+  button lies over an answer (on main it does, on a phone, on the first card).
+- Should move: nothing a play log counts. It is what a visitor reads in the first minute: every
+  line whole.
+- Seen and left, for the owner's word: the card that flips up as the turnstiles take a ticket,
+  and the free pass's card, are placed by `ui/tickets.ts`, which his rules keep his. Each stands a
+  fifth of the way down the screen. With the ribbon and the welcome card up, the ticket's card
+  lies over them for its 2.6 seconds on a phone on its side (and by 3 px at 1024x768); at the
+  other three sizes it is clear. One line there would put it under the stack.
 
 ## Log
 

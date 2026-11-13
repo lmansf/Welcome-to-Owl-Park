@@ -238,6 +238,17 @@ function css(): string {
 #hud .home .h-closed .h-closed-words{margin:0;font-size:clamp(17px,2.6vh,21px);font-weight:700;line-height:1.3}
 #hud .home .h-closed p{margin:0;font-size:14px;line-height:1.35;opacity:.92}
 #hud .home .h-stage{min-width:0;min-height:0}
+/* The keepers' ribbon lies across the top of the home screen (OP-369): the side's block keeps clear of it, moved down only as far
+   as it must be. Two spacers share the room left over as the centring did; the upper one is never shorter than the ribbon. */
+#hud.ribbon-on .home .h-side{justify-content:flex-start}
+#hud.ribbon-on .home .h-side::before,#hud.ribbon-on .home .h-side::after{content:'';flex:1 1 0px}
+#hud.ribbon-on .home .h-side::before{min-height:max(0px,calc(var(--ribbon-bottom,0px) + 8px - max(16px,env(safe-area-inset-top))))}
+/* A phone on its side: the block fills its side from top to bottom, and moved down its last links would leave the screen. There
+   the ribbon stands over the owl's side instead, and the block stays where it is. */
+@media (max-height:480px) and (min-width:641px){
+  #hud.at-home.ribbon-on .ribbon{margin:0 max(8px,env(safe-area-inset-right)) 0 auto;max-width:calc(100vw - min(440px,56vw) - 24px)}
+  #hud.ribbon-on .home .h-side::before{min-height:0}
+}
 /* After every rule that sets a display, so a hidden part (the line, its message, the note) stays hidden. */
 #hud .home [hidden]{display:none}
 @media (max-width:520px){
