@@ -45,12 +45,13 @@ const PLAY_MS = 40_000;
 
 /**
  * A play in `room`: from standing at `from` (`z` up over the ground line), the stick held east, to the
- * first time the owl stands at or past `goal`. A fall into the room's water or thorns ends it.
+ * first time the owl stands at or past `goal`. A fall into the room's water or thorns ends it. It starts
+ * at park time `t0`: a room whose ledges keep time (neon signs) is met as the clock has it then.
  */
-export function playEast(room: RoomDef, from: { x: number; z: number }, goal: number, play: Play): PlayEnd {
+export function playEast(room: RoomDef, from: { x: number; z: number }, goal: number, play: Play, t0 = 100_000): PlayEnd {
   const br = botRoom(room);
   const surfaces = surfacesOf(br);
-  const o = owlAt(from.x, from.z, 100_000);
+  const o = owlAt(from.x, from.z, t0);
   const flaps = play.flaps ?? [];
   const flapHold = play.flapHoldMs ?? 0;
   const path: string[] = [];

@@ -21,7 +21,7 @@ sign is stood on only while it is lit.
 
 | Room | Act | Screens | Width | What it is |
 | --- | --- | --- | ---: | --- |
-| `circuit-1` | 1, The Rooftops | 1.1 to 1.3 | 4800 | One sign up to a high roof, a glide over the street, then two signs in turn; breaker 1 |
+| `circuit-1` | 1, The Rooftops | 1.1 to 1.3 | 4800 | One hop up to breaker 1 (OP-378), one sign up to a high roof, a glide over the street, then two signs in turn |
 | `circuit-2` | 2, The Power Cut | 2.1 to 2.3 | 4800 | Signs between live wires over a dark block, faster circuits; breaker 2 |
 | `circuit-3` | 3, The Antenna | 3.1, 3.2 | 3200 | A climb of four signs to the tallest roof; breaker 3, the shrine |
 
@@ -49,13 +49,13 @@ The ground line is the roofs' own deck; a sign's row says which circuit it is on
 
 | Ledge | x | w | top | What it is | Reached from |
 | --- | ---: | ---: | ---: | --- | --- |
-| `ac1` | 300 | 200 | 120 | An air unit on the deck | the deck |
+| `ac1` | 300 | 200 | 120 | An air unit on the deck, breaker 1, glinting until it is on (OP-378) | the deck, one hop |
 | `s1` (a) | 700 | 180 | 230 | A sign | the deck, straight up |
 | `b1` | 1000 | 400 | 420 | The high roof, bench 1 | `s1` only (from the deck it is a rise of 420) |
 | `bridge1` | 1900 | 240 | 300 | A footbridge over the street, lost feather 1 | a glide down off `b1` |
 | `s2` (a) | 3000 | 180 | 200 | A sign | the second deck |
 | `s3` (b) | 3300 | 180 | 380 | A sign | `s2` |
-| `b2` | 3620 | 360 | 540 | The breaker's roof, breaker 1 | `s3` only: without either sign it is out of reach |
+| `b2` | 3620 | 360 | 540 | The tall roof, the harder way on (breaker 1 moved to `ac1`, OP-378) | `s3` only: without either sign it is out of reach |
 | `board1` | 4200 | 200 | 400 | A billboard, lost feather 2 | a glide down off `b2` |
 
 The street from 1400 to 2700 is 1300 wide: past a level glide with the dash (1175), so the way over

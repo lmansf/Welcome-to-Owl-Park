@@ -33,6 +33,16 @@ function edged(scene: Phaser.Scene, x: number, y: number, name: SymbolName, colo
   return scene.add.container(x, y, [edge, top]);
 }
 
+/**
+ * One glint, as the trail puts over a doorway not tried yet, standing over `x`, `y` (its foot): the park's
+ * one signal for "go here first", used by a course for its first landing and breaker too (OP-378).
+ */
+export function glintAt(scene: Phaser.Scene, x: number, y: number, calm: boolean): Shape {
+  const g = edged(scene, x, y - 30, 'star4', GLINT_TINT, GLINT_SCALE).setDepth(y + 2);
+  if (!calm) scene.tweens.add({ targets: g, scale: 0.6, angle: 45, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: (Math.round(x) % 7) * 120 });
+  return g;
+}
+
 /** The trail and the glints drawn in one room. */
 export class FeatherTrail {
   private feathers: Shape[] = [];
