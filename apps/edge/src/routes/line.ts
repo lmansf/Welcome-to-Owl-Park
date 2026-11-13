@@ -25,7 +25,10 @@ export async function line(c: RouteCtx): Promise<Response> {
     return json(a satisfies LineStatus);
   };
   const ask = (path: string, body: Record<string, unknown>) => overflow(env).fetch(`https://park${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, who }) });
-  if (!st.active) return go();
+  // Not active when last read: straight in, except a number asked for while the line starts by itself
+  // (OP-322). That ask goes to the line, since the park may have filled in the few seconds this Worker
+  // keeps its read: a full room sends a newcomer here the moment it fills.
+  if (!st.active && (request.method !== 'POST' || st.line.mode !== 'auto')) return go();
   if (request.method === 'POST') {
     // In the park lately (this browser holds an entry): straight back in, no line.
     if (await verifyEntry(secret, (await readJson(request))?.['entry'], who)) return go();
