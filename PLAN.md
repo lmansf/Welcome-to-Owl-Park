@@ -1000,3 +1000,16 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   runner) now have the slow allowance their neighbours have. Kept for next time: a held clock
   takes the park's time out of a test, not the machine's; count the frames a test draws and give
   it the allowance for a runner three times slower than this one.
+- 2026-11-13: OP-365 merged through the gate (PR 242, 8533254) on its second run of the checks,
+  every one green, and is live (deploy run 315 on the merge commit).
+- 2026-11-13: OP-369 built (one safe area along the top of the screen; under "After the pass").
+  The audit's pages cannot be read from here, so its overlaps were found again on a guest's
+  screen: the test room server run as the live park is (the gate taking tickets, the ribbon on,
+  the tree taking every new owl), and every box laid over the game measured at the audit's five
+  sizes from the home screen to a first course. That walk is now the browser test. It found two
+  overlaps the audit did not name: the ribbon over the home screen's title on a phone on its
+  side, and (seen first while building OP-365) the feedback button on the quiz's first answer.
+  Kept for next time: an owl that arrives in the second the gate closes is let in as a ticket
+  holder, so a capture taken then shows no guest's badge (the tests wait past that second, and a
+  capture script must too); and the client must not be rebuilt under a running room server,
+  which then serves an empty page.
