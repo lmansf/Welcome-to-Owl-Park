@@ -401,6 +401,15 @@ export class Overflow extends DurableObject<Env> {
       return Response.json(st);
     }
 
+    if (url.pathname === '/full') {
+      // A room just turned a newcomer away as full (OP-322): count the park now rather than by a count
+      // up to COUNT_FRESH_MS old, and say whether the line takes arrivals, so the room sends the
+      // newcomer to wait in it instead of telling it the room is full.
+      const s = this.settings.line();
+      if (s.mode === 'auto') await this.freshCount(now, true);
+      return Response.json({ line: await this.isActive(now, false) });
+    }
+
     const who = body['who'];
     if (typeof who !== 'string' || who.length < 3 || who.length > 40) return Response.json({ error: 'bad request' }, { status: 400 });
     if (url.pathname === '/line/join') {

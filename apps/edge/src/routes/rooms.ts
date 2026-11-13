@@ -151,7 +151,8 @@ export async function socket(c: RouteCtx): Promise<Response> {
   // through it, opens a room; a newcomer is sent to wait on the home screen.
   const busy = await overflowOf(env);
   const who = whoOf(pass);
-  if (busy.active && !(await verifyEntry(secret, url.searchParams.get('entry'), who))) {
+  const cameThrough = await verifyEntry(secret, url.searchParams.get('entry'), who);
+  if (busy.active && !cameThrough) {
     log.info('room.join', 'room_join_refused', 'A room socket was sent to wait in the line.', { ...seen, reason: 'queue' });
     return turnedAway(ctx, log, CLOSE.QUEUED, 'line');
   }
@@ -181,6 +182,10 @@ export async function socket(c: RouteCtx): Promise<Response> {
   const until = ticketUntil(gate.mode, pass, roomId, spectator);
   if (until !== null) headers.set('X-Ticket-Until', String(until));
   headers.set('X-Visitor-Ip', clientIp(request, env));
+  // A newcomer (no entry: not inside lately, not through the line), by the Worker's word only (OP-322):
+  // a full room sends it to the line when the line has just started, rather than saying the room is full.
+  headers.delete('X-Newcomer');
+  if (!cameThrough) headers.set('X-Newcomer', '1');
   // One of our own test visits (the page's `test=1`, or a headless browser): only the Worker says so, whatever the page sent under the name goes.
   headers.delete('X-Test-Visit');
   if (isTestVisit(url.searchParams.get('test'), request.headers.get('User-Agent'))) headers.set('X-Test-Visit', '1');

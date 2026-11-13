@@ -165,6 +165,8 @@ export interface Attachment {
    * and the quests and today's tasks are locked to it, until a ticket's pass admits it in place.
    */
   spec?: true;
+  /** A newcomer, by the Worker's word (OP-322): not inside lately and not through the line, so a full room may send it to the line. */
+  newcomer?: true;
   /** When the ticket that let this owl in runs out, in ms (OP-237): the socket closes then, on a frame or the alarm. */
   until?: number;
   /** One of our own test visits (the Worker's X-Test-Visit): its visit goes to the log marked, for the reports to leave out. */
@@ -650,6 +652,24 @@ export class RoomObject extends DurableObject<Env> {
     if (reason === 'afk') log.info('room.rest', 'afk_leave', 'An owl left its room asleep, its visitor away.', sleep?.since != null ? { asleep_ms: now - sleep.since } : {});
   }
 
+  /**
+   * Whether the line in front of the park takes newcomers now, asked of the overflow object as a room
+   * turns one away as full (OP-322): it counts the park at once rather than by a count up to a few
+   * seconds old. No overflow object (a test's stand-in env), or no answer: no line, as before.
+   */
+  private async lineTakesNewcomers(): Promise<boolean> {
+    const ns = this.env.OVERFLOW as Env['OVERFLOW'] | undefined;
+    if (!ns) return false;
+    try {
+      const r = await ns.get(ns.idFromName('park')).fetch('https://park/full', { method: 'POST', body: '{}' });
+      if (!r.ok) return false;
+      return ((await r.json()) as { line?: unknown }).line === true;
+    } catch (e) {
+      this.log.warn('overflow', 'read_failed', 'The overflow object did not say whether the line takes a newcomer at a full room: it is told the room is full.', { error: e });
+      return false;
+    }
+  }
+
   /** The busy ribbon now: asked of the overflow object when last asked more than a minute ago. */
   private async freshNotice(): Promise<void> {
     if (Date.now() - this.noticeAt < NOTICE_FRESH_MS) return;
@@ -917,6 +937,8 @@ export class RoomObject extends DurableObject<Env> {
     if (device) att.device = device;
     // One of our own test visits: the Worker's word only.
     if (request.headers.get('X-Test-Visit') === '1') att.test = true;
+    // A newcomer (OP-322): the Worker's word only.
+    if (request.headers.get('X-Newcomer') === '1') att.newcomer = true;
     server.serializeAttachment(att);
     await this.freshNotice();
     await this.ensureAlarm();
@@ -1248,6 +1270,13 @@ export class RoomObject extends DurableObject<Env> {
     const result = room.join(peerOf(ws), att.id, { ...hello, look }, att.sid, { ...opts, welcome, ...(att.spec ? { spectator: true } : {}) });
     const log = this.logOf(att);
     if (result === 'full') {
+      // A newcomer at a full park room, as the line starts by itself (OP-322): sent to wait in the line,
+      // as the Worker would send it once the line's count caught up, rather than told the room is full.
+      if (!att.spec && att.newcomer && !isNestRoom(att.room) && !isPartyRoom(att.room) && (await this.lineTakesNewcomers())) {
+        log.info('room.join', 'room_join_refused', 'A newcomer at a full room was sent to wait in the line: the line had just started.', { reason: 'queue', cap: room.cap });
+        closeSocket(ws, CLOSE.QUEUED, 'line');
+        return false;
+      }
       // A spectator is turned away at its share of the cap (OP-191): ticket holders still come in.
       // TODO-DOCS (OP-191): docs/LOGGING.md: room_join_refused reason `spectators` (with cap and limit); room_join_ok `spectator`; climb_band_refused `practice`.
       if (att.spec) log.info('room.join', 'room_join_refused', 'A spectator was turned away: the room holds its spectators’ share of owls.', { reason: 'spectators', cap: room.cap, limit: room.spectatorLimit });
