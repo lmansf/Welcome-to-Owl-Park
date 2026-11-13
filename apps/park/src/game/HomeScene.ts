@@ -1,7 +1,9 @@
 import Phaser from 'phaser';
+import { ROOM_W } from '@owl-park/shared';
 import type { ParkConfig } from '../config';
 import { NEST_ROOM } from '../rooms';
 import { loadArtCopy, prefetchRoomArt, releaseArt } from './art';
+import homeBackdrop from './home-backdrop.webp?url';
 
 /** The game event the home scene sends as it comes up (main.ts shows the home screen's buttons then). */
 export const HOME_SHOWN = 'owl-park:home';
@@ -9,7 +11,7 @@ export const HOME_SHOWN = 'owl-park:home';
 /** The lobby's painting behind the home screen, under a texture key of its own. */
 const BACKDROP = 'home-backdrop';
 /** Where the carved-owl arch stands in the lobby's painting (room pixels): a narrow screen keeps it in view. */
-const ARCH_X = 960;
+const ARCH_X_FRACTION = 960 / ROOM_W;
 
 /**
  * The home screen's backdrop (OP-065): the lobby's painting, dimmed, behind the buttons and the
@@ -42,7 +44,7 @@ export class HomeScene extends Phaser.Scene {
       releaseArt(this, [BACKDROP]);
     });
     this.layout();
-    void loadArtCopy(this, 'lobby', BACKDROP).then((ok) => {
+    void loadArtCopy(this, homeBackdrop, BACKDROP).then((ok) => {
       if (gen !== this.gen) return;
       // Then, while the home screen waits on Play, the nest's art comes ahead (OP-129): Play goes to the owl's own nest, and every nest has the same.
       prefetchRoomArt(this, NEST_ROOM, this.registry.get('config') as ParkConfig);
@@ -61,7 +63,7 @@ export class HomeScene extends Phaser.Scene {
     if (!art) return;
     const k = Math.max(width / art.width, height / art.height);
     const w = art.width * k;
-    const left = Math.min(0, Math.max(width - w, width / 2 - ARCH_X * k));
+    const left = Math.min(0, Math.max(width - w, width / 2 - ARCH_X_FRACTION * w));
     art.setScale(k).setPosition(left + w / 2, height / 2);
   }
 }

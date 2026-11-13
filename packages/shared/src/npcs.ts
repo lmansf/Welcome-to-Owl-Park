@@ -5,6 +5,7 @@
  * (proposal C31) before they ship.
  */
 import type { OwlLook, Vec2 } from './protocol';
+import { START_QUEST_OWL } from './realmStart';
 
 export interface NpcDef {
   id: string;
@@ -34,12 +35,60 @@ export const NPC_EMOTE_RADIUS = 220;
 /** Public-safe names for the rooms, used in quest text (realm names stay internal). */
 export const PLACE_NAMES: Readonly<Record<string, string>> = {
   hub: 'the great tree',
+  glass: 'the glass street',
   grove: 'the treehouse clearing',
   market: 'the neon street',
+  // The new map's stairs (map 3), top to bottom.
+  'm3-stair-1': 'the high boardwalk',
+  'm3-stair-2': 'the quiet landing',
+  'm3-stair-3': 'the treetop diner',
+  'm3-ground': 'the forest path',
+  'm3-under': 'the root stair',
+  // The inside of the trunk, its four Commons side by side.
+  'm3-hall': 'the great hollow',
 };
 
 export function placeName(room: string): string {
   return PLACE_NAMES[room] ?? 'the park';
+}
+
+/**
+ * The names the new map (3) gives places, where they are not the names quest text uses (OP-346). On
+ * the new map the room `hub` is the Party Grove at the tree's foot, and a step read "Visit the great
+ * tree" where the doorway's sign and the Menu's map both said the Party Grove. Quest text is worded
+ * once for every owl with PLACE_NAMES, whichever park the owl walks, and the play log records those
+ * words; a screen puts the walked park's own names in as it shows them (placeWords).
+ */
+export const NEW_MAP_PLACE_NAMES: Readonly<Record<string, string>> = {
+  hub: 'the Party Grove',
+  glass: 'the glass realm',
+  'm3-hall': 'the Great Hollow',
+};
+
+/**
+ * A place's name as an owl walking `map` is shown it: the new map's own where it has one. A room of the
+ * new map alone (its id says so, `m3-`) has that name whichever park the owl walks: a course's way out
+ * leads into the Great Hollow on any of them.
+ */
+export function placeShown(room: string, map: number): string {
+  return (map === 3 || room.startsWith('m3-') ? NEW_MAP_PLACE_NAMES[room] : undefined) ?? placeName(room);
+}
+
+const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/**
+ * `text` with each place named as the park the owl walks names it (`map`): quest steps and offers, an
+ * owl's title, what a quest owl says. Today's park and the tree read as they are written.
+ */
+export function placeWords(text: string, map: number): string {
+  if (map !== 3) return text;
+  let out = text;
+  for (const [room, name] of Object.entries(NEW_MAP_PLACE_NAMES)) {
+    const old = PLACE_NAMES[room];
+    if (!old || old === name) continue;
+    out = out.split(old).join(name).split(capital(old)).join(capital(name));
+  }
+  return out;
 }
 
 export const NPCS: readonly NpcDef[] = [
@@ -51,7 +100,7 @@ export const NPCS: readonly NpcDef[] = [
     pos: { x: 2210, y: 700 },
     facing: 1,
     look: { body: '#5C4033', belly: '#E8D8B8', accent: '#C9A227', wear: { head: 'mortarboard~0', face: 'half-moon-specs~0', neck: 'moon-pendant~0' } },
-    greetings: ['Welcome, little one. The tree has room for everyone.', 'Every leaf in this hollow has a story. Some are even true.', 'Mind the moonbeam. It likes to be looked at.'],
+    greetings: ['Welcome in. The tree has room for everyone.', 'Every leaf in this hollow has a story. Some are even true.', 'Mind the moonbeam. It likes to be looked at.'],
     idle: ['nod', 'hoot'],
   },
   {
@@ -82,8 +131,8 @@ export const NPCS: readonly NpcDef[] = [
     name: 'Juniper',
     role: 'Treehouse builder',
     room: 'grove',
-    // The grove's east end (OP-152).
-    pos: { x: 4150, y: 800 },
+    // The grove's east end, on the front side of the fallen log (OP-152, OP-320).
+    pos: { x: 4150, y: 845 },
     facing: -1,
     look: { body: '#A67B5B', belly: '#E8D8B8', accent: '#C9A227', wear: { head: 'bucket-hat~0', face: 'round-glasses~0', pet: 'snail~0' } },
     greetings: ['Measure twice, hoot once.', 'That rope bridge? Mine. The wobble is a feature.', 'Every treehouse needs a good view and a better railing.'],
@@ -112,6 +161,20 @@ export const NPCS: readonly NpcDef[] = [
     look: { body: '#6B6B6B', belly: '#BFC9D6', accent: '#00E5FF', wear: { head: 'propeller-cap~0', face: 'brass-goggles~0', pet: 'beetle~4' } },
     greetings: ['Do not touch the blinking one. Or do, it is fine, probably.', 'Gears, springs, a little neon: that is all anything is.', 'I dropped something again. I always drop something.'],
     idle: ['tilt', 'spin'],
+  },
+  {
+    // The stained-glass realm's quest owl (OP-276), at the foot of the quest post on the realm's start,
+    // in the realm's own circlet (the realm hat until its artist's is delivered). Its quests are its own:
+    // the realm is gated, so no quest elsewhere in the park sends an owl here (questCatalog.ts, TOWN_NPCS).
+    id: 'prism',
+    name: 'Prism',
+    role: 'Keeper of the glass street',
+    room: 'glass',
+    pos: { ...START_QUEST_OWL },
+    facing: 1,
+    look: { body: '#4B5D8A', belly: '#E6ECF7', accent: '#9FD0FF', wear: { head: 'glass-circlet~0', neck: 'moon-pendant~0' } },
+    greetings: ['The light comes through every pane a different colour. I keep count.', 'The guardian listens when you stand in front of it.', 'The climb is just past the nest. Mind the wind.'],
+    idle: ['tilt', 'nod'],
   },
 ];
 

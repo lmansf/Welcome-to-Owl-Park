@@ -186,14 +186,15 @@ describe('the kit', () => {
     }
     expect(top).toBeGreaterThan(140);
     expect(top).toBeLessThan(160);
-    // Released at once: a hop.
+    // Released at once: a lower jump, and still one that clears a first step (OP-343).
     s = hold({ jumpPressed: true, jumpHeld: true }, at(240, 0), 1);
     let hop = s.y;
     for (let i = 0; i < 200 && !s.grounded; i++) {
       s = stepClimb(s, NO_INPUT, layout, night, all);
       hop = Math.max(hop, s.y);
     }
-    expect(hop).toBeLessThan(40);
+    expect(hop).toBeGreaterThan(80);
+    expect(hop).toBeLessThan(top - 40);
     // The double at the apex, once.
     s = hold({ jumpPressed: true, jumpHeld: true }, at(240, 0), 1);
     while (s.vy > 0) s = stepClimb(s, { ...NO_INPUT, jumpHeld: true }, layout, night, all);

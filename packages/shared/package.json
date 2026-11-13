@@ -6,7 +6,9 @@
   "license": "MIT",
   "exports": {
     ".": "./src/index.ts",
-    "./rooms": "./rooms/index.ts"
+    "./rooms": "./rooms/index.ts",
+    "./rooms/kit": "./rooms/kit.ts",
+    "./headers": "./src/headers.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",

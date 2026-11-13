@@ -2,10 +2,9 @@ import {
   ACCENT_COLOURS,
   BELLY_COLOURS,
   BODY_COLOURS,
-  CATALOGUE,
   RARITY_COLOURS,
   RARITY_NAMES,
-  colourwaysFor,
+  itemColourways,
   equipSlotOf,
   getSpecies,
   parseVariant,
@@ -18,6 +17,7 @@ import {
   type Wear,
 } from '@owl-park/shared';
 import type { CollectionState } from '../collect/state';
+import { builderItems } from './builderItems';
 import { dotColour, variantIcon } from './itemIcon';
 import { createModal, modalHeader } from './modal';
 
@@ -30,6 +30,9 @@ export interface PreviewFrame {
   y: number;
   w: number;
   h: number;
+  /** The quiz's reveal (OP-330): the owl glides in to this frame, once. */
+  arrive?: boolean;  /** The quiz's reveal: a closer view, so the owl itself fills the frame. */
+  close?: boolean;
 }
 
 export interface OwlBuilderActions {
@@ -241,7 +244,7 @@ export function createOwlBuilder(root: HTMLElement, state: CollectionState, acti
     content.appendChild(button('Natural colours', 'ghost natural', () => setLook({ ...look, ...getSpecies(look.species).natural })));
   };
 
-  const ownedVariantsOf = (item: ItemDef) => colourwaysFor(item.kind).map((c) => `${item.id}~${c.n}`).filter((v) => state.owns(v));
+  const ownedVariantsOf = (item: ItemDef) => itemColourways(item).map((c) => `${item.id}~${c.n}`).filter((v) => state.owns(v));
 
   /** Tap a card: wear its colourway (or take it off when it is on); not owned, say where to find it. */
   const tapItem = (item: ItemDef, variant: string) => {
@@ -254,7 +257,7 @@ export function createOwlBuilder(root: HTMLElement, state: CollectionState, acti
 
   const card = (item: ItemDef, worn: Set<string>): HTMLElement => {
     const owned = ownedVariantsOf(item);
-    const ways = colourwaysFor(item.kind);
+    const ways = itemColourways(item);
     const firstOwned = owned[0] ? (parseVariant(owned[0])?.colour?.n ?? 0) : 0;
     const wornHere = owned.find((o) => worn.has(o));
     const n = pick.get(item.id) ?? (wornHere ? (parseVariant(wornHere)?.colour?.n ?? firstOwned) : firstOwned);
@@ -286,7 +289,7 @@ export function createOwlBuilder(root: HTMLElement, state: CollectionState, acti
 
   const renderItems = (kind: 'wear' | 'pet' | 'fx') => {
     const worn = new Set(Object.values(actions.wear() ?? {}));
-    const items = CATALOGUE.filter((i) => i.kind === kind);
+    const items = builderItems(kind);
     if (kind === 'wear') {
       for (const slot of ['head', 'face', 'neck'] as const) {
         const grid = el('div', 'grid');
@@ -322,7 +325,7 @@ export function createOwlBuilder(root: HTMLElement, state: CollectionState, acti
     detail.appendChild(what);
     const sel = selected;
     const slot = equipSlotOf(v);
-    if (!state.owns(sel)) detail.appendChild(el('div', 'what', 'Not yet yours: earn it on a quest, or look for it in the feather shop.'));
+    if (!state.owns(sel)) detail.appendChild(el('div', 'what', v.item.reward ? (v.item.id === 'hollow-moth' ? 'Not yet yours: escape the sealed hollow with friends to earn it.' : 'Not yet yours: clear every course to earn it.') : 'Not yet yours: earn it on a quest, or look for it in the feather shop.'));
     else if (slot) {
       const on = actions.wear()?.[slot] === sel;
       detail.appendChild(

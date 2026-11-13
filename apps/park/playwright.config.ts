@@ -3,7 +3,8 @@ import { E2E_ACCOUNTS, E2E_ADMIN_KEY, E2E_STORE } from './e2e/helpers';
 
 /**
  * The room server's test settings: the admin key, a store that is the stand-in on this machine,
- * accounts on (OP-139), their mail kept by the same stand-in, and spectators on (OP-191).
+ * accounts on (OP-139), their mail kept by the same stand-in, Sign in with Google (OP-313) with Google
+ * stood in by it too, and spectators on (OP-191).
  */
 const EDGE_VARS = {
   ADMIN_KEY: E2E_ADMIN_KEY,
@@ -19,6 +20,11 @@ const EDGE_VARS = {
   ACCOUNT_SECRET: E2E_ACCOUNTS.secret,
   MAIL_FROM: E2E_ACCOUNTS.from,
   MAIL_TEST_ORIGIN: E2E_STORE.origin,
+  // Sign in with Google (OP-313) on, with Google's two addresses the same stand-in.
+  GOOGLE_SIGNIN: 'on',
+  GOOGLE_CLIENT_ID: E2E_ACCOUNTS.googleClientId,
+  GOOGLE_CLIENT_SECRET: E2E_ACCOUNTS.googleClientSecret,
+  GOOGLE_TEST_ORIGIN: E2E_STORE.origin,
 };
 
 export default defineConfig({
@@ -37,11 +43,12 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
+  // OP-218: the level specs must join tree.spec.ts on both devices; CI shards use this discovery list.
   projects: [
     // Collectibles run on the desktop project only: the phone project repeats the park suite's layout checks.
-    { name: 'desktop', testMatch: /(park|collect|lobby|activities|nests|arcade|climb|chat|leave|home|feedback|pad|mirror|sleep|flight|perches|loader|travel|tree|whichOwl)\.spec\.ts/, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } } },
-    // Zooming by touch (OP-104) is checked on the phone only.
-    { name: 'phone', testMatch: /(park|lobby|nests|arcade|climb|chat|leave|home|feedback|pad|mirror|zoom|sleep|flight|perches|loader|travel|tree|whichOwl)\.spec\.ts/, use: { ...devices['Pixel 7'], browserName: 'chromium' } },
+    { name: 'desktop', testMatch: /(park|collect|lobby|activities|escape|party|nests|arcade|climb|chat|leave|home|feedback|pad|mirror|sleep|flight|perches|loader|travel|tree(?:L[2-5])?|whichOwl|course|air|realmStart|sizes|skin|trail|wayBack|townView|thermal|guardian)\.spec\.ts/, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } } },
+    // Zooming by touch (OP-104) and the thumbstick letting go under two thumbs (stick.spec.ts, OP-242) are checked on the phone only.
+    { name: 'phone', testMatch: /(park|lobby|escape|party|nests|arcade|climb|chat|leave|home|feedback|pad|mirror|zoom|stick|sleep|flight|perches|loader|travel|tree(?:L[2-5])?|whichOwl|course|air|realmStart|sizes|skin|trail|wayBack|townView|thermal|guardian)\.spec\.ts/, use: { ...devices['Pixel 7'], browserName: 'chromium' } },
     // The room server suite: the built client served by the Worker (wrangler dev), real WebSockets.
     // Two browser contexts, real sockets, two walks and a room change per test: on a loaded CI runner
     // that chain runs close to a minute, so this project gets a longer per-test budget.
@@ -50,7 +57,7 @@ export default defineConfig({
     // store (storecard.spec.ts, OP-153), whose ways need the store's pages, the keepers' entries
     // setting (entries.spec.ts, OP-156), which the Worker reads when it writes a pass, and spectators
     // (spectator.spec.ts, OP-191).
-    { name: 'edge', testMatch: /(edge|opening|gate|turnstiles|checkout|overflow|climb|accounts|travel|policy|paint|feedback|storecard|restart|entries|spectator|setup)\.spec\.ts/, timeout: 90_000, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 }, baseURL: 'http://localhost:8787' } },
+    { name: 'edge', testMatch: /(edge|opening|gate|turnstiles|checkout|overflow|climb|accounts|travel|policy|paint|feedback|storecard|restart|entries|spectator|setup|hudStack)\.spec\.ts/, timeout: 90_000, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 }, baseURL: 'http://localhost:8787' } },
   ],
   webServer: [
     {

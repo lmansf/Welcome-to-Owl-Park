@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_ANCHORS, artFacing, hueRotateMatrix, measureAnchors, multiplyTint, rotateHue, type Mask } from './pixels';
+import { DEFAULT_ANCHORS, GILD_STOPS, artFacing, gild, hueRotateMatrix, measureAnchors, multiplyTint, rotateHue, type Mask } from './pixels';
 
 const px = (...rgba: number[]) => new Uint8ClampedArray(rgba);
 
@@ -16,6 +16,27 @@ describe('multiply tint', () => {
     const px = new Uint8ClampedArray([200, 100, 50, 255]);
     for (const bad of ['', 'red', '#fff', '4FA3FF', '#4FA3FG']) multiplyTint(px, bad);
     expect([...px]).toEqual([200, 100, 50, 255]);
+  });
+});
+
+describe('gilding (the Golden Mouse)', () => {
+  it('maps black, grey and white onto the gold stops, keeps alpha and skips clear pixels', () => {
+    const px = new Uint8ClampedArray([0, 0, 0, 255, 128, 128, 128, 200, 255, 255, 255, 255, 40, 90, 200, 0]);
+    gild(px);
+    expect([...px.slice(0, 4)]).toEqual([...GILD_STOPS[0]!, 255]);
+    const mid = GILD_STOPS[1]!;
+    for (let c = 0; c < 3; c++) expect(Math.abs(px[4 + c]! - mid[c]!)).toBeLessThanOrEqual(2);
+    expect(px[7]).toBe(200);
+    expect([...px.slice(8, 12)]).toEqual([...GILD_STOPS[2]!, 255]);
+    expect([...px.slice(12, 16)]).toEqual([40, 90, 200, 0]);
+  });
+
+  it('keeps shading: a lighter pixel stays lighter, and every pixel comes out warm (red over blue)', () => {
+    const px = new Uint8ClampedArray([60, 30, 90, 255, 200, 120, 160, 255]);
+    gild(px);
+    expect(px[4]! + px[5]! + px[6]!).toBeGreaterThan(px[0]! + px[1]! + px[2]!);
+    expect(px[0]!).toBeGreaterThan(px[2]!);
+    expect(px[4]!).toBeGreaterThan(px[6]!);
   });
 });
 

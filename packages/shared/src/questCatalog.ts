@@ -11,6 +11,7 @@ import { hashSeed, rotationRandom } from './parktime';
 import { questFeathers, type Cadence, type Difficulty, type Goal, type QuestDef, type QuestLength, type QuestStep, type QuestType } from './quests';
 import type { QuestItemKind } from './interactables';
 import { NPCS, getNpc } from './npcs';
+import { getPuzzle } from './puzzles';
 
 const ROOMS = ['hub', 'grove', 'market'] as const;
 type RoomId = (typeof ROOMS)[number];
@@ -34,8 +35,14 @@ function lengthOf(steps: number): QuestLength {
   return steps <= 1 ? 'short' : steps <= 3 ? 'medium' : 'long';
 }
 
+/**
+ * The owls of the open town (the great tree, the clearing and the neon street), who give and take the
+ * templates' quests. A realm's own quest owl (OP-276) gives only its own story quests: a realm may be
+ * gated, and no quest should send an owl to a door it cannot open.
+ */
+export const TOWN_NPCS = NPCS.filter((n) => (ROOMS as readonly string[]).includes(n.room));
 const roomOf = (npc: string) => getNpc(npc)!.room as RoomId;
-const others = (npc: string) => NPCS.filter((n) => n.id !== npc);
+const others = (npc: string) => TOWN_NPCS.filter((n) => n.id !== npc);
 const othersIn = (npc: string, room: string) => others(npc).filter((n) => n.room === room);
 const othersElsewhere = (npc: string) => others(npc).filter((n) => n.room !== roomOf(npc));
 
@@ -125,6 +132,37 @@ export const STORY_QUESTS: readonly QuestDef[] = [
     thanks: 'Just as I thought: excellent acoustics. Have my spare hat, it has seen a lot of treetops.',
     requires: ['story-welcome'],
   },
+  {
+    // The new map's way down the tree (map 3): two piles in the Great Hollow and one at the foot of the arcade's stair, so the way down has errands of its own.
+    id: 'story-pip-stair-leaves',
+    title: 'Leaves on the stair',
+    giver: 'pip',
+    type: 'interact',
+    difficulty: 'easy',
+    length: 'long',
+    cadence: 'story',
+    // Four steps as before, so a quest under way keeps its place: the Commons' pile is now in the hollow.
+    steps: [flop(1, 'm3-hall'), flop(1, 'm3-hall'), flop(1, 'arcade'), emote('hoot', { npc: 'pip' })],
+    reward: { feathers: 50, item: null },
+    offer: 'The leaves come down the tree faster than I can sweep. Flop into two piles in the great hollow and one in the arcade below it, then come back and hoot for me.',
+    thanks: 'The hollow is clear and the lanterns shine again. Here, for your trouble.',
+    requires: ['story-welcome'],
+  },
+  {
+    // The stained-glass realm's start (OP-276): a job from the quest owl at the post, the leaves by the
+    // trading nest, and a hoot for the guardian on the vote spot, so the start has something to do.
+    id: 'story-prism-panes',
+    title: 'Leaves on the glass',
+    giver: 'prism',
+    type: 'mixed',
+    difficulty: 'easy',
+    length: 'medium',
+    cadence: 'story',
+    steps: [flop(1, 'glass'), emote('hoot', { npc: 'prism' })],
+    reward: { feathers: 40, item: null },
+    offer: 'The wind off the climb keeps blowing leaves against the trading nest. Flop into the pile for me, then come back and give me a hoot.',
+    thanks: 'The panes are clear again and the light is back. Here, for your trouble.',
+  },
 ];
 
 // ---------- templates (expanded in bulk) ----------
@@ -144,6 +182,8 @@ interface Template {
 }
 
 const GRAND_TITLES = ['The grand tour', 'A very long night', 'All around the park', 'The full flight', 'Round the whole park', 'One big adventure'];
+/** The monthly tours (OP-254): one title per giver, like the grand quests. */
+const ODYSSEY_TITLES = ['The long moon', 'A month of wonders', 'Every corner of the park', 'The great migration', 'Moon to moon', 'The whole wide park'];
 
 const THANKS = ['Wonderful. You have earned this.', 'Just what I needed. Here, for your trouble.', 'You are quicker than you look. Take this.', 'Thank you, friend. A little something for you.'];
 
@@ -164,7 +204,7 @@ const TEMPLATES: readonly Template[] = [
   },
   {
     id: 'errand',
-    givers: NPCS.map((n) => n.id),
+    givers: TOWN_NPCS.map((n) => n.id),
     build: (giver, d, key) => {
       const near = othersIn(giver, roomOf(giver));
       const far = othersElsewhere(giver);
@@ -189,7 +229,7 @@ const TEMPLATES: readonly Template[] = [
   },
   {
     id: 'tour',
-    givers: NPCS.map((n) => n.id),
+    givers: TOWN_NPCS.map((n) => n.id),
     build: (giver, d, key) => {
       const away = ROOMS.filter((r) => r !== roomOf(giver));
       let steps: QuestStep[];
@@ -207,12 +247,12 @@ const TEMPLATES: readonly Template[] = [
   },
   {
     id: 'show',
-    givers: NPCS.map((n) => n.id),
+    givers: TOWN_NPCS.map((n) => n.id),
     build: (giver, d, key) => {
       let steps: QuestStep[];
       if (d === 'easy') steps = [emote(pick(key, ['hoot', 'flap']), { npc: giver })];
       else if (d === 'medium') steps = ROOMS.filter((r) => r !== roomOf(giver)).map((r) => emote(pick(key + r, ['hoot', 'flap']), { room: r }));
-      else steps = [...ROOMS.map((r) => emote('hoot', { npc: pick(key + r, NPCS.filter((n) => n.room === r && n.id !== giver)).id })), emote('flap', { npc: giver })];
+      else steps = [...ROOMS.map((r) => emote('hoot', { npc: pick(key + r, TOWN_NPCS.filter((n) => n.room === r && n.id !== giver)).id })), emote('flap', { npc: giver })];
       // Titles and offers follow the emotes the steps ask for.
       const emotes = steps.map((s) => (s.goal.kind === 'emote' ? s.goal.emote : ''));
       const hoots = emotes.every((e) => e === 'hoot');
@@ -232,7 +272,7 @@ const TEMPLATES: readonly Template[] = [
   },
   {
     id: 'gather',
-    givers: NPCS.map((n) => n.id),
+    givers: TOWN_NPCS.map((n) => n.id),
     build: (giver, d, key) => {
       const home = roomOf(giver);
       const away = pick(key, ROOMS.filter((r) => r !== home));
@@ -277,7 +317,7 @@ const TEMPLATES: readonly Template[] = [
   },
   {
     id: 'grand',
-    givers: NPCS.map((n) => n.id),
+    givers: TOWN_NPCS.map((n) => n.id),
     build: (giver, d, key) => {
       if (d === 'easy') return null;
       const rnd = rotationRandom(key);
@@ -302,11 +342,42 @@ const TEMPLATES: readonly Template[] = [
       const steps = order.slice(0, n).map((i) => pool[i]!());
       return {
         // One title per giver: the week's two grand quests come from different givers, so they never share one.
-        title: GRAND_TITLES[NPCS.findIndex((n) => n.id === giver) % GRAND_TITLES.length]!,
+        title: GRAND_TITLES[TOWN_NPCS.findIndex((n) => n.id === giver) % GRAND_TITLES.length]!,
         type: 'mixed',
         steps,
         offer: pick(key + 'o', ['I have a long list and a good feeling about you. It will take a while.', 'This one is a proper adventure. Are you up for it?']),
         thanks: pick(key + 't', ['You did it all? Every bit? Remarkable. This is yours.', ...THANKS]),
+      };
+    },
+  },
+  {
+    // The monthly tour (OP-254): seven steps across every room, hard only, one title per giver.
+    id: 'odyssey',
+    givers: TOWN_NPCS.map((n) => n.id),
+    build: (giver, d, key) => {
+      if (d !== 'hard') return null;
+      const rnd = rotationRandom(key);
+      const pool: Array<() => QuestStep> = [
+        () => talk(pick(key + 'talk', othersElsewhere(giver)).id),
+        () => visit(pick(key + 'visit', ROOMS.filter((r) => r !== roomOf(giver)))),
+        () => flop(4),
+        () => browse(3),
+        () => bask(),
+        () => emote('hoot', { npc: pick(key + 'emote', others(giver)).id }),
+        () => emote('flap', { room: pick(key + 'flap', ROOMS) }),
+        () => gather(pick(key + 'gather', ROOMS), 3),
+      ];
+      const order = pool.map((_, i) => i);
+      for (let i = order.length - 1; i > 0; i--) {
+        const j = Math.floor(rnd() * (i + 1));
+        [order[i], order[j]] = [order[j]!, order[i]!];
+      }
+      return {
+        title: ODYSSEY_TITLES[TOWN_NPCS.findIndex((n) => n.id === giver) % ODYSSEY_TITLES.length]!,
+        type: 'mixed',
+        steps: order.slice(0, 7).map((i) => pool[i]!()),
+        offer: pick(key + 'o', ['This one takes a whole month of wandering, if you like. Every corner of the park.', 'A long road, all around the park. Take your time: you have the whole month.']),
+        thanks: pick(key + 't', ['All of it, in one month? You are a true explorer. This is yours.', ...THANKS]),
       };
     },
   },
@@ -320,7 +391,7 @@ function expand(): QuestDef[] {
         const id = `${t.id}-${giver}-${d}`;
         const b = t.build(giver, d, id);
         if (!b || !b.steps.length) continue;
-        const cadence: Exclude<Cadence, 'story'> = t.id === 'grand' ? 'weekly' : 'daily';
+        const cadence: Exclude<Cadence, 'story'> = t.id === 'grand' ? 'weekly' : t.id === 'odyssey' ? 'monthly' : 'daily';
         out.push({
           id,
           title: b.title,
@@ -341,7 +412,40 @@ function expand(): QuestDef[] {
   return out;
 }
 
-export const QUESTS: readonly QuestDef[] = [...STORY_QUESTS, ...expand()];
+/**
+ * Puzzle quests (OP-255, puzzles.ts): an escape room of locks and keys, one step ("open every lock"),
+ * played alone or in a run with anyone. The weekly one comes back every week, the monthly one every month.
+ */
+export const PUZZLE_QUESTS: readonly QuestDef[] = [
+  {
+    id: 'puzzle-moon-gate',
+    title: 'The moonlit gate',
+    giver: 'pip',
+    type: 'puzzle',
+    difficulty: 'hard',
+    length: 'short',
+    cadence: 'weekly',
+    steps: [{ goal: { kind: 'puzzle', puzzle: 'moon-gate' } }],
+    reward: { feathers: questFeathers('weekly', 'hard'), item: 'pick' },
+    offer: 'There is a gate in the roots that only opens by moonlight. Three locks, and the clues are scattered all over the park. Bring friends if you like!',
+    thanks: 'You opened the moon gate! I knew the clues would not stay hidden from you.',
+  },
+  {
+    id: 'puzzle-lockbox',
+    title: "The tinker's lockbox",
+    giver: 'flicker',
+    type: 'puzzle',
+    difficulty: 'hard',
+    length: 'short',
+    cadence: 'monthly',
+    steps: [{ goal: { kind: 'puzzle', puzzle: 'lockbox' } }],
+    reward: { feathers: questFeathers('monthly', 'hard'), item: 'pick' },
+    offer: 'I built a lockbox with four locks and hid the clues all over the park. Then I forgot them. Work it out alone or with a crew. Every box is different!',
+    thanks: 'Open! Every last lock. You and your crew are cleverer than my box.',
+  },
+];
+
+export const QUESTS: readonly QuestDef[] = [...STORY_QUESTS, ...expand(), ...PUZZLE_QUESTS];
 
 const BY_ID: Readonly<Record<string, QuestDef>> = Object.fromEntries(QUESTS.map((q) => [q.id, q]));
 
@@ -350,4 +454,16 @@ export function getQuest(id: unknown): QuestDef | undefined {
 }
 
 export const DAILY_POOL: readonly QuestDef[] = QUESTS.filter((q) => q.cadence === 'daily');
-export const WEEKLY_POOL: readonly QuestDef[] = QUESTS.filter((q) => q.cadence === 'weekly');
+export const WEEKLY_POOL: readonly QuestDef[] = QUESTS.filter((q) => q.cadence === 'weekly' && q.template === 'grand');
+/** The weekly puzzle quests: one is offered each week beside the two grand quests. */
+export const WEEKLY_PUZZLE_POOL: readonly QuestDef[] = PUZZLE_QUESTS.filter((q) => q.cadence === 'weekly');
+/** The monthly tours (OP-254). */
+export const MONTHLY_POOL: readonly QuestDef[] = QUESTS.filter((q) => q.cadence === 'monthly' && q.template === 'odyssey');
+/** The monthly puzzle quests: one is offered each month beside one tour. */
+export const MONTHLY_PUZZLE_POOL: readonly QuestDef[] = PUZZLE_QUESTS.filter((q) => q.cadence === 'monthly');
+
+/** The puzzle a quest plays, if it is a puzzle quest. */
+export function questPuzzle(q: QuestDef): string | null {
+  const g = q.steps[0]?.goal;
+  return q.type === 'puzzle' && g?.kind === 'puzzle' && getPuzzle(g.puzzle) ? g.puzzle : null;
+}

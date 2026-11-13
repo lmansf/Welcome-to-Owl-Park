@@ -1,18 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { DOUBLE_JUMP_IMPULSE, GRAVITY, JUMP_CUT_SPEED, JUMP_IMPULSE } from './jump';
-import { AIRBORNE, ALL_FLIGHT, FLIGHT_STEP_MS, GLIDE_SINK, GLIDING, GROUNDED, MAX_RISE, ON_GROUND, carryOn, checkAir, newFlier, stepFlier, type Flier, type FlightAbilities, type FlightInput } from './flight';
+import { COYOTE_MS, DOUBLE_JUMP_IMPULSE, GRAVITY, JUMP_CUT_SPEED, JUMP_IMPULSE } from './jump';
+import { WALK_SPEED } from './walk';
+import { AIRBORNE, ALL_FLIGHT, EDGE_GRACE_MS, FLAP_RISE, FLIGHT_STEP_MS, GLIDE_SINK, GLIDING, GROUNDED, JUMP_RISE, LIFTED, MAX_RISE, ON_GROUND, PARK_FLIGHT, airOut, carryOn, checkAir, flightFor, newFlier, stepFlier, type Air, type Flier, type FlightAbilities, type FlightInput } from './flight';
+import { UPDRAFT_RISE } from './updraft';
 
 const NONE: FlightInput = { pressed: false, held: false };
 const PRESS: FlightInput = { pressed: true, held: true };
 const HOLD: FlightInput = { pressed: false, held: true };
 
 /** Steps an owl through a list of inputs, each held for `steps` steps; returns every state on the way. */
-function run(start: Flier, plan: Array<[FlightInput, number]>, ground = 0): Flier[] {
+function run(start: Flier, plan: Array<[FlightInput, number]>, ground = 0, can: Readonly<FlightAbilities> = ALL_FLIGHT): Flier[] {
   const out: Flier[] = [];
   let fl = start;
   for (const [input, steps] of plan) {
     for (let i = 0; i < steps; i++) {
-      fl = stepFlier(fl, i === 0 ? input : { ...input, pressed: false }, ground);
+      fl = stepFlier(fl, i === 0 ? input : { ...input, pressed: false }, ground, can);
       out.push(fl);
     }
   }
@@ -30,25 +32,85 @@ describe('flight (OP-084)', () => {
     expect(path.at(-1)!.air).toEqual(ON_GROUND);
   });
 
-  it('a tap rises less than a press held: let go on the way up and the rise is cut', () => {
+  it('a tap is a jump: let go on the way up, the rise is cut, and it still clears a first step (OP-343)', () => {
     const tap = run(newFlier(), [[PRESS, 1], [NONE, steps(800)]]);
+    const quick = run(newFlier(), [[PRESS, steps(50)], [NONE, steps(800)]]);
     const held = run(newFlier(), [[PRESS, steps(340)], [NONE, steps(800)]]);
     expect(tap[1]!.air.vz).toBeLessThanOrEqual(JUMP_CUT_SPEED);
-    expect(top(tap)).toBeLessThan(top(held) / 4);
+    // The shortest press there is, one step: over 80 px, and less than a press held.
+    expect(top(tap)).toBeGreaterThan(80);
+    expect(top(tap)).toBeLessThan(top(held) - 40);
+    // A quick tap, a twentieth of a second: over 110 px. A tenth of a second: the whole jump.
+    expect(top(quick)).toBeGreaterThan(110);
+    expect(top(quick)).toBeLessThan(top(held) - 20);
+    expect(top(run(newFlier(), [[PRESS, steps(100)], [NONE, steps(800)]]))).toBeCloseTo(top(held), 0);
   });
 
-  it('flaps once more in the air, and only once', () => {
-    const up = run(newFlier(), [[PRESS, steps(300)]]);
+  it('a tapped flap is nearly a whole flap (OP-343)', () => {
+    const park = (plan: Array<[FlightInput, number]>) => run(newFlier(), plan, 0, PARK_FLIGHT);
+    const jump = top(park([[PRESS, steps(340)], [NONE, steps(800)]]));
+    const heldFlap = top(park([[PRESS, steps(340)], [PRESS, steps(300)], [NONE, steps(1200)]]));
+    const tappedFlap = top(park([[PRESS, steps(340)], [PRESS, steps(50)], [NONE, steps(1200)]]));
+    expect(heldFlap - jump).toBeGreaterThan(100);
+    expect(tappedFlap - jump).toBeGreaterThan((heldFlap - jump) * 0.9);
+  });
+
+  it("flaps once more in today's park, and only once", () => {
+    const park = (start: Flier, plan: Array<[FlightInput, number]>) => run(start, plan, 0, PARK_FLIGHT);
+    const up = park(newFlier(), [[PRESS, steps(300)]]);
     expect(up.at(-1)!.air.f).toBe(1);
-    const flap = stepFlier(up.at(-1)!, PRESS);
+    const flap = stepFlier(up.at(-1)!, PRESS, 0, PARK_FLIGHT);
     expect(flap.air.vz).toBeGreaterThan(DOUBLE_JUMP_IMPULSE - GRAVITY * (FLIGHT_STEP_MS / 1000) - 1);
     expect(flap.air.f).toBe(0);
-    const third = stepFlier(run(flap, [[HOLD, steps(200)]]).at(-1)!, PRESS);
+    const third = stepFlier(park(flap, [[HOLD, steps(200)]]).at(-1)!, PRESS, 0, PARK_FLIGHT);
     expect(third.air.vz).toBeLessThan(DOUBLE_JUMP_IMPULSE / 2);
     // Jump and flap together reach higher than the jump alone, and never past MAX_RISE.
-    const both = run(newFlier(), [[PRESS, steps(330)], [PRESS, steps(330)], [NONE, steps(1500)]]);
-    expect(top(both)).toBeGreaterThan(top(run(newFlier(), [[PRESS, steps(330)], [NONE, steps(800)]])) + 80);
+    const both = park(newFlier(), [[PRESS, steps(330)], [PRESS, steps(330)], [NONE, steps(1500)]]);
+    expect(top(both)).toBeGreaterThan(top(park(newFlier(), [[PRESS, steps(330)], [NONE, steps(800)]])) + 80);
     expect(top(both)).toBeLessThan(MAX_RISE);
+  });
+
+  it('jumps three times in the tree: a jump and two flaps, about 149, 260 and 371 px, and never a fourth (OP-239)', () => {
+    expect(flightFor(2)).toBe(ALL_FLIGHT);
+    expect(flightFor(1)).toBe(PARK_FLIGHT);
+    // Each press held to the top of the last rise: the jump's 0.34 s, then each flap's 0.29 s.
+    const jump = run(newFlier(), [[PRESS, steps(340)], [NONE, steps(1200)]]);
+    const two = run(newFlier(), [[PRESS, steps(340)], [PRESS, steps(295)], [NONE, steps(1500)]]);
+    const three = run(newFlier(), [[PRESS, steps(340)], [PRESS, steps(295)], [PRESS, steps(295)], [NONE, steps(2000)]]);
+    // Within a few px of the sums: the 120 Hz step gives a little up at each top.
+    const near = (z: number, want: number) => z > want - 12 && z < want + 1;
+    expect(near(top(jump), JUMP_RISE), `${top(jump)}`).toBe(true);
+    expect(near(top(two), JUMP_RISE + FLAP_RISE), `${top(two)}`).toBe(true);
+    expect(near(top(three), JUMP_RISE + 2 * FLAP_RISE), `${top(three)}`).toBe(true);
+    expect(top(three) - top(two)).toBeGreaterThan(FLAP_RISE - 12);
+    expect(Math.round(JUMP_RISE)).toBe(149);
+    expect(Math.round(JUMP_RISE + FLAP_RISE)).toBe(260);
+    expect(Math.round(JUMP_RISE + 2 * FLAP_RISE)).toBe(371);
+    expect(top(three)).toBeLessThan(MAX_RISE);
+    // The flaps count down 2, 1, 0, and a fourth press in the air does nothing.
+    const up = run(newFlier(), [[PRESS, steps(340)]]).at(-1)!;
+    expect(up.air.f).toBe(2);
+    const first = stepFlier(up, PRESS);
+    expect(first.air.f).toBe(1);
+    const second = stepFlier(run(first, [[HOLD, steps(200)]]).at(-1)!, PRESS);
+    expect(second.air.f).toBe(0);
+    expect(second.air.vz).toBeGreaterThan(DOUBLE_JUMP_IMPULSE - GRAVITY * (FLIGHT_STEP_MS / 1000) - 1);
+    const fourth = stepFlier(run(second, [[HOLD, steps(200)]]).at(-1)!, PRESS);
+    expect(fourth.air.vz).toBeLessThan(DOUBLE_JUMP_IMPULSE / 2);
+    expect(fourth.air.f).toBe(0);
+    // Off an edge, both flaps are still to come; landed, the count is back to none until the next jump.
+    const off = stepFlier({ ...newFlier(), air: { z: 80, vz: 0, s: GROUNDED, f: 0 } }, { pressed: false, held: false }, 0);
+    expect(off.air.f).toBe(2);
+    expect(three.at(-1)!.air).toEqual(ON_GROUND);
+  });
+
+  it('a second flap needs its own ability: held back, the tree flies as today', () => {
+    const can: FlightAbilities = { ...ALL_FLIGHT, secondFlap: false };
+    const plan: Array<[FlightInput, number]> = [[PRESS, steps(340)], [PRESS, steps(295)], [PRESS, steps(295)], [NONE, steps(2000)]];
+    const oneFlap = top(run(newFlier(), plan, 0, can));
+    expect(oneFlap).toBeGreaterThan(JUMP_RISE + FLAP_RISE - 12);
+    expect(oneFlap).toBeLessThan(JUMP_RISE + FLAP_RISE + 1);
+    expect(top(run(newFlier(), plan, 0, { ...ALL_FLIGHT, flap: false }))).toBeLessThan(JUMP_RISE + 1);
   });
 
   it('held on the way down, it glides: one down for three along at the walk, longer in the air than a fall', () => {
@@ -65,6 +127,25 @@ describe('flight (OP-084)', () => {
     const dropped = run(late, [[NONE, steps(200)]]).at(-1)!;
     expect(dropped.air.s === AIRBORNE || dropped.air.s === GROUNDED).toBe(true);
     expect(dropped.air.vz).toBeLessThan(-GLIDE_SINK);
+  });
+
+  it('a step off a ledge still jumps for the edge grace, the same however the page draws, and not after it (OP-353)', () => {
+    // On a ledge 200 up, then nothing under it: the owl walked off its end.
+    const onLedge: Flier = { ...newFlier(), air: { z: 200, vz: 0, s: GROUNDED, f: 0 } };
+    const stood = run(onLedge, [[NONE, 3]], 200).at(-1)!;
+    const jumpAfter = (ms: number) => run(stood, [[NONE, steps(ms)], [PRESS, steps(360)], [NONE, steps(60)]], 0, PARK_FLIGHT);
+    // Within the grace: a whole jump, from where the fall has taken it, with its flap still to come.
+    const late = jumpAfter(EDGE_GRACE_MS - FLIGHT_STEP_MS);
+    expect(top(late)).toBeGreaterThan(200 + JUMP_RISE - 30);
+    expect(late.at(-1)!.air.f).toBe(1);
+    // After it the press is the flap, not a jump: the one flap is spent on it.
+    const tooLate = jumpAfter(EDGE_GRACE_MS + 2 * FLIGHT_STEP_MS);
+    expect(tooLate.at(-1)!.air.f).toBe(0);
+    // The grace is a step off a ledge's end and no more: under an owl's own width of walk.
+    expect((EDGE_GRACE_MS / 1000) * WALK_SPEED).toBeGreaterThan(24);
+    expect((EDGE_GRACE_MS / 1000) * WALK_SPEED).toBeLessThan(40);
+    // And it is not shorter than the climb's.
+    expect(EDGE_GRACE_MS).toBeGreaterThanOrEqual(COYOTE_MS);
   });
 
   it('honours a press a moment before landing, and lands on what is under it', () => {
@@ -116,6 +197,8 @@ describe('flight (OP-084)', () => {
   it('the room takes only air it can believe', () => {
     expect(checkAir({ z: 120.04, vz: -300, s: 1, f: 1 }, MAX_RISE)).toEqual({ z: 120, vz: -300, s: 1, f: 1 });
     expect(checkAir(ON_GROUND, MAX_RISE)).toEqual(ON_GROUND);
+    expect(checkAir({ z: 200, vz: 700, s: 1, f: 1 }, MAX_RISE)).toEqual({ z: 200, vz: 700, s: 1, f: 1 }); // the first of the tree's two flaps
+    expect(checkAir({ z: 40, vz: 860, s: 1, f: 2 }, MAX_RISE)).toEqual({ z: 40, vz: 860, s: 1, f: 2 });
     for (const bad of [
       { z: 10, vz: 0, s: 0, f: 0 }, // on the ground, but not at it
       { z: 0, vz: 50, s: 0, f: 0 },
@@ -123,12 +206,28 @@ describe('flight (OP-084)', () => {
       { z: -5, vz: 0, s: 1, f: 0 },
       { z: 10, vz: 5000, s: 1, f: 0 },
       { z: 10, vz: 0, s: 3, f: 0 },
-      { z: 10, vz: 0, s: 1, f: 2 },
+      { z: 10, vz: 0, s: 1, f: 3 }, // a fourth take-off's worth of flaps
       { z: Number.NaN, vz: 0, s: 1, f: 0 },
       'up',
       null,
     ]) {
       expect(checkAir(bad, MAX_RISE), JSON.stringify(bad)).toBeNull();
     }
+  });
+});
+
+describe('an air state as a page tells it to the room (airOut)', () => {
+  it('rounds its numbers to a tenth and sends nothing a page does not need', () => {
+    expect(airOut({ z: 120.26, vz: -86.666, s: GLIDING, f: 1 })).toEqual({ z: 120.3, vz: -86.7, s: GLIDING, f: 1 });
+    // The top is a lifted owl's alone: a stale one on any other state is not sent.
+    expect(airOut({ z: 300, vz: 0, s: AIRBORNE, f: 0, h: 300 })).toEqual({ z: 300, vz: 0, s: AIRBORNE, f: 0 });
+  });
+
+  it('keeps the top a lifted owl rises to, which the room server needs to take the state at all', () => {
+    const lifted: Air = { z: 120.04, vz: UPDRAFT_RISE, s: LIFTED, f: 0, h: 300 };
+    expect(airOut(lifted)).toEqual({ z: 120, vz: UPDRAFT_RISE, s: LIFTED, f: 0, h: 300 });
+    expect(checkAir(airOut(lifted), 700, null)).toEqual({ z: 120, vz: UPDRAFT_RISE, s: LIFTED, f: 0, h: 300 });
+    // As the page sent it before: no top, and the room server dropped it.
+    expect(checkAir({ z: 120, vz: UPDRAFT_RISE, s: LIFTED, f: 0 }, 700, null)).toBeNull();
   });
 });

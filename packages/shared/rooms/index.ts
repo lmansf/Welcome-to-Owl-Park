@@ -1,11 +1,28 @@
 import type { Polygon } from '../src/geometry';
 import { isNestRoom } from '../src/homes';
+import { ESCAPE_BACK_SPAWN, ESCAPE_DOOR, ESCAPE_ROOM, isEscapeRoom } from '../src/escape';
+import { FROM_STUMP_AT, FROM_STUMP_SPAWN, isPartyRoom } from '../src/party/ids';
+import { PARTY_ROOM } from './party';
+import { doorTarget, type WalkMap } from '../src/doorways';
+import { isNewMapRoom } from '../src/newMap';
 import type { Perch } from '../src/perches';
 import type { Vec2 } from '../src/protocol';
-import { ROOM_H, ROOM_W, mapOf, type RoomDef } from '../src/room';
+import { ROOM_H, ROOM_W, idolRealms, mapOf, type DoorDef, type RoomDef } from '../src/room';
 import type { OwlSpeciesId } from '../src/species';
+import { TRIAL_COURSE, TRIAL_ROOMS } from './trialCourse';
+import { CANOPY_COURSE, CANOPY_ROOMS } from './updraftCanopy';
+import { BRUSH_COURSE, BRUSH_ROOMS } from './brushstrokeBridges';
+import { CIRCUIT_COURSE, CIRCUIT_ROOMS } from './neonCourse';
+import { HALL_ANCHORS, HALL_ID, HALL_ROOM, fromRealm } from './hollowHall';
+import { growToPlaza } from './plaza';
+import { floorPerches, floorPieces } from '../src/plazaFloor';
+import type { CourseDef } from '../src/course';
+import { realmStart, realmStartAnchors } from '../src/realmStart';
 
 export { STREET_DOORS, STREET_ROOM } from '../src/homes';
+export { PARTY_ROOM } from './party';
+export { NEW_MAP } from '../src/newMap';
+export { HALL_MIDDLE, HALL_ROOM, ROOT_RUNS, RUN_Y, rootId, type HallLevel, type RootRun } from './hollowHall';
 
 /**
  * Room registry shared by the browser client and the room server, so both clamp walks
@@ -37,6 +54,13 @@ export const CLOSED_SIGNS = ['Not Yet Fledged', 'Closed for Molting', 'Pardon Ou
 
 /** The tree's ground line on a screen of map 2 (room px; OP-157's painting puts it at 985 of 1152). */
 export const TREE_GROUND = 770;
+/**
+ * The ground line of a room seen from the side (room px): its kit's own, else the tree's. A tall room
+ * (the hollow hall) has its ground near its own foot, ROOM_H - TREE_GROUND above it as on a screen.
+ */
+export function groundOf(room: Pick<RoomDef, 'kit'>): number {
+  return room.kit?.ground ?? TREE_GROUND;
+}
 /** Half the depth of the tree's floor strip: an owl's spot on the plan stays on the ground line. */
 const TREE_STRIP = 4;
 /**
@@ -194,17 +218,19 @@ export const ROOMS: Record<string, RoomDef> = {
         top: 264,
       },
     ],
-    spawns: { 'default': { x: 2400, y: 730 }, 'from-grove': { x: 1800, y: 740 }, 'from-market': { x: 2990, y: 750 }, 'from-glass': { x: 2665, y: 740 } },
+    spawns: { 'default': { x: 2400, y: 730 }, 'from-grove': { x: 1800, y: 740 }, 'from-market': { x: 2990, y: 750 }, 'from-glass': { x: 2665, y: 740 }, [FROM_STUMP_SPAWN]: { ...FROM_STUMP_AT } },
     doors: [
-      { id: 'to-grove', rect: { x: 1700, y: 610, w: 130, h: 90 }, to: { room: 'grove', spawn: 'default' }, marker: { x: 1765, y: 560 } },
-      { id: 'to-market', rect: { x: 2940, y: 610, w: 150, h: 100 }, to: { room: 'market', spawn: 'default' }, marker: { x: 3015, y: 560 } },
+      // On the new map this is the Party Grove (out of the Great Hollow's trunk door): its doorways carry signs there (labelNew).
+      { id: 'to-grove', rect: { x: 1700, y: 610, w: 130, h: 90 }, to: { room: 'grove', spawn: 'default' }, marker: { x: 1765, y: 560 }, labelNew: 'To the treehouse clearing' },
+      { id: 'to-market', rect: { x: 2940, y: 610, w: 150, h: 100 }, to: { room: 'market', spawn: 'default' }, marker: { x: 3015, y: 560 }, labelNew: 'To the neon street' },
       // The marker is the foot of each arch's blockade; the rect is the strip in front of it.
       { id: 'closed-a', rect: { x: 2040, y: 660, w: 210, h: 30 }, closedSign: 'Not Yet Fledged', marker: { x: 2145, y: 668 } },
-      // The east arch leads to the stained-glass realm (gated: the realms setting opens it); its sign and blockade stay until then.
-      { id: 'to-glass', rect: { x: 2560, y: 610, w: 210, h: 90 }, to: { room: 'glass', spawn: 'from-hub' }, closedSign: 'Hatching Soon', marker: { x: 2665, y: 668 } },
+      // The east arch leads to the stained-glass realm, open to every owl since Nov 8; its sign shows only should a realm be shut again.
+      { id: 'to-glass', rect: { x: 2560, y: 610, w: 210, h: 90 }, to: { room: 'glass', spawn: 'from-hub' }, closedSign: 'Hatching Soon', marker: { x: 2665, y: 668 }, labelNew: 'To the glass realm', labelAt: { x: 2665, y: 560 } },
       // The way out (C43): the floor's bottom edge below where owls arrive from the turnstiles, back
       // to the lobby outside the gate. A soft ring on the floor marks it.
-      { id: 'to-lobby', rect: { x: 2310, y: 862, w: 180, h: 38 }, to: { room: 'lobby', spawn: 'from-hub' }, marker: { x: 2400, y: 872 } },
+      // On the new map it is the way back into the Great Hollow (NEW_MAP_WAYS), its sign just below where an owl arrives from there.
+      { id: 'to-lobby', rect: { x: 2310, y: 862, w: 180, h: 38 }, to: { room: 'lobby', spawn: 'from-hub' }, marker: { x: 2400, y: 872 }, labelNew: 'Back into the Great Hollow', labelAt: { x: 2400, y: 790 } },
     ],
     spots: [
       { x: 300, y: 840 },
@@ -540,7 +566,7 @@ export const ROOMS: Record<string, RoomDef> = {
       { id: 'to-hub', rect: { x: 0, y: 600, w: 120, h: 220 }, to: { room: 'hub', spawn: 'from-market' }, toTree: { room: 'l1', spawn: 'market' }, marker: { x: 70, y: 580 } },
       // The arcade's doorway on the pavement where the street bends away, under its joystick sign.
       // The arcade's door; for an owl walking the tree, the arcade is down in level 0's cave (OP-163).
-      { id: 'to-arcade', rect: { x: 3098, y: 678, w: 60, h: 36 }, to: { room: 'arcade', spawn: 'from-market' }, toTree: { room: 'l0-arcade', spawn: 'from-market' }, marker: { x: 3126, y: 640 } },
+      { id: 'to-arcade', rect: { x: 3098, y: 678, w: 60, h: 36 }, to: { room: 'arcade', spawn: 'from-market' }, closedInTree: true, marker: { x: 3126, y: 640 } },
       { id: 'shop', rect: { x: 960, y: 690, w: 170, h: 80 }, marker: { x: 1080, y: 560 } },
       // Beneath the giant robot owl: standing here lets a ticket-holder vote for this realm.
       { id: 'idol', rect: { x: 1150, y: 710, w: 220, h: 100 }, marker: { x: 1260, y: 760 } },
@@ -568,76 +594,28 @@ export const ROOMS: Record<string, RoomDef> = {
     ],
   },
   /**
-   * The stained-glass realm (designs/the-stained-glass-climb.md): two screens, the arch back to
-   * the hub and the idol on the west screen, the portal to the solo climb at the foot of a tall
-   * window on the east. Gated: closed until the keepers open it with the realms setting.
+   * The stained-glass realm's start (OP-276): one screen seen from above, laid out as every realm's
+   * start is (realmStart.ts, the realm kit's wireframe 1). Left to right it tells the visit: in from
+   * the tree at the knot-hole, a job from the quest owl at the post, a vote at the guardian, the realm's
+   * things at the trading nest, then on to the climb at the way out east. The floor, the two openings
+   * and the vote spot are the template's; the painting is the realm's start screen (kit slot S01),
+   * today's west screen of the street standing in until its artist's arrives. Gated: closed until the
+   * keepers open it with the realms setting.
    */
-  glass: {
-    id: 'glass',
-    gated: true,
-    size: { w: 2 * ROOM_W, h: ROOM_H },
-    background: 'glass',
-    backgrounds: [
-      { key: 'glass', x: 0, y: 0 },
-      { key: 'glass-east', x: ROOM_W, y: 0 },
-    ],
-    foregrounds: [],
+  glass: realmStart('glass', {
+    // The knot-hole back to the tree, and on the new map back to the glass commons (NEW_MAP_WAYS).
+    back: { to: { room: 'hub', spawn: 'from-glass' }, toTree: { room: 'l3', spawn: 'glass' } },
+    // The way on is the portal to the solo climb (the client's `interactions` table offers Climb there).
+    on: { id: 'portal' },
     mood: 'dusk',
-    // The floor as painted (OP-127): it starts at the arch back into the tree (the trunk left of it is
-    // bark) and goes round the idol's plinth, which stands on it and is no floor itself. Past the
-    // plinth it keeps to the pavement where the two screens join (repainted, OP-125): the pink
-    // shopfront's stone base, into its lit doorway porch, along the next building's ledge, then the
-    // plaza's far edge.
-    walkable: [
-      [
-        { x: 140, y: 690 },
-        { x: 1140, y: 690 },
-        { x: 1140, y: 815 },
-        { x: 1380, y: 815 },
-        { x: 1380, y: 758 },
-        { x: 1600, y: 758 },
-        { x: 1612, y: 732 },
-        { x: 1745, y: 732 },
-        { x: 1757, y: 748 },
-        { x: 1960, y: 748 },
-        { x: 1990, y: 705 },
-        { x: 2400, y: 705 },
-        { x: 2420, y: 690 },
-        { x: 3200, y: 690 },
-        { x: 3200, y: 888 },
-        { x: 280, y: 888 },
-        { x: 250, y: 830 },
-        { x: 170, y: 760 },
-        { x: 140, y: 760 },
-      ],
+    // Open to every owl (the owner's "whole map unlocked all the time", Nov 8): no longer behind the realms switch.
+    decor: [
+      // A planter of glass flowers by the quest post, and two lanterns lighting the way in and the way on.
+      { key: 'kit-glass-decor--glass-glass-planter' },
+      { key: 'kit-glass-decor--glass-glass-lantern' },
+      { key: 'kit-glass-decor--glass-glass-lantern' },
     ],
-    spawns: { 'default': { x: 330, y: 740 }, 'from-hub': { x: 330, y: 740 } },
-    doors: [
-      // The painted arch's threshold (x 150 to 290), not the trunk beside it; its glow at the arch's foot.
-      { id: 'to-hub', rect: { x: 150, y: 690, w: 140, h: 75 }, to: { room: 'hub', spawn: 'from-glass' }, toTree: { room: 'l3', spawn: 'glass' }, marker: { x: 220, y: 728 } },
-      // In front of the plinth: an owl votes standing on the floor before the idol, not on its plinth.
-      { id: 'idol', rect: { x: 1150, y: 816, w: 220, h: 64 }, marker: { x: 1260, y: 848 } },
-      // The portal: standing here offers the climb (the client's `interactions` table).
-      // The foot of the tall window in the east screen's painting.
-      { id: 'portal', rect: { x: 2785, y: 700, w: 200, h: 90 }, marker: { x: 2885, y: 640 } },
-    ],
-    spots: [
-      { x: 330, y: 860 },
-      { x: 480, y: 720 },
-      { x: 600, y: 850 },
-      { x: 760, y: 760 },
-      { x: 900, y: 860 },
-      { x: 1050, y: 730 },
-      { x: 1450, y: 860 },
-      { x: 1700, y: 800 },
-      { x: 1900, y: 860 },
-      { x: 2100, y: 790 },
-      { x: 2300, y: 860 },
-      { x: 2450, y: 740 },
-      { x: 2900, y: 860 },
-      { x: 3050, y: 780 },
-    ],
-  },
+  }),
   arcade: {
     id: 'arcade',
     size: { w: 3 * ROOM_W, h: ROOM_H },
@@ -691,14 +669,18 @@ export const ROOMS: Record<string, RoomDef> = {
         { x: 0, y: 888 },
       ],
     ],
-    spawns: { 'default': { x: 300, y: 810 }, 'from-market': { x: 300, y: 810 } },
+    spawns: { 'default': { x: 300, y: 810 }, 'from-market': { x: 300, y: 810 }, 'from-cavern': { x: 300, y: 810 } },
     doors: [
-      // The open doorway, out onto the street past its threshold.
-      { id: 'to-market', rect: { x: 0, y: 700, w: 120, h: 100 }, to: { room: 'market', spawn: 'from-arcade' }, marker: { x: 100, y: 640 } },
+      // The open doorway, out onto the street past its threshold. On the new map it is the stair up
+      // the hatch into the Great Hollow (OP-306, the root stair folded into the arcade); in today's park
+      // it goes back to the market.
+      { id: 'to-market', rect: { x: 0, y: 700, w: 120, h: 100 }, to: { room: 'market', spawn: 'from-arcade' }, toNew: { room: 'm3-hall', spawn: 'from-under' }, marker: { x: 100, y: 640 } },
       // The three cabinets, each spot on the floor in front of its cabinet and each marker on its screen.
-      { id: 'cabinet-crossing', rect: { x: 540, y: 812, w: 160, h: 60 }, marker: { x: 652, y: 482 } },
-      { id: 'cabinet-flight', rect: { x: 1820, y: 790, w: 160, h: 60 }, marker: { x: 1862, y: 496 } },
-      { id: 'cabinet-sling', rect: { x: 3910, y: 780, w: 170, h: 60 }, marker: { x: 3975, y: 468 } },
+      // A spot reaches up to the cabinet's front (OP-323), so an owl standing against the front anywhere
+      // along it, or walking the hall at the height it came in at, is at the cabinet.
+      { id: 'cabinet-crossing', rect: { x: 540, y: 770, w: 160, h: 102 }, marker: { x: 652, y: 482 } },
+      { id: 'cabinet-flight', rect: { x: 1820, y: 766, w: 160, h: 84 }, marker: { x: 1862, y: 496 } },
+      { id: 'cabinet-sling', rect: { x: 3910, y: 756, w: 170, h: 84 }, marker: { x: 3975, y: 468 } },
     ],
   },
   lobby: {
@@ -907,12 +889,9 @@ export const ROOMS: Record<string, RoomDef> = {
       treeLedge('boulder', 680, 850, 110),
       treeLedge('log', 1010, 1210, 85),
       treeLedge('wall', 700, 1440, 190),
-      // The lobby: up the spiral stair (three steps a jump apart) to the balcony; the lintel over the
-      // way down, a flap from the floor; the shelf fungus over it, a jump from the lintel.
-      treeLedge('stair-1', ROOM_W + 953, ROOM_W + 1078, 82),
-      treeLedge('stair-2', ROOM_W + 961, ROOM_W + 1063, 153),
-      treeLedge('stair-3', ROOM_W + 922, ROOM_W + 1016, 223),
-      treeLedge('balcony', ROOM_W + 1000, ROOM_W + 1109, 286),
+      // The lobby: the lintel over the way down, a flap from the floor; the shelf fungus over it, a jump
+      // from the lintel. The spiral stair is taken from the floor at its foot (OP-220), so its treads and
+      // the balcony at its top are not ledges: an owl goes up by the doorway, never by hopping the stair.
       treeLedge('lintel', ROOM_W + 582, ROOM_W + 730, 196),
       treeLedge('fungus', ROOM_W + 508, ROOM_W + 641, 282),
       // The market's square: crates stacked by the path in from the lobby; a stone block and the crate
@@ -929,16 +908,8 @@ export const ROOMS: Record<string, RoomDef> = {
       treeLedge('steps-1', 2 * ROOM_W + 397, 2 * ROOM_W + 462, 190),
       treeLedge('steps-2', 2 * ROOM_W + 412, 2 * ROOM_W + 476, 238),
       treeLedge('steps-3', 2 * ROOM_W + 434, 2 * ROOM_W + 496, 285),
-      // The roof run: a stair of crates and barrels a half-visitor a step, the long roof over the
-      // stalls, the higher one by the lantern tower, and the tower's balcony, a jump up from that
-      // roof's end under it, the highest ledge of the level.
-      treeLedge('crates-1', 3 * ROOM_W + 80, 3 * ROOM_W + 245, 95),
-      treeLedge('crates-2', 3 * ROOM_W + 160, 3 * ROOM_W + 390, 170),
-      treeLedge('crates-3', 3 * ROOM_W + 265, 3 * ROOM_W + 425, 250),
-      treeLedge('roof-low', 3 * ROOM_W + 410, 3 * ROOM_W + 965, 310),
-      treeLedge('barrel', 3 * ROOM_W + 535, 3 * ROOM_W + 608, 383),
-      treeLedge('roof-high', 3 * ROOM_W + 955, 3 * ROOM_W + 1340, 402),
-      treeLedge('tower-balcony', 3 * ROOM_W + 1258, 3 * ROOM_W + 1500, 530),
+      // The roof run's crates, roofs and lantern tower lead nowhere yet (the market's adventure is still
+      // to come), so they are not ledges: a rope across the foot of the crates shuts the climb (OP-220).
     ],
     // What is painted in front of the path, drawn again over the owls (OP-173): the west path's two lamp
     // posts (their poles and lanterns), the post in front of the market square's stall, the lobby stair's
@@ -1040,25 +1011,31 @@ export const ROOMS: Record<string, RoomDef> = {
       west: { x: 720, y: TREE_GROUND },
       east: { x: 3 * ROOM_W + 1100, y: TREE_GROUND },
       market: { x: 3 * ROOM_W + 1230, y: TREE_GROUND },
-      // Down from level 2, at the lobby stair's foot.
-      'from-l2': { x: ROOM_W + 1180, y: TREE_GROUND },
-      // Up from level 0, just west of the way down.
-      'from-l0': { x: ROOM_W + 540, y: TREE_GROUND },
+      // Down from level 2, just west of the stair up; up from level 0, just east of the way down: each
+      // arrival faces the level's other stair, so an owl climbing the tree crosses no doorway (OP-220).
+      'from-l2': { x: ROOM_W + 900, y: TREE_GROUND },
+      'from-l0': { x: ROOM_W + 760, y: TREE_GROUND },
     },
     doors: [
       // The closed gate at the west end: a blockade on the stone apron in front of it, its phrase on
       // its board; the door turns owls back at the apron's edge, where the overlay's grass leaves the
       // path clear.
-      { id: 'closed-west', rect: { x: 630, y: 750, w: 60, h: 40 }, closedSign: 'Not Yet Fledged', marker: { x: 415, y: TREE_GROUND } },
+      { id: 'closed-west', rect: { x: 630, y: 750, w: 60, h: 40 }, closedSign: 'Not Yet Fledged', top: 0, marker: { x: 415, y: TREE_GROUND } },
       // The archway at the foot of the lantern tower, at the roof run's east end: into the market's
       // own screens (OP-155's grid), whose way out brings a tree owl back here. Taken on the
       // ground only, so an owl on the high roof or the balcony over it walks on past.
-      // Up to level 2, from the balcony at the top of the lobby's spiral stair (through the chamber's
-      // ceiling).
-      { id: 'stair-l2-l1', rect: { x: ROOM_W + 1010, y: 750, w: 90, h: 40 }, to: { room: 'l2', spawn: 'from-l1' }, top: 286, markAt: { x: ROOM_W + 1055, y: 440 } },
-      // Down to level 0, through the arched way down under the lintel, on the floor.
-      { id: 'stair-l1-l0', rect: { x: ROOM_W + 610, y: 750, w: 90, h: 40 }, to: { room: 'l0', spawn: 'from-l1' }, top: 0, markAt: { x: ROOM_W + 653, y: 640 } },
+      // Down to level 0, through the arched way down under the lintel, on the floor: the lobby's west stair.
+      { id: 'stair-l1-l0', rect: { x: ROOM_W + 610, y: 750, w: 90, h: 40 }, to: { room: 'l0', spawn: 'from-l1' }, top: 0, way: 'down', markAt: { x: ROOM_W + 653, y: 640 } },
+      // Up to level 2: the spiral stair, its east stair, taken from the floor at its foot (OP-220).
+      { id: 'stair-l2-l1', rect: { x: ROOM_W + 960, y: 750, w: 110, h: 40 }, to: { room: 'l2', spawn: 'from-l1' }, top: 0, way: 'up', markAt: { x: ROOM_W + 1015, y: 560 } },
       { id: 'to-market', rect: { x: 3 * ROOM_W + 1300, y: 750, w: 90, h: 40 }, to: { room: 'market', spawn: 'default' }, top: 0, markAt: { x: 3 * ROOM_W + 1365, y: 462 } },
+    ],
+    // What shuts the ways not open yet (OP-220): a locked gate where the floor ends before the ink-wash
+    // realm's closed gate, and a rope across the foot of the roof run's crates (the boardwalk under it runs
+    // on to the archway).
+    barriers: [
+      { id: 'closed-west', kind: 'gate', x: 570, w: 90, sign: 'Not Yet Fledged' },
+      { id: 'roof-run', kind: 'rope', x: 3 * ROOM_W + 60, w: 220, sign: 'Hatching Soon' },
     ],
   },
   // Level 4, the sky landing (OP-159): two screens, the stair landing round the trunk (0) and the quiet
@@ -1103,15 +1080,8 @@ export const ROOMS: Record<string, RoomDef> = {
       ],
     ],
     perches: [
-      // The landing: the spiral stair's treads up the trunk (each a hop), its half-landing and the two
-      // treads over it, then the balcony on the trunk's west side, a jump and a glide from the top tread.
-      treeLedge('stair-1', 896, 984, 67),
-      treeLedge('stair-2', 924, 1024, 96),
-      treeLedge('stair-3', 972, 1068, 134),
-      treeLedge('stair-landing', 1004, 1148, 175),
-      treeLedge('stair-4', 1048, 1112, 206),
-      treeLedge('stair-5', 1044, 1084, 239),
-      treeLedge('balcony', 584, 740, 321),
+      // The landing has none: its spiral stair up is taken from the floor at its foot (OP-220), so its
+      // treads and the balcony west of the trunk (reached only from them) are not ledges.
       // The overlook: a stair of perches up the bough, each a hop and a short gap on from the last: the
       // stump, the board on its post, the mushroom's cap and the lookout at the top.
       treeLedge('stump', ROOM_W + 352, ROOM_W + 520, 111),
@@ -1124,26 +1094,25 @@ export const ROOMS: Record<string, RoomDef> = {
       default: { x: 800, y: TREE_GROUND },
       west: { x: 220, y: TREE_GROUND },
       east: { x: ROOM_W + 1240, y: TREE_GROUND },
-      // Up from level 3, at the foot of the way down.
+      // Up from level 3, just east of the way down; down from level 5, just west of the stair up: each
+      // arrival faces the level's other stair (OP-220).
       'from-l3': { x: 780, y: TREE_GROUND },
-      // Down from level 5, at the foot of the spiral stair behind the trunk.
-      'from-l5': { x: 1180, y: TREE_GROUND },
+      'from-l5': { x: 840, y: TREE_GROUND },
     },
     doors: [
-      // The way down to level 3: the stair behind the railing west of the trunk, taken from the boardwalk
-      // (the balcony over it walks on past).
-      { id: 'stair-l4-l3', rect: { x: 640, y: 750, w: 100, h: 40 }, to: { room: 'l3', spawn: 'from-l4' }, top: 0, markAt: { x: 690, y: 560 } },
-      // Up to level 5, from the spiral stair's last tread behind the trunk.
-      { id: 'stair-l5-l4', rect: { x: 1044, y: 750, w: 40, h: 40 }, to: { room: 'l5', spawn: 'from-l4' }, top: 239, markAt: { x: 1064, y: 470 } },
+      // The way down to level 3, west of the trunk: the stair behind the railing, taken from the boardwalk.
+      { id: 'stair-l4-l3', rect: { x: 640, y: 750, w: 100, h: 40 }, to: { room: 'l3', spawn: 'from-l4' }, top: 0, way: 'down', markAt: { x: 690, y: 560 } },
+      // Up to level 5, east of it: the spiral stair round the trunk, taken from the floor at its foot (OP-220).
+      { id: 'stair-l5-l4', rect: { x: 880, y: 750, w: 100, h: 40 }, to: { room: 'l5', spawn: 'from-l4' }, top: 0, way: 'up', markAt: { x: 930, y: 600 } },
     ],
   },
   // Level 3, the high branch east (OP-160): three screens, the trunk's landing (0) with its stair up to
   // level 4, the stained-glass realm's common area (+1) and its reach (+2), where the stained-glass
   // street's doorway stands and a stair of perches climbs the branch toward its tip. Painted in the six
   // layers as level 4 (only the landing has front props; the common area stays open, with no middle
-  // distance). The stair up is taken from its top, so an owl climbs the treads to go up; down from
-  // level 4 it comes out at the stair's foot. The stairwell down to level 2 is east of the trunk, taken from the
-  // boardwalk.
+  // distance). Both stairs are taken from the floor (OP-220): down to level 2 at the boardwalk's west end,
+  // where the game draws the stairhead (the painting has none there), and up to level 4 at the foot of the
+  // painted stair east of it. The branch's perches toward the tip lead nowhere yet, so a rope shuts them.
   l3: {
     id: 'l3',
     map: 2,
@@ -1167,62 +1136,49 @@ export const ROOMS: Record<string, RoomDef> = {
       ...['0', 'e1', 'e2'].map((s, i) => ({ key: `tree-l3-${s}-fg`, x: i * ROOM_W, y: 0, rate: 1.2, fade: { left: TREE_EDGE_FADE, right: TREE_EDGE_FADE } })),
     ],
     mood: 'hub',
-    // The boardwalk from the landing's west end, through the common area, to the reach's railing, and on
-    // along the top of the branch where it runs level, under the first perches.
+    // The boardwalk from the landing's west end, through the common area, to the end of the reach's
+    // boardwalk, where the rope across the branch stops an owl.
     walkable: [
       [
         { x: 150, y: TREE_GROUND - TREE_STRIP },
-        { x: 2 * ROOM_W + 1100, y: TREE_GROUND - TREE_STRIP },
-        { x: 2 * ROOM_W + 1100, y: TREE_GROUND + TREE_STRIP },
+        { x: 2 * ROOM_W + 880, y: TREE_GROUND - TREE_STRIP },
+        { x: 2 * ROOM_W + 880, y: TREE_GROUND + TREE_STRIP },
         { x: 150, y: TREE_GROUND + TREE_STRIP },
       ],
     ],
-    perches: [
-      // The landing: the stair's eight treads up the trunk, each a hop, to the landing at its top.
-      treeLedge('stair-1', 488, 650, 43),
-      treeLedge('stair-2', 528, 680, 80),
-      treeLedge('stair-3', 576, 716, 115),
-      treeLedge('stair-4', 620, 736, 152),
-      treeLedge('stair-5', 672, 776, 185),
-      treeLedge('stair-6', 728, 832, 218),
-      treeLedge('stair-7', 776, 872, 251),
-      treeLedge('stair-8', 832, 900, 290),
-      treeLedge('stair-top', 872, 1076, 325),
-      // The reach: up the branch toward its tip, the stump, the little table, the shelf fungus, two boards
-      // on their posts and the tip's perch (the capstone's place, OP-110).
-      treeLedge('stump', 2 * ROOM_W + 900, 2 * ROOM_W + 980, 54),
-      treeLedge('table', 2 * ROOM_W + 1012, 2 * ROOM_W + 1092, 103),
-      treeLedge('fungus', 2 * ROOM_W + 1132, 2 * ROOM_W + 1256, 143),
-      treeLedge('board-1', 2 * ROOM_W + 1208, 2 * ROOM_W + 1312, 210),
-      treeLedge('board-2', 2 * ROOM_W + 1296, 2 * ROOM_W + 1396, 290),
-      treeLedge('tip', 2 * ROOM_W + 1388, 2 * ROOM_W + 1460, 387),
-    ],
+    // No ledges: the stair up is taken at its foot (OP-220), so its treads and its landing are not ledges,
+    // and the reach's stump, table, fungus, boards and tip lead nowhere yet, behind the rope.
     spawns: {
       default: { x: 300, y: TREE_GROUND },
-      // Down from level 4, at the stair's foot.
-      'from-l4': { x: 420, y: TREE_GROUND },
+      // Down from level 4, just west of the stair up; up from level 2, just east of the stairhead: each
+      // arrival faces the level's other stair (OP-220).
+      'from-l4': { x: 450, y: TREE_GROUND },
       east: { x: 2 * ROOM_W + 820, y: TREE_GROUND },
       // Back out of the stained-glass street, in front of its doorway.
       glass: { x: 2 * ROOM_W + 690, y: TREE_GROUND },
-      // Up from level 2, in front of the railed stairwell east of the trunk.
-      'from-l2': { x: 1180, y: TREE_GROUND },
+      'from-l2': { x: 340, y: TREE_GROUND },
     },
     doors: [
-      // Up to level 4, from the landing at the stair's top.
-      { id: 'stair-l4-l3', rect: { x: 990, y: 750, w: 80, h: 40 }, to: { room: 'l4', spawn: 'from-l3' }, top: 325, markAt: { x: 1030, y: 390 } },
-      // Down to level 2: the railed stairwell east of the trunk, taken from the boardwalk (the landing over
-      // it walks on past).
-      { id: 'stair-l3-l2', rect: { x: 1040, y: 750, w: 100, h: 40 }, to: { room: 'l2', spawn: 'from-l3' }, top: 0, markAt: { x: 1090, y: 610 } },
+      // Down to level 2, at the boardwalk's west end: the stairhead the game draws (`landings`).
+      { id: 'stair-l3-l2', rect: { x: 170, y: 750, w: 100, h: 40 }, to: { room: 'l2', spawn: 'from-l3' }, top: 0, way: 'down', markAt: { x: 220, y: 640 } },
+      // Up to level 4: the painted stair up the trunk, taken from the floor at its foot.
+      { id: 'stair-l4-l3', rect: { x: 500, y: 750, w: 110, h: 40 }, to: { room: 'l4', spawn: 'from-l3' }, top: 0, way: 'up', markAt: { x: 555, y: 600 } },
       // The stained-glass doorway on the reach: into the realm's street (today's stained-glass realm),
       // whose way out brings a tree owl back here.
       { id: 'to-glass', rect: { x: 2 * ROOM_W + 480, y: 750, w: 120, h: 40 }, to: { room: 'glass', spawn: 'default' }, top: 0, markAt: { x: 2 * ROOM_W + 538, y: 430 } },
     ],
+    // The stairhead down through the boardwalk's west end, where the painting shows no stair (OP-220).
+    landings: [{ id: 'stair-l3-l2', x: 160, w: 120 }],
+    // The rope from the reach's railing post across the branch: the perches toward the tip are shut for now.
+    barriers: [{ id: 'reach', kind: 'rope', x: 2 * ROOM_W + 850, w: 70, sign: 'Hatching Soon' }],
   },
   // Level 2, the high branch west (OP-161): three screens, the trunk's landing (0) with its stairs up to
   // level 3 and down to level 1, the grove's common area (-1), left open for its idol, guardian and game,
   // and its reach (-2), the treetop diner (OP-165) with the tip's perch at the branch's end. Painted in
-  // the six layers as levels 3 and 4 (only the landing has front props). The stair up is taken from the
-  // landing at its top; the stair down from the floor in front of the steps behind the trunk.
+  // the six layers as levels 3 and 4 (only the landing has front props). Both stairs are taken from the
+  // floor (OP-220): down to level 1 west of the trunk, where the game draws the stairhead (the painting has
+  // none there), and up to level 3 at the foot of the painted stair. The steps behind the trunk's east
+  // side lead nowhere now, so a rope ends the boardwalk before them.
   l2: {
     id: 'l2',
     map: 2,
@@ -1245,51 +1201,48 @@ export const ROOMS: Record<string, RoomDef> = {
     ],
     mood: 'hub',
     // The branch's top out to its tip in the west, the diner's deck, the common area and the landing, to
-    // the roots east of the trunk.
+    // the rope on the trunk's east side.
     walkable: [
       [
         { x: 160, y: TREE_GROUND - TREE_STRIP },
-        { x: 3 * ROOM_W - 40, y: TREE_GROUND - TREE_STRIP },
-        { x: 3 * ROOM_W - 40, y: TREE_GROUND + TREE_STRIP },
+        { x: 2 * ROOM_W + 1100, y: TREE_GROUND - TREE_STRIP },
+        { x: 2 * ROOM_W + 1100, y: TREE_GROUND + TREE_STRIP },
         { x: 160, y: TREE_GROUND + TREE_STRIP },
       ],
     ],
     perches: [
       // The reach: the round perch at the branch's tip, west of the diner's deck (the capstone's place).
+      // The landing's stair is taken at its foot (OP-220), so its treads and landing are not ledges.
       treeLedge('tip', 82, 168, 64),
-      // The landing: the stair's eight treads up the trunk, each a hop, to the landing at its top.
-      treeLedge('stair-1', 2 * ROOM_W + 530, 2 * ROOM_W + 650, 58),
-      treeLedge('stair-2', 2 * ROOM_W + 600, 2 * ROOM_W + 700, 100),
-      treeLedge('stair-3', 2 * ROOM_W + 645, 2 * ROOM_W + 740, 143),
-      treeLedge('stair-4', 2 * ROOM_W + 688, 2 * ROOM_W + 780, 178),
-      treeLedge('stair-5', 2 * ROOM_W + 728, 2 * ROOM_W + 810, 208),
-      treeLedge('stair-6', 2 * ROOM_W + 765, 2 * ROOM_W + 845, 238),
-      treeLedge('stair-7', 2 * ROOM_W + 800, 2 * ROOM_W + 880, 266),
-      treeLedge('stair-8', 2 * ROOM_W + 835, 2 * ROOM_W + 905, 305),
-      treeLedge('stair-top', 2 * ROOM_W + 870, 2 * ROOM_W + 1075, 347),
     ],
     spawns: {
       default: { x: 2 * ROOM_W + 300, y: TREE_GROUND },
       west: { x: 460, y: TREE_GROUND },
-      // Down from level 3, at the stair's foot; up from level 1, by the steps down behind the trunk.
-      'from-l3': { x: 2 * ROOM_W + 420, y: TREE_GROUND },
-      'from-l1': { x: 2 * ROOM_W + 1120, y: TREE_GROUND },
+      // Up from level 1, just east of the stairhead; down from level 3, just west of the stair up: each
+      // arrival faces the level's other stair (OP-220).
+      'from-l1': { x: 2 * ROOM_W + 340, y: TREE_GROUND },
+      'from-l3': { x: 2 * ROOM_W + 470, y: TREE_GROUND },
     },
     doors: [
-      // Up to level 3, from the landing at the stair's top.
-      { id: 'stair-l3-l2', rect: { x: 2 * ROOM_W + 990, y: 750, w: 80, h: 40 }, to: { room: 'l3', spawn: 'from-l2' }, top: 347, markAt: { x: 2 * ROOM_W + 1030, y: 412 } },
-      // Down to level 1: the steps behind the trunk's east side, taken from the boardwalk.
-      { id: 'stair-l2-l1', rect: { x: 2 * ROOM_W + 1140, y: 750, w: 100, h: 40 }, to: { room: 'l1', spawn: 'from-l2' }, top: 0, markAt: { x: 2 * ROOM_W + 1190, y: 600 } },
+      // Down to level 1, west of the trunk: the stairhead the game draws (`landings`).
+      { id: 'stair-l2-l1', rect: { x: 2 * ROOM_W + 180, y: 750, w: 100, h: 40 }, to: { room: 'l1', spawn: 'from-l2' }, top: 0, way: 'down', markAt: { x: 2 * ROOM_W + 230, y: 640 } },
+      // Up to level 3: the painted stair up the trunk, taken from the floor at its foot.
+      { id: 'stair-l3-l2', rect: { x: 2 * ROOM_W + 540, y: 750, w: 110, h: 40 }, to: { room: 'l3', spawn: 'from-l2' }, top: 0, way: 'up', markAt: { x: 2 * ROOM_W + 595, y: 600 } },
     ],
+    // The stairhead down through the boardwalk, where the painting shows no stair (OP-220).
+    landings: [{ id: 'stair-l2-l1', x: 2 * ROOM_W + 170, w: 120 }],
+    // The rope across the boardwalk on the trunk's east side, before the painted steps behind it.
+    barriers: [{ id: 'trunk-east', kind: 'rope', x: 2 * ROOM_W + 1070, w: 70, sign: 'Hatching Soon' }],
   },
   // Level 5, the canopy (OP-158): six screens, in two rooms so a room stays at most four screens (decided
   // 2026-11-01), split at the front gate so the Day Ticket is sold where the tree's park begins (also
   // decided then). The nests street (`l5-street`, outside the gate) is the three screens from the street's
-  // far west end to the trunk's crown: the second parkour bough (6) climbing west to the far end, where a
-  // closed doorway waits for the places beyond Owl Park (the owner's steer, 2026-11-02), the nest doors
-  // along the boardwalk, and the trunk. Its east end is the front gate: the turnstiles let an owl on into
-  // the canopy (`l5`, inside), under the entrance arch (+1), past the stair down to level 4, the lounge and
-  // gift shop (+2), to the first parkour bough (7, +3). Painted in the six layers as levels 2 to 4 (only
+  // far west end to the trunk's crown: the second parkour bough (6) climbing west, shut for now behind a
+  // fallen branch at its foot, where a closed doorway waits for the places beyond Owl Park (the owner's
+  // steer, 2026-11-02), the nest doors along the boardwalk, and the trunk. Its east end is the front gate:
+  // the turnstiles let an owl on into the canopy (`l5`, inside), under the entrance arch (+1), past the
+  // stair down to level 4, the lounge and gift shop (+2), to the first parkour bough (7, +3), shut the same
+  // way at the pier's end (OP-220: neither bough leads anywhere yet). Painted in the six layers as levels 2 to 4 (only
   // the trunk has front props).
   'l5-street': {
     id: 'l5-street',
@@ -1312,28 +1265,19 @@ export const ROOMS: Record<string, RoomDef> = {
       ...['w2', 'w1', '0'].map((s, i) => ({ key: `tree-l5-${s}-fg`, x: i * ROOM_W, y: 0, rate: 1.2, fade: { left: TREE_EDGE_FADE, right: TREE_EDGE_FADE } })),
     ],
     mood: 'hub',
-    // The boardwalk past the nest doors, from the foot of the bough in the west, round the trunk, to the gate.
+    // The boardwalk past the nest doors, from the fallen branch at the foot of the bough in the west, round
+    // the trunk, to the gate. Bough 6's stones, plank, mushroom and far perch are painted but are not ledges.
     walkable: [
       [
-        { x: 550, y: TREE_GROUND - TREE_STRIP },
+        { x: 580, y: TREE_GROUND - TREE_STRIP },
         { x: 3 * ROOM_W - 20, y: TREE_GROUND - TREE_STRIP },
         { x: 3 * ROOM_W - 20, y: TREE_GROUND + TREE_STRIP },
-        { x: 550, y: TREE_GROUND + TREE_STRIP },
+        { x: 580, y: TREE_GROUND + TREE_STRIP },
       ],
-    ],
-    perches: [
-      // Bough 6, west up the branch: three stepping stones (Tier 1), the plank over a gap (Tier 2), the
-      // shelf mushroom across a glide (Tier 3) and, highest, the perch at the street's far end.
-      treeLedge('stone-1', 515, 556, 18),
-      treeLedge('stone-2', 476, 518, 42),
-      treeLedge('stone-3', 428, 484, 65),
-      treeLedge('plank', 302, 412, 121),
-      treeLedge('mushroom', 125, 292, 208),
-      treeLedge('far-end', 4, 78, 264),
     ],
     spawns: {
       default: { x: ROOM_W + 800, y: TREE_GROUND },
-      west: { x: 640, y: TREE_GROUND },
+      west: { x: 700, y: TREE_GROUND },
       // Back out of the gate from the canopy, in front of the turnstiles.
       'from-canopy': { x: 3 * ROOM_W - 220, y: TREE_GROUND },
       // Out of the park by the Menu, or back from checkout in this page: before the gate, as the lobby's 'from-hub' is (LEFT_PARK_SPAWN).
@@ -1361,9 +1305,15 @@ export const ROOMS: Record<string, RoomDef> = {
       { id: 'nest-door-4', rect: { x: 1225, y: 750, w: 100, h: 40 }, top: 0, marker: { x: 1275, y: 590 } },
       { id: 'nest-door-5', rect: { x: 1000, y: 750, w: 100, h: 40 }, top: 0, marker: { x: 1050, y: 590 } },
       { id: 'spare-nest', rect: { x: 770, y: 750, w: 100, h: 40 }, closedSign: 'Hatching Soon', top: 0, marker: { x: 820, y: TREE_GROUND } },
-      // The street's far end, on the bough's highest perch: a doorway for the places beyond Owl Park, shut
-      // until one exists (no destination yet; the owner's steer, OP-158).
-      { id: 'closed-beyond', rect: { x: 8, y: 750, w: 60, h: 40 }, closedSign: 'Hatching Soon', top: 264, marker: { x: 40, y: TREE_GROUND - 264 } },
+      // The street's west end, at the foot of bough 6: a doorway for the places beyond Owl Park, shut until
+      // one exists (no destination yet; the owner's steer, OP-158), on the floor behind its fallen branch.
+      { id: 'closed-beyond', rect: { x: 590, y: 750, w: 60, h: 40 }, closedSign: 'Hatching Soon', top: 0, marker: { x: 600, y: TREE_GROUND } },
+    ],
+    // OP-220: a fallen branch across the bough's foot, where the floor ends (the way beyond, and bough 6,
+    // shut for now), and boards nailed over the nest still to hatch.
+    barriers: [
+      { id: 'closed-beyond', kind: 'branch', x: 540, w: 90, sign: 'Hatching Soon' },
+      { id: 'spare-nest', kind: 'boards', x: 770, w: 100, sign: 'Hatching Soon' },
     ],
   },
   l5: {
@@ -1385,24 +1335,15 @@ export const ROOMS: Record<string, RoomDef> = {
     foregrounds: ['e1', 'e2', 'e3'].map((s, i) => ({ key: `tree-l5-${s}-fg`, x: i * ROOM_W, y: 0, rate: 1.2, fade: { left: TREE_EDGE_FADE, right: TREE_EDGE_FADE } })),
     mood: 'hub',
     // The boardwalk from the gate, under the entrance arch, past the lounge and the gift shop, to the end
-    // of the pier where bough 7 starts.
+    // of the pier, where a fallen branch shuts bough 7 for now (OP-220: its stumps, plank, branch and tip
+    // are painted but are not ledges, since the bough leads nowhere yet).
     walkable: [
       [
         { x: 20, y: TREE_GROUND - TREE_STRIP },
-        { x: 2 * ROOM_W + 700, y: TREE_GROUND - TREE_STRIP },
-        { x: 2 * ROOM_W + 700, y: TREE_GROUND + TREE_STRIP },
+        { x: 2 * ROOM_W + 680, y: TREE_GROUND - TREE_STRIP },
+        { x: 2 * ROOM_W + 680, y: TREE_GROUND + TREE_STRIP },
         { x: 20, y: TREE_GROUND + TREE_STRIP },
       ],
-    ],
-    perches: [
-      // Bough 7, east off the pier: a stone, the two cut stumps (Tier 1), the plank over a gap (Tier 2),
-      // the long branch across a glide (Tier 3), and the top plank at the bough's tip.
-      treeLedge('stone', 2 * ROOM_W + 695, 2 * ROOM_W + 788, 64),
-      treeLedge('stump-high', 2 * ROOM_W + 755, 2 * ROOM_W + 845, 128),
-      treeLedge('stump-low', 2 * ROOM_W + 828, 2 * ROOM_W + 884, 95),
-      treeLedge('plank', 2 * ROOM_W + 887, 2 * ROOM_W + 1032, 215),
-      treeLedge('branch', 2 * ROOM_W + 1100, 2 * ROOM_W + 1295, 294),
-      treeLedge('tip', 2 * ROOM_W + 1298, 2 * ROOM_W + 1445, 351),
     ],
     spawns: {
       // Through the gate: under the entrance arch.
@@ -1414,17 +1355,19 @@ export const ROOMS: Record<string, RoomDef> = {
     doors: [
       // Back out through the gate, to the street.
       { id: 'to-street', rect: { x: 20, y: 750, w: 80, h: 40 }, to: { room: 'l5-street', spawn: 'from-canopy' }, top: 0, markAt: { x: 60, y: 600 } },
-      // Down to level 4: the railed stair behind the arch, taken from the boardwalk.
-      { id: 'stair-l5-l4', rect: { x: 1230, y: 750, w: 100, h: 40 }, to: { room: 'l4', spawn: 'from-l5' }, top: 0, markAt: { x: 1280, y: 600 } },
+      // Down to level 4, the way into the tree: the railed stair behind the arch, taken from the boardwalk,
+      // its mark pointing down (OP-220).
+      { id: 'stair-l5-l4', rect: { x: 1230, y: 750, w: 100, h: 40 }, to: { room: 'l4', spawn: 'from-l5' }, top: 0, way: 'down', markAt: { x: 1280, y: 600 } },
     ],
+    barriers: [{ id: 'bough-7', kind: 'branch', x: 2 * ROOM_W + 650, w: 70, sign: 'Hatching Soon' }],
   },
   // Level 0, the cavern under the tree (OP-163): two screens, the realm challenge stair (-1) and the
   // stair foot (0), painted in the six layers as the levels above (no front props). The stair from the
-  // lobby ring comes down round a great root to the floor; west of it two root knobs and a stone shelf
-  // lead up toward the high root ledge, reached from the stair by a glide (the find's place, set by the
+  // lobby ring comes down round a great root to the floor, and is taken up from its foot (OP-220); west of
+  // it two root knobs and a stone shelf lead up toward the high root ledge (the find's place, set by the
   // spot placer). The mouth at the east end leads into the arcade cave, its own room. In the west, the
-  // stairwell down to OP-115's first lock is closed until that ticket ships; beyond the low stone wall the
-  // cavern falls away and nothing leads on.
+  // stairwell down to OP-115's first lock is boarded up until that ticket ships; beyond the low stone wall
+  // the cavern falls away and nothing leads on.
   l0: {
     id: 'l0',
     map: 2,
@@ -1461,32 +1404,26 @@ export const ROOMS: Record<string, RoomDef> = {
       treeLedge('knob-low', ROOM_W + 380, ROOM_W + 470, 93),
       treeLedge('knob-high', ROOM_W + 480, ROOM_W + 560, 128),
       treeLedge('root-ledge', ROOM_W + 330, ROOM_W + 610, 264),
-      // The stair from the lobby ring: its treads round the great root, a hop apart, to the top under the
-      // round opening in the roof.
-      treeLedge('stair-1', ROOM_W + 940, ROOM_W + 1040, 57),
-      treeLedge('stair-2', ROOM_W + 890, ROOM_W + 990, 110),
-      treeLedge('stair-3', ROOM_W + 840, ROOM_W + 910, 165),
-      treeLedge('stair-4', ROOM_W + 800, ROOM_W + 870, 215),
-      treeLedge('stair-5', ROOM_W + 760, ROOM_W + 870, 262),
-      treeLedge('stair-6', ROOM_W + 780, ROOM_W + 900, 305),
-      treeLedge('stair-top', ROOM_W + 810, ROOM_W + 900, 344),
+      // The stair up to the lobby ring is taken from the floor at its foot (OP-220), so its treads are not ledges.
     ],
     // Down from the lobby ring at the stair's foot; back from the arcade cave inside its mouth; the
     // west end's by the closed stairwell.
     spawns: {
       default: { x: ROOM_W + 1150, y: TREE_GROUND },
       west: { x: 900, y: TREE_GROUND },
-      'from-l1': { x: ROOM_W + 1120, y: TREE_GROUND },
+      // Down from level 1, just west of the stair up, facing the level's other stair (OP-220).
+      'from-l1': { x: ROOM_W + 880, y: TREE_GROUND },
       'from-arcade': { x: 2 * ROOM_W - 220, y: TREE_GROUND },
     },
     doors: [
-      // The stairwell down to OP-115's first lock: closed, its blockade on the floor before it.
-      { id: 'stair-challenge', rect: { x: 600, y: 750, w: 160, h: 40 }, closedSign: 'Not Yet Fledged', top: 0, marker: { x: 680, y: TREE_GROUND } },
-      // Up to the lobby ring, from the stair's top, through the round opening in the cavern's roof.
-      { id: 'stair-l1-l0', rect: { x: ROOM_W + 810, y: 750, w: 90, h: 40 }, to: { room: 'l1', spawn: 'from-l0' }, top: 344, markAt: { x: ROOM_W + 855, y: 380 } },
+      // The stairwell down to OP-115's first lock, the level's west stair: closed, boards nailed over it.
+      { id: 'stair-challenge', rect: { x: 600, y: 750, w: 160, h: 40 }, closedSign: 'Not Yet Fledged', top: 0, way: 'down', marker: { x: 680, y: TREE_GROUND } },
+      // Up to the lobby ring, its east stair: the stair round the great root, taken from the floor at its foot.
+      { id: 'stair-l1-l0', rect: { x: ROOM_W + 960, y: 750, w: 100, h: 40 }, to: { room: 'l1', spawn: 'from-l0' }, top: 0, way: 'up', markAt: { x: ROOM_W + 1010, y: 600 } },
       // The cavern's mouth at the east end, into the arcade cave.
       { id: 'to-arcade', rect: { x: 2 * ROOM_W - 100, y: 750, w: 80, h: 40 }, to: { room: 'l0-arcade', spawn: 'from-l0' }, top: 0, markAt: { x: 2 * ROOM_W - 60, y: 600 } },
     ],
+    barriers: [{ id: 'stair-challenge', kind: 'boards', x: 590, w: 180, sign: 'Not Yet Fledged' }],
   },
   // Neon Roost, the arcade, rebuilt as level 0's cave (OP-163, decided on OP-155): three screens off the
   // cavern's east end, its own room (cap 40, as today's hall). A bay a screen, each with the alcove where
@@ -1508,7 +1445,10 @@ export const ROOMS: Record<string, RoomDef> = {
       ...['c0', 'c1', 'c2'].map((s, i) => ({ key: `tree-l0-${s}-back`, x: i * ROOM_W, y: 0 })),
       ...['c0', 'c1', 'c2'].map((s, i) => ({ key: `tree-l0-${s}-play`, x: i * ROOM_W, y: 0, plain: true })),
     ],
-    foregrounds: ['c0', 'c1', 'c2'].map((s, i) => ({ key: `tree-l0-${s}-fg`, x: i * ROOM_W, y: 0, rate: 1.2, fade: { left: TREE_EDGE_FADE, right: TREE_EDGE_FADE } })),
+    // No overlay for now (OP-216): the cave's three root overlays covered about a third of the view and
+    // showed a cut band at the floor, so the cave is drawn without them until OP-215 repaints them as
+    // thin roots at the screen's edges. The overlays stay published (tree-l0-c0-fg to c2-fg).
+    foregrounds: [],
     mood: 'arcade',
     // The wet stone floor, from the mouth in the west to the wall of roots that closes the east end.
     walkable: [
@@ -1519,7 +1459,7 @@ export const ROOMS: Record<string, RoomDef> = {
         { x: 40, y: TREE_GROUND + TREE_STRIP },
       ],
     ],
-    spawns: { default: { x: 300, y: TREE_GROUND }, 'from-l0': { x: 220, y: TREE_GROUND }, 'from-market': { x: 300, y: TREE_GROUND } },
+    spawns: { default: { x: 300, y: TREE_GROUND }, 'from-l0': { x: 220, y: TREE_GROUND } },
     doors: [
       // The mouth, back out into the cavern.
       { id: 'to-l0', rect: { x: 0, y: 750, w: 80, h: 40 }, to: { room: 'l0', spawn: 'from-arcade' }, top: 0, markAt: { x: 50, y: 600 } },
@@ -1530,7 +1470,304 @@ export const ROOMS: Record<string, RoomDef> = {
       { id: 'cabinet-sling', rect: { x: 2 * ROOM_W + 505, y: 750, w: 160, h: 40 }, top: 0, marker: { x: 2 * ROOM_W + 585, y: 627 } },
     ],
   },
+  // The test course (OP-224): keepers only, drawn in plain shapes (trialCourse.ts).
+  ...TRIAL_ROOMS,
+  ...CANOPY_ROOMS,
+  ...BRUSH_ROOMS,
+  ...CIRCUIT_ROOMS,
 };
+
+// ---- The new map (map 3): the park laid out as one tree (Nov 6 park map) ----
+//
+// Every owl the tree takes walks it (the entries setting, OP-156), and a keeper's tab with `?newmap=1`;
+// `?newmap=0` walks the tree as it was. Only its own ways (DoorDef.toNew) lead into its rooms. It is built from rooms and art the park already has. The common spaces
+// are today's top-down rooms: the lobby is the Treetop Commons (the turnstiles and the booth: the
+// entrance with its gift shop), its street the canopy nests, the three open realms the Commons with their
+// Realm Vote idols, the hub the Party Grove at the tree's foot and the arcade hall below the neon realm.
+// The stairs between them are levels of the tree seen from the side, each a copy of one under its own id
+// with its doorways led on to the new map's rooms: from the turnstiles down past the stained-glass realm
+// (level 3's branch), a quiet landing (level 4), the treehouse clearing (level 2's reach), to the ground
+// (level 1's forest path) with the neon realm's gate, the way out to the Party Grove and the root stair
+// down to the cavern and its arcade cave (level 0). Its rooms' kits are the levels' own (rooms/kit.ts).
+// The ink-wash realm has no room yet, so its landing has no doorway.
+
+/** Where an owl walking the new map starts without a nest: the Treetop Commons, before the turnstiles. */
+export const NEW_MAP_ARRIVAL = { room: 'lobby', spawn: 'default' } as const;
+
+/** A copy of the tree's level `from` as the new map's room `id`, its doorways led on by `ways` (door id to target). */
+function newMapLevel(id: string, from: string, ways: Readonly<Record<string, { room: string; spawn: string }>>, more: Partial<RoomDef> = {}): RoomDef {
+  // The tree's level it is built on is gated (dark unless the tree takes a share of the arrivals, OP-156);
+  // the new map's copy is open to every owl (the owner's "whole map unlocked all the time", Nov 8).
+  const { gated: _gated, ...src } = ROOMS[from]!;
+  const doors = src.doors.map((d) => {
+    const to = ways[d.id];
+    if (!to) return d;
+    const { toTree: _tree, closedInTree: _closed, ...rest } = d;
+    return { ...rest, to };
+  });
+  return { ...src, id, ...more, doors: [...doors, ...(more.doors ?? [])], spawns: { ...src.spawns, ...more.spawns } };
+}
+
+const at = (room: string, spawn: string) => ({ room, spawn });
+
+ROOMS['m3-stair-1'] = newMapLevel('m3-stair-1', 'l3', {
+  // Up the knothole: back to the Treetop Commons, before the turnstiles.
+  'stair-l4-l3': at('lobby', 'from-hub'),
+  'stair-l3-l2': at('m3-stair-2', 'from-l5'),
+  'to-glass': at('glass', 'default'),
+});
+ROOMS['m3-stair-2'] = newMapLevel('m3-stair-2', 'l4', {
+  'stair-l5-l4': at('m3-stair-1', 'from-l2'),
+  'stair-l4-l3': at('m3-stair-3', 'from-l3'),
+});
+ROOMS['m3-stair-3'] = newMapLevel(
+  'm3-stair-3',
+  'l2',
+  {
+    'stair-l3-l2': at('m3-stair-2', 'from-l3'),
+    'stair-l2-l1': at('m3-ground', 'from-l2'),
+  },
+  {
+    // The treehouse clearing's doorway at the far side of the reach's common, by its log bench.
+    spawns: { grove: { x: ROOM_W + 1180, y: TREE_GROUND } },
+    doors: [{ id: 'to-grove', rect: { x: ROOM_W + 1250, y: 750, w: 110, h: 40 }, to: at('grove', 'default'), top: 0, markAt: { x: ROOM_W + 1305, y: 330 } }],
+  },
+);
+{
+  // The ground: level 1's forest path. Its closed gate in the west is the way out of the tree to the Party
+  // Grove; the neon realm's gate in the east; the root stair down to the cavern.
+  const l1 = ROOMS['l1']!;
+  const closedWest = l1.doors.find((d) => d.id === 'closed-west')!;
+  ROOMS['m3-ground'] = newMapLevel(
+    'm3-ground',
+    'l1',
+    {
+      'stair-l2-l1': at('m3-stair-3', 'from-l1'),
+      'stair-l1-l0': at('m3-under', 'from-l1'),
+      'to-market': at('market', 'default'),
+    },
+    {
+      spawns: { party: { x: 760, y: TREE_GROUND } },
+      // The kit's level 1 draws no rope at the painted roof run, so the new map's ground has no barrier.
+      barriers: [],
+    },
+  );
+  const ground = ROOMS['m3-ground']!;
+  ground.doors = ground.doors.map((d) =>
+    d.id === 'closed-west' ? { id: 'to-party', rect: closedWest.rect, to: at('hub', 'default'), top: 0, markAt: { x: closedWest.rect.x + closedWest.rect.w / 2, y: 462 } } : d,
+  );
+}
+ROOMS['m3-under'] = newMapLevel('m3-under', 'l0', {
+  // Up the root stair into the hollow hall's floor (the stairs above are left over, see below).
+  'stair-l1-l0': at(HALL_ID, 'from-under'),
+  // The arcade is a communal room, so seen from above (the owner's camera rule, OP-283): the cavern's
+  // arcade door leads into the top-down arcade, whose street door leads back down here for an owl
+  // that came this way (its `toNew`).
+  'to-arcade': at('arcade', 'from-cavern'),
+});
+// The side-view copy of the tree's arcade the cavern led to before OP-283; nothing leads in now.
+ROOMS['m3-cave'] = newMapLevel('m3-cave', 'l0-arcade', { 'to-l0': at('m3-under', 'from-arcade') });
+
+// ---- Plazas (plaza.ts) ----
+//
+// The owner's ask, Nov 8: the top-down rooms should feel like a town center, somewhere 80 owls could
+// gather. Each painted common room runs on below its painting into a plaza: the Treetop Commons in
+// front of the turnstiles, and the arcade hall in front of its cabinets.
+
+/** Where the plazas' floors end, their gathering spots' middles (each a moonbeam in a worn ring). */
+export const LOBBY_PLAZA = { front: 1335, rings: [{ x: 1600, y: 1110 }] } as const;
+export const ARCADE_PLAZA = { front: 1335, rings: [{ x: 1200, y: 1110 }, { x: 3600, y: 1110 }] } as const;
+export const HOMES_PLAZA = { front: 1335, rings: [{ x: 2300, y: 1110 }] } as const;
+export const MARKET_PLAZA = { front: 1335, rings: [{ x: 900, y: 1110 }, { x: 2400, y: 1110 }] } as const;
+export const GROVE_PLAZA = { front: 1235, rings: [{ x: 900, y: 1060 }, { x: 2600, y: 1060 }, { x: 3900, y: 1060 }] } as const;
+export const GLASS_PLAZA = { front: 1700, rings: [{ x: 800, y: 1260 }] } as const;
+export const HUB_PLAZA = { front: 1235, rings: [{ x: 1150, y: 1060 }, { x: 3650, y: 1060 }] } as const;
+
+/** A solid thing in a painting's foot that a grown floor now reaches, hopped up on (plaza.ts): its outline, closed at the painting's foot. */
+const footMound = (id: string, outline: Vec2[]): Perch => ({ id, area: outline, top: 36, solid: true });
+
+ROOMS['lobby'] = growToPlaza(ROOMS['lobby']!, {
+  ...LOBBY_PLAZA,
+  rings: [...LOBBY_PLAZA.rings],
+  oldFront: 888,
+  west: 0,
+  east: 2 * ROOM_W - 40,
+  // The painting's own cobbles, run on down, tinted to the painting's foot (its mean colour there).
+  texture: 'kit-tex-ground-cobble-path',
+  tint: 0x8384b8,
+  ring: 'edge-commons-ring',
+  corner: 'edge-commons-corner-front',
+  frontBumps: ['edge-commons-planters-a', 'edge-commons-planters-b', 'edge-commons-planters-a', 'edge-commons-planters-b', 'edge-commons-planters-a'],
+});
+ROOMS['arcade'] = growToPlaza(ROOMS['arcade']!, {
+  ...ARCADE_PLAZA,
+  rings: [...ARCADE_PLAZA.rings],
+  oldFront: 888,
+  west: 0,
+  east: 3 * ROOM_W - 10,
+  texture: 'kit-tex-neon-wet-pavement',
+  tint: 0x88b9ff,
+  ring: 'edge-arcade-ring',
+  corner: 'edge-arcade-corner-front',
+  frontBumps: ['edge-arcade-clutter-a', 'edge-arcade-clutter-b', 'edge-arcade-clutter-a', 'edge-arcade-clutter-b', 'edge-arcade-clutter-a', 'edge-arcade-clutter-b', 'edge-arcade-clutter-a'],
+});
+// The lane under the nests: its west bank, the mound where its two screens join and its east bank,
+// which closed the lane's front, are mossy mounds in the plaza now, hopped up on.
+ROOMS['homes'] = growToPlaza(ROOMS['homes']!, {
+  ...HOMES_PLAZA,
+  rings: [...HOMES_PLAZA.rings],
+  oldFront: 750,
+  west: 0,
+  east: 2 * ROOM_W,
+  texture: 'kit-tex-ground-forest-floor',
+  tint: 0xf8abc5,
+  ring: 'edge-lane-ring',
+  corner: 'edge-lane-corner-front',
+  frontBumps: ['edge-lane-ferns-a', 'edge-lane-ferns-b', 'edge-lane-ferns-a', 'edge-lane-ferns-b', 'edge-lane-ferns-a'],
+  perches: [
+    footMound('homes-bank-west', [{ x: 0, y: 750 }, { x: 312, y: 724 }, { x: 318, y: 770 }, { x: 345, y: 780 }, { x: 436, y: 782 }, { x: 444, y: 832 }, { x: 462, y: 880 }, { x: 470, y: 900 }, { x: 0, y: 900 }]),
+    footMound('homes-mound', [{ x: 1372, y: 900 }, { x: 1372, y: 880 }, { x: 1400, y: 834 }, { x: 1445, y: 794 }, { x: 1490, y: 774 }, { x: 1566, y: 768 }, { x: 1576, y: 756 }, { x: 1610, y: 756 }, { x: 1648, y: 760 }, { x: 1676, y: 780 }, { x: 1700, y: 806 }, { x: 1760, y: 830 }, { x: 1860, y: 880 }, { x: 1870, y: 900 }]),
+    footMound('homes-bank-east', [{ x: 2930, y: 900 }, { x: 2944, y: 880 }, { x: 3000, y: 832 }, { x: 3100, y: 772 }, { x: 3200, y: 750 }, { x: 3200, y: 900 }]),
+  ],
+});
+// The night market's street runs on past its stalls, wet and lit, a ring of puddles under each string of lights.
+ROOMS['market'] = growToPlaza(ROOMS['market']!, {
+  ...MARKET_PLAZA,
+  rings: [...MARKET_PLAZA.rings],
+  oldFront: 888,
+  west: 0,
+  east: 2 * ROOM_W,
+  texture: 'kit-tex-neon-wet-pavement',
+  tint: 0xe0feff,
+  ring: 'edge-market-ring',
+  corner: 'edge-market-corner-front',
+  frontBumps: ['edge-market-clutter-a', 'edge-market-clutter-b', 'edge-market-clutter-a', 'edge-market-clutter-b', 'edge-market-clutter-a'],
+});
+// The glass street runs on toward the viewer, deeper than it is wide; the two lanterns at its old front
+// stand in the street now, their bases hopped up on.
+ROOMS['glass'] = growToPlaza(ROOMS['glass']!, {
+  ...GLASS_PLAZA,
+  rings: [...GLASS_PLAZA.rings],
+  oldFront: 840,
+  west: 60,
+  east: 1560,
+  texture: 'kit-tex-ground-cobble-path',
+  tint: 0x73abff,
+  ring: 'edge-glass-ring',
+  corner: 'edge-glass-corner-front',
+  frontBumps: ['edge-glass-planters-a', 'edge-glass-planters-b'],
+  perches: [
+    footMound('glass-lantern-west', [{ x: 130, y: 840 }, { x: 270, y: 840 }, { x: 270, y: 880 }, { x: 130, y: 880 }]),
+    footMound('glass-lantern-east', [{ x: 1390, y: 840 }, { x: 1530, y: 840 }, { x: 1530, y: 880 }, { x: 1390, y: 880 }]),
+  ],
+});
+// The grove's clearing runs on toward the viewer. Its floors overlap where the meadow meets the trunk
+// and the east path, so the back of the grown floor is traced round them by hand (each corner one of
+// theirs); the dock stays as it is. What closed the meadow's front (its west bank, the ferny mound
+// under the lantern, the mushrooms and the east bank) are mounds in the open floor now, hopped up on.
+ROOMS['grove'] = growToPlaza(ROOMS['grove']!, {
+  ...GROVE_PLAZA,
+  rings: [...GROVE_PLAZA.rings],
+  oldFront: 900,
+  west: 0,
+  east: 3 * ROOM_W,
+  texture: 'kit-tex-ground-forest-floor',
+  tint: 0x9b91bc,
+  ring: 'edge-clearing-ring',
+  corner: 'edge-clearing-corner-front',
+  frontBumps: ['edge-clearing-ferns-a', 'edge-clearing-ferns-b', 'edge-clearing-ferns-a', 'edge-clearing-ferns-b', 'edge-clearing-ferns-a', 'edge-clearing-ferns-b', 'edge-clearing-ferns-a'],
+  back: {
+    run: pts([0, 700], [390, 668], [560, 664], [722, 672], [1080, 668], [1200, 672], [1420, 664], [1520, 676], [1600, 690], [1680, 650], [1850, 600], [1862, 540], [1930, 510], [2550, 510], [2525, 610], [2505, 705], [3050, 705], [3100, 700], [3340, 688], [3420, 705], [3560, 700], [3640, 672], [3800, 640], [3950, 650], [4000, 700], [4250, 722], [4300, 690], [4420, 645], [4560, 650], [4800, 700]),
+    others: [ROOMS['grove']!.walkable[1]!],
+  },
+  perches: [
+    footMound('grove-bank-west', pts([0, 700], [390, 668], [440, 760], [520, 860], [700, 880], [710, 900], [0, 900])),
+    footMound('grove-lantern-mound', pts([1100, 900], [1100, 860], [1300, 800], [1560, 790], [1660, 765], [1900, 765], [1890, 790], [1960, 880], [1965, 900])),
+    footMound('grove-mushrooms', pts([3070, 900], [3070, 870], [3140, 850], [3140, 745], [3340, 745], [3340, 900])),
+    footMound('grove-bank-east', pts([4340, 900], [4380, 860], [4450, 770], [4580, 720], [4800, 700], [4800, 900])),
+  ],
+});
+
+// The Party Grove runs on toward the viewer, its pale floor laid on below the painted one. The glowing
+// ring painted in the floor's middle is still the way back into the Great Hollow, out in the open now,
+// and the plaza's two moonbeams stand either side of it, clear of the path down from the trunk door.
+ROOMS['hub'] = growToPlaza(ROOMS['hub']!, {
+  ...HUB_PLAZA,
+  rings: [...HUB_PLAZA.rings],
+  oldFront: 900,
+  west: 140,
+  east: 4720,
+  texture: 'kit-tex-entrance-plaza-stone',
+  tint: 0xe3dbc8,
+  ring: 'edge-party-ring',
+  corner: 'edge-party-corner-front',
+  frontBumps: ['edge-party-mushrooms-a', 'edge-party-mushrooms-b', 'edge-party-mushrooms-a', 'edge-party-mushrooms-b', 'edge-party-mushrooms-a', 'edge-party-mushrooms-b', 'edge-party-mushrooms-a', 'edge-party-mushrooms-b'],
+});
+
+// Out on each plaza's floor (plazaFloor.ts, the owner's ask, Nov 8: things to interact with around the
+// room, not all on the wall): its little scenes' stumps and logs to land on and the art that sets each scene.
+for (const id of ['lobby', 'arcade', 'homes', 'market', 'glass', 'grove', 'hub']) {
+  const room = ROOMS[id]!;
+  const perches = floorPerches(id);
+  ROOMS[id] = { ...room, ...(perches.length ? { perches: [...(room.perches ?? []), ...perches] } : {}), pieces: [...(room.pieces ?? []), ...floorPieces(id)] };
+}
+// The sealed hollow's doorway (OP-310, escape.ts) stands on the clearing's front edge: an owl back out of it comes out here.
+ROOMS[ESCAPE_DOOR.room]!.spawns[ESCAPE_BACK_SPAWN] = { ...ESCAPE_DOOR.spawn };
+
+// ---- The Great Hollow (hollowHall.ts) ----
+//
+// The inside of the tree, one huge oval room seen from almost straight above with the four Commons round
+// its rim (Nov 7, the owner's "Build the big room"; Nov 8, "make it a huge oval with realms kind of all the
+// way around"), in place of the tall hall seen from the side with a Commons behind a door on each landing.
+
+ROOMS[HALL_ROOM.id] = HALL_ROOM;
+
+/** The realms whose idols stand in the Great Hollow now, each over its Realm Vote spot there. */
+export const HALL_IDOL_REALMS: ReadonlySet<string> = new Set(idolRealms(HALL_ROOM));
+
+/**
+ * A room as an owl walking `map` finds it (Nov 8, the owner's word: "We can probably remove the idols
+ * from their original realms if they're still there now that they're in the main hall"): on the new map
+ * a realm whose idol stands in the Great Hollow has none of its own, neither the idol nor its Realm Vote
+ * spot; today's park keeps it, as its only vote is there.
+ */
+export function roomOnMap(room: RoomDef, map: WalkMap): RoomDef {
+  if (
+    map !== 3 ||
+    room.id === HALL_ID ||
+    room.idols ||
+    !HALL_IDOL_REALMS.has(room.votesFor ?? room.id) ||
+    !room.doors.some((d) => d.id === 'idol')
+  )
+    return room;
+  return { ...room, idols: [], doors: room.doors.filter((d) => d.id !== 'idol') };
+}
+
+/**
+ * The new map's ways out of today's top-down rooms (DoorDef.toNew), by room and door: each realm's way out
+ * back to its landing, the turnstiles down into the tree, and the Party Grove's way back in. Every other
+ * door of those rooms leads where it always has: the lobby's west end to the street of nests, the nests
+ * back to it, the plaza's arches into the realms, the neon street's arcade door into the hall.
+ */
+const NEW_MAP_WAYS: Readonly<Record<string, Readonly<Record<string, { room: string; spawn: string }>>>> = {
+  // Switched on (Nov 6, the owner's "Switch it on"): through the turnstiles down the knothole into the
+  // Great Hollow, each realm's way out back into its Commons there, and the Party Grove's way into the trunk.
+  lobby: { gate: at(HALL_ID, 'from-lobby') },
+  glass: { 'to-hub': at(HALL_ID, fromRealm('glass')) },
+  grove: { 'to-hub': at(HALL_ID, fromRealm('grove')) },
+  market: { 'to-hub': at(HALL_ID, fromRealm('market')) },
+  hub: { 'to-lobby': at(HALL_ID, 'from-party') },
+};
+for (const [room, ways] of Object.entries(NEW_MAP_WAYS)) {
+  const r = ROOMS[room]!;
+  r.doors = r.doors.map((d) => {
+    const toNew = ways[d.id];
+    return toNew ? { ...d, toNew } : d;
+  });
+}
+
+/** The parkour courses (OP-224, course.ts), by id: the keepers' test course, the Updraft Canopy, Brushstroke Bridges and the neon realm's course (all the keepers' for now). */
+export const COURSES: Readonly<Record<string, CourseDef>> = { [TRIAL_COURSE.id]: TRIAL_COURSE, [CANOPY_COURSE.id]: CANOPY_COURSE, [BRUSH_COURSE.id]: BRUSH_COURSE, [CIRCUIT_COURSE.id]: CIRCUIT_COURSE };
 
 /**
  * Where an owl walking the tree comes out of its nest, and where Play puts it should its nest not answer
@@ -1619,7 +1856,9 @@ export const ANCHORS: Record<string, Record<string, { x: number; y: number }>> =
   hub: { 'tree-base': { x: 2400, y: 628 } },
   grove: { guardian: { x: 2400, y: 430 }, gathering: { x: 2400, y: 612 } },
   market: { robot: { x: 1240, y: 520 }, shop: { x: 1080, y: 560 } },
-  glass: { idol: { x: 1260, y: 705 }, portal: { x: 2885, y: 560 } },
+  glass: realmStartAnchors(),
+  // The idols in the Great Hollow's Commons, each just behind its Realm Vote spot (RoomDef.idols).
+  [HALL_ID]: HALL_ANCHORS,
 };
 
 /** A realm's guardian: the owl over its Realm Vote spot (the `idol` door). */
@@ -1661,10 +1900,11 @@ export const GATED_ROOMS: readonly string[] = Object.values(ROOMS).filter((r) =>
  */
 export const TREE_REALMS: ReadonlySet<string> = (() => {
   const seen = new Set<string>();
-  const next = Object.values(ROOMS).filter((r) => mapOf(r) === 2);
+  // A course's rooms (OP-224) are seen from the side too, but are no level of the tree: their trail gate is the course's.
+  const next = Object.values(ROOMS).filter((r) => mapOf(r) === 2 && !isNewMapRoom(r.id) && !r.course);
   for (let room = next.pop(); room; room = next.pop()) {
     for (const d of room.doors) {
-      const to = roomFor((d.toTree ?? d.to)?.room ?? '');
+      const to = roomFor(doorTarget(d, 2)?.room ?? '');
       if (!to || mapOf(to) === 2 || seen.has(to.id)) continue;
       seen.add(to.id);
       next.push(to);
@@ -1688,9 +1928,11 @@ export function relayout(room: string, p: Vec2, from: number): Vec2 {
   return { x, y: p.y };
 }
 
-/** The room with this id: one of ROOMS, or a nest made from NEST_ROOM; undefined for anything else. */
+/** The room with this id: one of ROOMS, a nest made from NEST_ROOM, a group's sealed hollow made from ESCAPE_ROOM (OP-310) or a party game's room from PARTY_ROOM (OP-314); undefined for anything else. */
 export function roomFor(id: string): RoomDef | undefined {
   if (Object.hasOwn(ROOMS, id)) return ROOMS[id];
+  if (isEscapeRoom(id)) return { ...ESCAPE_ROOM, id };
+  if (isPartyRoom(id)) return { ...PARTY_ROOM, id };
   return isNestRoom(id) ? { ...NEST_ROOM, id } : undefined;
 }
 

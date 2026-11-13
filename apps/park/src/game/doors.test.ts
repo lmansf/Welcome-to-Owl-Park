@@ -1,7 +1,7 @@
-import { STREET_ROOM } from '@owl-park/shared';
+import { STREET_ROOM, TREE_STREET_ROOM, type DoorDef } from '@owl-park/shared';
 import { describe, expect, it } from 'vitest';
 import { NEST_ROOM, ROOMS } from '../rooms';
-import { AHEAD_PX, DOOR_AIM_PX, WAY_DOOR_PX, doorwaysOff, roomsAhead, takesDoorway } from './doors';
+import { AHEAD_PX, CARRIED_COS, DOOR_AIM_PX, UP_GRACE_MS, WAY_DOOR_PX, backWaits, carriedIn, doorwayUnder, doorwaysOff, heldAtFall, roomsAhead, stillCarried, stillHeldSinceFall, takesDoorway, upCounts } from './doors';
 
 const door = { x: 1700, y: 610, w: 130, h: 90 };
 
@@ -17,6 +17,155 @@ describe('takesDoorway', () => {
     expect(takesDoorway(door, { x: 2000, y: 640 }, false, false)).toBe(false);
     expect(takesDoorway(door, { x: 1765, y: 700 + DOOR_AIM_PX + 1 }, false, false)).toBe(false);
     expect(takesDoorway(door, { x: 1765, y: 655 }, false, true)).toBe(false);
+  });
+});
+
+describe('backWaits: the way back waits for a fresh push', () => {
+  it('waits while the way the owl came in with is still held', () => {
+    expect(backWaits(true, true, false)).toBe(true);
+  });
+
+  it('opens once the keys are let go, and stays open however they are pushed after', () => {
+    const open = backWaits(true, false, false);
+    expect(open).toBe(false);
+    expect(backWaits(open, true, false)).toBe(false);
+    expect(backWaits(open, true, true)).toBe(false);
+  });
+
+  it('keeps waiting under a screen that takes the keys: held keys read as let go there', () => {
+    expect(backWaits(true, false, true)).toBe(true);
+    expect(backWaits(backWaits(true, false, true), true, false)).toBe(true);
+  });
+
+  it('is open for an owl that came in holding nothing', () => {
+    expect(backWaits(true, false, false)).toBe(false);
+  });
+
+  it('opens on the letting go itself, though the key is down again by the next look or a screen covers the room', () => {
+    expect(backWaits(true, true, false, true)).toBe(false);
+    expect(backWaits(true, false, true, true)).toBe(false);
+    expect(backWaits(true, true, false, false)).toBe(true);
+  });
+});
+
+describe('carriedIn: a direction held across a change of view is not a walk (OP-346)', () => {
+  const up = { x: 0, y: -1 };
+  const right = { x: 1, y: 0 };
+  const diagonal = { x: Math.SQRT1_2, y: -Math.SQRT1_2 };
+
+  it('is the direction held as the owl comes out of a side view into a room seen from above, and the other way round', () => {
+    expect(carriedIn(true, false, up, false)).toEqual(up);
+    expect(carriedIn(false, true, right, false)).toEqual(right);
+  });
+
+  it('is nothing between two rooms seen the same way: there a held direction walks on', () => {
+    expect(carriedIn(false, false, up, false)).toBeNull();
+    expect(carriedIn(true, true, right, false)).toBeNull();
+  });
+
+  it('is nothing for an owl that came by no doorway, that holds nothing, or that let go on the way', () => {
+    expect(carriedIn(undefined, false, up, false)).toBeNull();
+    expect(carriedIn(true, false, null, false)).toBeNull();
+    expect(carriedIn(true, false, up, true)).toBeNull();
+  });
+
+  it('stays carried while the same direction is held, a wavering thumbstick included', () => {
+    expect(stillCarried(up, up)).toBe(up);
+    const wavered = { x: Math.sin(0.3), y: -Math.cos(0.3) };
+    expect(stillCarried(up, wavered)).toBe(up);
+  });
+
+  it('is free once the direction is let go, or points elsewhere: any walking key added or let go is a new push', () => {
+    expect(stillCarried(up, null)).toBeNull();
+    expect(stillCarried(up, diagonal)).toBeNull();
+    expect(stillCarried(diagonal, right)).toBeNull();
+    expect(stillCarried(diagonal, up)).toBeNull();
+    expect(stillCarried(up, { x: 0, y: 1 })).toBeNull();
+    expect(stillCarried(null, up)).toBeNull();
+    // The 45 degrees between two neighbouring ways of the keys is past the turn a carried direction allows.
+    expect(Math.SQRT1_2).toBeLessThan(CARRIED_COS);
+  });
+});
+
+describe('heldAtFall: a push held as a fall puts the owl back is not a walk (OP-360)', () => {
+  const right = { x: 1, y: 0 };
+  const left = { x: -1, y: 0 };
+
+  it('is the push held at the fall, with how often the keys had been let go by then; nothing with nothing held', () => {
+    expect(heldAtFall(right, 3)).toEqual({ dir: right, rests: 3 });
+    expect(heldAtFall(null, 3)).toBeNull();
+    // Its own copy: the keys' direction is theirs to change.
+    const held = { x: 1, y: 0 };
+    const then = heldAtFall(held, 0)!;
+    held.x = -1;
+    expect(then.dir).toEqual(right);
+  });
+
+  it('still holds while the same push is held, a wavering thumbstick included', () => {
+    const then = heldAtFall(right, 3);
+    expect(stillHeldSinceFall(then, right, 3)).toBe(true);
+    expect(stillHeldSinceFall(then, { x: Math.cos(0.3), y: Math.sin(0.3) }, 3)).toBe(true);
+  });
+
+  it('is over once the push is let go, was let go and pressed again between two looks, or points another way', () => {
+    const then = heldAtFall(right, 3);
+    expect(stillHeldSinceFall(then, null, 3)).toBe(false);
+    expect(stillHeldSinceFall(then, right, 4)).toBe(false);
+    expect(stillHeldSinceFall(then, left, 3)).toBe(false);
+    expect(stillHeldSinceFall(then, { x: Math.SQRT1_2, y: -Math.SQRT1_2 }, 3)).toBe(false);
+    expect(stillHeldSinceFall(null, right, 3)).toBe(false);
+  });
+});
+
+describe('takesDoorway seen from the side (the tree, OP-212)', () => {
+  it('passes a doorway by on the held keys, and stays standing in one', () => {
+    expect(takesDoorway(door, { x: 2400, y: 640 }, true, false, true)).toBe(false);
+    expect(takesDoorway(door, { x: 1765, y: 655 }, true, false, true)).toBe(false);
+    expect(takesDoorway(door, null, false, false, true)).toBe(false);
+  });
+
+  it('still takes a tap aimed at the doorway itself, and never one on an errand', () => {
+    expect(takesDoorway(door, { x: 1765, y: 655 }, false, false, true)).toBe(true);
+    expect(takesDoorway(door, { x: 1765, y: 610 - DOOR_AIM_PX }, false, false, true)).toBe(true);
+    expect(takesDoorway(door, { x: 2000, y: 640 }, false, false, true)).toBe(false);
+    expect(takesDoorway(door, { x: 1765, y: 655 }, false, true, true)).toBe(false);
+  });
+
+  it('leaves a room seen from above as it was: the held keys and standing in it go through', () => {
+    expect(takesDoorway(door, { x: 2400, y: 640 }, true, false, false)).toBe(true);
+    expect(takesDoorway(door, null, false, false, false)).toBe(true);
+  });
+});
+
+describe('upCounts (OP-212)', () => {
+  it('counts a press for a moment after it, and none before it or once the moment is past', () => {
+    expect(upCounts(1000, 1000)).toBe(true);
+    expect(upCounts(1000, 1000 + UP_GRACE_MS)).toBe(true);
+    expect(upCounts(1000, 1001 + UP_GRACE_MS)).toBe(false);
+    expect(upCounts(1000, 999)).toBe(false);
+    expect(upCounts(0, 100)).toBe(false);
+  });
+});
+
+describe('doorwayUnder (OP-212)', () => {
+  const l1 = ROOMS['l1']!;
+  const stairDown = l1.doors.find((d) => d.id === 'stair-l1-l0')!;
+  const stairUp = l1.doors.find((d) => d.id === 'stair-l2-l1')!;
+  const middle = (d: DoorDef) => ({ x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2 });
+  const level = (z: number) => (d: DoorDef) => d.top === undefined || d.top === z;
+  const leads = (d: DoorDef) => !!d.to;
+
+  it('is the doorway the owl stands in at its height, leading somewhere', () => {
+    // Both of the lobby's stairs are on the floor (OP-220): down at the west, up at the east.
+    expect(doorwayUnder(l1.doors, middle(stairDown), level(0), leads)?.id).toBe('stair-l1-l0');
+    expect(doorwayUnder(l1.doors, middle(stairUp), level(0), leads)?.id).toBe('stair-l2-l1');
+  });
+
+  it('is none for an owl up on a ledge over a doorway, beside a doorway, or at one that leads nowhere now', () => {
+    // The lintel over the way down is 196 up: an owl standing on it walks on past the doorway under it.
+    expect(doorwayUnder(l1.doors, middle(stairDown), level(196), leads)).toBeNull();
+    expect(doorwayUnder(l1.doors, { x: stairDown.rect.x - 20, y: 770 }, level(0), leads)).toBeNull();
+    expect(doorwayUnder(l1.doors, middle(stairDown), level(0), () => false)).toBeNull();
   });
 });
 
@@ -80,5 +229,21 @@ describe('roomsAhead (OP-129)', () => {
     const door = street.doors.find((d) => d.id === 'nest-door-0')!;
     const at = { x: door.rect.x + door.rect.w / 2, y: door.rect.y + door.rect.h / 2 };
     expect(roomsAhead(street, { x: at.x - 400, y: at.y }, at, false, open)).toEqual([NEST_ROOM]);
+  });
+
+  it('seen from the side, is the room behind a doorway an owl stands in, which up may take it through (OP-212)', () => {
+    const l1 = ROOMS['l1']!;
+    const stair = l1.doors.find((d) => d.id === 'stair-l1-l0')!.rect;
+    const at = { x: stair.x + stair.w / 2, y: 770 };
+    expect(roomsAhead(l1, at, null, false, open, 2, true).map((r) => r.id)).toEqual(['l0']);
+    expect(roomsAhead(l1, { x: stair.x - 200, y: 770 }, null, false, open, 2, true)).toEqual([]);
+    // Seen from above, an owl standing still is going nowhere.
+    expect(roomsAhead(l1, at, null, false, open, 2, false)).toEqual([]);
+  });
+
+  it('on the tree’s street, is a nest behind the nest door an owl stands in', () => {
+    const street = ROOMS[TREE_STREET_ROOM]!;
+    const door = street.doors.find((d) => d.id === 'nest-door-2')!.rect;
+    expect(roomsAhead(street, { x: door.x + door.w / 2, y: 770 }, null, false, open, 2, true)).toEqual([NEST_ROOM]);
   });
 });

@@ -40,6 +40,19 @@ export interface Env extends Cloudflare.Env {
    * through the gate, and counts passes bought with it but without that link. Unset: no pass link.
    */
   OPENING_PASS_CODE?: string;
+  /**
+   * Bring a friend (OP-056, with REFERRALS not off): the store's discount code that takes one whole Day
+   * Ticket off, once per customer. The park puts it in the cart link of a free Day Ticket it offered an
+   * owl, and an order with it that came through no such link waits for the owner's check. Unset: no free
+   * Day Ticket can be checked out (friends can still be brought and thanked with feathers).
+   */
+  REFERRAL_CODE?: string;
+  /**
+   * Bring a friend: the store's code for the thank-you Day Ticket an owl gets for each friend it brings,
+   * the same 100% off one Day Ticket but with no once-per-customer limit (thank-yous have no cap). The park
+   * puts it only in the cart link of a thank-you it offered. Unset: a thank-you uses REFERRAL_CODE.
+   */
+  REFERRAL_REWARD_CODE?: string;
   /** Browser tests only: a stand-in store on this machine (http://localhost:<port>). Never set in production. */
   SHOPIFY_TEST_ORIGIN?: string;
   /**
@@ -64,4 +77,13 @@ export interface Env extends Cloudflare.Env {
   MAIL_FROM?: string;
   /** Browser tests only: a stand-in mail sender on this machine (http://localhost:<port>). Never set in production. */
   MAIL_TEST_ORIGIN?: string;
+  /**
+   * Sign in with Google (OP-313), with GOOGLE_SIGNIN on (wrangler.jsonc): the OAuth client made in
+   * Google Cloud for the park (a Web application whose redirect URI is <origin>/api/account/google/callback).
+   * Without both, Google sign-in stays off and the button never shows.
+   */
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+  /** Browser tests only: a stand-in for Google's sign-in page and token endpoint on this machine. Never set in production. */
+  GOOGLE_TEST_ORIGIN?: string;
 }

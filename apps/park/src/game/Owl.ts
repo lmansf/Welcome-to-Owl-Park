@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import { AIRBORNE, DEFAULT_SPECIES, GLIDING, GROUNDED, ON_GROUND, facing, hexToInt, parseVariant, positionAlongWalk, speciesOf, type Air, type OwlLook, type Vec2, type Walk, type Wear } from '@owl-park/shared';
+import { AIRBORNE, DEFAULT_SPECIES, GLIDING, GROUNDED, LIFTED, ON_GROUND, facing, hexToInt, parseVariant, positionAlongWalk, speciesOf, type Air, type OwlLook, type Vec2, type Walk, type Wear } from '@owl-park/shared';
+import { tintedTexture } from './canvasTint';
 import { artFacing, type OwlAnchors } from '../collect/pixels';
 import { OWL_H, OWL_LAYERS, OWL_W, SPECIES_FLIGHT_LAYERS, SPECIES_LAYERS, WING_H, WING_W, loadFlightArt, loadSpeciesArt } from './art';
 import { playEmote, playFlop, type EmoteHost } from './emotes';
@@ -44,6 +45,8 @@ export interface Held {
   beat?: WingBeat;
   tumbling?: boolean;
 }
+/** How much of a slope's angle a standing owl leans with (OP-238). */
+const SLOPE_LEAN = 1 / 3;
 const HELD_GLIDING: Air = { z: 0, vz: 0, s: GLIDING, f: 0 };
 const HELD_FALLING: Air = { z: 0, vz: 0, s: AIRBORNE, f: 0 };
 
@@ -62,24 +65,8 @@ function layersFor(scene: Phaser.Scene, look: OwlLook): readonly string[] {
   return own.every((k) => scene.textures.exists(k)) ? own : LAYERS;
 }
 
-/** A copy of a white layer multiplied by a colour, for renderers without tint support. */
-function tintedLayer(scene: Phaser.Scene, key: string, hex: string): string {
-  const out = `${key}:${hex.toLowerCase()}`;
-  if (scene.textures.exists(out)) return out;
-  const src = scene.textures.get(key).getSourceImage() as HTMLImageElement | HTMLCanvasElement;
-  const canvas = scene.textures.createCanvas(out, src.width, src.height);
-  if (!canvas) return key;
-  const ctx = canvas.context;
-  ctx.drawImage(src, 0, 0);
-  ctx.globalCompositeOperation = 'multiply';
-  ctx.fillStyle = hex;
-  ctx.fillRect(0, 0, src.width, src.height);
-  ctx.globalCompositeOperation = 'destination-in';
-  ctx.drawImage(src, 0, 0);
-  ctx.globalCompositeOperation = 'source-over';
-  canvas.refresh();
-  return out;
-}
+/** A copy of a white layer multiplied by a colour, for renderers without tint support (canvasTint.ts). */
+const tintedLayer = tintedTexture;
 
 type WearImageSlot = 'head' | 'face' | 'neck';
 
@@ -92,6 +79,11 @@ type WearImageSlot = 'head' | 'face' | 'neck';
  * animate; the layers, the worn items and the effect rigs (`back`, `front`) live in `pose`.
  * A pet trots alongside in the room itself.
  */
+/** The shadow at an owl's feet: its size and how dark it is. */
+const SHADOW_W = 54;
+const SHADOW_H = 18;
+const SHADOW_ALPHA = 0.28;
+
 export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHost {
   readonly id: string;
   look: OwlLook;
@@ -142,6 +134,10 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
   private lift = 0;
   /** What the owl comes down on where it is (OP-084, perches.ts groundAt): the scene's, the floor until it says. */
   groundUnder: (pos: Vec2, z: number) => number = () => 0;
+  /** The sloped ground under the owl (OP-238, perches.ts slopeUnder): null where it is flat. */
+  slopeUnder: (pos: Vec2, z: number) => { top: number; grade: number } | null = () => null;
+  /** Its height as drawn on a slope, carried from frame to frame from the air it was last told. */
+  private slopeZ: { from: Air; z: number } | null = null;
   /** Whether the visitor asked for calm motion: the scene's (no landing dust then). */
   calm: () => boolean = () => false;
   /** Its last landing (OP-084): when (ms), and how hard (landingHardness); and how fast it was last falling in the air. */
@@ -195,7 +191,7 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     this.anchors = owlAnchors(scene);
     this.drawnFacing = artFacing(this.anchors);
 
-    this.shadow = scene.add.ellipse(0, 0, 54, 18, 0x000000, 0.28);
+    this.shadow = scene.add.ellipse(0, 0, SHADOW_W, SHADOW_H, 0x000000, SHADOW_ALPHA);
     // The pledge mark: a small gold glow at the feet, shown for the day after a Realm Vote.
     this.pledgeMark = scene.add.image(0, 2, 'fx-glow').setTint(0xffd36a).setScale(0.5, 0.2).setAlpha(0).setBlendMode(Phaser.BlendModes.ADD);
     // Textures may be rasterized at any resolution; every layer is drawn at the logical canvas size.
@@ -231,6 +227,16 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
       this.roomScale = k;
       this.applyLook(this.look);
     }
+    return this;
+  }
+
+  /**
+   * How dark and wide its shadow is drawn (1: as everywhere). A room seen from almost straight above
+   * (RoomDef.bowl) draws it deeper, so an owl stands on the floor and not on a painting of it.
+   */
+  setShadowDepth(k: number): this {
+    this.shadow.setFillStyle(0x000000, Math.min(0.9, SHADOW_ALPHA * k)).setSize(SHADOW_W * Math.sqrt(k), SHADOW_H * Math.sqrt(k));
+    this.shadow.setOrigin(0.5);
     return this;
   }
 
@@ -391,6 +397,17 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
    */
   holdAloft(held: Held | null): void {
     this.held = held;
+  }
+
+  /**
+   * Where the owl is at `at` (this page's clock): along the walk it is on, or the leg that follows on
+   * once that one is done, as every page reckons a walk; where it stands without one. `pos` is where
+   * the last frame drew it, a frame's walk behind by the time the next frame asks (OP-353).
+   */
+  placeAt(at: number): Vec2 {
+    if (!this.walk) return this.pos;
+    const here = positionAlongWalk(this.walk, at);
+    return here.done && this.nextWalk ? positionAlongWalk(this.nextWalk, at).pos : here.pos;
   }
 
   /** How high the owl is drawn above the floor right now, in room pixels (0 on the ground). */
@@ -638,7 +655,12 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
 
     // In the air (OP-084): carried on from the last state told, as every page does; or held there by a game (OP-135).
     const held = this.held;
-    const air = held ? (held.tumbling ? HELD_FALLING : HELD_GLIDING) : this.flight.at(now);
+    const told = held ? (held.tumbling ? HELD_FALLING : HELD_GLIDING) : this.flight.at(now);
+    // Standing on a slope (OP-238), the owl is drawn at the slope's height where it walks: its page
+    // tells the room nothing while it walks, so the height it was told is carried along the slope.
+    const slope = told.s === GROUNDED ? this.slopeUnder(this.pos, this.slopeZ?.from === told ? this.slopeZ.z : told.z) : null;
+    this.slopeZ = slope ? { from: told, z: slope.top } : null;
+    const air = slope ? { ...told, z: slope.top } : told;
     this.air = air;
     const flying = air.s !== GROUNDED;
     // Its place among the room's things: by where it stands, a ledge's band further back (OP-173).
@@ -694,7 +716,10 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     const moving = walkingHere || this.waddleIn > 0;
     const waddle = moving ? walkPose({ amount: this.waddleIn, walking: walkingHere, grounded: !flying, dt, now, calm: this.calm() }) : null;
     this.waddleIn = waddle?.amount ?? 0;
-    this.art.rotation = air.s === GLIDING ? GLIDE_LEAN * this.dir : (waddle?.tilt ?? 0);
+    // On a slope it leans a little with the ground (OP-238): cosmetic, a third of the slope's angle.
+    const lean = slope ? -Math.atan(slope.grade) * SLOPE_LEAN : 0;
+    // Lifted by an updraft, it holds its wings spread as in a glide.
+    this.art.rotation = air.s === GLIDING || air.s === LIFTED ? GLIDE_LEAN * this.dir : (waddle?.tilt ?? 0) + lean;
     const ground = this.groundUnder(this.pos, air.z);
     this.shadow.y = -ground / (OWL_SCALE * this.size);
     const up = shadowFade(air.z - ground);

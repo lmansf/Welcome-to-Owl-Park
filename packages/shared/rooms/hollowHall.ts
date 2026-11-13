@@ -1,0 +1,581 @@
+/**
+ * The Great Hollow (Nov 7, the owner's word: "this room is supposed to be top down with all the commons
+ * like one super server room"; Nov 8: "can we go more top down, like almost completely top down, but
+ * offset in this room, and make it a huge oval with realms kind of all the way around"): the inside of
+ * the tree as one huge oval floor seen from almost straight above, its four Commons round the rim.
+ *
+ * Every way out stands on the rim, a step apart (src/hollowOval.ts, HALL_WAYS): clockwise from the
+ * knothole up to the Treetop Commons at the back, the treehouse clearing's doorway and its course's
+ * gate, the neon street's, the trunk's door out to the Party Grove and the hatch down to the arcade at
+ * the front, the ink-wash realm's course gate, and the glass realm's doorway. A way with nothing behind
+ * it yet (the ink-wash realm's doorway, the glass realm's course gate) is no doorway at all: the tree has
+ * grown over it (OP-337, HALL_GROWN). Each Commons' idol stands on its base between its two ways, over its Realm Vote spot,
+ * and its plaza, where its moonbeam falls, lies out toward the middle. Every open way has a sign on the
+ * floor in front of it naming where it leads, so a ten year old finds the Party Grove without a map.
+ *
+ * TODO-DOCS (OP-337): docs/MAP.md's notes on `m3-hall` gain its ways round the rim as they are now: nine
+ * doorways, and two ways with nothing behind them yet that the tree has grown over (no doorway, no sign).
+ *
+ * The root runs (OP-308) cross the middle, where the oval is widest. The floor is built from the art
+ * kit's textures until the hollow is painted (a file swap: the size list has each piece's size); the
+ * scene draws the wall round it with height (RoomDef.bowl), so it reads as a room and not a painting.
+ */
+import {
+  ringAt,
+  rimAt,
+  rimNormal,
+  angleAt,
+  floorInset,
+  sized,
+  GROWN_DROP,
+  GROWN_OUT,
+  GROWN_WAYS,
+  HALL_CX,
+  HALL_CY,
+  HALL_H,
+  HALL_RX,
+  HALL_RY,
+  HALL_W,
+  HALL_HEART,
+  HALL_LEAVES,
+  HALL_MOONBEAMS,
+  HALL_WAYS,
+  RIM_LENGTH,
+  RUN_Y,
+  WALL_FACE,
+  WALL_LIP,
+  WAY_STEP,
+  commonsS,
+  idolAt,
+  voteAt,
+  wayAt,
+  wayS,
+  type HallLevel,
+  type HallWay,
+} from '../src/hollowOval';
+import type { EdgePlacement } from '../src/edges';
+import { GLIDE_SLOPE } from '../src/flight';
+import type { Polygon } from '../src/geometry';
+import type { Perch } from '../src/perches';
+import type { Vec2 } from '../src/protocol';
+import type { DoorDef, RoomBowl, RoomDef, RoomKit, RoomPiece } from '../src/room';
+import type { Thermal } from '../src/thermal';
+import { KIT_ART } from '../src/kitArt';
+
+export {
+  HALL_CX,
+  HALL_CY,
+  HALL_H,
+  HALL_MIDDLE,
+  HALL_RX,
+  HALL_RY,
+  HALL_W,
+  OWL_ROOM_PX2,
+  RUN_Y,
+  commonsS,
+  idolAt,
+  plazaAt,
+  voteAt,
+  wayAt,
+  wayS,
+  type HallLevel,
+  type HallWay,
+} from '../src/hollowOval';
+
+export const HALL_ID = 'm3-hall';
+
+/** What a Commons opens on: its realm (closed while the realm has no room) and its parkour course. */
+export interface CommonsOf {
+  level: HallLevel;
+  /** Its realm's room and spawn, or none yet (its way is grown over, HALL_GROWN). */
+  realm?: { room: string; spawn: string };
+  /** Its course's first room and spawn, or none yet (its way is grown over, HALL_GROWN). */
+  course?: { room: string; spawn: string };
+  /** The realm its idol takes the Realm Vote for, where it has one. */
+  votesFor?: 'glass' | 'grove' | 'market';
+  /** What the signs at its two open doorways say: its realm's public name, and its course's name. */
+  realmName?: string;
+  courseName?: string;
+  /** The doorway's art (a kit piece), and its realm's colour, pooled softly on the floor by its ways. */
+  door: string;
+  colour: number;
+}
+
+/** The Commons, clockwise round the rim from the back: the clearing's, the neon street's, the ink-wash realm's and the glass realm's. */
+export const HALL_COMMONS: readonly CommonsOf[] = [
+  {
+    level: 'grove',
+    realm: { room: 'grove', spawn: 'default' },
+    course: { room: 'canopy-1', spawn: 'from-gate' },
+    votesFor: 'grove',
+    realmName: 'The treehouse clearing',
+    courseName: 'Updraft Canopy',
+    door: 'kit-clearing-vine-curtain',
+    colour: 0x7fd46a,
+  },
+  {
+    level: 'market',
+    realm: { room: 'market', spawn: 'default' },
+    course: { room: 'circuit-1', spawn: 'from-gate' },
+    votesFor: 'market',
+    realmName: 'The neon street',
+    courseName: 'Blackout Circuit',
+    door: 'kit-neon-rooftop-door-open',
+    colour: 0xff4fb8,
+  },
+  // The ink-wash realm has no room yet: its Commons leads only to its course, Brushstroke Bridges.
+  {
+    level: 'ink',
+    course: { room: 'brush-1', spawn: 'from-gate' },
+    courseName: 'Brushstroke Bridges',
+    door: 'kit-ink-door-paper-open',
+    colour: 0xe8dcc0,
+  },
+  {
+    level: 'glass',
+    realm: { room: 'glass', spawn: 'from-hub' },
+    votesFor: 'glass',
+    realmName: 'The glass realm',
+    door: 'kit-glass-door-glass-open',
+    colour: 0x9fd0ff,
+  },
+];
+
+/** The door ids: each Commons' way to its realm, its course's gate and its Realm Vote spot. */
+export const realmDoor = (level: HallLevel) => `to-${level}` as HallWay;
+export const courseDoor = (level: HallLevel) => `course-${level}` as HallWay;
+export const voteDoor = (level: HallLevel) => `idol-${level}`;
+/** The spawns: in front of a Commons' realm doorway, and in front of its course's gate. */
+export const fromRealm = (level: HallLevel) => `from-${level}`;
+export const fromCourse = (level: HallLevel) => `from-${level}-course`;
+
+/** The Commons with an idol: the floor is cut in round each one's base. */
+const IDOL_LEVELS: readonly HallLevel[] = HALL_COMMONS.filter((c) => c.votesFor).map((c) => c.level);
+
+/**
+ * The ways with nothing behind them yet (src/hollowOval.ts, GROWN_WAYS: each Commons' way that it has no
+ * room for). No doorway, no blockade and no closed sign stand there. The knothole painted at each is
+ * grown over with roots (GROWN_ART), a glow behind them for what is still to come, and the floor is cut
+ * in round the roots.
+ */
+export const HALL_GROWN: readonly HallWay[] = GROWN_WAYS;
+/** The roots grown over such a way: a piece the kit already has. */
+export const GROWN_ART = 'kit-under-barrier-roots';
+/** Where the roots' foot stands, so their middle falls on the knothole painted at the way (src/hollowOval.ts, GROWN_DROP). */
+export function grownFoot(id: HallWay): Vec2 {
+  const at = wayAt(id);
+  return { x: Math.round(at.x + rimNormal(angleAt(wayS(id))).x * GROWN_OUT), y: at.y + GROWN_DROP };
+}
+
+/** Whether a way stands on the front half of the rim, where an owl sees the near wall's top and not its face. */
+export const atFront = (id: HallWay) => rimNormal(angleAt(wayS(id))).y > 0.7;
+/** Whether a way stands at one of the oval's two ends, the rim running up and down beside it. */
+const atEnd = (id: HallWay) => {
+  const n = rimNormal(angleAt(wayS(id)));
+  return Math.abs(n.x) > Math.abs(n.y);
+};
+
+/**
+ * The floor owls walk on: the oval, measured round its rim every 40 px, cut in round each idol's base
+ * so owls walk round the idol and never through it.
+ */
+function hollowFloor(): Polygon {
+  const out: Polygon = [];
+  const n = Math.round(RIM_LENGTH / 40);
+  for (let i = 0; i < n; i++) {
+    const s = (i / n) * RIM_LENGTH;
+    out.push(rimAt(s, floorInset(s, IDOL_LEVELS, HALL_GROWN)));
+  }
+  return out;
+}
+
+/** How far in from the rim a way's arrivals stand, and its marker. */
+const ARRIVE = 190;
+const MARK = 24;
+/** How far in from the rim (out, so under zero) the foot of a doorway's art stands at the back and the two ends. */
+const END_ART_OUT = -6;
+
+/** The art standing at each way: its realm's doorway, the knothole, the trunk's door, the hatch. */
+function wayArt(id: HallWay): string | null {
+  if (id === 'up') return 'kit-doorway-knothole';
+  if (id === 'to-party') return 'kit-clearing-trunk-entrance';
+  if (id === 'down') return 'kit-hatch-down';
+  const level = id.replace(/^(to|course)-/, '') as HallLevel;
+  const c = HALL_COMMONS.find((x) => x.level === level)!;
+  const open = id.startsWith('to-') ? c.realm : c.course;
+  // A way with nothing behind it has no doorway: the roots grown over it instead (GROWN_ART).
+  return open ? c.door : null;
+}
+
+/**
+ * How big a doorway in the near wall is drawn: seen from almost straight above, it stands low over the
+ * floor's front edge, and on a phone it never fills the screen's foot (Nov 8, the trunk's door did).
+ */
+export const FRONT_ART = 0.6;
+
+/** How far in from an end doorway's art its sign's near edge stands, and how far over the doorway's middle its top (room px). */
+export const END_SIGN_GAP = 16;
+export const END_SIGN_UP = 30;
+
+/** Half the width of what a way's doorway art draws (its measured box where the kit has one), in room px. */
+function artHalf(id: HallWay): number {
+  const art = wayArt(id);
+  const a = art ? KIT_ART[art] : undefined;
+  const wide = a?.left !== undefined && a.right !== undefined ? a.right - a.left : (a?.w ?? 240);
+  return (wide * (atFront(id) ? FRONT_ART : 1)) / 2;
+}
+
+/**
+ * An end way's sign (OP-346): beside its doorway and level with it, the sign's near edge just in from
+ * the doorway's art (DoorDef.labelAnchor). Its words lie on the floor an owl walks up over whatever
+ * their length, and none slips under the art (the neon street read "The neon stre", Nov 9). Before, the
+ * sign's middle stood half a long label further in along the leaning rim: a short sign on a computer
+ * stood 340 px from its doorway and 240 over it, across the face of the idol between the Commons' ways.
+ */
+function endSign(id: HallWay): Pick<DoorDef, 'labelAt' | 'labelAnchor'> {
+  const out = Math.sign(rimNormal(angleAt(wayS(id))).x);
+  const art = wayAt(id, END_ART_OUT);
+  return { labelAt: { x: Math.round(art.x - out * (artHalf(id) + END_SIGN_GAP)), y: wayAt(id).y - END_SIGN_UP }, labelAnchor: out > 0 ? 1 : 0 };
+}
+
+/** How tall a way's doorway art is drawn (room px). */
+function artTall(id: HallWay): number {
+  const art = wayArt(id);
+  return (art ? (KIT_ART[art]?.h ?? 320) : 320) * (atFront(id) ? FRONT_ART : 1);
+}
+
+/**
+ * Where a way's sign stands: on the floor in front of it, where an owl walking up to it reads it. At
+ * the front its doorway's art stands up over the floor before it, so its sign stands clear above that.
+ */
+export function signInset(id: HallWay): number {
+  if (id === 'down') return 200;
+  // At an end the doorway's art stands beside the floor, and its sign beside the art (endSign).
+  if (!atFront(id)) return 150;
+  return Math.min(300, artTall(id) + 20);
+}
+
+/**
+ * How far in from the rim an owl coming in by a way lands: at the front just inside its doorway's
+ * sign, close enough that the sign shows (hints.ts SIGN_REACH, 300 from the doorway's middle).
+ */
+const arriveAt = (id: HallWay) => (atFront(id) ? Math.min(280, signInset(id) + 30) : ARRIVE);
+
+/** A way's doorway on the rim: its strip straddles the rim, across it at the back and front, down it at the two ends. */
+function rimDoor(id: HallWay, to: NonNullable<DoorDef['to']>, label?: string): DoorDef {
+  const s = wayS(id);
+  const p = rimAt(s);
+  const n = rimNormal(angleAt(s));
+  const across = Math.abs(n.y) >= Math.abs(n.x);
+  const [w, h] = across ? [220, 80] : [80, 220];
+  return {
+    id,
+    rect: { x: p.x - w / 2, y: p.y - h / 2, w, h },
+    to,
+    marker: rimAt(s, MARK),
+    ...(label ? { label, ...(atEnd(id) ? endSign(id) : { labelAt: rimAt(s, signInset(id)) }) } : {}),
+  };
+}
+
+/** The hatch lies in the floor, just in from the rim at the front. */
+const HATCH_IN = 70;
+
+const DOORS: DoorDef[] = [
+  // Up through the knothole at the very back: the Treetop Commons, before the turnstiles.
+  rimDoor('up', { room: 'lobby', spawn: 'from-hub' }, 'Up to the Treetop Commons'),
+  ...HALL_COMMONS.flatMap((c): DoorDef[] => [
+    // Only the ways that lead somewhere are doorways (HALL_GROWN has the rest).
+    ...(c.realm ? [rimDoor(realmDoor(c.level), c.realm, c.realmName)] : []),
+    ...(c.course ? [rimDoor(courseDoor(c.level), c.course, c.courseName)] : []),
+    ...(c.votesFor
+      ? [{ id: voteDoor(c.level), rect: { x: voteAt(c.level).x - 110, y: voteAt(c.level).y - 35, w: 220, h: 70 }, marker: voteAt(c.level) }]
+      : []),
+  ]),
+  // Out through the trunk's door at the front: the Party Grove at the tree's foot.
+  rimDoor('to-party', { room: 'hub', spawn: 'default' }, 'Out to the Party Grove'),
+  // Down the hatch in the floor at the front: straight into the arcade (OP-306, the root stair folded into it).
+  (() => {
+    const at = wayAt('down', HATCH_IN);
+    return {
+      id: 'down',
+      rect: { x: at.x - 90, y: at.y - 40, w: 180, h: 80 },
+      to: { room: 'arcade', spawn: 'from-cavern' },
+      marker: at,
+      label: 'Down to the arcade',
+      // Over the hatch, not under it: the hatch's art stands over the floor's edge.
+      labelAt: wayAt('down', signInset('down')),
+    } satisfies DoorDef;
+  })(),
+];
+
+/**
+ * Each way's art, its foot on the rim: at the back against the far wall's foot, at the two ends
+ * against the side walls, at the front out on the near wall's top so it stands in the wall's opening.
+ */
+const PIECES: RoomPiece[] = HALL_WAYS.flatMap((id): RoomPiece[] => {
+  const key = wayArt(id);
+  // Grown over: the roots stand over the knothole painted there, their foot a little below its point on the rim.
+  if (!key) return HALL_GROWN.includes(id) ? [{ id: `${id}-grown`, key: GROWN_ART, ...grownFoot(id) }] : [];
+  if (id === 'down') {
+    const at = wayAt('down', HATCH_IN);
+    return [{ id: 'root-hatch', key, x: at.x, y: at.y + 50 }];
+  }
+  const foot = wayAt(id, atFront(id) ? -40 : END_ART_OUT);
+  const p = wayAt(id);
+  // Course gates face their realm's doorway along the rim.
+  return [
+    {
+      id: id === 'up' ? 'knothole' : id === 'to-party' ? 'trunk-door' : `${id}-door`,
+      key,
+      x: foot.x,
+      y: foot.y,
+      ...(id.startsWith('course-') && p.x < HALL_CX ? { flip: true as const } : {}),
+      ...(atFront(id) ? { scale: FRONT_ART } : {}),
+    },
+  ];
+});
+
+/**
+ * The root runs (OP-308, travel as play): roots come up through the floor across the middle of the
+ * hollow, each run a fallen root to step up on, a knot of roots and a cut stump, every one a single
+ * jump above the last. Climb a run from near the middle and glide off its stump over the gap to the
+ * next run out, climb that and glide off the end onto the floor: west toward the glass realm's end,
+ * east toward the neon street's. Each glide is one a kid lands every other try or better (the bots fly
+ * it, bots/sim/hollowRuns.test.ts). Walking is the same as ever; a fall lands on the floor with
+ * nothing lost. The pieces are the arcade's root art, standing on the floor where an owl walks round
+ * them.
+ *
+ * Each perch is a strip of the plan RUN_HALF either side of RUN_Y, its top the art's cut surface
+ * measured off the art plus RUN_HALF, its piece's foot at the strip's back edge: an owl stood anywhere
+ * on it is drawn over the root, its feet on the cut surface in the strip's middle.
+ */
+export const RUN_HALF = 20;
+
+export type RootKind = 'log' | 'knot' | 'stump';
+
+/** Each root's art, how high its standing surface is over its foot (measured off the art) and that surface's ends from the piece's middle. */
+export const ROOT_ART: Readonly<Record<RootKind, { key: string; stands: number; span: readonly [number, number] }>> = {
+  log: { key: 'kit-under-root-ledge-mid', stands: 112, span: [-150, 150] },
+  knot: { key: 'kit-under-root-knot', stands: 162, span: [-64, 56] },
+  stump: { key: 'kit-under-root-buttress-right', stands: 275, span: [-120, -20] },
+};
+
+export interface RootRun {
+  /** The Commons whose side of the hollow it stands on. */
+  level: HallLevel;
+  /** Its roots from the middle outward, by kind and the piece's middle (room x). */
+  steps: ReadonlyArray<readonly [RootKind, number]>;
+  /** West of the middle the runs climb west: the art turned round. */
+  flip?: true;
+}
+
+/** West of the middle, then east, each from the middle outward: the inner west run glides to the outer one, the inner east run to the outer east one. */
+/**
+ * Where the runs stand across the hollow, out from its middle (room px). The pieces are the size their
+ * art is and the glides between them are flown, not painted, so a run and the gap to the next keep
+ * their lengths at any size of the hollow: a fallen root from RUN_START out, its knot and its stump, a
+ * glide's gap, and the next run the same. What changes with the hollow is only how far from the
+ * middle they start: as far as they always did where there is room (430), and nearer in a smaller
+ * hollow, so the outer stump's art still stands RUN_END_CLEAR in from the rim.
+ */
+export const RUN_END_CLEAR = 100;
+/** A run's pieces from its start: the log's middle, the knot's, the stump's; and from one run's start to the next's. */
+const RUN_LOG = 150;
+const RUN_KNOT = 370;
+const RUN_STUMP = 570;
+const RUN_NEXT = 1400;
+/** How far past its middle the outer stump's art reaches. */
+const STUMP_ART_HALF = 160;
+export const RUN_START = Math.min(430, Math.floor((HALL_RX - RUN_END_CLEAR - STUMP_ART_HALF - RUN_NEXT - RUN_STUMP) / 10) * 10);
+
+/** One run's roots, `start` out from the middle on the side `way` (1 east, -1 west). */
+const runSteps = (start: number, way: 1 | -1): RootRun['steps'] => [
+  ['log', HALL_CX + way * (start + RUN_LOG)],
+  ['knot', HALL_CX + way * (start + RUN_KNOT)],
+  ['stump', HALL_CX + way * (start + RUN_STUMP)],
+];
+
+export const ROOT_RUNS: readonly RootRun[] = [
+  { level: 'ink', flip: true, steps: runSteps(RUN_START, -1) },
+  { level: 'glass', flip: true, steps: runSteps(RUN_START + RUN_NEXT, -1) },
+  { level: 'grove', steps: runSteps(RUN_START, 1) },
+  { level: 'market', steps: runSteps(RUN_START + RUN_NEXT, 1) },
+];
+
+export const rootId = (level: HallLevel, kind: RootKind) => `root-${level}-${kind}`;
+
+/** A root's standing surface along the room (room x), its art turned round west of the middle. */
+export function rootSpan(kind: RootKind, x: number, flip?: boolean): [number, number] {
+  const [a, b] = ROOT_ART[kind].span;
+  return flip ? [x - b, x - a] : [x + a, x + b];
+}
+
+export const ROOT_PERCHES: readonly Perch[] = ROOT_RUNS.flatMap((run) =>
+  run.steps.map(([kind, x]): Perch => {
+    const [x0, x1] = rootSpan(kind, x, run.flip);
+    return {
+      id: rootId(run.level, kind),
+      area: [
+        { x: x0, y: RUN_Y - RUN_HALF },
+        { x: x1, y: RUN_Y - RUN_HALF },
+        { x: x1, y: RUN_Y + RUN_HALF },
+        { x: x0, y: RUN_Y + RUN_HALF },
+      ],
+      top: ROOT_ART[kind].stands + RUN_HALF,
+      solid: true,
+    };
+  }),
+);
+
+/**
+ * The Great Hollow's light (OP-348): warm, as its painted heartwood floor is lit. The roots are the
+ * arcade's art, painted for a cold cave (frost on the fallen root, pale edges on the knot), and the
+ * idols are each painted for their own realm; multiplied by the room's light they stand in the same
+ * room as the floor under them. The idols take less of it: each keeps its realm's own colours.
+ */
+export const HALL_LIGHT = { roots: 0xffd9a6, idols: 0xffecd2 } as const;
+
+const ROOT_PIECES: RoomPiece[] = ROOT_RUNS.flatMap((run) =>
+  run.steps.map(
+    ([kind, x]): RoomPiece => ({
+      id: rootId(run.level, kind),
+      key: ROOT_ART[kind].key,
+      x,
+      y: RUN_Y - RUN_HALF,
+      ...(run.flip ? { flip: true as const } : {}),
+      tint: HALL_LIGHT.roots,
+    }),
+  ),
+);
+
+/** Each plaza's worn ring round its moonbeam, and the heart's (edges.ts: walked across, drawn on the floor). */
+export const HALL_EDGES: readonly EdgePlacement[] = HALL_MOONBEAMS.map((m) => ({
+  id: `ring-${m.id.replace('moonbeam-', '')}`,
+  key: 'edge-hall-plaza-ring',
+  x: m.pos.x - 380,
+  y: m.pos.y - 190,
+}));
+
+/** The floor: one texture under the whole room (the scene draws the wall over everything past the rim). */
+const HALL_KIT: RoomKit = {
+  ground: HALL_CY + HALL_RY,
+  surfaces: [{ id: 'floor', texture: 'kit-tex-ground-forest-floor', rect: { x: 0, y: 0, w: HALL_W, h: HALL_H } }],
+};
+
+/** The wall round the oval, and each Commons' colour pooled on the floor by its two ways. */
+export const HALL_BOWL: RoomBowl = {
+  cx: HALL_CX,
+  cy: HALL_CY,
+  rx: HALL_RX,
+  ry: HALL_RY,
+  face: WALL_FACE,
+  lip: WALL_LIP,
+  pools: [
+    ...HALL_COMMONS.map((c) => ({ ...ringAt(commonsS(c.level), 0.84), r: sized(900), color: c.colour })),
+    { ...HALL_HEART, r: sized(1100), color: 0xffe2a8 },
+  ],
+  gaps: HALL_WAYS.filter((id) => atFront(id) && id !== 'down' && !HALL_GROWN.includes(id)).map((id) => ({ ...wayAt(id), w: 220 })),
+  light: HALL_LIGHT.idols,
+};
+
+/** Whether a point is clear of every root's art (and a little round it), where a visitor can see it. */
+export function clearOfRoots(p: Vec2): boolean {
+  return ROOT_PIECES.every((q) => {
+    const a = KIT_ART[q.key];
+    if (!a) return true;
+    return !(p.x > q.x - a.w / 2 - 40 && p.x < q.x + a.w / 2 + 40 && p.y > q.y - a.h && p.y < q.y + RUN_HALF * 2);
+  });
+}
+
+/** The first of some places for a hiding spot that no root's art hides. */
+const clearSpot = (...places: Vec2[]): Vec2 => places.find(clearOfRoots) ?? places[0]!;
+
+/**
+ * Hiding spots round the rim between the ways, out across each plaza and round the heart, so a find
+ * can be anywhere a crowd stands.
+ */
+const SPOTS: Vec2[] = [
+  // A third of the way on from each way (clear of the idols midway between a Commons' two), or a third
+  // of the way back from the next where the roots across the middle would hide it. Where a run's outer
+  // stump stands close to the rim (a smaller hollow), nearer the wall than its art reaches, or well out past it.
+  ...HALL_WAYS.map((id) =>
+    clearSpot(
+      rimAt(wayS(id) + WAY_STEP * 0.3, 260),
+      rimAt(wayS(id) + WAY_STEP * 0.7, 260),
+      rimAt(wayS(id) + WAY_STEP * 0.3, 110),
+      rimAt(wayS(id) + WAY_STEP * 0.7, 110),
+      rimAt(wayS(id) + WAY_STEP * 0.5, 520),
+    ),
+  ),
+  // Either side of each Commons' middle, out toward its plaza, or nearer in or further out where a root would hide it.
+  ...HALL_COMMONS.flatMap((c) => [-300, 300].map((along) => clearSpot(...[0.55, 0.42, 0.68].map((ring) => ringAt(commonsS(c.level) + along, ring))))),
+  { x: HALL_CX - sized(420), y: HALL_CY - sized(520) },
+  { x: HALL_CX + sized(420), y: HALL_CY - sized(520) },
+  { x: HALL_CX, y: HALL_CY + sized(420) },
+];
+
+/** Where owls arrive in the hollow: the middle of the floor, and in front of each way that leads somewhere. */
+/** The stump of the inner west run: where the browser test of the first flight stands to glide (e2e/park.spec.ts, OP-347). */
+const STUMP_SPAWN = 'on-stump';
+const WEST_STUMP = ROOT_PERCHES.find((p) => p.id === rootId('ink', 'stump'))!;
+
+const SPAWNS: Record<string, Vec2> = {
+  default: { x: HALL_CX, y: HALL_CY + sized(260) },
+  [STUMP_SPAWN]: { x: Math.round((Math.min(...WEST_STUMP.area.map((p) => p.x)) + Math.max(...WEST_STUMP.area.map((p) => p.x))) / 2), y: RUN_Y },
+  'from-lobby': wayAt('up', ARRIVE),
+  'from-party': wayAt('to-party', arriveAt('to-party')),
+  'from-under': wayAt('down', 330),
+  // An arrival spot in front of each way that leads somewhere (a grown-over way has none).
+  ...Object.fromEntries(
+    HALL_COMMONS.flatMap((c) => [
+      ...(c.realm ? [[fromRealm(c.level), wayAt(realmDoor(c.level), arriveAt(realmDoor(c.level)))]] : []),
+      ...(c.course ? [[fromCourse(c.level), wayAt(courseDoor(c.level), arriveAt(courseDoor(c.level)))]] : []),
+    ]),
+  ),
+};
+
+/**
+ * The thermal at the hollow's heart (OP-340, src/thermal.ts): warm air rises where the light falls
+ * brightest. An owl that glides in the heart's moonbeam is carried up to its top, sees the whole oval,
+ * and from there a held glide (one down for three along) carries it to where any way's arrivals stand:
+ * the top is as high as the farthest of them needs, and a little over for a turn on the way.
+ */
+export const HEART_THERMAL: Thermal = {
+  id: 'heart',
+  pos: HALL_HEART,
+  r: 160,
+  top: Math.ceil((Math.max(...Object.values(SPAWNS).map((at) => Math.hypot(at.x - HALL_HEART.x, at.y - HALL_HEART.y))) / GLIDE_SLOPE + 40) / 10) * 10,
+};
+
+export const HALL_ROOM: RoomDef = {
+  id: HALL_ID,
+  size: { w: HALL_W, h: HALL_H },
+  background: 'kit-tex-inner-wood',
+  backgrounds: [],
+  foregrounds: [],
+  mood: 'hub',
+  walkable: [hollowFloor()],
+  spawns: SPAWNS,
+  spawnTops: { [STUMP_SPAWN]: WEST_STUMP.top },
+  doors: DOORS,
+  pieces: [...PIECES, ...ROOT_PIECES],
+  perches: [...ROOT_PERCHES],
+  thermals: [HEART_THERMAL],
+  edges: [...HALL_EDGES],
+  bowl: HALL_BOWL,
+  // A Realm Vote idol in each Commons of a realm that has one, each over its own spot (RoomDef.idols).
+  idols: HALL_COMMONS.flatMap((c) => (c.votesFor ? [{ realm: c.votesFor, door: voteDoor(c.level) }] : [])),
+  spots: SPOTS,
+  kit: HALL_KIT,
+};
+
+/** The leaf piles and moonbeams (interactables.ts) are src/hollowOval.ts's: HALL_LEAVES, HALL_MOONBEAMS. */
+export { HALL_LEAVES, HALL_MOONBEAMS };
+
+/** The idols' anchors (ANCHORS), under the names the scene draws each realm's idol at. */
+export const HALL_ANCHORS: Record<string, Vec2> = {
+  idol: idolAt('glass'),
+  guardian: idolAt('grove'),
+  gathering: voteAt('grove'),
+  robot: idolAt('market'),
+};

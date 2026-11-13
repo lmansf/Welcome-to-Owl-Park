@@ -96,12 +96,16 @@ Nothing more specific (no times, no refunds, no causes) without the owner's word
 ## 7. Controls and the Menu [BUILT (OP-026, OP-034, OP-076, OP-082, OP-083, OP-084, OP-104, OP-105, OP-108, OP-114, OP-126, OP-130, OP-153, OP-167, OP-180, OP-190, OP-191, OP-198)]
 
 What a visitor has in hand on `main` 01e9722. Nothing a visitor does needs typing, apart from a
-feedback note and a grown-up's email (section 8).
+feedback note and an email to protect an owl (section 8).
 
 **The home screen and the first run** (`apps/park/src/ui/home.ts`, `whichOwl.ts`). A device with no
-owl yet shows **Make your owl**. It opens the quiz first, **Which owl are you?** (OP-076): a voice
-says three lines, then eight questions, each answered with a tap on one of three pictures, then a
-card for the owl's colours, and the owl is shown big in its new kind and colours. **Keep it** goes
+owl yet shows **Make your owl**. It opens the quiz first, **Which owl are you?** (OP-076, rebuilt in
+OP-325 to OP-331): three friendly lines of welcome, then eight questions about owl life (a quick
+either/or, six cards of two to four answers, a quick either/or, the answers in a new order each run),
+each answer a picture box with its size on it until the art is painted (`docs/QUIZ-ART.md`), then a
+card for the owl's colors, a short pause, and the owl glides in big in its new kind and colors, with
+what the player shares with that owl, a true owl fact (`docs/OWL-FACTS.md`) and something to try in
+the park. **Keep it** goes
 on to Play; **Make it yours** opens the owl builder; **Not me? Try again** runs the quiz again;
 **Skip**, in the corner, opens the builder at once. Nothing typed, no score, no back button; only the
 result is kept, as the owl's look (`WHICH_OWL_WORDS`, `packages/shared/src/whichOwlBank.ts`). A
@@ -128,7 +132,8 @@ zooms the page (OP-104: `touch-action` in `apps/park/index.html`, and the viewpo
 **Jump and flight** (OP-084, `packages/shared/src/flight.ts`, `perches.ts`): every owl in every
 room can fly. Tap Jump (the space bar on a keyboard) to jump; tap it again in the air for a second
 flap; hold it on the way down to glide, the fall held to the walk's pace over `GLIDE_SLOPE` (one
-down for three along). Let go on the way up and the rise is cut short (`JUMP_CUT_SPEED`). An owl
+down for three along). Let go on the way up and the rise is cut (`JUMP_CUT_SPEED`), but a tap is
+still a jump: it rises about two thirds of a held one, enough for a first step (OP-343). An owl
 jumps onto a perch (a root, a beam, a stump, a shelf) and stands on it; it walks off the perch's
 edge to come down. A thing up on a perch (a quest spot, a leaf pile) is reached only from that
 perch. Everyone in the room sees the same arc. Nothing about flight is logged.
@@ -164,12 +169,15 @@ closes it. It is five tabs, each with its word always shown: **Quests**, **Colle
 There is no Your owl tab: the owl is changed at the mirror in a nest (`docs/NESTS.md`, The mirror),
 or by the first run's quiz and builder.
 
-**Travel from the map** (OP-130, `packages/shared/src/travel.ts`): a place on the Menu's map lights
-up once the owl has walked into it; the owl's own nest is always lit. A tap opens the place's card;
+**Travel from the map** (OP-130, `packages/shared/src/travel.ts`): every place on the Menu's map is
+lit from the start (the owner's "whole map unlocked all the time", 2026-11-08), and one walked into
+sparkles the first time the map shows it. On the new map the Great Hollow, the root stair and the
+Party Grove travel too. A tap opens the place's card;
 its button is held to travel (`HOLD_MS`, 350 ms, a fill running across it), and a quicker tap says
 "Hold to travel." A key's press on the button travels at once. Travel lands the owl where walking
-in would have. Into the park is only through the front gate: the great tree's card travels to the
-gate, outside the turnstiles, and a place inside the park offers **Travel to the gate** until the
+in would have. Into the park is only through the front gate (on the new map the turnstiles down
+the knothole into the Great Hollow count the same): today's great tree's card travels to the gate,
+outside the turnstiles, and a place inside the park offers **Travel to the gate** until the
 owl has walked through the turnstiles since it was last outside. Going home, walking out and every
 new visit put it outside again. The room server keeps this and turns any other travel in away. No
 travel mid-climb, mid-game, at the turnstiles, while decorating or while "Still here?" asks
@@ -207,7 +215,7 @@ spectators off) opens the turnstiles' sale (`gateSale.ts`) on the card before th
 **The card before the store** (OP-153, `apps/park/src/ui/storeCard.ts`): every way from the park to
 the store's pages shows this one card first, once for each purchase, right before it: the
 turnstiles' Day Ticket, opening night's pass offer after the turnstiles, and the gift shop's door.
-Its line is "Ask a grown-up before buying" (`STORE_WORDS.ask`, a draft until the owner approves the
+Its line is "This opens the store in a new tab" (`STORE_WORDS.ask`, a draft until the owner approves the
 final words), with **Continue** and **Not now**; no timer and no spending limit. At the turnstiles,
 with the annual pass's cart link to hand, Continue reads **Day Ticket** and **Annual Pass** sits
 beside it, under "Or get the Annual Pass and come back all year." (`UPGRADE_WORDS`, drafts). Under
@@ -258,10 +266,10 @@ keeper can do depends on whether an email protects it. The Menu's Nest and Setti
 ("Protected: this owl can come back on another screen." or "This owl lives only on this screen.").
 
 - **Not protected**: nothing can be done. The owl lived only in that browser; a lost screen or a
-  cleared browser takes it. The keepers cannot find it or bring it back. The family makes a new owl, and a grown-up can protect it (Protect this owl, in the Nest or
+  cleared browser takes it. The keepers cannot find it or bring it back. The family makes a new owl, and can protect it (Protect this owl, in the Nest or
   Settings tab) so it can come back next time.
 - **Protected**: the family brings it back themselves. On the new screen, **I already have an owl**
-  on the home screen (or **Bring your owl here** on the card before the store) asks a grown-up for
+  on the home screen (or **Bring your owl here** on the card before the store) asks for
   the email that protects it; the park mails a link (good for `MAGIC_LINK_MS`, 15 minutes, used once;
   at most `LINKS_PER_EMAIL_PER_HOUR`, 3, per email and `LINKS_PER_IP_PER_HOUR`, 10, per address). On
   that screen the link shows the email's owls as pictures; a tap on theirs brings it there, and the
@@ -271,6 +279,8 @@ keeper can do depends on whether an email protects it. The Menu's Nest and Setti
   plenty of links for now" means the hourly limit: an hour's wait.
 - No mail at all: the accounts need `ACCOUNT_SECRET` and the mail sender (`docs/DEPLOY.md`,
   Accounts). Without them no link goes out.
+
+A visit's guest pass lasts 12 hours (`GUEST_PASS_TTL_S`, `apps/edge/src/pass.ts`). The browser keeps a separate collector token with no time-based expiry (`readCollector`). `/api/pass` gives a returning browser a fresh visit pass for the same owl when that collector token is still valid and the owl has not moved to another device. Closing a tab does not clear browser storage. A new visit starts on the home screen, and Play opens the owl's own nest. A tab that reconnects while still open stays in its room (OP-087).
 
 ## 9. Two lines in the log [BUILT (OP-140, OP-141, OP-142)]
 

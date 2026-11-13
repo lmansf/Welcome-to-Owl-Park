@@ -1,7 +1,7 @@
 import { devices, type Browser, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { flyThrough, playAt, run, untilOver } from './arcadePlay';
-import { dist, doAction, E2E_ADMIN_KEY, jumpFlapGlide, openPark, settleCamera, state, steppedFlight, steppedPeerFlight, tapRoomPoint, travelTo, waitForArrival, walkAndStop, walkToDoor, walkToJetty } from './helpers';
+import { dist, doAction, E2E_ADMIN_KEY, jumpFlapGlide, openPark, settleCamera, state, steppedFlight, steppedPeerFlight, tapRoomPoint, travelTo, waitForArrival, walkAndStop, walkToDoor, walkToJetty, actionButton } from './helpers';
 
 /**
  * These tests run against the room server (wrangler dev on :8787). Each visitor gets its own
@@ -75,7 +75,7 @@ test.describe('room server', () => {
     const s = await state(a);
     expect(s.room).toBe('hub');
     expect(s.pos.y).toBeGreaterThan(560); // scattered onto the walkable floor
-    await expect(a.getByText('1 owl here')).toBeVisible();
+    await expect(a.locator('[data-count]')).toHaveText('1 owl here');
     await a.context().close();
   });
 
@@ -112,9 +112,10 @@ test.describe('room server', () => {
     const b = await visitor(browser);
     const a = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
     // The hub's paintings come only when the test says: the room cannot open before.
+    // Visitors get the Party Grove's painted layers (partygrove-*); ?art=old pages get hub-*. Both are held.
     let paintingsCame!: () => void;
     const paintingsHeld = new Promise<void>((r) => (paintingsCame = r));
-    await a.route(/\/art\/hub[-.%@]/, async (route) => {
+    await a.route(/\/art\/(hub|partygrove)[-.%@]/, async (route) => {
       await paintingsHeld;
       await route.continue().catch(() => undefined);
     });
@@ -135,7 +136,7 @@ test.describe('room server', () => {
       { timeout: 30_000 },
     );
     expect(await first.jsonValue()).toEqual({ connected: true, peers: 1 });
-    await expect(a.getByText('2 owls here')).toBeVisible();
+    await expect(a.locator('[data-count]')).toHaveText('2 owls here');
     await a.context().close();
     await b.context().close();
   });
@@ -189,7 +190,7 @@ test.describe('room server', () => {
     await expect.poll(async () => (await state(a)).peers.length, { timeout: 15_000 }).toBe(1);
     await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(1);
     expect((await state(b)).peers[0]!.look.body).toBe('#8B5A2B');
-    await expect(a.getByText('2 owls here')).toBeVisible();
+    await expect(a.locator('[data-count]')).toHaveText('2 owls here');
 
     const target = { x: 2200, y: 760 };
     await a.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), target);
@@ -406,6 +407,7 @@ test.describe('room server', () => {
   });
 
   test('leaving the park keeps a ticket running, the turnstiles let the owl back in, and travel home finds its nest', async ({ browser, request }) => {
+    test.slow(); // Two owls, leaving, re-entering and travelling home can exhaust 90 s on software-rendered CI.
     const issued = await request.post('/api/admin/tickets', { headers: { 'X-Admin-Key': E2E_ADMIN_KEY }, data: { kind: 'day', quantity: 1 } });
     expect(issued.status()).toBe(200);
     const { link } = (await issued.json()) as { link: string };
@@ -449,6 +451,24 @@ test.describe('room server', () => {
     await a.context().close();
   });
 
+  test('an owl in its own nest is in Your nest on the map, even when the park cannot connect (OP-303)', async ({ browser }) => {
+    const a = await visitor(browser);
+    await travelTo(a, 'nest');
+    await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toMatch(/^nest-[a-z0-9]{8}$/);
+    const home = (await state(a)).room;
+    // From here on the room server's socket is refused: the page wanders alone, as when the park cannot connect,
+    // so the room server never says whose nest it is; the owl's home nest still does.
+    await a.routeWebSocket(/\/ws\//, (ws) => ws.close());
+    await a.goto(`/?${new URLSearchParams({ transport: 'edge', room: home, kit: '0' })}`);
+    await expect.poll(() => a.evaluate(() => window.owlPark?.state()?.room ?? null), { timeout: 20_000 }).toBe(home);
+    await a.locator('[data-menu-btn]').click();
+    const menu = a.getByRole('dialog', { name: 'Menu' });
+    await menu.locator('[data-tab="map"]').click();
+    await expect(menu.locator('[data-place="nest"]')).toContainText('You are here', { timeout: 10_000 });
+    await expect(menu.locator('[data-place].here')).toHaveCount(1);
+    await a.context().close();
+  });
+
   for (const [name, device] of [
     ['a computer', { viewport: { width: 1280, height: 800 } }],
     ['a phone', { ...devices['Pixel 7'] }],
@@ -486,6 +506,49 @@ test.describe('room server', () => {
     });
   }
 
+  test('Play answers the first press: it says Opening the park while the nest is slow, takes no second press, and asks the line once', async ({ browser }) => {
+    const a = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
+    // A slow park: the owl's nest takes three seconds to answer, as it can on a phone far away.
+    await a.route('**/api/nest', async (route) => {
+      await new Promise((r) => setTimeout(r, 3_000));
+      await route.continue();
+    });
+    let joins = 0;
+    a.on('request', (req) => {
+      if (req.method() === 'POST' && new URL(req.url()).pathname === '/api/line') joins++;
+    });
+    await a.goto('/?transport=edge');
+    const play = a.locator('[data-home-btn="play"]');
+    // Look around free makes the owl and presses Play for it.
+    await a.locator('[data-home-btn="guest"]').click({ timeout: 20_000 });
+    await expect(play).toHaveText('Opening the park…');
+    await expect(play).toHaveAttribute('aria-busy', 'true');
+    // Pressed again and again while the park answers, as the visitor did: nothing more is asked of the park.
+    const box = (await play.boundingBox())!;
+    for (let i = 0; i < 6; i++) await a.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await a.keyboard.press('Enter');
+    await expect.poll(async () => (await state(a)).room, { timeout: 20_000 }).toMatch(/^nest-[a-z0-9]{8}$/);
+    expect(joins).toBe(1);
+    // Back on the home screen, Play is itself again.
+    await a.locator('[data-menu-btn]').click();
+    await a.getByRole('dialog', { name: 'Menu' }).locator('[data-tab="settings"]').click();
+    await a.getByRole('dialog', { name: 'Menu' }).locator('[data-screen="title"]').click();
+    await expect(play).toHaveText('Play', { timeout: 20_000 });
+    await expect(play).not.toHaveAttribute('aria-busy', 'true');
+    await a.context().close();
+  });
+
+  test('Play never hangs on a nest that does not answer: after a few seconds the owl goes to the lobby instead', async ({ browser }) => {
+    const a = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
+    // The nest never answers.
+    await a.route('**/api/nest', () => new Promise<void>(() => undefined));
+    await a.goto('/?transport=edge');
+    await a.locator('[data-home-btn="guest"]').click({ timeout: 20_000 });
+    await expect(a.locator('[data-home-btn="play"]')).toHaveText('Opening the park…');
+    await expect.poll(async () => (await state(a)).room, { timeout: 25_000 }).toBe('lobby');
+    await a.context().close();
+  });
+
   test('quests live on the server: talk, take on and progress are checked there', async ({ browser }) => {
     const a = await visitor(browser);
     await expect.poll(async () => (await state(a)).npcs.find((n) => n.id === 'bramble')?.mark, { timeout: 15_000 }).toBe('offer');
@@ -505,9 +568,16 @@ test.describe('room server', () => {
     const a = await visitor(browser, { room: 'grove' });
     const b = await visitor(browser, { room: 'grove' });
     await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(1);
-    const pile = (await state(a)).objects.find((o) => o.kind === 'leaf-pile' && o.here)!;
+    // A pile on the floor, which an owl flops into from where it stands (the grove has two more up in
+    // its treehouses, which take a jump: with the three on the floor used up, the first one "here" was one of those).
+    const pile = (await state(a)).objects.find((o) => o.kind === 'leaf-pile' && o.here && o.top === 0)!;
+    expect(pile, 'a leaf pile on the grove’s floor that has not been flopped into').toBeDefined();
     expect(await a.evaluate((id) => window.owlPark.use(id), pile.id)).toBe(true);
     await expect.poll(async () => (await state(a)).objects.find((o) => o.id === pile.id)?.here, { timeout: 20_000 }).toBe(false);
+    // The second owl is still in the grove. The room gives it a spot of its own beside the first, and
+    // its walk over used to pass, one time in fifteen, through the way to the hub and take it out
+    // (OP-342): this test then failed with the pile not among the objects of the room it was in.
+    expect((await state(b)).room).toBe('grove');
     await expect.poll(async () => (await state(b)).objects.find((o) => o.id === pile.id)?.here, { timeout: 10_000 }).toBe(false);
     await a.screenshot({ path: 'e2e-screenshots/edge-leaves.png' });
     // A newcomer hears about it too.
@@ -821,7 +891,7 @@ test.describe('room server', () => {
 
     // The host moves the lamp and takes today's furniture gift; the guest sees the lamp move.
     const sheet = host.locator('section.decorate');
-    await host.locator('[data-action="decorate"]').click();
+    await actionButton(host, 'decorate').click();
     await sheet.getByRole('button', { name: 'Next spot' }).click();
     await sheet.locator('[data-piece="lamp"]').click();
     await expect.poll(async () => (await state(guest)).nest?.layout['f2'], { timeout: 10_000 }).toBe('lamp');
@@ -848,7 +918,8 @@ test.describe('room server', () => {
 
   test("feedback from the Menu reaches the keepers' page, which needs the admin key and marks notes done", async ({ browser, request }) => {
     const a = await visitor(browser);
-    const words = `More lanterns by the pond, please (${Date.now()})`;
+    // A marker in letters as well as digits: the Worker takes ten digits or more out of a note as a phone number (OP-236).
+    const words = `More lanterns by the pond, please (${Date.now().toString(36)})`;
     const sheet = a.getByRole('dialog', { name: 'Feedback' });
     const openFeedback = async () => {
       await a.locator('[data-menu-btn]').click();
@@ -859,7 +930,7 @@ test.describe('room server', () => {
     await sheet.getByRole('button', { name: 'Idea' }).click();
     await sheet.getByRole('textbox', { name: 'Your note' }).fill(words);
     await sheet.getByRole('button', { name: 'Send' }).click();
-    await expect(a.getByText("Your note is with the park's keepers")).toBeVisible();
+    await expect(a.getByText(/Your note is with the park's keepers|A grey mouse is waiting in your collection/)).toBeVisible();
     // A second note straight away waits its turn.
     await openFeedback();
     await sheet.getByRole('textbox', { name: 'Your note' }).fill('And a second thought');
@@ -896,7 +967,7 @@ test.describe('room server', () => {
 
   test("a hostile note reaches the keepers' page as plain words: no markup, no script (OP-143)", async ({ browser }) => {
     const a = await visitor(browser);
-    const words = `<img src=x onerror=alert(1)> ' OR '1'='1 ../../../etc/passwd %00 (${Date.now()})`;
+    const words = `<img src=x onerror=alert(1)> ' OR '1'='1 ../../../etc/passwd %00 (${Date.now().toString(36)})`;
     await a.locator('[data-menu-btn]').click();
     await a.getByRole('dialog', { name: 'Menu' }).locator('[data-tab="settings"]').click();
     await a.locator('[data-screen="feedback"]').click();
@@ -904,7 +975,7 @@ test.describe('room server', () => {
     await sheet.getByRole('button', { name: 'Bug' }).click();
     await sheet.getByRole('textbox', { name: 'Your note' }).fill(words);
     await sheet.getByRole('button', { name: 'Send' }).click();
-    await expect(a.getByText("Your note is with the park's keepers")).toBeVisible();
+    await expect(a.getByText(/Your note is with the park's keepers|A grey mouse is waiting in your collection/)).toBeVisible();
 
     const keeper = await browser.newPage();
     const alerts: string[] = [];

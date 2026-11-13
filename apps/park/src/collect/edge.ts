@@ -1,7 +1,7 @@
 import { isNestId, parseTravelState, type BuyResult, type FurnitureGiftResult, type GiftResult, type Inventory, type ShopView, type TravelState } from '@owl-park/shared';
 import type { EdgeTransport } from '../net/edge';
 import type { RoomConnection } from '../net/transport';
-import type { ActivityLink, CollectionService, FurnitureGiftReply, NestLink, QuestLink } from './service';
+import type { ActivityLink, CollectionService, CourseLink, FurnitureGiftReply, NestLink, QuestLink } from './service';
 
 /**
  * The collection kept by the room server. Inventory and the shop go over HTTP with the visitor's
@@ -42,6 +42,10 @@ export class EdgeCollections implements CollectionService {
 
   activityLink(_room: string, conn: RoomConnection | null): ActivityLink | null {
     return conn?.acts ?? null;
+  }
+
+  courseLink(_room: string, conn: RoomConnection | null): CourseLink | null {
+    return conn?.course ?? null;
   }
 
   nestLink(_room: string, conn: RoomConnection | null): NestLink | null {

@@ -1,3 +1,5 @@
+import { NEW_MAP } from './newMap';
+
 /**
  * The tree's named spots (OP-155's list; OP-156, part 3): each thing a level of the tree (map 2) has
  * where an owl comes to use it (a door, a stair, a booth, an idol, a guardian, a game, a find, a
@@ -88,10 +90,11 @@ export const TREE_SPOTS: readonly TreeSpot[] = [
 
 /**
  * The level of the tree a room is (`l0` to `l5`: 0 to 5, and a level's second room, such as level 5's
- * nests street `l5-street`), or null for any other room.
+ * nests street `l5-street`), or null for any other room. A room of the new map (NEW_MAP) is the level it
+ * is a copy of.
  */
 export function treeLevelOf(roomId: string): number | null {
-  const m = /^l(\d)(?:-[a-z]+)?$/.exec(roomId);
+  const m = /^l(\d)(?:-[a-z]+)?$/.exec(NEW_MAP[roomId] ?? roomId);
   const n = m ? Number(m[1]) : -1;
   return n >= 0 && n <= TREE_LEVEL_MAX ? n : null;
 }

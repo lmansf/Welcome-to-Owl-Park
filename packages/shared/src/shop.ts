@@ -6,7 +6,7 @@
  * storing anything (only who took today's gift is kept). Feathers are earned in the park and never
  * sold: no money is involved here.
  */
-import { PRESENTS, RARITIES, STARTER_PACK, allVariants, parseVariant, type Rarity } from './collectibles';
+import { PRESENTS, RARITIES, STARTER_PACK, allVariants, isRewardVariant, parseVariant, type Rarity } from './collectibles';
 import { nextParkDayAt, nextParkWeekAt, parkDay, parkWeek, rotationRandom, daysBetween } from './parktime';
 
 // ---------- defaults the owner may change ----------
@@ -83,11 +83,11 @@ export interface ShopRotation {
 const EVERYONES = new Set<string>([...STARTER_PACK, ...PRESENTS.map((p) => p.variant)]);
 
 let poolCache: Record<Rarity, string[]> | null = null;
-/** Every variant the shop may sell, by rarity (never one that everyone holds). */
+/** Every variant the shop may sell, by rarity (never one that everyone holds, nor a reward of its own). */
 function pool(): Record<Rarity, string[]> {
   if (!poolCache) {
     poolCache = { common: [], uncommon: [], rare: [], epic: [] };
-    for (const v of allVariants()) if (!EVERYONES.has(v)) poolCache[parseVariant(v)!.rarity].push(v);
+    for (const v of allVariants()) if (!EVERYONES.has(v) && !isRewardVariant(v)) poolCache[parseVariant(v)!.rarity].push(v);
   }
   return poolCache;
 }

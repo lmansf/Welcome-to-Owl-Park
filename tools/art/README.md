@@ -204,6 +204,119 @@ moved down by the post stage: `shift <key> --dy N` (room pixels) writes a new ca
 painting's top rows mirrored into the gap, so what ran out of the frame still does; `select` it and
 finish it as any other playfield.
 
+## The art kit (OP-229)
+
+`config/kit.json` is the one list of what the kit holds, and `kit.mjs` turns it into jobs. The level
+assembler (OP-234) builds screens from the published files, whose format is this:
+
+- **Textures** are the keys `kit-tex-<name>` (bark, inner-wood, planks, moss, leaves, rope, stone,
+  earth, roots, cloth): one `apps/park/public/art/kit-tex-<name>.webp` each, 512 x 512, opaque, and
+  tileable in both directions, so a tile sprite can repeat it at any size and scale. Generated at
+  1024 x 1024 as a painting that asks to tile, then `art:finish texture <key>` heals the wrap
+  (rolled by half, the cross of the old edges covered by the painting's own middle under a
+  feathered mask), resizes with the tiling kept and refuses a tile whose wrap seam is more than
+  `--max-seam` (1.6) times its inner detail; the post record keeps the seam ratios before and
+  after. No `@2x`: the assembler scales the tile.
+- **Shape sheets** are the helper keys `kit-sheet-<name>` (twenty-two of them: eighteen core sheets and the four slope sheets of top-up G2b, OP-240): one 2048 x 1152
+  painting on magenta `#FF00FF` with six props in a grid of three across and two down, listed in
+  `kit.json` in reading order. `art:finish pieces <key>` keys the sheet out, finds the six props as blobs (the painter's grid
+  is never exact) and takes them in reading order, trims each to its own pixels and fits it (contain, bottom-aligned, 2 % margin) into the piece's logical canvas, and
+  ships it as the public key `kit-<piece>`: `kit-<piece>.webp` (1x, w x h from the table) and
+  `kit-<piece>@2x.webp`, RGBA with the alpha exact, each with its own post record naming the sheet
+  and cell. Pieces that repeat (`*-mid`) are cut straight at both ends; caps (`*-cap-left`,
+  `*-cap-right`) end a run; slopes rise left to right (`*-slope-up`) or fall (`*-slope-down`).
+  `packages/shared/src/sprites.json` records each piece's drawn box, centre and solid box, as for
+  any cut-out, which is what the assembler should place by. Fewer than six props refuses the candidate; a small extra blob
+  (a leaf, a lantern on a thread) is dropped with a warning.
+- **Sizes**: a sheet gives its pieces one logical size (`w`, `h` in `kit.json`); a piece may set its
+  own. The same sizes sit in `apps/park/src/game/art.ts` (kind `texture` or `piece`) and
+  `config/assets.json`, which the tests hold in step with `kit.json`.
+- **Area sets** live under `kit.areas.<area>` and follow the same two formats with the area's name in
+  the key: accent textures `kit-tex-<area>-<name>`, prop sheets `kit-sheet-<area>-<name>` cut to
+  `kit-<area>-<piece>`, and seven **backdrop layers** `kit-<area>-sky-a|b` (1600 x 900, opaque),
+  `kit-<area>-far-a|b` (1600 x 900, keyed) and `kit-<area>-mid-a|b|c` (800 x 450, keyed), finished by
+  `art:finish layer <key>`: a sky as painted, a far or middle layer keyed out of its magenta, each
+  healed to repeat sideways (its left and right edges continue into each other, the sideways seam
+  ratio in the post record) so the assembler can run one along any number of screens at the tree's
+  rates (sky 0.5, far about 0.6, middle 0.75). No `@2x`. When the model paints a keyed layer as a
+  panel inside a border of the key colour, `--trim-key` cuts the border away first (with
+  `--trust-key` when the panel fills the frame); the wording that stops it doing so says the open
+  half is "left as flat solid magenta with nothing painted on it, no sky, no frame or border". A
+  far layer whose fade into the key went violet and was cleared to a hard top edge gets
+  `--fade-top <px>`, which ramps its alpha in below that edge.
+- **Course props** live under `kit.courses.<area>.<sheet>`: extra six-prop sheets for a realm's
+  course, keyed, cut and named like the area's own sheets (`kit-sheet-<area>-<name>` to
+  `kit-<area>-<piece>`), seeded from 9000.
+- **Landmarks** live under `kit.landmarks.<name>` (`area`, `w`, `h`, `desc`): one prop each on its own
+  1024 x 1024 key-colour canvas, the helper key `kit-sheet-landmark-<name>`, cut by
+  `art:finish pieces` (which takes a one-piece sheet as one blob) to `kit-landmark-<name>` at its
+  logical size, seeded from 9500.
+- **The recut** (OP-251, `kit.recut`): pieces painted from the approved targets as references
+  (`@guide:<target>-ref`, written by `art:finish target <key> --ref`), so their light, colour and
+  edges match. A run (`kit.recut.runs.<material>`, the helper key `kit-sheet-cut-run-<material>`,
+  2720 x 1530 at the model's larger tier) is three continuous runs of one material stacked on the key
+  colour; `art:finish runs <key>` finds each run as a band of mostly-opaque rows (plus the rows of
+  anything attached, a rail's posts), keeps only the paint joined to it (a moon in the box is
+  cleared), scales it to twice its row's logical height and cuts a left cap, a right cap and middle
+  pieces of the recut's lengths from different stretches of it (`kit-cut-<row>-cap-left`,
+  `-cap-right`, `-mid-320`, `-mid-480`, `-mid-640`), so a laid run never repeats one copy. A run
+  painted a little short for the longest middle is squashed in height up to `--max-squash`.
+  `--clear-glow 0.2` clears the washed-out pink halo the model paints along a run, `--clear-mist`
+  the grey mist over the key; `--raw <file> --only <pieces>` takes one row from another candidate.
+  A column sheet (`kit.recut.columns.<name>`, `kit-sheet-cut-col-<name>`, OP-259) is tall columns
+  painted side by side, each running off the top and the bottom of the frame; `art:finish columns
+  <key>` finds each as the run finder does on the image turned on its side, scales it by its width
+  to the piece and keeps its middle to the piece's height, so top and bottom are straight cuts; a
+  piece marked `tile` is healed up and down so stacked copies meet with no seam (the trunk's middle). A join sheet (`kit.recut.sheets.<name>`, `kit-sheet-cut-<name>`)
+  holds six props (corners, ground transitions, slope joins, trunk and bough edges) cut by
+  `art:finish pieces` to `kit-cut-<piece>`. The old pieces stay until rooms move off them.
+- **Puzzle quest art** (OP-256, `kit.puzzle` in `config/kit.json`): two keyed sheets painted with the
+  level 4 target as the reference, `kit-sheet-puzzle-props` (the lock post shut and open, the blank
+  clue carving, the brass key; four props, two by two) and `kit-sheet-puzzle-symbols` (the six code
+  symbols), cut by `art:finish pieces` to `kit-puzzle-<piece>`. The room's markers and the code pad
+  draw them in place of the code-drawn stand-ins, and fall back to those until the art is loaded.
+- **Hero screens** (OP-230, `kit.hero` in `config/kit.json`): a hero screen gets one kit-guided pass,
+  a far and (where the target has one) a middle backdrop layer painted for that screen from its
+  approved target and the screen as the kit assembles it (`work/art/guides/hero-<room>-screen.png`,
+  a `kit:preview` screen), keys `kit-hero-<room>-far-a` and `-mid-a`, finished and banded like any
+  area layer and named by the room's kit in place of the area's layers. `art:finish layer
+  --inpaint-key-hue 0.3` repaints the key's hue where the model painted it into the subject (magenta
+  mist at a bough's foot), which keying would leave pink. No hero screen goes live until its
+  side-by-side with its target (`pnpm kit:preview <room> --target`) has been shown to the owner with
+  its scenes' stories, the owner has said yes, and `pnpm kit:check` passes (OP-252,
+  `docs/TREE_STYLE.md` section 8).
+- **Art targets** (OP-249, `targets.mjs`): three finished screens, `target-l4`, `target-plaza` and
+  `target-clearing`, painted as one picture each at 1600 x 900 under one light (the moon, upper right)
+  from two references in `work/art/guides/`: `<key>-preview.png` (the screen as the kit draws it today,
+  `pnpm kit:preview <room> --scale 1` on PR 86's branch, or a composite for the clearing) and
+  `<key>-greybox.png` (`pnpm kit:greybox <room>`, the first screen). They are helper keys, never shipped:
+  `art:finish target <key>` keeps the approved candidate under `tools/art/targets/` with a provenance
+  line in `tools/art/targets/provenance.jsonl`. A revision round (`ART_TARGET_ROUND=2`) repaints the
+  round before from `work/art/guides/<key>-round.png` (`art:finish target <key> --guide`) with the
+  target's revision notes. The kit's recut (OP-251) and the value bands (OP-250) are taken from them.
+- **Value bands** (OP-250, `docs/TREE_STYLE.md` section 2b, `artlib/bands.py`): every published backdrop
+  layer sits inside its layer's band of lightness (Lab L mean and p95), local contrast and saturation,
+  measured over its opaque pixels, so the backdrop stays darker and softer than the walkable floor.
+  `art:finish bands <key>...` (or `--all`; no generation, no cost) reads a published layer from
+  `apps/park/public/art`, measures it, and pulls it into its band: a linear remap of L toward the band's
+  mean and ceiling, a blend toward a blurred copy and a gain under 1 for contrast, a chroma scale for
+  saturation, and for far and middle layers a little blur and a haze toward the area's sky colour
+  (sampled from the lower half of its `sky-a` plate as published, so skies are graded first). The WebP is
+  re-encoded in place under the same budget with the alpha untouched, a provenance line is appended whose
+  `tools` keep the layer's finish and add `bands: <band> ...` with the parameters and the statistics
+  before and after, and `work/art/review/bands-<area>.png` shows each layer before and after over its sky.
+  Deterministic; a layer whose latest line already says `bands:` is skipped unless `--force`. `--dry-run`
+  prints the statistics and writes nothing; `--measure <png>...` prints a 1600 x 900 screen's sky, backdrop
+  and floor bands (or any image's statistics); `--haze` and `--blur` override the far and middle defaults.
+  A layer the grade cannot bring into its band is reported (exit 1) and is one to regenerate. `--finals`
+  grades finished, unpublished layers in `work/art/final` instead: the finish record takes the `bands:`
+  line, so `publish` carries it. A regenerated layer may be painted from a reference: `kit.layer_refs.<key>`
+  in `kit.json` lists the job's refs in the generator's form (`@guide:target-l4-ref` is
+  `work/art/guides/target-l4-ref.png`, the level 4 target at 1280 x 720, under the inline reference limit).
+- **Palette and style** come from the park's style guide (`docs/TREE_STYLE.md`): one palette,
+  clean cel-shaded shapes, no outlines, no text, no characters. The owner sees every sheet before
+  it is published; nothing from the kit is published without that.
+
 ## Output contract (read by the post stage)
 
 ```

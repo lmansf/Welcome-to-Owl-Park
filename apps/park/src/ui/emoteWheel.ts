@@ -2,6 +2,7 @@ import { CATALOGUE, EMOTE_IDS, type ItemDef } from '@owl-park/shared';
 import type { CollectionState } from '../collect/state';
 import { variantIcon } from './itemIcon';
 import { createModal, type Modal } from './modal';
+import { typingInField } from './typing';
 
 /** Emotes on one turn of the wheel; more turn the page. */
 export const WHEEL_SLOTS = 8;
@@ -22,6 +23,24 @@ export function wheelPage<T>(items: readonly T[], page: number, per = WHEEL_SLOT
 /** The owl's emotes in the wheel's order: the first eight are its first page, and keys 1 to 8. */
 export function wheelEmotes(state: CollectionState): ItemDef[] {
   return CATALOGUE.filter((i) => i.kind === 'emote' && state.owns(i.id));
+}
+
+/**
+ * The other wheel, one tap away (OP-242): a phone has one button for Say and the emotes, so each
+ * wheel offers the other beside Close. The wheel closes and `go` opens the other.
+ */
+export interface WheelSwap {
+  label: string;
+  go(): void;
+}
+
+/** Show the swap button with its label and wire it, or leave it hidden with none. */
+export function wireSwap(button: HTMLButtonElement, swap: WheelSwap | undefined): void {
+  if (!swap) return;
+  button.hidden = false;
+  button.textContent = swap.label;
+  button.dataset['swap'] = swap.label.toLowerCase();
+  button.addEventListener('click', () => swap.go());
 }
 
 export interface EmoteWheel {
@@ -51,7 +70,8 @@ const CSS = `
 #hud .wheel .pager button{min-height:34px;min-width:34px;padding:0;font-size:18px;line-height:1}
 #hud .wheel .note{max-width:min(360px,calc(100vw - 32px));text-align:center;font-size:13px;line-height:1.35;background:rgba(12,30,54,.86);border:1px solid rgba(246,241,227,.15);border-radius:12px;padding:8px 12px}
 #hud .wheel .note:empty{display:none}
-#hud .wheel [data-close]{min-height:40px}
+#hud .wheel [data-close],#hud .wheel [data-swap]{min-height:40px}
+#hud .wheel .wfoot{display:flex;gap:8px;justify-content:center}
 @media (max-width:420px),(max-height:520px){#hud .wheel .ring{--r:108px}#hud .wheel .slot{width:70px;height:70px;margin:-35px 0 0 -35px}#hud .wheel .slot canvas{width:30px;height:30px}}
 `;
 
@@ -60,7 +80,7 @@ const CSS = `
  * through `press`) plays one and closes the wheel. More than eight turn the page with the arrows
  * (or ← and →).
  */
-export function createEmoteWheel(root: HTMLElement, state: CollectionState, play: (emote: string) => void): EmoteWheel {
+export function createEmoteWheel(root: HTMLElement, state: CollectionState, play: (emote: string) => void, swap?: WheelSwap): EmoteWheel {
   const style = document.createElement('style');
   style.textContent = CSS;
   document.head.appendChild(style);
@@ -80,7 +100,7 @@ export function createEmoteWheel(root: HTMLElement, state: CollectionState, play
       </div>
     </div>
     <p class="note" data-note></p>
-    <button class="ghost" data-close aria-label="Close emotes">Close</button>`;
+    <div class="wfoot"><button class="ghost" data-swap hidden></button><button class="ghost" data-close aria-label="Close emotes">Close</button></div>`;
   const $ = <T extends Element>(sel: string) => box.querySelector(sel) as T;
   const ring = $<HTMLElement>('[data-ring]');
   const nameEl = $<HTMLElement>('[data-name]');
@@ -151,9 +171,10 @@ export function createEmoteWheel(root: HTMLElement, state: CollectionState, play
     });
   }
   $<HTMLButtonElement>('[data-close]').addEventListener('click', () => modal.close());
+  wireSwap($<HTMLButtonElement>('[data-swap]'), swap);
   // The arrows turn the page. (1 to 8 and Escape are the HUD's, from the keyboard module.)
   window.addEventListener('keydown', (e) => {
-    if (!modal.isOpen() || e.altKey || e.ctrlKey || e.metaKey) return;
+    if (!modal.isOpen() || e.altKey || e.ctrlKey || e.metaKey || typingInField(e)) return;
     if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
       e.preventDefault();
       page += e.code === 'ArrowLeft' ? -1 : 1;

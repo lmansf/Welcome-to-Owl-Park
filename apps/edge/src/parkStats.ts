@@ -16,15 +16,21 @@
  *   there; time with the Menu open counts, as the owl is still in the room. They go to the log with
  *   their visit, right after its row.
  *
+ * - Each visit's live stay (OP-265): the room the owl is in now, sent to the log as it comes in
+ *   (`enter`) and as it goes (`leave`, with why: another room, the page closed, the line dropped or
+ *   went quiet, or the nightly restart), so the owner's `game.room_stay` holds an open row for every
+ *   owl's room now. A line that drops and comes back into the same room continues the stay. Only a
+ *   change of room, the visit's end and the restart send anything, never a heartbeat.
+ *
  * - What each visit was past the turnstiles (OP-192): a full visitor's or a spectator's (OP-191),
  *   from the room server's word on each socket, so free owls are counted beside paid ones.
  *
  * Nothing here is kept while the log is off. Written against `SqlStorage`, so Node tests it.
  */
-import { DEFAULT_SPECIES, SPECIES, isHexColour, isNestRoom, mapOf, type SpeciesId } from '@owl-park/shared';
+import { DEFAULT_SPECIES, SPECIES, isHexColour, isNestRoom, isNewMapRoom, mapOf, type SpeciesId } from '@owl-park/shared';
 import { TREE_REALMS, roomFor } from '@owl-park/shared/rooms';
 import { moduleLog } from './logs';
-import { cleanVisit, type CollectLog, type EntrySource, type Visit } from './collectLog';
+import { cleanVisit, type CollectLog, type EntrySource, type StayEntry, type Visit } from './collectLog';
 
 /** A visit not seen for this long is over: two of the room objects' minute heartbeats and some. */
 export const VISIT_GRACE_MS = 3 * 60_000;
@@ -42,12 +48,25 @@ export interface Sighting extends Visit {
   /** It came by travel from the Menu's map (OP-130). */
   travel?: boolean;
   /**
+   * At its hello, the park the page has the owl walking (OP-265): a room both parks share (a nest, a
+   * realm the tree opens into) has its stay logged in it. A room of one park alone ignores it.
+   */
+  map?: 1 | 2;
+  /**
    * Inside the park, whether the socket is a spectator's (OP-191, OP-192): true for a spectator, false
    * for a full visitor. Left out outside the turnstiles (the lobby, the street, the nests), where
    * nobody is either.
    */
   spec?: boolean;
+  /**
+   * Its socket's close (OP-265): `bye` when the page closed it (1000, 1001), `drop` when the line was
+   * lost, `restart` when the nightly restart is closing it. Left out of a hello and the heartbeat.
+   */
+  left?: SocketEnd;
 }
+
+/** How a socket ended, for a live stay's exit reason (OP-265). */
+export type SocketEnd = 'bye' | 'drop' | 'restart';
 
 /**
  * What a visit was past the turnstiles (OP-192): `visitor` once any of its sockets inside the park
@@ -64,9 +83,15 @@ export interface StatsLook {
 
 const SPECIES_IDS = new Set<string>(SPECIES.map((s) => s.id));
 
-type VisitRow = { pass: string; cid: string; started: number; seen: number; device: string | null; rooms: string; gained: number; kind: string | null };
+type VisitRow = { pass: string; cid: string; started: number; seen: number; device: string | null; rooms: string; gained: number; kind: string | null; test: number | null };
 /** A time in one room: `place` is the room's own id (which nest it was), kept here only; `room` is the log's name for it. */
 type RoomTime = { pass: string; seq: number; cid: string; place: string; room: string; entered: number; exited: number | null; source: EntrySource; gained: number };
+/**
+ * A visit's live stay (OP-265): its `seq`-th, in `place` (the room's own id) since `entered`. `open` is
+ * 0 once the restart closed it, kept so the visit's next stay takes the next number. `ending` is how
+ * the owl's socket here last ended (`bye` or `drop`), cleared by a heartbeat or a hello here.
+ */
+type LiveStay = { pass: string; cid: string; seq: number; place: string; room: string; map: number; entered: number; open: number; ending: string | null };
 
 export class ParkStats {
   constructor(
@@ -80,16 +105,33 @@ export class ParkStats {
     // Visits kept before OP-192 have no kind: they go to the log without one, as visits before spectators did.
     const visitColumns = sql.exec<{ name: string }>(`PRAGMA table_info(stats_visits)`).toArray();
     if (!visitColumns.some((c) => c.name === 'kind')) sql.exec(`ALTER TABLE stats_visits ADD COLUMN kind TEXT`);
+    // Visits kept before test visits were marked count as players', as they did.
+    if (!visitColumns.some((c) => c.name === 'test')) sql.exec(`ALTER TABLE stats_visits ADD COLUMN test INTEGER`);
     sql.exec(
       `CREATE TABLE IF NOT EXISTS stats_rooms (pass TEXT NOT NULL, seq INTEGER NOT NULL, cid TEXT NOT NULL, place TEXT NOT NULL, room TEXT NOT NULL, entered INTEGER NOT NULL, exited INTEGER, source TEXT NOT NULL, gained INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (pass, seq))`,
     );
+    sql.exec(
+      `CREATE TABLE IF NOT EXISTS stats_live (pass TEXT PRIMARY KEY, cid TEXT NOT NULL, seq INTEGER NOT NULL, place TEXT NOT NULL, room TEXT NOT NULL, map INTEGER NOT NULL, entered INTEGER NOT NULL, open INTEGER NOT NULL, ending TEXT)`,
+    );
+  }
+
+  /**
+   * The visit and room an owl is in now, by its open live stay (OP-266): the one it came into last,
+   * should it have two tabs open. Null when it is in no room (or the log is off).
+   */
+  liveOf(cid: string): { pass: string; room: string } | null {
+    const r = this.sql.exec<{ pass: string; room: string }>(`SELECT pass, room FROM stats_live WHERE cid = ? AND open = 1 ORDER BY entered DESC LIMIT 1`, cid).toArray()[0];
+    return r ? { pass: r.pass, room: r.room } : null;
   }
 
   /** An owl in a room (its hello, or a new look): its visit goes on, and a changed kind or colour is a new version. */
   seen(s: Sighting, look: StatsLook, now: number): void {
     if (!this.log.on) return;
     this.sighted(s, now);
-    if (s.entered) this.entered(s, now);
+    if (s.entered) {
+      this.entered(s, now);
+      this.stayEntered(s, now);
+    }
     const species: SpeciesId = typeof look.species === 'string' && SPECIES_IDS.has(look.species) ? (look.species as SpeciesId) : DEFAULT_SPECIES;
     if (!isHexColour(look.body)) return;
     const color = look.body.toLowerCase();
@@ -102,7 +144,10 @@ export class ParkStats {
   /** The room objects' heartbeat, and a socket's close: these visits are still going (or were, until now). */
   alive(sightings: readonly Sighting[], now: number): void {
     if (!this.log.on) return;
-    for (const s of sightings) this.sighted(s, now);
+    for (const s of sightings) {
+      this.sighted(s, now);
+      this.staySighted(s, now);
+    }
   }
 
   /** A collectible came in this visit, in the room the owl is in. */
@@ -125,6 +170,7 @@ export class ParkStats {
         rooms: rooms(v.rooms),
         gained: v.gained,
         kind: v.kind === 'visitor' || v.kind === 'spectator' ? v.kind : null,
+        test: v.test === 1,
       });
       // The room the owl was last in ends when the visit was last seen.
       const times = this.sql.exec<RoomTime>(`SELECT * FROM stats_rooms WHERE pass = ? ORDER BY seq`, v.pass).toArray();
@@ -133,10 +179,69 @@ export class ParkStats {
         this.log.realmVisit({ cid: t.cid, pass: t.pass, seq: t.seq, room: t.room, map: maps[i]!, entered: t.entered, exited: t.exited ?? Math.max(t.entered, v.seen), source: t.source, gained: t.gained }),
       );
       this.sql.exec(`DELETE FROM stats_rooms WHERE pass = ?`, v.pass);
+      // Its live stay ends when the visit was last seen: a goodbye from the page is a log off, anything else a timeout.
+      const live = this.live(v.pass);
+      if (live?.open) this.log.roomStay({ event: 'leave', cid: live.cid, pass: live.pass, seq: live.seq, at: Math.max(live.entered, v.seen), reason: live.ending === 'bye' ? 'logoff' : 'timeout' });
+      this.sql.exec(`DELETE FROM stats_live WHERE pass = ?`, v.pass);
       this.sql.exec(`DELETE FROM stats_visits WHERE pass = ?`, v.pass);
     }
     const next = this.sql.exec<{ seen: number | null }>(`SELECT MIN(seen) AS seen FROM stats_visits`).one().seen;
     return next === null ? null : next + VISIT_GRACE_MS;
+  }
+
+  private live(pass: string): LiveStay | undefined {
+    return this.sql.exec<LiveStay>(`SELECT * FROM stats_live WHERE pass = ?`, pass).toArray()[0];
+  }
+
+  /**
+   * The owl came into a room (OP-265): back into the room of its open stay (a dropped line), the stay
+   * goes on; anywhere else the open stay ends as moved and a new one begins, both sent at once.
+   */
+  private stayEntered(s: Sighting, now: number): void {
+    const v = cleanVisit(s);
+    if (!v.pass || !v.room || typeof s.room !== 'string') return;
+    const place = s.room;
+    const live = this.live(v.pass);
+    if (live?.open && live.place === place) {
+      this.sql.exec(`UPDATE stats_live SET ending = NULL WHERE pass = ?`, v.pass);
+      return;
+    }
+    if (live?.open) this.log.roomStay({ event: 'leave', cid: live.cid, pass: live.pass, seq: live.seq, at: Math.max(live.entered, now), reason: 'moved' });
+    const home = v.room === 'lobby' || (v.room === 'nest' && s.own === true);
+    // After the restart closed its stay, the owl comes back in from the home screen.
+    const source: StayEntry = s.travel === true ? 'travel' : live?.open ? 'walked' : live ? (home ? 'spawn' : 'walked') : home ? 'spawn' : 'deep_link';
+    const said = s.map === 1 || s.map === 2 ? s.map : null;
+    const map = stayMap(place, said ?? (live ? (live.map === 2 ? 2 : 1) : null));
+    const seq = (live?.seq ?? 0) + 1;
+    this.sql.exec(
+      `INSERT OR REPLACE INTO stats_live (pass, cid, seq, place, room, map, entered, open, ending) VALUES (?, ?, ?, ?, ?, ?, ?, 1, NULL)`,
+      v.pass,
+      s.cid,
+      seq,
+      place,
+      v.room,
+      map,
+      now,
+    );
+    this.log.roomStay({ event: 'enter', cid: s.cid, pass: v.pass, seq, at: now, room: v.room, map, source });
+  }
+
+  /**
+   * A heartbeat or a socket's close in the room of the visit's open stay (OP-265): the heartbeat
+   * clears how the socket last ended; a close keeps it (`bye` or `drop`) for the visit's end; the
+   * restart's close ends the stay now. Word from any other room (one the owl already left) is ignored.
+   */
+  private staySighted(s: Sighting, now: number): void {
+    const pass = cleanVisit(s).pass;
+    if (!pass || typeof s.room !== 'string') return;
+    const live = this.live(pass);
+    if (!live?.open || live.place !== s.room) return;
+    if (s.left === 'restart') {
+      this.log.roomStay({ event: 'leave', cid: live.cid, pass: live.pass, seq: live.seq, at: Math.max(live.entered, now), reason: 'server_restart' });
+      this.sql.exec(`UPDATE stats_live SET open = 0, ending = NULL WHERE pass = ?`, pass);
+      return;
+    }
+    this.sql.exec(`UPDATE stats_live SET ending = ? WHERE pass = ?`, s.left === 'bye' || s.left === 'drop' ? s.left : null, pass);
   }
 
   private sighted(s: Sighting, now: number): void {
@@ -144,15 +249,17 @@ export class ParkStats {
     if (!v.pass) return;
     // Past the turnstiles (OP-192): a full visitor's socket makes the visit a visitor's for good; a spectator's, a spectator's until then.
     const seenAs: VisitorKind | null = s.spec === true ? 'spectator' : s.spec === false ? 'visitor' : null;
+    // One of our own test visits: a socket of it that says so marks the visit for good.
+    const test = s.test === true ? 1 : 0;
     const was = this.sql.exec<VisitRow>(`SELECT * FROM stats_visits WHERE pass = ?`, v.pass).toArray()[0];
     if (!was) {
-      this.sql.exec(`INSERT INTO stats_visits (pass, cid, started, seen, device, rooms, kind) VALUES (?, ?, ?, ?, ?, ?, ?)`, v.pass, s.cid, now, now, v.device, JSON.stringify(v.room ? [v.room] : []), seenAs);
+      this.sql.exec(`INSERT INTO stats_visits (pass, cid, started, seen, device, rooms, kind, test) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, v.pass, s.cid, now, now, v.device, JSON.stringify(v.room ? [v.room] : []), seenAs, test);
       return;
     }
     const list = rooms(was.rooms);
     if (v.room && !list.includes(v.room)) list.push(v.room);
     const kind = was.kind === 'visitor' || seenAs === 'visitor' ? 'visitor' : (seenAs ?? was.kind);
-    this.sql.exec(`UPDATE stats_visits SET seen = MAX(seen, ?), device = COALESCE(device, ?), rooms = ?, kind = ? WHERE pass = ?`, now, v.device, JSON.stringify(list), kind, v.pass);
+    this.sql.exec(`UPDATE stats_visits SET seen = MAX(seen, ?), device = COALESCE(device, ?), rooms = ?, kind = ?, test = MAX(COALESCE(test, 0), ?) WHERE pass = ?`, now, v.device, JSON.stringify(list), kind, test, v.pass);
   }
 
   /**
@@ -183,14 +290,28 @@ export class ParkStats {
  * `places` are the rooms' own ids in the order the owl went into them.
  */
 export function visitMaps(places: readonly string[]): (1 | 2)[] {
-  const own = places.map((place): 1 | 2 | null => {
-    if (isNestRoom(place) || TREE_REALMS.has(place)) return null;
-    const room = roomFor(place);
-    return room ? mapOf(room) : null;
-  });
+  const own = places.map(roomLogMap);
   const first = own.find((m) => m !== null) ?? 1;
   let carry: 1 | 2 = first;
   return own.map((m) => (carry = m ?? carry));
+}
+
+/**
+ * The park a live stay is in (OP-265), from its room alone: a room of the tree is map 2 and one only
+ * today's park has is map 1; a room both share (the market, a nest) takes `before`: the park the page
+ * says it walks, else the park of the stay before it in the visit, else today's park. A live row
+ * cannot wait to see the visit's later rooms, as `visitMaps` does.
+ */
+export function stayMap(place: string, before: 1 | 2 | null): 1 | 2 {
+  return roomLogMap(place) ?? before ?? 1;
+}
+
+/** Map 3 belongs to the tree's reporting bucket, as the client's room hello already says. */
+function roomLogMap(place: string): 1 | 2 | null {
+  if (isNestRoom(place) || TREE_REALMS.has(place)) return null;
+  if (isNewMapRoom(place)) return 2;
+  const room = roomFor(place);
+  return room ? mapOf(room) : null;
 }
 
 function rooms(text: string): string[] {

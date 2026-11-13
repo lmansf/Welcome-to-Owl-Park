@@ -285,6 +285,13 @@ survives; strength 0 is the identity. Edit the JSON and rerun `room`/`piece` fro
 in seconds; `pnpm art:finish grade in.png out.png --realm market --strength 0.6` tries a grade on
 any image. The palette file's hash, the strength and the chosen colour count go into provenance.
 
+The art kit's backdrop layers carry a second, measured grade (OP-250): `pnpm art:finish bands --all`
+pulls every published `kit-<area>-sky|far|mid-*` layer into the value band its layer holds in the style
+guide (`docs/TREE_STYLE.md`, section 2b), in place, re-encoded under the same budget with its alpha
+untouched and a provenance line per file whose `tools` say `bands: ...`; `tools/art/test_art_tools.py`
+(`TestBands`) fails any published layer outside its band. The command and its flags are in
+`tools/art/README.md` (the art kit).
+
 ### Keyed assets and the chroma key
 
 Set pieces, overlays and the owl master are generated on a flat key-colour backdrop (the job's

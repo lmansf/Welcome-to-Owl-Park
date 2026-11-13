@@ -108,6 +108,33 @@ export function distanceToRect(p: Vec2, r: Rect): number {
   return Math.hypot(Math.max(r.x - p.x, 0, p.x - (r.x + r.w)), Math.max(r.y - p.y, 0, p.y - (r.y + r.h)));
 }
 
+/**
+ * Whether the straight way from `a` to `b` touches rectangle `r` anywhere along it (the rectangle's
+ * edge counts, as it does for pointInRect). For a walk that must not pass through a doorway.
+ */
+export function segmentTouchesRect(a: Vec2, b: Vec2, r: Rect): boolean {
+  // The stretch of the way that lies between each pair of the rectangle's sides, as shares of the
+  // way (0 at `a`, 1 at `b`): the way touches the rectangle where the two stretches overlap.
+  let from = 0;
+  let to = 1;
+  for (const [start, step, lo, hi] of [
+    [a.x, b.x - a.x, r.x, r.x + r.w],
+    [a.y, b.y - a.y, r.y, r.y + r.h],
+  ] as const) {
+    if (step === 0) {
+      // No travel this way at all: between this pair of sides the whole way, or never.
+      if (start < lo || start > hi) return false;
+      continue;
+    }
+    const t0 = (lo - start) / step;
+    const t1 = (hi - start) / step;
+    from = Math.max(from, Math.min(t0, t1));
+    to = Math.min(to, Math.max(t0, t1));
+    if (from > to) return false;
+  }
+  return true;
+}
+
 export function rectCenter(r: Rect): Vec2 {
   return { x: r.x + r.w / 2, y: r.y + r.h / 2 };
 }

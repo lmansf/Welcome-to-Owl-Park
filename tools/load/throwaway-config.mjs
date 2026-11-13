@@ -8,12 +8,16 @@
  * well past the bots' needs; the API's rate limits are off. Never deploy the park with this file.
  *
  *   node tools/load/throwaway-config.mjs
+ *   (then: wrangler deploy -c wrangler.load.jsonc --secrets-file wrangler.load.secrets.json)
  */
+import { randomBytes } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 
 export const LOAD_NAME = 'owl-park-load';
 const SRC = new URL('../../apps/edge/wrangler.jsonc', import.meta.url);
 const OUT = new URL('../../apps/edge/wrangler.load.jsonc', import.meta.url);
+/** The copy's secrets, for `wrangler deploy --secrets-file`: written beside the config, deleted after the deploy. */
+const SECRETS = new URL('../../apps/edge/wrangler.load.secrets.json', import.meta.url);
 
 /** JSON with comments to plain JSON: drops `//` and block comments outside strings. */
 function stripComments(text) {
@@ -55,12 +59,20 @@ config.vars = {
   RATE_LIMITS: 'off',
   MAX_SOCKETS_PER_IP: '64',
   // The most the server takes for a room (apps/edge/src/rooms.ts); above it the defaults apply.
-  ROOM_CAPS: JSON.stringify(capacity ? { lobby: 120, hub: 30, grove: 120, market: 120 } : { lobby: 120, hub: 120, grove: 120, market: 120 }),
-  // A throwaway key made for this one run (the workflow masks it); the copy is deleted after.
+  // The new map's Great Hollow, ground room and stair rooms too (OP-211's tree steps, run-steps.mjs --plan tree).
+  ROOM_CAPS: JSON.stringify(capacity ? { lobby: 120, hub: 30, grove: 120, market: 120 } : { lobby: 120, hub: 120, grove: 120, market: 120, 'm3-hall': 120, 'm3-ground': 120, 'm3-stair-1': 120, 'm3-stair-2': 120, 'm3-stair-3': 120 }),
+};
+// The copy's keys go up as secrets (wrangler deploy --secrets-file), never as vars: Wrangler prints a
+// var's first characters, which the log's mask (the whole key) does not catch. Its own signing key
+// (OP-209: off this machine a Worker without one signs and takes no pass) is the workflow's, made for
+// this run, else one made here; the rehearsal's admin key is the workflow's. The copy is deleted after.
+const secrets = {
+  PASS_SIGNING_KEY: process.env.LOAD_SIGNING_KEY || randomBytes(24).toString('hex'),
   ...(capacity && process.env.LOAD_ADMIN_KEY ? { ADMIN_KEY: process.env.LOAD_ADMIN_KEY } : {}),
 };
-if (config.name !== LOAD_NAME || 'routes' in config || 'route' in config || config.env) {
-  throw new Error('the throwaway copy must have its own name, no domain and no environments');
+if (config.name !== LOAD_NAME || 'routes' in config || 'route' in config || config.env || 'PASS_SIGNING_KEY' in config.vars || 'ADMIN_KEY' in config.vars) {
+  throw new Error('the throwaway copy must have its own name, no domain, no environments and no keys among its vars');
 }
 writeFileSync(OUT, `${JSON.stringify(config, null, 2)}\n`);
+writeFileSync(SECRETS, `${JSON.stringify(secrets)}\n`, { mode: 0o600 });
 console.log(`wrote apps/edge/wrangler.load.jsonc: ${LOAD_NAME}, its workers.dev address only, no cron, ROOM_SHARDING ${config.vars.ROOM_SHARDING}${capacity ? ', the busy-night rehearsal' : ''}`);

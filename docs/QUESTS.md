@@ -78,9 +78,10 @@ is the step after the last.
 | `interact {what, count, room?, distinct?}` | uses of interactables of a kind; `distinct` wants different ones |
 | `emote {emote, npc?, room?}` | playing an emote, near an NPC or in a room |
 | `gather {item, count, room}` | picking up quest items placed on that room's hiding spots, for this collector only |
+| `puzzle {puzzle}` | every lock of that puzzle on this owl's own list (see Puzzle quests) |
 
 - **Type**: talk, visit, interact, emote, gather, or mixed. **Difficulty**: easy, medium, hard.
-  **Length** by steps: 1 short, 2 or 3 medium, 4 to 6 long. **Cadence**: story (once), daily or weekly.
+  **Length** by steps: 1 short, 2 or 3 medium, 4 to 6 long. **Cadence**: story (once), daily, weekly or monthly (OP-254).
 - **Catalogue**: 114 quests. Six hand-written story quests (the welcome quest first; the others
   unlock after it). Eight templates expanded in bulk over the givers and the three difficulties:
   leaves, errand, tour, show, gather, browse, bask and grand. The first seven, at every difficulty,
@@ -88,11 +89,14 @@ is the step after the last.
   (12). Ids are stable: `<template>-<giver>-<difficulty>`, for example `leaves-hazel-medium`.
 - **Offers**: each park day one easy, one medium and one hard daily quest (different givers and
   templates); each week one medium and one hard weekly quest (different givers). The same for
-  every visitor, chosen by a seeded shuffle of the day or week; plus any story quest whose
-  prerequisites are handed in. A visitor carries at most 4 quests (`MAX_ACTIVE_QUESTS`).
+  every visitor, chosen by a seeded shuffle of the day or week; plus one weekly puzzle quest, and each
+  park month (`parkMonth`, `M2026-11`) one monthly puzzle quest and one monthly odyssey (a seven-step
+  tour from another giver); plus any story quest whose prerequisites are handed in. Each tier has its
+  own room (`ACTIVE_SLOTS`: story 2, daily 3, weekly 3, monthly 2), so a full week never blocks a
+  day or a month; `MAX_ACTIVE_QUESTS` is their sum (10).
 - **Progress** is server-authoritative: the room checks where the owl stands for talks, uses,
-  hand-ins and pickups. Only the current step of a quest can move. Daily and weekly quests not
-  handed in expire with their day or week.
+  hand-ins and pickups. Only the current step of a quest can move. Daily, weekly and monthly quests
+  not handed in expire with their day, week or month. The tiers never share progress or rewards.
 
 ### Rewards (canon C31; the owner may tune them)
 
@@ -102,6 +106,8 @@ is the step after the last.
 | Weekly quest feathers | 150, about seven times a daily quest (`WEEKLY_QUEST_FEATHERS`) |
 | A daily quest's collectible | easy 70/27/3/0, medium 45/40/13/2, hard 20/45/30/5 % common/uncommon/rare/epic (`REWARD_ODDS`) |
 | A weekly quest's collectible | always rare or better: rare 80 %, epic 20 % (`WEEKLY_REWARD_ODDS`) |
+| Monthly quest feathers | 450, three times a weekly quest (`MONTHLY_QUEST_FEATHERS`) |
+| A monthly quest's collectible | rare 30 %, epic 70 % (`MONTHLY_REWARD_ODDS`) |
 | Within a rarity | a variant not yet owned is 4 times as likely (`REWARD_UNOWNED_BOOST`) |
 | Duplicate | pays 5 / 10 / 25 / 60 feathers by rarity (`DUPLICATE_FEATHERS`) |
 | Story quests | a fixed collectible each and 40 to 70 feathers (the welcome quest: Leaf Crown and 50) |
@@ -109,6 +115,37 @@ is the step after the last.
 An active day comes to about 100 to 150 feathers: 80 from the three daily quests, up to 40 from
 leaf piles, and some from duplicates. A common costs about a third of that, an epic four to five
 days.
+
+### Puzzle quests (`puzzles.ts`, `puzzleQuests.ts`, OP-255)
+
+Escape-room quests: a puzzle is a set of locks, some open from the start and some needing others
+first, so owls can split up. A code lock takes a short code of owl symbols (moon, leaf, feather,
+acorn, star, mushroom), one carved on each of its clues hidden around the park; a key lock takes a
+key hidden in another room.
+
+- **Runs.** A run is one attempt, with a fresh random seed from the server: the codes, the clue
+  spots and the key spots differ from run to run, so nothing learnt or shared from one run opens a
+  lock in another. The seed never reaches a page and neither does a code; a clue's symbol shows only
+  to the run's members once one of them reads it.
+- **Friends or anybody.** Up to 4 owls share a run (`PUZZLE_RUN_MAX`): start one from the Quests
+  tab, or join an owl standing next to you that holds the same quest (the room checks both). A run's
+  host leaving hands it on; an empty run is dropped.
+- **Per-player progress.** Each owl keeps its own list of the locks it opened. A lock opened counts
+  for every member then in the run; locks a run opened before an owl joined do not count for it, so
+  an owl that joins a run further behind redoes those locks with it. A run an owl starts carries the
+  locks it opened before, so it can pick the puzzle back up with friends later. The quest is ready to
+  hand in when the owl's own list holds every lock.
+- **Guessing is slow.** Five wrong codes in a row jam a lock for 20 seconds (`PUZZLE_JAM_TRIES`,
+  `PUZZLE_JAM_MS`).
+- **Frames.** One `puzzle` client frame with an `op` (`state`, `start`, `near`, `join`, `leave`,
+  `look`, `take`, `open`), answered by a `puzzle` server frame with the run's view; members' pages
+  get the same frame pushed when another member moves the run along. Free guests are refused, as for
+  every quest frame. The collections object keeps runs and progress in `puzzle_runs` and
+  `puzzle_progress`; the local mode keeps them in browser storage.
+- **On the page.** The Quests tab shows a puzzle quest's run (start, join, leave, each lock and its
+  hint, the symbols read). In the room, lock posts, clues and keys are drawn in code as placeholders
+  until OP-256's art; standing at a clue reads it, at a key picks it up, at a key lock with its key
+  opens it, and at a code lock opens its tap-only code pad.
 
 ### Adding quests
 
@@ -150,6 +187,10 @@ retired: the shop replaces it.
 - **HTTP**: `GET /api/shop`, `POST /api/shop/buy {variant}` and `POST /api/shop/gift` with the
   pass; `GET /api/collection` as before. `POST /api/collection/craft` and `/api/collection/tz` are
   gone. Who took today's gift is kept in the `earned` table.
+- **Analytics** (OP-266): while the collection log is on, the SQL store tells `src/questLog.ts` of
+  every change to a quest row, and each step's start and end (done, abandoned, expired, retired)
+  goes to the owner's `game.quest_progress`, with the quests and their steps as reference tables
+  (`apps/park-log/README.md`). Anonymous like every log row; never a puzzle's code or key.
 
 ### Socket frames (protocol v4)
 

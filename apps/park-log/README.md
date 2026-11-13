@@ -1,4 +1,4 @@
-# The park's analytics log (OP-107, OP-111, OP-113, OP-192)
+# The park's analytics log (OP-107, OP-111, OP-113, OP-192, OP-265, OP-266)
 
 A Supabase Edge Function in the owner's fraud pipeline project, not part of the park's deploy:
 the park's collections object posts a row to it for every collectible an owl comes by
@@ -16,6 +16,10 @@ them in the project's `game` schema, beside the park's orders (`apps/score-endpo
 | `realm_visit`: each room a visit went into, sent right after the visit's own row | `game.fact_realm_visit`, under its session; one whose visit is not there is left out |
 | `feedback` (OP-166): each note a visitor sent from the Feedback form, as the room server keeps it | `game.feedback`, for the owner's morning feedback run; one already there is skipped |
 | `purchase` (OP-192): ticket events from the Worker: an order paid, its tickets put on an owl (claim link or the gate's checkout), refunded, cancelled, and a ticket's first scan | `game.fact_purchase`; one already there (by its event id) is skipped |
+| `room_stay` (OP-265): live, as it happens: an owl came into a room (`enter`), or its stay there ended (`leave`, with why) | `game.room_stay`, one row per stay; `game.apply_room_stays` applies them in order, an enter closing the visit's open stay and opening its own in one transaction |
+| `quest_progress` (OP-266): live, as it happens: a step of a quest an owl took began (`start`), or ended (`end`, with how: done, abandoned, expired, retired) | `game.quest_progress`, one row per owl's step of one run; `game.apply_quest_progress` applies them in order, a start closing the run's open step |
+| `play_event` (OP-304): live, as it happens: a parkour run begun, a bench or part reached for the first time in the run, a fall (with where, to 10 px), the run cleared (with its time), and a thing used (a leaf pile, a stall) | `game.play_event`, one row per event; one already there (by its event id) is skipped |
+| `quest_catalogue` (OP-266): every quest and every step of each, handing in included, whenever a deploy changes them | `game.dim_quest` and `game.dim_quest_step` by `game.set_quest_catalogue`; one no longer listed stays, marked `in_catalogue = false` |
 | `contact` (OP-192): a paid order's buyer, read from the store by the Worker and sent straight on | `contacts.contact` and `contacts.contact_order`, the owner's own schema, never a `game` table; each order once |
 
 Two views read them (`sql/collect.sql`):
@@ -72,6 +76,22 @@ logs above with the ticket events:
   last seen longer ago than `keep` (90 days by default, never under 30): their visits, rooms,
   collections and versions; their notes stay. Not scheduled: the owner runs it, or schedules it.
 
+Room stays (OP-265, `sql/room_stays.sql`), live where `game.fact_realm_visit` waits for the visit's end:
+
+- `game.room_stay`, one row per owl's stay in one room: `entered_at`, `left_at` (null while the owl is
+  there, so the open row is its room now), `entry_source` (walked, spawn, deep_link, travel) and
+  `exit_reason`: `moved` (another room), `logoff` (the page closed the connection and the owl did not
+  come back within the three-minute grace), `timeout` (the line dropped or went quiet and did not come
+  back), `server_restart` (the nightly restart). A line that drops and comes back into the same room
+  continues the stay. One open row per visit: an owl with two tabs open is two visits.
+- `game.v_room_occupancy_now`: owls in each room now, by park.
+- `game.prune_room_stays()`, daily at 10:30 UTC by pg_cron (`sql/room_stays_retention.sql`): closes
+  a stay left open over a day (a lost event) as a timeout, then deletes the stays that ended more
+  than 90 days ago. Nothing is counted up first: for 90 days every stay keeps its owl, room and times,
+  so paths through the park can be studied (where owls go after the market), and then it is gone. It
+  replaced the hourly rollup (`game.room_stay_hourly`) and the daily one before it, neither of which
+  ever held a row.
+
 A visit is one page load: it begins at the owl's first hello in a room, the room object's minute
 heartbeat and each socket's close say it is still going, and it ends when it was last seen, once it
 has been quiet for three minutes (moving between rooms keeps it going). Its `session_id` is the one
@@ -84,6 +104,41 @@ visit's rooms follow one another without a gap or an overlap, so their minutes a
 another room of the visit: a door, the way out, the turnstile, Go home), `spawn` (the visit's first
 room from Play: the owl's own nest, or the lobby), `deep_link` (the visit's first room named by the
 page's address) or `reconnect`. Visits from before OP-113 have no rooms; nothing is made up for them.
+
+Quest progress (OP-266, `sql/quest_progress.sql`), beside the room stays, for models of where an owl
+goes next:
+
+- `game.dim_quest`, every quest the park has offered: its giver and the giver's room, type,
+  difficulty, length, cadence (story, daily, weekly, monthly), template, number of steps, reward,
+  the quests it needs first, and its puzzle. Kept for good.
+- `game.dim_quest_step`, each step of each quest from 1: what it asks (talk, visit, interact, emote,
+  gather, puzzle) and the room it happens in, the NPC, the thing (leaf-pile, acorn, an emote, a
+  puzzle's id) and how many; the last step is `hand_in`, at the giver's room. Kept for good.
+- `game.quest_progress`, one row per owl's step of one run of a quest (a run is one acceptance, so
+  a quest given up and taken again is a new run): `started_at` and the visit and room it began in,
+  `expires_at` (the end of its day, week or month; null for story quests), `completed_at` and the
+  visit and room it ended in, and `outcome`: `done`, `abandoned`, `expired`, `retired`. The open row
+  is the step the owl is on now. Joins `game.room_stay` on `collector_id` and time, or the visit.
+  Counts within a step (2 of 3 leaf piles) are not sent, and nothing of a puzzle's run ever is.
+- `game.v_quest_step_now`: each owl's open steps with the room each happens in; `game.v_quest_run`:
+  each run whole (accepted, handed in, steps done, how it ended).
+- `game.prune_quest_progress()`, daily at 10:35 UTC by pg_cron: closes steps open past their
+  `expires_at` as expired (the park only notices when the owl's quests are next read), then deletes
+  rows that ended, or began and never ended, more than 90 days ago.
+
+Play events (OP-304, `sql/play_events.sql`), for what the stays and quest steps do not show: where
+owls quit, fall or get lost:
+
+- `game.play_event`, one row per thing an owl did in play: `course_start`, `course_bench` and
+  `course_part` (a bench or part reached for the first time in the run), `course_fall` (with
+  `pos_x` and `pos_y`, the room's pixels to 10 px: the only events that keep a position),
+  `course_clear` (with `ms`, the run's time) and `interact` (a thing used, as `thing` kind:id).
+  Every step of one run shares its `run_id`; `practice` marks a spectator's. The Worker caps each owl
+  at 60 a minute. Joins `game.room_stay` on `collector_id` and time, or the visit.
+- `game.v_course_run`: each run whole (falls, benches, parts, the room it was last in) and its
+  outcome: `cleared`, `open` (under the hour a run lasts) or `quit`. `game.v_session_end`: each visit
+  that is over, with the room it was last in and how it ended.
+- `game.prune_play_events()`, daily at 10:40 UTC by pg_cron: deletes events more than 90 days old.
 
 ## What a row holds, and what it never holds
 
@@ -108,6 +163,9 @@ salted uuid), the owl as `collector_id` (claimed and scanned only), when it happ
 kind, a count of tickets, cents (what the order came to, or what a refund sent back), whether it was
 the pass offered after a ticket, whether it was held, how a claim came (claim or checkout), and when a
 scanned ticket runs out.
+
+A room stay holds its own id, the visit's `session_id`, the `collector_id`, the room's neutral id and
+its kind, the park, its times, how the owl came in and why it left: never where in the room it stood.
 
 Never a name, email, order number, ticket id, pass, IP address or browser description in a `game`
 table: the park sends none, and the function takes only these fields and checks each one, leaving
@@ -143,6 +201,17 @@ outward to the buyer, never the buyer into a `game` table.
    so the function goes first; it takes a visit without `visitor_kind` as before (null). A function
    deployed before the migration fails every visit (no `visitor_kind` column), and the Worker sends
    them again later, so the migration goes first of all.
+   OP-265 adds `sql/room_stays.sql` as `game_room_stays` (it turns on pg_cron and schedules the daily
+   rollup). Order: the migration, then the function deployed again, then the Worker: a function from
+   before it refuses `room_stay` as a kind it does not know, and the Worker drops a refused batch for good.
+   Then `sql/room_stays_hourly.sql` as `game_room_stays_hourly`: the hourly rollup in place of the
+   daily one (it stops if the daily table ever held a row). Database only: no function or Worker change.
+   Then `sql/room_stays_retention.sql` as `game_room_stays_retention`: no rollup, stays deleted 90 days
+   after they end (it stops if the hourly table ever held a row). Database only.
+   OP-113 and OP-107 let realm visits, collection events and mirrored keeper feedback retain neutral
+   room ids such as `m3-hall` and `trail-1`. Apply `sql/realm_room_slugs.sql` before deploying the log
+   function, then deploy the Worker so the Great Hollow counts with the tree (`map_id = 2`), as
+   the client already reports map 3. Previously skipped rows stay missing and old rows are untouched.
 2. `src/index.ts` and `src/handler.ts` deployed as the function `owl-park-log` with the platform's
    JWT check off (the function checks the park's key itself): through Supabase's API, or with the
    Supabase CLI from a folder `supabase/functions/owl-park-log/` holding the two files,
@@ -177,6 +246,27 @@ The platform gives the function `SUPABASE_DB_URL`, whose `postgres` role owns th
 with no policies, and no grants to the API's roles, so only that connection, and the owner's own
 queries, reach them. The fraud tables are never touched. Each batch goes to the
 database as one JSON parameter, so nothing the park sends is ever part of a query.
+
+### Quest progress (OP-266)
+
+`sql/quest_progress.sql` as `game_quest_progress`, after `game_room_stays` (pg_cron on). Order: the
+migration, then the function deployed again, then the Worker: a function from before it refuses
+`quest_progress` as a kind it does not know, and the Worker drops a refused batch for good (the quest
+catalogue is sent again each round until it is taken, so it is never lost).
+
+### Play events (OP-304)
+
+`sql/play_events.sql` as `game_play_events`, after `game_quest_progress` (pg_cron on). Order: the
+migration, then the function deployed again, then the Worker: a function from before it refuses
+`play_event` as a kind it does not know, and the Worker drops a refused batch for good.
+
+### Test visits (Nov 10)
+
+`sql/test_visits.sql` as `game_test_visits`: `is_test` on each visit (our own scripted checks, bots and
+QA walks, marked by the page or a headless browser's user agent) and the view `game.v_player_session`
+(visits without them), which the morning report and the visitor dashboard count. Order: the migration,
+then the function deployed again, then the Worker. A function before it drops the Worker's `is_test` and
+keeps the visit as a player's; a function deployed before the migration fails every visit.
 
 ## Tests
 

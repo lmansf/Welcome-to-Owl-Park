@@ -9,7 +9,8 @@
  *   GET  /state           the settings, whether the line is in front of the park, its pace, the count
  *   POST /settings        {line?, ribbon?, copy?: {room, n, state}, realms?: {open?, portal?, night?}, setup?: {on?, words?}}: the keepers' changes
  *                         (`realms` is the stained-glass climb's switch, designs/the-stained-glass-climb.md)
- *   POST /line/join       {who}: a number in the line (its turn at once while a place is free), or go when there is no line
+ *   POST /line/join       {who, addr?}: a number in the line (its turn at once while a place is free), go when there is
+ *                         no line, or full when addr (the address's key) holds LINE_PER_ADDRESS numbers already (OP-244)
  *   POST /line/status     {n, who}: where that number stands; a called number takes its turn
  *   GET  /notice          the ribbon's words, the realms switch and the setup switch now (for the room objects)
  *   GET  /masks/<room>    a tree room's ledge draft as a keeper last saved it (OP-156), or 404
@@ -25,6 +26,7 @@ import { DurableObject } from 'cloudflare:workers';
 import {
   COPY_MAX,
   LINE_DEFAULTS,
+  LINE_PER_ADDRESS,
   RIBBON_DEFAULTS,
   lineRate,
   ribbonNow,
@@ -88,7 +90,7 @@ export interface OverflowState {
 }
 
 /** The overflow object's answer to a line request, before the Worker adds the entry. */
-export type LineAnswer = { state: 'go' } | { state: 'waiting'; n: number; place: number; waitMin: number | null } | { state: 'called'; n: number; holdUntil: number } | { state: 'expired' };
+export type LineAnswer = { state: 'go' } | { state: 'waiting'; n: number; place: number; waitMin: number | null } | { state: 'called'; n: number; holdUntil: number } | { state: 'expired' } | { state: 'full' };
 
 class Settings {
   constructor(private readonly sql: SqlStorage) {
@@ -177,6 +179,7 @@ export class Overflow extends DurableObject<Env> {
     this.log = loggerFor(env);
     this.settings = new Settings(ctx.storage.sql);
     this.line = new Line(ctx.storage.sql);
+    ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS client_error_minutes (minute INTEGER PRIMARY KEY, count INTEGER NOT NULL)');
   }
 
   private holdMs(): number {
@@ -333,6 +336,22 @@ export class Overflow extends DurableObject<Env> {
   override async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const now = Date.now();
+    if (url.pathname === '/client-error') {
+      // One row per minute. Remove expired bins on the next write.
+      const minute = Math.floor(now / 60_000);
+      const oldest = minute - 1439;
+      const sql = this.ctx.storage.sql;
+      if (request.method === 'POST') {
+        sql.exec('DELETE FROM client_error_minutes WHERE minute < ?', oldest);
+        sql.exec('INSERT INTO client_error_minutes (minute, count) VALUES (?, 1) ON CONFLICT(minute) DO UPDATE SET count = count + 1', minute);
+        return new Response(null, { status: 204 });
+      }
+      if (request.method === 'GET') {
+        const row = sql.exec<{ count: number }>('SELECT COALESCE(SUM(count), 0) AS count FROM client_error_minutes WHERE minute >= ?', oldest).toArray()[0];
+        return Response.json({ count: row?.count ?? 0 });
+      }
+      return new Response(null, { status: 405 });
+    }
     if (url.pathname === '/state') return Response.json(await this.state(now));
     if (url.pathname === '/notice') return Response.json({ words: ribbonNow(this.settings.ribbon(), await this.isActive(now, false)), realms: this.settings.realms(), setup: this.settings.setup() });
     if (url.pathname.startsWith('/masks/')) return this.masks(request, url.pathname.slice('/masks/'.length), now);
@@ -392,13 +411,27 @@ export class Overflow extends DurableObject<Env> {
       return Response.json(st);
     }
 
+    if (url.pathname === '/full') {
+      // A room just turned a newcomer away as full (OP-322): count the park now rather than by a count
+      // up to COUNT_FRESH_MS old, and say whether the line takes arrivals, so the room sends the
+      // newcomer to wait in it instead of telling it the room is full.
+      const s = this.settings.line();
+      if (s.mode === 'auto') await this.freshCount(now, true);
+      return Response.json({ line: await this.isActive(now, false) });
+    }
+
     const who = body['who'];
     if (typeof who !== 'string' || who.length < 3 || who.length > 40) return Response.json({ error: 'bad request' }, { status: 400 });
     if (url.pathname === '/line/join') {
       if (!(await this.isActive(now))) return Response.json({ state: 'go' } satisfies LineAnswer);
       // A number taken just now, or the one this browser already held (a page loaded again).
       const again = this.line.held(who, now, this.holdMs()) !== null;
-      const n = this.line.join(who, now, this.holdMs());
+      const addr = typeof body['addr'] === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(body['addr']) ? body['addr'] : null;
+      const n = this.line.join(who, now, this.holdMs(), addr);
+      if (n === null) {
+        this.log.warn('room.queue', 'queue_refused', 'An address that holds its share of numbers in the line asked for another, and was told to ask later.', { who_hash: hashForLog(who), reason: 'address', limit: LINE_PER_ADDRESS });
+        return Response.json({ state: 'full' } satisfies LineAnswer);
+      }
       this.log.info('room.queue', 'queue_enter', 'An owl arrived while the line is in front of the park, and holds a number.', { n, who_hash: hashForLog(who), again, waiting: this.line.waiting() });
       // A place may be free already: the line moves before answering, and a newcomer called at once takes its turn now.
       await this.step(now);

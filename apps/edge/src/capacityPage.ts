@@ -9,10 +9,15 @@
  * the realms switch as `realms.tree` (0 to 100; 0, as deployed, keeps the tree dark).
  *
  * Closed for setup (OP-205): the whole park shut while the keepers set something up, and open again
- * with the same card, kept as `setup` ({on, words}). On, every owl in a room goes to the home screen,
- * which shows the closed card's words over Play, and Play lets no one back in; an owl on a keeper's
- * token still walks in. An owl in its own nest goes within a minute. Off, Play works again at once
+ * with the same card, kept as `setup` ({on, words, reopenAt}). On, every owl in a room goes to the home
+ * screen, which shows the closed card in place of Play (OP-233, read from GET /api/closed), so no one
+ * walks back in; an owl on a keeper's token still does. An owl in its own nest goes within a minute. Off, Play works again at once
  * in the rooms, and within a minute in the nests.
+ *
+ * The reopen time (OP-233): an optional time, in the keeper's own time zone on this page, kept as
+ * `setup.reopenAt` (milliseconds since 1970, or null). The home screen's closed card shows it in each
+ * visitor's own time zone; opening the park clears it.
+ * TODO-DOCS (OP-233): docs/CAPACITY.md gains the reopen time and `{"setup": {"reopenAt": <ms> | null}}`.
  * TODO-DOCS (OP-205): docs/CAPACITY.md gains the setup card and `{"setup": {"on": true, "words": "..."}}`,
  * and docs/PLAYBOOK.md the setup hour's steps (the ribbon first, then the switch, the keeper's walk, and off).
  */
@@ -27,6 +32,7 @@ section.card strong{color:var(--ink)}
 label{display:flex;gap:8px;align-items:center;color:var(--dim)}
 label input{flex:0 1 110px}
 #words,#setup-words{flex:1 1 280px}
+#setup-reopen{flex:0 1 220px}
 #setup-card[data-on="true"]{border-color:#e07a5f}
 table{width:100%;border-collapse:collapse;margin:0 0 6px}
 th,td{text-align:left;padding:6px 4px;border-bottom:1px solid var(--line);vertical-align:middle}
@@ -62,9 +68,17 @@ function lineText(s) {
   return 'Every new owl goes through the line, which lets owls in while the park holds fewer than ' + l.threshold + '. ' + inLine + '.' + pace + counted;
 }
 
+/** A time as a datetime-local field holds it: this browser's own time zone, to the minute. */
+function localInput(ms) {
+  const d = new Date(ms);
+  const p = (n) => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
 function show(s) {
   now = s;
   $('#line-state').textContent = lineText(s);
+  $('#client-errors').textContent = Number.isFinite(s.clientErrors24h) ? String(s.clientErrors24h) : 'Unavailable';
   for (const b of document.querySelectorAll('[data-line]')) b.setAttribute('aria-pressed', String(b.dataset.line === s.line.mode));
   if (document.activeElement !== $('#threshold')) $('#threshold').value = s.line.threshold;
   if (document.activeElement !== $('#hold')) $('#hold').value = s.line.holdMin;
@@ -72,14 +86,16 @@ function show(s) {
   $('#ribbon-state').textContent = s.ribbon.on ? 'On for everyone: "' + words + '"' : (s.active ? 'On by itself while the line is: "' + words + '"' : 'Off.');
   for (const b of document.querySelectorAll('[data-ribbon]')) b.setAttribute('aria-pressed', String((b.dataset.ribbon === 'on') === s.ribbon.on));
   if (document.activeElement !== $('#words')) $('#words').value = s.ribbon.words || '';
-  // Closed for setup (OP-205).
-  const st = s.setup || { on: false, words: null };
+  // Closed for setup (OP-205), and the time the keepers expect to open (OP-233).
+  const st = s.setup || { on: false, words: null, reopenAt: null };
+  const back = st.reopenAt ? ' Back by ' + new Date(st.reopenAt).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }) + '.' : '';
   $('#setup-card').dataset.on = String(!!st.on);
   $('#setup-state').textContent = st.on
-    ? 'Closed for setup: every owl is on the home screen, which says "' + (st.words || $('#setup-words').placeholder) + '". Only keepers walk in.'
-    : 'Open: the park takes owls as usual.';
+    ? 'Closed for setup: every owl is on the home screen, which says "' + (st.words || $('#setup-words').placeholder) + '" and shows no Play.' + back + ' Only keepers walk in.'
+    : 'Open: the park takes owls as usual.' + (back ? ' When you close it, the closed card says:' + back : '');
   for (const b of document.querySelectorAll('[data-setup]')) b.setAttribute('aria-pressed', String((b.dataset.setup === 'on') === !!st.on));
   if (document.activeElement !== $('#setup-words')) $('#setup-words').value = st.words || '';
+  if (document.activeElement !== $('#setup-reopen')) $('#setup-reopen').value = st.reopenAt ? localInput(st.reopenAt) : '';
   const room = s.sharding === 'room';
   $('#copies-note').textContent = room
     ? 'One object per room: a room can open copies. New owls go to the copy with the most free places; a draining copy takes none, and closes once empty.'
@@ -174,6 +190,14 @@ for (const b of document.querySelectorAll('[data-setup]')) b.addEventListener('c
   change({ setup: { on } }, on ? 'Closed. Owls in the rooms go home at once, and owls in their nests within a minute.' : 'Open again. Play works at once in the rooms, and within a minute in the nests.');
 });
 $('#setup-words-save').addEventListener('click', () => change({ setup: { words: $('#setup-words').value } }, 'Saved.'));
+$('#setup-reopen-save').addEventListener('click', () => {
+  const v = $('#setup-reopen').value;
+  const at = v ? new Date(v).getTime() : NaN;
+  if (!Number.isFinite(at)) return say('Pick a day and a time first, or Clear time.');
+  if (at <= Date.now()) return say('That time has passed: pick one still to come.');
+  change({ setup: { reopenAt: at } }, 'Saved. The closed card shows it in each owl\u2019s own time zone.');
+});
+$('#setup-reopen-clear').addEventListener('click', () => change({ setup: { reopenAt: null } }, 'Cleared: the closed card gives no time.'));
 $('#realms-save').addEventListener('click', () => {
   const open = [...document.querySelectorAll('[data-realm]')].filter((c) => c.checked).map((c) => c.dataset.realm);
   const night = $('#night').value || null;
@@ -206,6 +230,7 @@ function html(nonce: string, ribbonWords: string): string {
 <body>
 <main>
 <h1>Owl Park capacity</h1>
+<p>Browser error reports in the last 24 hours: <strong id="client-errors">—</strong></p>
 <p class="lede">Busy nights: the line, the busy ribbon and copies of rooms; the realms switch; and closing the park for setup. No deploy needed. When to use which: docs/CAPACITY.md.</p>
 <form id="key">
 <input type="password" name="key" autocomplete="current-password" placeholder="Admin key" aria-label="Admin key" required>
@@ -221,6 +246,13 @@ function html(nonce: string, ribbonWords: string): string {
 <div class="tabs">
 <input id="setup-words" maxlength="90" placeholder="${SETUP_WORDS.replace(/"/g, '&quot;')}" aria-label="The closed card's words (empty: its own)">
 <button id="setup-words-save">Save words</button>
+</div>
+<p></p>
+<div class="tabs">
+<label for="setup-reopen">Back by (optional, your time)</label>
+<input id="setup-reopen" type="datetime-local">
+<button id="setup-reopen-save">Save time</button>
+<button id="setup-reopen-clear">Clear time</button>
 </div>
 </section>
 <section class="card" aria-labelledby="line-h">

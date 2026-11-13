@@ -8,13 +8,17 @@
  * files fall back to generated placeholders and never stop the park.
  */
 import Phaser from 'phaser';
-import { FURNITURE, isArcadeRoom, ROOM_H, ROOM_W, backgroundTiles, foregroundTiles, isNestRoom, type RoomDef, type SpeciesId } from '@owl-park/shared';
+import { EDGE_ART, FURNITURE, KIT_ART, edgePlaceholder, kitDrawPlan, kitFrames, isArcadeRoom, kitFilesOf, ROOM_H, ROOM_W, backgroundTiles, foregroundTiles, idolRealms, interactablesIn, isNestRoom, kitArtKeys, kitPlaceholder, seenFromSide, type RoomDef, type SpeciesId } from '@owl-park/shared';
 import { GAME_ART } from '../arcade/paint';
 import type { ParkConfig } from '../config';
-import { ROOMS, TREE_GROUND, roomFor } from '../rooms';
+import { COURSES, ROOMS, TREE_GROUND, roomFor } from '../rooms';
 import { DENSE_SCALE, FLIGHT_LAYERS, OWL_LAYERS, SPECIES_FLIGHT_LAYERS, SPECIES_LAYERS, isFlightLayer, isSpeciesLayer, rasterCandidates, rasterNames, roomScaleCap } from './artFiles';
 import { ART_BYTES, PUBLISHED_ART, versioned } from './publishedArt';
+import { drawKitOps } from './kitView';
 import { loadSvgTexture } from './svgLoader';
+import { boxable, paintSizeBox } from './sizeBoxes';
+import { fitTrialArt, setTrialBackdropVeil, trialFilesOf, updraftBitsKey } from './skinTrial';
+import { allLookKeys } from './artLooks';
 
 export const ART_PATH = 'art/';
 export const OWL_W = 200;
@@ -23,12 +27,36 @@ export const OWL_H = 240;
 export const WING_W = 200;
 export const WING_H = 120;
 
+let sizeBoxes = false;
+
+/** Size boxes for this page (`?sizes=1`, sizeBoxes.ts): the map's art is drawn as boxes of its sizes in place of its files. */
+export function useSizeBoxes(on: boolean): void {
+  sizeBoxes = on;
+}
+
+let skin: string | null = null;
+
+/** A skin trial for this page (`?skin=<name>`, skinTrial.ts): the realm slots it has files for draw from them. */
+export function useSkinTrial(name: string | null): void {
+  skin = name;
+  setTrialBackdropVeil(!!name);
+}
+
+/** The key whose files a key's art loads from: a skin trial's when this page draws one for it, else kitFilesOf's. */
+function filesOf(key: string, published: ReadonlyMap<string, string> = PUBLISHED_ART): string {
+  return trialFilesOf(key, skin, published) ?? kitFilesOf(key);
+}
+
 /**
  * `arcade`: the arcade's own art, its title signs and its games' paintings. Drawn sharp (a game fills
  * the screen), and never given a placeholder: the arcade draws its neon stand-in for anything missing.
  * `climb`: the stained-glass climb's tower pieces, the same way; the climb draws glass of its own until they come.
+ * `kit`: the art kit's textures, shape pieces and backdrops (OP-234, kitArt.ts), each standing in as its
+ * placeholder in the tree's palette until its art ships.
+ * `edge`: the pieces that shape a room's edges seen from above (edges.ts): roots, ferns, pillars, leaf
+ * litter and the rim, each standing in as plain shapes until its art ships.
  */
-export type ArtKind = 'room' | 'piece' | 'owl' | 'arcade' | 'climb';
+export type ArtKind = 'room' | 'piece' | 'owl' | 'arcade' | 'climb' | 'texture' | 'layer' | 'kit' | 'edge';
 
 export interface ArtSpec {
   w: number;
@@ -278,15 +306,668 @@ export const ART: Record<string, ArtSpec> = {
   'owl-screech-flight-body': { w: OWL_W, h: OWL_H, kind: 'owl' },
   'owl-screech-flight-belly': { w: OWL_W, h: OWL_H, kind: 'owl' },
   'owl-screech-flight-accent': { w: OWL_W, h: OWL_H, kind: 'owl' },
+  // The art kit (OP-229, tools/art/config/kit.json): seamless 512 x 512 textures the level assembler tiles, and the keyed props cut from its shape sheets.
+  'kit-tex-bark': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-inner-wood': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-planks': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-moss': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-leaves': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-rope': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-stone': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-earth': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-roots': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-cloth': { w: 512, h: 512, kind: 'texture' },
+  'kit-branch-cap-left': { w: 160, h: 120, kind: 'piece' },
+  'kit-branch-mid': { w: 320, h: 120, kind: 'piece' },
+  'kit-branch-cap-right': { w: 160, h: 120, kind: 'piece' },
+  'kit-branch-thin-cap-left': { w: 160, h: 60, kind: 'piece' },
+  'kit-branch-thin-mid': { w: 320, h: 60, kind: 'piece' },
+  'kit-branch-thin-cap-right': { w: 160, h: 60, kind: 'piece' },
+  'kit-branch-slope-up': { w: 320, h: 200, kind: 'piece' },
+  'kit-branch-slope-down': { w: 320, h: 200, kind: 'piece' },
+  'kit-branch-stub': { w: 160, h: 120, kind: 'piece' },
+  'kit-branch-knob': { w: 160, h: 160, kind: 'piece' },
+  'kit-branch-fork': { w: 320, h: 200, kind: 'piece' },
+  'kit-branch-wide': { w: 320, h: 160, kind: 'piece' },
+  'kit-plank-cap-left': { w: 160, h: 120, kind: 'piece' },
+  'kit-plank-mid': { w: 320, h: 120, kind: 'piece' },
+  'kit-plank-cap-right': { w: 160, h: 120, kind: 'piece' },
+  'kit-plank-thin-cap-left': { w: 160, h: 60, kind: 'piece' },
+  'kit-plank-thin-mid': { w: 320, h: 60, kind: 'piece' },
+  'kit-plank-thin-cap-right': { w: 160, h: 60, kind: 'piece' },
+  'kit-plank-slope-up': { w: 320, h: 200, kind: 'piece' },
+  'kit-plank-slope-down': { w: 320, h: 200, kind: 'piece' },
+  'kit-plank-single': { w: 160, h: 120, kind: 'piece' },
+  'kit-plank-railed-mid': { w: 320, h: 200, kind: 'piece' },
+  'kit-plank-bridge-mid': { w: 320, h: 200, kind: 'piece' },
+  'kit-plank-end-post': { w: 160, h: 200, kind: 'piece' },
+  'kit-stone-cap-left': { w: 160, h: 120, kind: 'piece' },
+  'kit-stone-mid': { w: 320, h: 120, kind: 'piece' },
+  'kit-stone-cap-right': { w: 160, h: 120, kind: 'piece' },
+  'kit-stone-thin-cap-left': { w: 160, h: 60, kind: 'piece' },
+  'kit-stone-thin-mid': { w: 320, h: 60, kind: 'piece' },
+  'kit-stone-thin-cap-right': { w: 160, h: 60, kind: 'piece' },
+  'kit-stone-slope-up': { w: 320, h: 200, kind: 'piece' },
+  'kit-stone-slope-down': { w: 320, h: 200, kind: 'piece' },
+  'kit-stone-single': { w: 160, h: 120, kind: 'piece' },
+  'kit-stone-mossy-mid': { w: 320, h: 200, kind: 'piece' },
+  'kit-stone-step': { w: 160, h: 120, kind: 'piece' },
+  'kit-stone-ledge-end': { w: 160, h: 200, kind: 'piece' },
+  'kit-trim-moss-a': { w: 320, h: 80, kind: 'piece' },
+  'kit-trim-moss-b': { w: 320, h: 80, kind: 'piece' },
+  'kit-trim-grass': { w: 320, h: 80, kind: 'piece' },
+  'kit-trim-moss-hanging': { w: 320, h: 160, kind: 'piece' },
+  'kit-trim-leaves': { w: 320, h: 160, kind: 'piece' },
+  'kit-trim-roots': { w: 320, h: 160, kind: 'piece' },
+  'kit-trim-plank-edge': { w: 320, h: 80, kind: 'piece' },
+  'kit-trim-stone-edge': { w: 320, h: 80, kind: 'piece' },
+  'kit-trim-bark-edge': { w: 320, h: 80, kind: 'piece' },
+  'kit-trim-rope': { w: 320, h: 60, kind: 'piece' },
+  'kit-lantern-string-3': { w: 320, h: 160, kind: 'piece' },
+  'kit-lantern-string-5': { w: 320, h: 160, kind: 'piece' },
+  'kit-stair-wood-right': { w: 400, h: 300, kind: 'piece' },
+  'kit-stair-wood-left': { w: 400, h: 300, kind: 'piece' },
+  'kit-stair-stone-right': { w: 400, h: 300, kind: 'piece' },
+  'kit-stair-stone-left': { w: 400, h: 300, kind: 'piece' },
+  'kit-step-wood': { w: 200, h: 100, kind: 'piece' },
+  'kit-step-stone': { w: 200, h: 100, kind: 'piece' },
+  'kit-stair-spiral': { w: 400, h: 300, kind: 'piece' },
+  'kit-ladder-wood': { w: 160, h: 400, kind: 'piece' },
+  'kit-ladder-rope': { w: 160, h: 400, kind: 'piece' },
+  'kit-stair-rail-right': { w: 400, h: 300, kind: 'piece' },
+  'kit-stair-rail-left': { w: 400, h: 300, kind: 'piece' },
+  'kit-landing': { w: 400, h: 160, kind: 'piece' },
+  'kit-door-round-closed': { w: 240, h: 320, kind: 'piece' },
+  'kit-door-round-open': { w: 240, h: 320, kind: 'piece' },
+  'kit-door-plank': { w: 240, h: 320, kind: 'piece' },
+  'kit-doorway-stone': { w: 240, h: 320, kind: 'piece' },
+  'kit-doorway-knothole': { w: 240, h: 320, kind: 'piece' },
+  'kit-hatch-down': { w: 240, h: 120, kind: 'piece' },
+  'kit-arch-portal-bare': { w: 360, h: 420, kind: 'piece' },
+  'kit-arch-portal-boarded': { w: 360, h: 420, kind: 'piece' },
+  'kit-arch-portal-open': { w: 360, h: 420, kind: 'piece' },
+  'kit-arch-small': { w: 240, h: 280, kind: 'piece' },
+  'kit-arch-top': { w: 360, h: 160, kind: 'piece' },
+  'kit-arch-pillar': { w: 120, h: 420, kind: 'piece' },
+  'kit-gate-locked': { w: 300, h: 240, kind: 'piece' },
+  'kit-barrier-rope': { w: 300, h: 240, kind: 'piece' },
+  'kit-barrier-branch': { w: 300, h: 240, kind: 'piece' },
+  'kit-barrier-boards': { w: 300, h: 320, kind: 'piece' },
+  'kit-post-lantern': { w: 120, h: 300, kind: 'piece' },
+  'kit-rope-coil': { w: 160, h: 120, kind: 'piece' },
+  'kit-fence-section': { w: 300, h: 240, kind: 'piece' },
+  'kit-fence-post': { w: 80, h: 240, kind: 'piece' },
+  'kit-wall-low-stone': { w: 300, h: 240, kind: 'piece' },
+  'kit-hedge': { w: 300, h: 240, kind: 'piece' },
+  'kit-log-pile': { w: 300, h: 240, kind: 'piece' },
+  'kit-boulder': { w: 300, h: 240, kind: 'piece' },
+  'kit-bench-wood': { w: 240, h: 160, kind: 'piece' },
+  'kit-bench-stone': { w: 240, h: 160, kind: 'piece' },
+  'kit-seat-log': { w: 240, h: 160, kind: 'piece' },
+  'kit-stool': { w: 120, h: 120, kind: 'piece' },
+  'kit-table-round': { w: 240, h: 160, kind: 'piece' },
+  'kit-table-long': { w: 320, h: 160, kind: 'piece' },
+  'kit-shelf-goods': { w: 240, h: 300, kind: 'piece' },
+  'kit-shelf-empty': { w: 240, h: 300, kind: 'piece' },
+  'kit-crate-stack': { w: 240, h: 300, kind: 'piece' },
+  'kit-barrel': { w: 160, h: 200, kind: 'piece' },
+  'kit-sack-pile': { w: 240, h: 160, kind: 'piece' },
+  'kit-shelf-hanging': { w: 240, h: 160, kind: 'piece' },
+  'kit-signpost': { w: 160, h: 300, kind: 'piece' },
+  'kit-sign-hanging': { w: 240, h: 200, kind: 'piece' },
+  'kit-sign-arrow': { w: 240, h: 200, kind: 'piece' },
+  'kit-notice-board': { w: 240, h: 300, kind: 'piece' },
+  'kit-lamp-post': { w: 160, h: 400, kind: 'piece' },
+  'kit-lamp-hook': { w: 160, h: 160, kind: 'piece' },
+  'kit-stall-awning': { w: 480, h: 400, kind: 'piece' },
+  'kit-stall-counter': { w: 480, h: 240, kind: 'piece' },
+  'kit-booth-ticket': { w: 480, h: 400, kind: 'piece' },
+  'kit-turnstile': { w: 240, h: 300, kind: 'piece' },
+  'kit-stall-roof': { w: 480, h: 200, kind: 'piece' },
+  'kit-cart': { w: 480, h: 400, kind: 'piece' },
+  // Top-up G2b (OP-240): slopes, crests and dips in four materials, one sheet each, joining the core caps and mids at their edge heights.
+  'kit-branch-slope-gentle-up': { w: 320, h: 160, kind: 'piece' },
+  'kit-branch-slope-gentle-down': { w: 320, h: 160, kind: 'piece' },
+  'kit-branch-slope-steep-up': { w: 320, h: 240, kind: 'piece' },
+  'kit-branch-slope-steep-down': { w: 320, h: 240, kind: 'piece' },
+  'kit-branch-crest': { w: 320, h: 180, kind: 'piece' },
+  'kit-branch-dip': { w: 320, h: 120, kind: 'piece' },
+  'kit-earth-slope-gentle-up': { w: 320, h: 160, kind: 'piece' },
+  'kit-earth-slope-gentle-down': { w: 320, h: 160, kind: 'piece' },
+  'kit-earth-slope-steep-up': { w: 320, h: 240, kind: 'piece' },
+  'kit-earth-slope-steep-down': { w: 320, h: 240, kind: 'piece' },
+  'kit-earth-crest': { w: 320, h: 180, kind: 'piece' },
+  'kit-earth-dip': { w: 320, h: 120, kind: 'piece' },
+  'kit-stone-slope-gentle-up': { w: 320, h: 160, kind: 'piece' },
+  'kit-stone-slope-gentle-down': { w: 320, h: 160, kind: 'piece' },
+  'kit-stone-slope-steep-up': { w: 320, h: 240, kind: 'piece' },
+  'kit-stone-slope-steep-down': { w: 320, h: 240, kind: 'piece' },
+  'kit-stone-crest': { w: 320, h: 180, kind: 'piece' },
+  'kit-stone-dip': { w: 320, h: 120, kind: 'piece' },
+  'kit-roots-slope-gentle-up': { w: 320, h: 160, kind: 'piece' },
+  'kit-roots-slope-gentle-down': { w: 320, h: 160, kind: 'piece' },
+  'kit-roots-slope-steep-up': { w: 320, h: 240, kind: 'piece' },
+  'kit-roots-slope-steep-down': { w: 320, h: 240, kind: 'piece' },
+  'kit-roots-crest': { w: 320, h: 180, kind: 'piece' },
+  'kit-roots-dip': { w: 320, h: 120, kind: 'piece' },
+  // The kit's area sets (OP-229): accent textures, props cut from their sheets, and backdrop layers that repeat sideways.
+  'kit-tex-entrance-shop-wood': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-entrance-plaza-stone': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-entrance-awning-cloth': { w: 512, h: 512, kind: 'texture' },
+  'kit-entrance-shop-shelf-hats': { w: 240, h: 300, kind: 'piece' },
+  'kit-entrance-shop-counter-glass': { w: 320, h: 200, kind: 'piece' },
+  'kit-entrance-shop-stand': { w: 160, h: 300, kind: 'piece' },
+  'kit-entrance-shop-gift-stack': { w: 160, h: 160, kind: 'piece' },
+  'kit-entrance-shop-banner-bare': { w: 240, h: 160, kind: 'piece' },
+  'kit-entrance-shop-lantern-cluster': { w: 160, h: 240, kind: 'piece' },
+  'kit-entrance-ticket-window': { w: 320, h: 300, kind: 'piece' },
+  'kit-entrance-turnstile-brass': { w: 240, h: 300, kind: 'piece' },
+  'kit-entrance-queue-posts': { w: 320, h: 160, kind: 'piece' },
+  'kit-entrance-welcome-mat': { w: 240, h: 80, kind: 'piece' },
+  'kit-entrance-easel-blank': { w: 160, h: 300, kind: 'piece' },
+  'kit-entrance-planter-tree': { w: 160, h: 300, kind: 'piece' },
+  'kit-entrance-plaza-bench': { w: 320, h: 160, kind: 'piece' },
+  'kit-entrance-bird-bath': { w: 200, h: 240, kind: 'piece' },
+  'kit-entrance-pennant-pole': { w: 120, h: 420, kind: 'piece' },
+  'kit-entrance-lantern-garland': { w: 480, h: 160, kind: 'piece' },
+  'kit-entrance-map-board': { w: 240, h: 300, kind: 'piece' },
+  'kit-entrance-stair-head': { w: 320, h: 240, kind: 'piece' },
+  'kit-entrance-sky-a': { w: 1600, h: 900, kind: 'layer' },
+  'kit-entrance-sky-b': { w: 1600, h: 900, kind: 'layer' },
+  'kit-hero-plaza-far-a': { w: 1600, h: 900, kind: 'layer' },
+  'kit-hero-plaza-mid-a': { w: 800, h: 450, kind: 'layer' },
+  'kit-hero-l4-far-a': { w: 1600, h: 900, kind: 'layer' },
+  'kit-entrance-far-a': { w: 1600, h: 900, kind: 'layer' },
+  'kit-entrance-far-b': { w: 1600, h: 900, kind: 'layer' },
+  'kit-entrance-mid-a': { w: 800, h: 450, kind: 'layer' },
+  'kit-entrance-mid-b': { w: 800, h: 450, kind: 'layer' },
+  'kit-entrance-mid-c': { w: 800, h: 450, kind: 'layer' },
+  'kit-tex-clearing-fern-floor': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-clearing-hollow-wood': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-clearing-leaf-canopy': { w: 512, h: 512, kind: 'texture' },
+  'kit-clearing-idol-pedestal': { w: 240, h: 200, kind: 'piece' },
+  'kit-clearing-hammock': { w: 320, h: 160, kind: 'piece' },
+  'kit-clearing-hut-small': { w: 320, h: 320, kind: 'piece' },
+  'kit-clearing-rope-swing': { w: 160, h: 320, kind: 'piece' },
+  'kit-clearing-mushroom-cluster': { w: 160, h: 120, kind: 'piece' },
+  'kit-clearing-fern-clump': { w: 200, h: 140, kind: 'piece' },
+  'kit-clearing-updraft-vent': { w: 240, h: 160, kind: 'piece' },
+  'kit-clearing-trunk-entrance': { w: 320, h: 400, kind: 'piece' },
+  'kit-clearing-fungus-shelf': { w: 240, h: 120, kind: 'piece' },
+  'kit-clearing-log-bridge': { w: 400, h: 120, kind: 'piece' },
+  'kit-clearing-vine-curtain': { w: 240, h: 320, kind: 'piece' },
+  'kit-clearing-beehive-lantern': { w: 120, h: 200, kind: 'piece' },
+  'kit-clearing-leaf-platform': { w: 320, h: 100, kind: 'piece' },
+  'kit-clearing-acorn-cap': { w: 160, h: 160, kind: 'piece' },
+  'kit-clearing-bough-end-perch': { w: 240, h: 200, kind: 'piece' },
+  'kit-clearing-cocoon-bare': { w: 160, h: 240, kind: 'piece' },
+  'kit-clearing-feather-lost': { w: 80, h: 120, kind: 'piece' },
+  'kit-clearing-finish-shrine': { w: 320, h: 320, kind: 'piece' },
+  'kit-clearing-sky-a': { w: 1600, h: 900, kind: 'layer' },
+  'kit-clearing-sky-b': { w: 1600, h: 900, kind: 'layer' },
+  'kit-clearing-far-a': { w: 1600, h: 900, kind: 'layer' },
+  'kit-clearing-far-b': { w: 1600, h: 900, kind: 'layer' },
+  'kit-clearing-mid-a': { w: 800, h: 450, kind: 'layer' },
+  'kit-clearing-mid-b': { w: 800, h: 450, kind: 'layer' },
+  'kit-clearing-mid-c': { w: 800, h: 450, kind: 'layer' },
+  'kit-tex-glass-glass-panes': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-glass-pale-stone': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-glass-lead-lattice': { w: 512, h: 512, kind: 'texture' },
+  'kit-glass-idol-pedestal': { w: 240, h: 200, kind: 'piece' },
+  'kit-glass-glass-lantern': { w: 120, h: 200, kind: 'piece' },
+  'kit-glass-stone-bench': { w: 320, h: 160, kind: 'piece' },
+  'kit-glass-rose-window': { w: 240, h: 240, kind: 'piece' },
+  'kit-glass-glass-planter': { w: 160, h: 200, kind: 'piece' },
+  'kit-glass-kiosk': { w: 320, h: 320, kind: 'piece' },
+  'kit-glass-lift-car': { w: 240, h: 320, kind: 'piece' },
+  'kit-glass-lift-rail': { w: 80, h: 400, kind: 'piece' },
+  'kit-glass-window-arch': { w: 240, h: 320, kind: 'piece' },
+  'kit-glass-buttress': { w: 160, h: 400, kind: 'piece' },
+  'kit-glass-glass-bridge': { w: 400, h: 120, kind: 'piece' },
+  'kit-glass-finial': { w: 120, h: 240, kind: 'piece' },
+  'kit-glass-door-glass-closed': { w: 240, h: 320, kind: 'piece' },
+  'kit-glass-door-glass-open': { w: 240, h: 320, kind: 'piece' },
+  'kit-glass-chandelier': { w: 240, h: 240, kind: 'piece' },
+  'kit-glass-feather-lost': { w: 80, h: 120, kind: 'piece' },
+  'kit-glass-finish-shrine': { w: 320, h: 320, kind: 'piece' },
+  'kit-glass-weathervane': { w: 160, h: 240, kind: 'piece' },
+  'kit-glass-sky-a': { w: 1600, h: 900, kind: 'layer' },
+  'kit-glass-sky-b': { w: 1600, h: 900, kind: 'layer' },
+  'kit-glass-far-a': { w: 1600, h: 900, kind: 'layer' },
+  'kit-glass-far-b': { w: 1600, h: 900, kind: 'layer' },
+  'kit-glass-mid-a': { w: 800, h: 450, kind: 'layer' },
+  'kit-glass-mid-b': { w: 800, h: 450, kind: 'layer' },
+  'kit-glass-mid-c': { w: 800, h: 450, kind: 'layer' },
+  'kit-tex-neon-neon-brick': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-neon-wet-pavement': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-neon-corrugated-tin': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-neon-lit-wall': { w: 512, h: 512, kind: 'texture' },
+  'kit-neon-idol-pedestal': { w: 240, h: 200, kind: 'piece' },
+  'kit-neon-noodle-stall': { w: 320, h: 320, kind: 'piece' },
+  'kit-neon-paper-lantern-string': { w: 400, h: 120, kind: 'piece' },
+  'kit-neon-vending-machine': { w: 160, h: 280, kind: 'piece' },
+  'kit-neon-neon-arrow-sign': { w: 240, h: 160, kind: 'piece' },
+  'kit-neon-robot-plinth': { w: 320, h: 160, kind: 'piece' },
+  'kit-neon-sign-platform': { w: 400, h: 120, kind: 'piece' },
+  'kit-neon-water-tank': { w: 240, h: 320, kind: 'piece' },
+  'kit-neon-air-unit': { w: 240, h: 160, kind: 'piece' },
+  'kit-neon-antenna-mast': { w: 120, h: 400, kind: 'piece' },
+  'kit-neon-fire-escape': { w: 240, h: 400, kind: 'piece' },
+  'kit-neon-rooftop-ledge': { w: 400, h: 120, kind: 'piece' },
+  'kit-neon-billboard-blank': { w: 400, h: 240, kind: 'piece' },
+  'kit-neon-satellite-dish': { w: 160, h: 160, kind: 'piece' },
+  'kit-neon-chimney-stack': { w: 160, h: 280, kind: 'piece' },
+  'kit-neon-skylight': { w: 240, h: 120, kind: 'piece' },
+  'kit-neon-feather-lost': { w: 80, h: 120, kind: 'piece' },
+  'kit-neon-finish-shrine': { w: 320, h: 320, kind: 'piece' },
+  'kit-neon-sky-a': { w: 1600, h: 900, kind: 'layer' },
+  'kit-neon-sky-b': { w: 1600, h: 900, kind: 'layer' },
+  'kit-neon-far-a': { w: 1600, h: 900, kind: 'layer' },
+  'kit-neon-far-b': { w: 1600, h: 900, kind: 'layer' },
+  'kit-neon-mid-a': { w: 800, h: 450, kind: 'layer' },
+  'kit-neon-mid-b': { w: 800, h: 450, kind: 'layer' },
+  'kit-neon-mid-c': { w: 800, h: 450, kind: 'layer' },
+  'kit-tex-ink-paper-grain': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-ink-ink-stone': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-ink-woven-reed': { w: 512, h: 512, kind: 'texture' },
+  'kit-ink-idol-pedestal': { w: 240, h: 200, kind: 'piece' },
+  'kit-ink-paper-lantern': { w: 120, h: 200, kind: 'piece' },
+  'kit-ink-tea-stall': { w: 320, h: 320, kind: 'piece' },
+  'kit-ink-scroll-stand': { w: 160, h: 280, kind: 'piece' },
+  'kit-ink-ink-bench': { w: 320, h: 160, kind: 'piece' },
+  'kit-ink-stone-lantern': { w: 160, h: 240, kind: 'piece' },
+  'kit-ink-brush-stone': { w: 160, h: 120, kind: 'piece' },
+  'kit-ink-paper-cliff': { w: 320, h: 400, kind: 'piece' },
+  'kit-ink-reed-tuft': { w: 120, h: 200, kind: 'piece' },
+  'kit-ink-bamboo-span': { w: 400, h: 120, kind: 'piece' },
+  'kit-ink-temple-eave': { w: 400, h: 200, kind: 'piece' },
+  'kit-ink-rock-pillar': { w: 160, h: 320, kind: 'piece' },
+  'kit-ink-moon-gate': { w: 320, h: 320, kind: 'piece' },
+  'kit-ink-easel-blank': { w: 200, h: 280, kind: 'piece' },
+  'kit-ink-ferry-raft': { w: 400, h: 160, kind: 'piece' },
+  'kit-ink-pine-bough': { w: 240, h: 200, kind: 'piece' },
+  'kit-ink-feather-lost': { w: 80, h: 120, kind: 'piece' },
+  'kit-ink-finish-shrine': { w: 320, h: 320, kind: 'piece' },
+  'kit-ink-sky-a': { w: 1600, h: 900, kind: 'layer' },
+  'kit-ink-sky-b': { w: 1600, h: 900, kind: 'layer' },
+  'kit-ink-far-a': { w: 1600, h: 900, kind: 'layer' },
+  'kit-ink-far-b': { w: 1600, h: 900, kind: 'layer' },
+  'kit-ink-mid-a': { w: 800, h: 450, kind: 'layer' },
+  'kit-ink-mid-b': { w: 800, h: 450, kind: 'layer' },
+  'kit-ink-mid-c': { w: 800, h: 450, kind: 'layer' },
+  'kit-clearing-thorn-roots': { w: 400, h: 120, kind: 'piece' },
+  'kit-clearing-bramble-patch': { w: 320, h: 160, kind: 'piece' },
+  'kit-clearing-vine-shortcut': { w: 120, h: 400, kind: 'piece' },
+  'kit-clearing-log-shortcut': { w: 400, h: 200, kind: 'piece' },
+  'kit-clearing-bough-perch': { w: 320, h: 120, kind: 'piece' },
+  'kit-clearing-gust-leaves': { w: 240, h: 320, kind: 'piece' },
+  'kit-clearing-checkpoint-bench': { w: 320, h: 160, kind: 'piece' },
+  'kit-clearing-hut-door-closed': { w: 240, h: 320, kind: 'piece' },
+  'kit-clearing-hut-door-open': { w: 240, h: 320, kind: 'piece' },
+  'kit-clearing-deck-rail': { w: 400, h: 120, kind: 'piece' },
+  'kit-clearing-fern-tall': { w: 160, h: 240, kind: 'piece' },
+  'kit-clearing-root-shelf': { w: 320, h: 120, kind: 'piece' },
+  'kit-neon-neon-tube-hazard': { w: 80, h: 240, kind: 'piece' },
+  'kit-neon-rooftop-door-closed': { w: 240, h: 320, kind: 'piece' },
+  'kit-neon-rooftop-door-open': { w: 240, h: 320, kind: 'piece' },
+  'kit-neon-checkpoint-bench': { w: 320, h: 160, kind: 'piece' },
+  'kit-neon-cable-span': { w: 400, h: 80, kind: 'piece' },
+  'kit-neon-rooftop-garden': { w: 320, h: 160, kind: 'piece' },
+  'kit-neon-tank-ladder': { w: 120, h: 400, kind: 'piece' },
+  'kit-neon-sign-hazard': { w: 240, h: 160, kind: 'piece' },
+  'kit-neon-pigeon-coop': { w: 240, h: 200, kind: 'piece' },
+  'kit-neon-rooftop-tent': { w: 320, h: 240, kind: 'piece' },
+  'kit-neon-sky-bridge-mid': { w: 400, h: 120, kind: 'piece' },
+  'kit-neon-rooftop-stair': { w: 240, h: 320, kind: 'piece' },
+  'kit-glass-glass-rung': { w: 160, h: 80, kind: 'piece' },
+  'kit-glass-frail-glass-mid': { w: 400, h: 80, kind: 'piece' },
+  'kit-glass-thorn-bed': { w: 400, h: 120, kind: 'piece' },
+  'kit-glass-moth-lantern': { w: 160, h: 240, kind: 'piece' },
+  'kit-glass-band-ledge': { w: 400, h: 120, kind: 'piece' },
+  'kit-glass-cloud-ledge': { w: 320, h: 120, kind: 'piece' },
+  'kit-glass-door-pane-closed': { w: 240, h: 320, kind: 'piece' },
+  'kit-glass-door-pane-open': { w: 240, h: 320, kind: 'piece' },
+  'kit-glass-checkpoint-bench': { w: 320, h: 160, kind: 'piece' },
+  'kit-glass-thorn-ceiling': { w: 400, h: 120, kind: 'piece' },
+  'kit-glass-act-arch': { w: 320, h: 400, kind: 'piece' },
+  'kit-glass-strand-rail': { w: 120, h: 400, kind: 'piece' },
+  'kit-ink-bridge-stroke': { w: 400, h: 80, kind: 'piece' },
+  'kit-ink-tread-stroke': { w: 160, h: 60, kind: 'piece' },
+  'kit-ink-seal-red': { w: 120, h: 120, kind: 'piece' },
+  'kit-ink-bamboo-tall': { w: 120, h: 400, kind: 'piece' },
+  'kit-ink-eave-shelter': { w: 400, h: 160, kind: 'piece' },
+  'kit-ink-waterfall-curtain': { w: 240, h: 400, kind: 'piece' },
+  'kit-ink-door-paper-closed': { w: 240, h: 320, kind: 'piece' },
+  'kit-ink-door-paper-open': { w: 240, h: 320, kind: 'piece' },
+  'kit-ink-checkpoint-bench': { w: 320, h: 160, kind: 'piece' },
+  'kit-ink-lotus-pads': { w: 320, h: 120, kind: 'piece' },
+  'kit-ink-crane-perch': { w: 120, h: 400, kind: 'piece' },
+  'kit-ink-pond-edge': { w: 400, h: 120, kind: 'piece' },
+  'kit-landmark-idol-owl-wood': { w: 320, h: 400, kind: 'piece' },
+  'kit-landmark-hut-lookout': { w: 400, h: 400, kind: 'piece' },
+  'kit-landmark-door-root-tiny': { w: 160, h: 240, kind: 'piece' },
+  'kit-landmark-cabinet-miniature': { w: 160, h: 240, kind: 'piece' },
+  'kit-landmark-bell-hanging': { w: 120, h: 160, kind: 'piece' },
+  'kit-landmark-telescope-brass': { w: 160, h: 200, kind: 'piece' },
+  'kit-landmark-idol-owl-glass': { w: 320, h: 400, kind: 'piece' },
+  'kit-landmark-lamp-moth': { w: 120, h: 120, kind: 'piece' },
+  'kit-landmark-pane-cracked': { w: 240, h: 320, kind: 'piece' },
+  'kit-landmark-lever-brass': { w: 120, h: 160, kind: 'piece' },
+  'kit-landmark-switch-lift': { w: 120, h: 160, kind: 'piece' },
+  'kit-landmark-idol-owl-neon': { w: 320, h: 400, kind: 'piece' },
+  'kit-landmark-robot-owl': { w: 320, h: 400, kind: 'piece' },
+  'kit-landmark-arcade-door': { w: 240, h: 320, kind: 'piece' },
+  'kit-landmark-copy-stage': { w: 240, h: 120, kind: 'piece' },
+  'kit-landmark-idol-owl-ink': { w: 320, h: 400, kind: 'piece' },
+  'kit-landmark-crane-paper': { w: 240, h: 320, kind: 'piece' },
+  'kit-landmark-heron-ink': { w: 200, h: 280, kind: 'piece' },
+  'kit-landmark-scroll-tower': { w: 240, h: 400, kind: 'piece' },
+  'kit-landmark-pavilion-summit': { w: 400, h: 400, kind: 'piece' },
+  'kit-cut-plank-cap-left': { w: 160, h: 120, kind: 'piece' },
+  'kit-cut-plank-cap-right': { w: 160, h: 120, kind: 'piece' },
+  'kit-cut-plank-mid-320': { w: 320, h: 120, kind: 'piece' },
+  'kit-cut-plank-mid-480': { w: 480, h: 120, kind: 'piece' },
+  'kit-cut-plank-mid-640': { w: 640, h: 120, kind: 'piece' },
+  'kit-cut-plank-thin-cap-left': { w: 160, h: 60, kind: 'piece' },
+  'kit-cut-plank-thin-cap-right': { w: 160, h: 60, kind: 'piece' },
+  'kit-cut-plank-thin-mid-320': { w: 320, h: 60, kind: 'piece' },
+  'kit-cut-plank-thin-mid-480': { w: 480, h: 60, kind: 'piece' },
+  'kit-cut-plank-thin-mid-640': { w: 640, h: 60, kind: 'piece' },
+  'kit-cut-plank-rail-cap-left': { w: 160, h: 200, kind: 'piece' },
+  'kit-cut-plank-rail-cap-right': { w: 160, h: 200, kind: 'piece' },
+  'kit-cut-plank-rail-mid-320': { w: 320, h: 200, kind: 'piece' },
+  'kit-cut-plank-rail-mid-480': { w: 480, h: 200, kind: 'piece' },
+  'kit-cut-plank-rail-mid-640': { w: 640, h: 200, kind: 'piece' },
+  'kit-cut-branch-cap-left': { w: 160, h: 120, kind: 'piece' },
+  'kit-cut-branch-cap-right': { w: 160, h: 120, kind: 'piece' },
+  'kit-cut-branch-mid-320': { w: 320, h: 120, kind: 'piece' },
+  'kit-cut-branch-mid-480': { w: 480, h: 120, kind: 'piece' },
+  'kit-cut-branch-mid-640': { w: 640, h: 120, kind: 'piece' },
+  'kit-cut-branch-thin-cap-left': { w: 160, h: 60, kind: 'piece' },
+  'kit-cut-branch-thin-cap-right': { w: 160, h: 60, kind: 'piece' },
+  'kit-cut-branch-thin-mid-320': { w: 320, h: 60, kind: 'piece' },
+  'kit-cut-branch-thin-mid-480': { w: 480, h: 60, kind: 'piece' },
+  'kit-cut-branch-thin-mid-640': { w: 640, h: 60, kind: 'piece' },
+  'kit-cut-branch-mossy-cap-left': { w: 160, h: 120, kind: 'piece' },
+  'kit-cut-branch-mossy-cap-right': { w: 160, h: 120, kind: 'piece' },
+  'kit-cut-branch-mossy-mid-320': { w: 320, h: 120, kind: 'piece' },
+  'kit-cut-branch-mossy-mid-480': { w: 480, h: 120, kind: 'piece' },
+  'kit-cut-branch-mossy-mid-640': { w: 640, h: 120, kind: 'piece' },
+  'kit-cut-stone-cap-left': { w: 160, h: 120, kind: 'piece' },
+  'kit-cut-stone-cap-right': { w: 160, h: 120, kind: 'piece' },
+  'kit-cut-stone-mid-320': { w: 320, h: 120, kind: 'piece' },
+  'kit-cut-stone-mid-480': { w: 480, h: 120, kind: 'piece' },
+  'kit-cut-stone-mid-640': { w: 640, h: 120, kind: 'piece' },
+  'kit-cut-stone-thin-cap-left': { w: 160, h: 60, kind: 'piece' },
+  'kit-cut-stone-thin-cap-right': { w: 160, h: 60, kind: 'piece' },
+  'kit-cut-stone-thin-mid-320': { w: 320, h: 60, kind: 'piece' },
+  'kit-cut-stone-thin-mid-480': { w: 480, h: 60, kind: 'piece' },
+  'kit-cut-stone-thin-mid-640': { w: 640, h: 60, kind: 'piece' },
+  'kit-cut-stone-mossy-cap-left': { w: 160, h: 120, kind: 'piece' },
+  'kit-cut-stone-mossy-cap-right': { w: 160, h: 120, kind: 'piece' },
+  'kit-cut-stone-mossy-mid-320': { w: 320, h: 120, kind: 'piece' },
+  'kit-cut-stone-mossy-mid-480': { w: 480, h: 120, kind: 'piece' },
+  'kit-cut-stone-mossy-mid-640': { w: 640, h: 120, kind: 'piece' },
+  // The neon and ink realms' own rows (OP-348): a deck, its thin row and a pipe; a bank of washed rock, its thin row and a plank.
+  'kit-cut-neon-deck-cap-left': { w: 160, h: 120, kind: 'piece' },
+  'kit-cut-neon-deck-cap-right': { w: 160, h: 120, kind: 'piece' },
+  'kit-cut-neon-deck-mid-320': { w: 320, h: 120, kind: 'piece' },
+  'kit-cut-neon-deck-mid-480': { w: 480, h: 120, kind: 'piece' },
+  'kit-cut-neon-deck-mid-640': { w: 640, h: 120, kind: 'piece' },
+  'kit-cut-neon-deck-thin-cap-left': { w: 160, h: 60, kind: 'piece' },
+  'kit-cut-neon-deck-thin-cap-right': { w: 160, h: 60, kind: 'piece' },
+  'kit-cut-neon-deck-thin-mid-320': { w: 320, h: 60, kind: 'piece' },
+  'kit-cut-neon-deck-thin-mid-480': { w: 480, h: 60, kind: 'piece' },
+  'kit-cut-neon-deck-thin-mid-640': { w: 640, h: 60, kind: 'piece' },
+  'kit-cut-neon-pipe-cap-left': { w: 160, h: 120, kind: 'piece' },
+  'kit-cut-neon-pipe-cap-right': { w: 160, h: 120, kind: 'piece' },
+  'kit-cut-neon-pipe-mid-320': { w: 320, h: 120, kind: 'piece' },
+  'kit-cut-neon-pipe-mid-480': { w: 480, h: 120, kind: 'piece' },
+  'kit-cut-neon-pipe-mid-640': { w: 640, h: 120, kind: 'piece' },
+  'kit-cut-ink-bank-cap-left': { w: 160, h: 120, kind: 'piece' },
+  'kit-cut-ink-bank-cap-right': { w: 160, h: 120, kind: 'piece' },
+  'kit-cut-ink-bank-mid-320': { w: 320, h: 120, kind: 'piece' },
+  'kit-cut-ink-bank-mid-480': { w: 480, h: 120, kind: 'piece' },
+  'kit-cut-ink-bank-mid-640': { w: 640, h: 120, kind: 'piece' },
+  'kit-cut-ink-bank-thin-cap-left': { w: 160, h: 60, kind: 'piece' },
+  'kit-cut-ink-bank-thin-cap-right': { w: 160, h: 60, kind: 'piece' },
+  'kit-cut-ink-bank-thin-mid-320': { w: 320, h: 60, kind: 'piece' },
+  'kit-cut-ink-bank-thin-mid-480': { w: 480, h: 60, kind: 'piece' },
+  'kit-cut-ink-bank-thin-mid-640': { w: 640, h: 60, kind: 'piece' },
+  'kit-cut-ink-plank-cap-left': { w: 160, h: 120, kind: 'piece' },
+  'kit-cut-ink-plank-cap-right': { w: 160, h: 120, kind: 'piece' },
+  'kit-cut-ink-plank-mid-320': { w: 320, h: 120, kind: 'piece' },
+  'kit-cut-ink-plank-mid-480': { w: 480, h: 120, kind: 'piece' },
+  'kit-cut-ink-plank-mid-640': { w: 640, h: 120, kind: 'piece' },
+  'kit-puzzle-lock-closed': { w: 64, h: 112, kind: 'piece' },
+  'kit-puzzle-lock-open': { w: 64, h: 112, kind: 'piece' },
+  'kit-puzzle-carving': { w: 64, h: 64, kind: 'piece' },
+  'kit-puzzle-key': { w: 48, h: 48, kind: 'piece' },
+  'kit-puzzle-symbol-moon': { w: 64, h: 64, kind: 'piece' },
+  'kit-puzzle-symbol-leaf': { w: 64, h: 64, kind: 'piece' },
+  'kit-puzzle-symbol-feather': { w: 64, h: 64, kind: 'piece' },
+  'kit-puzzle-symbol-acorn': { w: 64, h: 64, kind: 'piece' },
+  'kit-puzzle-symbol-star': { w: 64, h: 64, kind: 'piece' },
+  'kit-puzzle-symbol-mushroom': { w: 64, h: 64, kind: 'piece' },
+  'item-painted-egg': { w: 90, h: 90, kind: 'piece' },
+  'item-painted-egg-crack-light': { w: 90, h: 90, kind: 'piece' },
+  'item-painted-egg-crack-heavy': { w: 90, h: 90, kind: 'piece' },
+  'item-painted-egg-hatch-1': { w: 90, h: 90, kind: 'piece' },
+  'item-painted-egg-hatch-2': { w: 90, h: 90, kind: 'piece' },
+  'item-painted-egg-hatch-3': { w: 90, h: 90, kind: 'piece' },
+  'item-rainbow-bunny': { w: 90, h: 90, kind: 'piece' },
+  'item-rainbow-bunny-hop': { w: 90, h: 90, kind: 'piece' },
+  'kit-cut-earth-cap-left': { w: 160, h: 200, kind: 'piece' },
+  'kit-cut-earth-cap-right': { w: 160, h: 200, kind: 'piece' },
+  'kit-cut-earth-mid-320': { w: 320, h: 200, kind: 'piece' },
+  'kit-cut-earth-mid-480': { w: 480, h: 200, kind: 'piece' },
+  'kit-cut-earth-mid-640': { w: 640, h: 200, kind: 'piece' },
+  'kit-cut-earth-thin-cap-left': { w: 160, h: 60, kind: 'piece' },
+  'kit-cut-earth-thin-cap-right': { w: 160, h: 60, kind: 'piece' },
+  'kit-cut-earth-thin-mid-320': { w: 320, h: 60, kind: 'piece' },
+  'kit-cut-earth-thin-mid-480': { w: 480, h: 60, kind: 'piece' },
+  'kit-cut-earth-thin-mid-640': { w: 640, h: 60, kind: 'piece' },
+  'kit-cut-earth-path-cap-left': { w: 160, h: 120, kind: 'piece' },
+  'kit-cut-earth-path-cap-right': { w: 160, h: 120, kind: 'piece' },
+  'kit-cut-earth-path-mid-320': { w: 320, h: 120, kind: 'piece' },
+  'kit-cut-earth-path-mid-480': { w: 480, h: 120, kind: 'piece' },
+  'kit-cut-earth-path-mid-640': { w: 640, h: 120, kind: 'piece' },
+  'kit-cut-plank-corner-in': { w: 160, h: 160, kind: 'piece' },
+  'kit-cut-plank-corner-out': { w: 160, h: 160, kind: 'piece' },
+  'kit-cut-plank-to-earth': { w: 320, h: 120, kind: 'piece' },
+  'kit-cut-plank-to-stone': { w: 320, h: 120, kind: 'piece' },
+  'kit-cut-plank-slope-join-up': { w: 320, h: 200, kind: 'piece' },
+  'kit-cut-plank-slope-join-down': { w: 320, h: 200, kind: 'piece' },
+  'kit-cut-branch-corner-in': { w: 160, h: 160, kind: 'piece' },
+  'kit-cut-branch-corner-out': { w: 160, h: 160, kind: 'piece' },
+  'kit-cut-branch-to-plank': { w: 320, h: 120, kind: 'piece' },
+  'kit-cut-branch-to-earth': { w: 320, h: 120, kind: 'piece' },
+  'kit-cut-branch-slope-join-up': { w: 320, h: 200, kind: 'piece' },
+  'kit-cut-branch-slope-join-down': { w: 320, h: 200, kind: 'piece' },
+  'kit-cut-stone-corner-in': { w: 160, h: 160, kind: 'piece' },
+  'kit-cut-stone-corner-out': { w: 160, h: 160, kind: 'piece' },
+  'kit-cut-stone-to-earth': { w: 320, h: 120, kind: 'piece' },
+  'kit-cut-earth-corner-in': { w: 160, h: 160, kind: 'piece' },
+  'kit-cut-earth-corner-out': { w: 160, h: 160, kind: 'piece' },
+  'kit-cut-earth-slope-join': { w: 320, h: 200, kind: 'piece' },
+  'kit-cut-trunk-edge-left': { w: 160, h: 400, kind: 'piece' },
+  'kit-cut-trunk-edge-right': { w: 160, h: 400, kind: 'piece' },
+  'kit-cut-trunk-mid': { w: 320, h: 400, kind: 'piece' },
+  'kit-cut-trunk-taper': { w: 320, h: 320, kind: 'piece' },
+  'kit-cut-trunk-flare': { w: 400, h: 240, kind: 'piece' },
+  'kit-cut-trunk-knothole-frame': { w: 240, h: 320, kind: 'piece' },
+  'kit-cut-bough-edge-left': { w: 240, h: 160, kind: 'piece' },
+  'kit-cut-bough-edge-right': { w: 240, h: 160, kind: 'piece' },
+  'kit-cut-bough-mid': { w: 320, h: 160, kind: 'piece' },
+  'kit-cut-bough-taper': { w: 320, h: 160, kind: 'piece' },
+  'kit-cut-bough-flare': { w: 320, h: 200, kind: 'piece' },
+  'kit-cut-bough-fork': { w: 320, h: 240, kind: 'piece' },
+  'kit-tex-under-packed-earth': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-under-root-mat': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-under-cave-stone': { w: 512, h: 512, kind: 'texture' },
+  'kit-under-lantern-post': { w: 120, h: 320, kind: 'piece' },
+  'kit-under-root-arch': { w: 320, h: 320, kind: 'piece' },
+  'kit-under-stair-root-right': { w: 240, h: 240, kind: 'piece' },
+  'kit-under-stair-root-left': { w: 240, h: 240, kind: 'piece' },
+  'kit-under-root-ledge-mid': { w: 400, h: 120, kind: 'piece' },
+  'kit-under-boulder-flat': { w: 240, h: 160, kind: 'piece' },
+  'kit-under-root-hang': { w: 160, h: 400, kind: 'piece' },
+  'kit-under-stone-pile': { w: 240, h: 160, kind: 'piece' },
+  'kit-under-root-knot': { w: 200, h: 200, kind: 'piece' },
+  'kit-under-sign-root': { w: 240, h: 200, kind: 'piece' },
+  'kit-under-barrier-roots': { w: 320, h: 320, kind: 'piece' },
+  'kit-under-lantern-hang': { w: 120, h: 200, kind: 'piece' },
+  'kit-under-root-buttress-left': { w: 320, h: 400, kind: 'piece' },
+  'kit-under-root-buttress-right': { w: 320, h: 400, kind: 'piece' },
+  'kit-under-mushroom-cluster': { w: 160, h: 120, kind: 'piece' },
+  'kit-under-stone-pillar': { w: 120, h: 400, kind: 'piece' },
+  'kit-under-stalactites': { w: 240, h: 200, kind: 'piece' },
+  'kit-under-earth-mound': { w: 320, h: 160, kind: 'piece' },
+  'kit-under-sky-a': { w: 1600, h: 900, kind: 'layer' },
+  'kit-under-sky-b': { w: 1600, h: 900, kind: 'layer' },
+  'kit-under-far-a': { w: 1600, h: 900, kind: 'layer' },
+  'kit-under-far-b': { w: 1600, h: 900, kind: 'layer' },
+  'kit-under-mid-a': { w: 800, h: 450, kind: 'layer' },
+  'kit-under-mid-b': { w: 800, h: 450, kind: 'layer' },
+  'kit-under-mid-c': { w: 800, h: 450, kind: 'layer' },
+  'kit-tex-ground-forest-floor': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-ground-cobble-path': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-ground-fern-fronds': { w: 512, h: 512, kind: 'texture' },
+  'kit-ground-gate-post': { w: 160, h: 400, kind: 'piece' },
+  'kit-ground-lantern-post': { w: 120, h: 400, kind: 'piece' },
+  'kit-ground-gate-arch': { w: 400, h: 320, kind: 'piece' },
+  'kit-ground-stone-step': { w: 240, h: 120, kind: 'piece' },
+  'kit-ground-bench': { w: 320, h: 160, kind: 'piece' },
+  'kit-ground-rope-barrier': { w: 320, h: 200, kind: 'piece' },
+  'kit-ground-market-stall': { w: 400, h: 320, kind: 'piece' },
+  'kit-ground-sign-board': { w: 160, h: 240, kind: 'piece' },
+  'kit-ground-lantern-garland': { w: 400, h: 120, kind: 'piece' },
+  'kit-ground-crate-stack': { w: 160, h: 200, kind: 'piece' },
+  'kit-ground-hand-cart': { w: 240, h: 200, kind: 'piece' },
+  'kit-ground-water-barrel': { w: 120, h: 160, kind: 'piece' },
+  'kit-ground-fallen-branch': { w: 400, h: 160, kind: 'piece' },
+  'kit-ground-fern-clump': { w: 160, h: 120, kind: 'piece' },
+  'kit-ground-mossy-boulder': { w: 240, h: 160, kind: 'piece' },
+  'kit-ground-stepping-stones': { w: 400, h: 80, kind: 'piece' },
+  'kit-ground-tree-stump': { w: 200, h: 160, kind: 'piece' },
+  'kit-ground-roof-ridge': { w: 400, h: 120, kind: 'piece' },
+  'kit-ground-sky-a': { w: 1600, h: 900, kind: 'layer' },
+  'kit-ground-sky-b': { w: 1600, h: 900, kind: 'layer' },
+  'kit-ground-far-a': { w: 1600, h: 900, kind: 'layer' },
+  'kit-ground-far-b': { w: 1600, h: 900, kind: 'layer' },
+  'kit-ground-mid-a': { w: 800, h: 450, kind: 'layer' },
+  'kit-ground-mid-b': { w: 800, h: 450, kind: 'layer' },
+  'kit-ground-mid-c': { w: 800, h: 450, kind: 'layer' },
+  'kit-tex-low-bough-bark': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-low-walkway-planks': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-low-lichen-moss': { w: 512, h: 512, kind: 'texture' },
+  'kit-low-walkway-mid': { w: 400, h: 120, kind: 'piece' },
+  'kit-low-walkway-cap-left': { w: 240, h: 120, kind: 'piece' },
+  'kit-low-walkway-cap-right': { w: 240, h: 120, kind: 'piece' },
+  'kit-low-rope-rail-mid': { w: 400, h: 120, kind: 'piece' },
+  'kit-low-rope-rail-post': { w: 80, h: 160, kind: 'piece' },
+  'kit-low-branch-lantern': { w: 160, h: 240, kind: 'piece' },
+  'kit-low-bark-ledge-mid': { w: 400, h: 120, kind: 'piece' },
+  'kit-low-bark-ledge-end': { w: 240, h: 120, kind: 'piece' },
+  'kit-low-knothole-door-closed': { w: 240, h: 320, kind: 'piece' },
+  'kit-low-knothole-door-open': { w: 240, h: 320, kind: 'piece' },
+  'kit-low-bough-stub': { w: 160, h: 200, kind: 'piece' },
+  'kit-low-leaf-clump': { w: 240, h: 200, kind: 'piece' },
+  'kit-low-rope-ladder': { w: 120, h: 400, kind: 'piece' },
+  'kit-low-rope-barrier': { w: 240, h: 160, kind: 'piece' },
+  'kit-low-log-bench': { w: 240, h: 160, kind: 'piece' },
+  'kit-low-signpost-blank': { w: 160, h: 240, kind: 'piece' },
+  'kit-low-pulley-bucket': { w: 160, h: 280, kind: 'piece' },
+  'kit-low-hanging-basket': { w: 120, h: 200, kind: 'piece' },
+  'kit-low-sky-a': { w: 1600, h: 900, kind: 'layer' },
+  'kit-low-sky-b': { w: 1600, h: 900, kind: 'layer' },
+  'kit-low-far-a': { w: 1600, h: 900, kind: 'layer' },
+  'kit-low-far-b': { w: 1600, h: 900, kind: 'layer' },
+  'kit-low-mid-a': { w: 800, h: 450, kind: 'layer' },
+  'kit-low-mid-b': { w: 800, h: 450, kind: 'layer' },
+  'kit-low-mid-c': { w: 800, h: 450, kind: 'layer' },
+  'kit-tex-high-lichen-bark': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-high-cloud-bank': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-high-silvered-planks': { w: 512, h: 512, kind: 'texture' },
+  'kit-high-bough-mid': { w: 400, h: 160, kind: 'piece' },
+  'kit-high-bough-end': { w: 240, h: 160, kind: 'piece' },
+  'kit-high-rope-rail-mid': { w: 400, h: 120, kind: 'piece' },
+  'kit-high-rope-rail-post': { w: 80, h: 160, kind: 'piece' },
+  'kit-high-hook-lantern': { w: 120, h: 200, kind: 'piece' },
+  'kit-high-mist-platform': { w: 400, h: 160, kind: 'piece' },
+  'kit-high-knothole-door-closed': { w: 240, h: 320, kind: 'piece' },
+  'kit-high-knothole-door-open': { w: 240, h: 320, kind: 'piece' },
+  'kit-high-sign-board': { w: 160, h: 240, kind: 'piece' },
+  'kit-high-rope-barrier': { w: 320, h: 200, kind: 'piece' },
+  'kit-high-lantern-pole': { w: 120, h: 400, kind: 'piece' },
+  'kit-high-cloud-bench': { w: 320, h: 160, kind: 'piece' },
+  'kit-high-rope-ladder': { w: 120, h: 400, kind: 'piece' },
+  'kit-high-lantern-string': { w: 400, h: 120, kind: 'piece' },
+  'kit-high-hanging-moss': { w: 160, h: 240, kind: 'piece' },
+  'kit-high-leaf-cluster': { w: 240, h: 240, kind: 'piece' },
+  'kit-high-wind-chime': { w: 120, h: 240, kind: 'piece' },
+  'kit-high-cloud-tuft': { w: 240, h: 120, kind: 'piece' },
+  'kit-high-sky-a': { w: 1600, h: 900, kind: 'layer' },
+  'kit-high-sky-b': { w: 1600, h: 900, kind: 'layer' },
+  'kit-high-far-a': { w: 1600, h: 900, kind: 'layer' },
+  'kit-high-far-b': { w: 1600, h: 900, kind: 'layer' },
+  'kit-high-mid-a': { w: 800, h: 450, kind: 'layer' },
+  'kit-high-mid-b': { w: 800, h: 450, kind: 'layer' },
+  'kit-high-mid-c': { w: 800, h: 450, kind: 'layer' },
+  'kit-tex-canopy-woven-wicker': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-canopy-leaf-tops': { w: 512, h: 512, kind: 'texture' },
+  'kit-tex-canopy-twig-thatch': { w: 512, h: 512, kind: 'texture' },
+  'kit-canopy-door-nest-closed': { w: 240, h: 320, kind: 'piece' },
+  'kit-canopy-door-nest-open': { w: 240, h: 320, kind: 'piece' },
+  'kit-canopy-nest-lantern': { w: 120, h: 200, kind: 'piece' },
+  'kit-canopy-nest-window': { w: 160, h: 160, kind: 'piece' },
+  'kit-canopy-woven-rail-mid': { w: 400, h: 120, kind: 'piece' },
+  'kit-canopy-sign-board': { w: 240, h: 200, kind: 'piece' },
+  'kit-canopy-twig-bench': { w: 320, h: 160, kind: 'piece' },
+  'kit-canopy-leaf-perch': { w: 320, h: 160, kind: 'piece' },
+  'kit-canopy-leaf-cluster': { w: 240, h: 240, kind: 'piece' },
+  'kit-canopy-barrier-nest': { w: 320, h: 280, kind: 'piece' },
+  'kit-canopy-nest-roof': { w: 320, h: 200, kind: 'piece' },
+  'kit-canopy-planter-wicker': { w: 160, h: 200, kind: 'piece' },
+  'kit-canopy-rail-post': { w: 80, h: 160, kind: 'piece' },
+  'kit-canopy-lantern-string': { w: 400, h: 120, kind: 'piece' },
+  'kit-canopy-bough-tip': { w: 320, h: 200, kind: 'piece' },
+  'kit-canopy-rope-coil': { w: 160, h: 120, kind: 'piece' },
+  'kit-canopy-hanging-basket': { w: 160, h: 240, kind: 'piece' },
+  'kit-canopy-woven-bridge-mid': { w: 400, h: 120, kind: 'piece' },
+  'kit-canopy-sky-a': { w: 1600, h: 900, kind: 'layer' },
+  'kit-canopy-sky-b': { w: 1600, h: 900, kind: 'layer' },
+  'kit-canopy-far-a': { w: 1600, h: 900, kind: 'layer' },
+  'kit-canopy-far-b': { w: 1600, h: 900, kind: 'layer' },
+  'kit-canopy-mid-a': { w: 800, h: 450, kind: 'layer' },
+  'kit-canopy-mid-b': { w: 800, h: 450, kind: 'layer' },
+  'kit-canopy-mid-c': { w: 800, h: 450, kind: 'layer' },
+  // The layered rooms' painted layers (artLooks.ts): four per screen, each a room tile.
+  ...Object.fromEntries(allLookKeys().map((key) => [key, { w: ROOM_W, h: ROOM_H, kind: 'room' as const }])),
 };
 
 export { FLIGHT_LAYERS, OWL_LAYERS, SPECIES_FLIGHT_LAYERS, SPECIES_LAYERS };
 
 /** The climb's pieces, loaded by its scene when a climb opens and released when it closes. */
 export const CLIMB_ART_KEYS = Object.keys(ART).filter((k) => ART[k]!.kind === 'climb');
+/** The puzzle quests' pieces (OP-256): the lock post, the clue carving, the key and the six code symbols, drawn by the room's markers and the code pad. */
+export const PUZZLE_ART_KEYS = Object.keys(ART).filter((k) => k.startsWith('kit-puzzle-'));
+
+/** The address of a published piece's 1x raster for an element outside the game canvas (the code pad's symbols), or null when this build does not ship it. */
+export function publishedArtUrl(key: string): string | null {
+  const name = `${key}.webp`;
+  return PUBLISHED_ART.has(name) ? `${baseUrl()}${versioned(name)}` : null;
+}
+
+// The art kit's pieces (OP-234), at their logical sizes.
+for (const [key, { w, h }] of Object.entries(KIT_ART)) ART[key] ??= { w, h, kind: 'kit' };
+// The pieces that shape a room's edges seen from above (edges.ts), at their logical sizes.
+for (const [key, { w, h }] of Object.entries(EDGE_ART)) ART[key] ??= { w, h, kind: 'edge' };
 
 // The tiles of a room bigger than one screen are room art of one screen each, like `hub`.
+// A room the page draws in plain shapes (`drawn`: the test course, OP-224) has no art files.
 for (const room of Object.values(ROOMS)) {
+  if (room.drawn) continue;
   for (const t of [...backgroundTiles(room), ...foregroundTiles(room)]) ART[t.key] ??= { w: ROOM_W, h: ROOM_H, kind: 'room' };
 }
 
@@ -298,17 +979,56 @@ export function blockadeKey(phrase: string): string {
   return `blockade-${phrase.toLowerCase().replace(/\s+/g, '-')}`;
 }
 
+/** Whether a realm kit slot's own art (OP-275) is published: delivered by its artist, not a piece standing in for it. */
+export function slotDelivered(key: string, published: ReadonlyMap<string, string> = PUBLISHED_ART): boolean {
+  const spec = KIT_ART[key];
+  return !!spec?.slot && !spec.standIn && (published.has(`${key}.svg`) || rasterNames(key, 1, published).length > 0);
+}
+
 /** Art that belongs to one room (released when it closes; roomOpeningArt is what loads as it opens). */
 export function roomArtKeys(roomId: string, room: RoomDef | undefined = roomFor(roomId)): string[] {
   const keys = room ? [...backgroundTiles(room), ...foregroundTiles(room)].map((t) => t.key) : [roomId, `${roomId}-fg`];
-  for (const door of room?.doors ?? []) if (door.closedSign) keys.push(blockadeKey(door.closedSign));
-  if (roomId === 'grove') keys.push('guardian');
-  if (roomId === 'market') keys.push('robot-owl');
-  if (roomId === 'glass') keys.push('glass-idol');
+  // A room built from the art kit (OP-234) loads its pieces too.
+  if (room?.kit) keys.push(...kitArtKeys(room));
+  // And the strips that frame its platforms' sides and feet (kitFrames in edges.ts), where it has any.
+  if (room?.kit) {
+    const plan = kitDrawPlan(room);
+    for (const d of plan) for (const s of kitFrames(d, room.size, plan)) keys.push(s.key);
+  }
+  // A course's pieces drawn from the kit (its benches, bells, lost feathers and shrine).
+  const course = room?.course && Object.hasOwn(COURSES, room.course.id) ? COURSES[room.course.id] : undefined;
+  for (const a of Object.values(course?.art ?? {})) if (a) keys.push(a.key);
+  // A realm's updraft and wind-current art (OP-275), once its artist's is published: until then the leaves and streaks are all.
+  for (const a of [...(room?.updrafts ?? []), ...(room?.winds ?? [])].map((x) => x.art)) if (a && (slotDelivered(a) || trialFilesOf(a, skin, PUBLISHED_ART)) && !keys.includes(a)) keys.push(a);
+  // A skin trial's updraft bits (skinTrial.ts), which rise in the realm's updrafts in place of the leaf.
+  const column = room?.updrafts?.find((u) => u.art)?.art;
+  const bits = column ? updraftBitsKey(column) : undefined;
+  if (bits && trialFilesOf(bits, skin, PUBLISHED_ART)) {
+    ART[bits] ??= { w: 80, h: 80, kind: 'kit' };
+    keys.push(bits);
+  }
+  // The ink a room's brush stones paint (OP-235): a bridge across and a tread up.
+  if (room?.brushStones?.length) keys.push('kit-ink-bridge-stroke', 'kit-ink-tread-stroke');
+  // A room's neon signs on their circuits: the kit's sign, lit or dark.
+  if (room?.neonSigns?.length) keys.push('kit-neon-sign-platform');
+  // The tree draws its barriers (OP-220): only today's park's closed arches load the blockade art.
+  if (room && !seenFromSide(room)) for (const door of room.doors) if (door.closedSign) keys.push(blockadeKey(door.closedSign));
+  // A realm's idol, in the realm or in its Commons (`votesFor`), or each of several (the Great Hollow's, RoomDef.idols).
+  const realms = room ? idolRealms(room) : [roomId];
+  if (realms.includes('grove')) keys.push('guardian');
+  if (realms.includes('market')) keys.push('robot-owl');
+  if (realms.includes('glass')) keys.push('kit-glass-idol-owl');
+  // A realm start's set pieces (OP-276).
+  for (const p of room?.pieces ?? []) keys.push(p.key);
+  // The art of the things to use out on a plaza's floor (plazaFloor.ts): a bird bath, mushrooms, a telescope.
+  for (const t of interactablesIn(roomId)) if (t.piece) keys.push(t.piece);
+  // The pieces that shape its edges, seen from above (edges.ts).
+  for (const e of room?.edges ?? []) keys.push(e.key);
   if (isArcadeRoom(roomId)) keys.push(...Object.keys(ART).filter((k) => ART[k]!.kind === 'arcade'));
   // A nest can show any piece of furniture: the owner may put out whatever they own.
   if (isNestRoom(roomId)) keys.push(...FURNITURE.map((f) => f.art));
-  return keys.filter((k) => k in ART);
+  // Once each: a kit backdrop is one picture drawn on several screens.
+  return [...new Set(keys)].filter((k) => k in ART);
 }
 
 const FURNITURE_ART = new Set(FURNITURE.map((f) => f.art));
@@ -351,7 +1071,8 @@ function fetchAhead(name: string): Promise<void> {
  * left out.
  */
 export function prefetchRoomArt(scene: Phaser.Scene, room: RoomDef, cfg: Pick<ParkConfig, 'pixelRatio' | 'artScaleMax' | 'roomArtBudget'>): void {
-  if (typeof fetch !== 'function') return;
+  // Size boxes are drawn, not fetched.
+  if (typeof fetch !== 'function' || sizeBoxes) return;
   const cap = roomArtCap(room, cfg);
   const could = new Set(softTiles(room, cfg));
   const rest: string[] = [];
@@ -377,11 +1098,12 @@ export function prefetchRoomArt(scene: Phaser.Scene, room: RoomDef, cfg: Pick<Pa
  * the room wants them at 2x, and the build ships both copies.
  */
 export function softTiles(room: RoomDef, cfg: Pick<ParkConfig, 'pixelRatio' | 'artScaleMax' | 'roomArtBudget'>, published: ReadonlyMap<string, string> = PUBLISHED_ART): string[] {
+  if (sizeBoxes) return [];
   const scale = artScale('room', cfg.pixelRatio, roomArtCap(room, cfg));
   if (scale <= DENSE_SCALE) return [];
   return [...backgroundTiles(room), ...foregroundTiles(room)]
     .map((t) => t.key)
-    .filter((key) => !published.has(`${key}.svg`) && (rasterNames(key, scale, published)[0]?.includes('@2x') ?? false) && rasterNames(key, 1, published).length > 0);
+    .filter((key) => !published.has(`${filesOf(key, published)}.svg`) && (rasterNames(filesOf(key, published), scale, published)[0]?.includes('@2x') ?? false) && rasterNames(filesOf(key, published), 1, published).length > 0);
 }
 
 /** How long the browser's cache gets to say whether it has a file (an answer from it takes a few ms). */
@@ -410,7 +1132,7 @@ async function inCache(url: string): Promise<boolean> {
 export async function opensSoft(room: RoomDef, cfg: Pick<ParkConfig, 'pixelRatio' | 'artScaleMax' | 'roomArtBudget'>): Promise<Set<string>> {
   const keys = softTiles(room, cfg);
   const scale = artScale('room', cfg.pixelRatio, roomArtCap(room, cfg));
-  const have = await Promise.all(keys.map((key) => inCache(`${baseUrl()}${versioned(rasterNames(key, scale, PUBLISHED_ART)[0]!)}`)));
+  const have = await Promise.all(keys.map((key) => inCache(`${baseUrl()}${versioned(rasterNames(filesOf(key), scale, PUBLISHED_ART)[0]!)}`)));
   return new Set(keys.filter((_, i) => !have[i]));
 }
 
@@ -428,7 +1150,9 @@ function imagesShowing(list: Phaser.GameObjects.GameObject[], key: string, out: 
 
 /** A painting's 2x copy, for sharpenArt (OP-129): null when the build has none or it fails to load. */
 export function sharpCopy(key: string, scale: number): Promise<HTMLImageElement | null> {
-  const name = rasterNames(key, scale, PUBLISHED_ART)[0];
+  // A size box stays a box: no sharper copy of the art replaces it.
+  if (drawnAsSizeBox(key)) return Promise.resolve(null);
+  const name = rasterNames(filesOf(key), scale, PUBLISHED_ART)[0];
   return name?.includes('@2x') ? loadImage(`${baseUrl()}${versioned(name)}`) : Promise.resolve(null);
 }
 
@@ -513,38 +1237,52 @@ async function streamImage(url: string, onBytes: (n: number) => void): Promise<H
   }
 }
 
+/** Whether this page draws `key` as its size box. */
+export function drawnAsSizeBox(key: string): boolean {
+  const spec = ART[key];
+  return sizeBoxes && !!spec && boxable(spec.kind);
+}
+
+/** A key's size box (sizeBoxes.ts) as its texture, at its logical size: true when it was made. */
+function makeSizeBox(scene: Phaser.Scene, key: string, spec: ArtSpec): boolean {
+  const tex = scene.textures.createCanvas(key, spec.w, spec.h);
+  if (!tex) return false;
+  paintSizeBox(tex.getContext(), key, spec);
+  tex.refresh();
+  return true;
+}
+
 /** Load one key. Returns true when a texture now exists for it (fresh or already present). With `onBytes`, its download is counted as it comes. */
 export async function loadArtKey(scene: Phaser.Scene, key: string, scale: number, onBytes?: (n: number) => void): Promise<boolean> {
   if (scene.textures.exists(key)) return true;
   const spec = ART[key];
   if (!spec) return false;
+  if (drawnAsSizeBox(key)) return makeSizeBox(scene, key, spec);
   const url = baseUrl();
-  if (PUBLISHED_ART.has(`${key}.svg`) && (await loadSvgTexture(scene, key, `${url}${versioned(`${key}.svg`)}`, Math.round(spec.w * scale), Math.round(spec.h * scale)))) return true;
-  for (const c of rasterCandidates(url, key, scale, PUBLISHED_ART)) {
+  if (PUBLISHED_ART.has(`${filesOf(key)}.svg`) && (await loadSvgTexture(scene, key, `${url}${versioned(`${filesOf(key)}.svg`)}`, Math.round(spec.w * scale), Math.round(spec.h * scale)))) return true;
+  // A skin trial's piece is redrawn to the outline of the stand-in it replaces (skinTrial.ts), so its top is the walk line.
+  const trial = !!trialFilesOf(key, skin, PUBLISHED_ART);
+  for (const c of rasterCandidates(url, filesOf(key), scale, PUBLISHED_ART)) {
     const img = await (onBytes ? streamImage(c, onBytes) : loadImage(c));
     if (img) {
-      if (!scene.textures.exists(key)) scene.textures.addImage(key, img);
+      if (!scene.textures.exists(key)) {
+        const fitted = trial ? fitTrialArt(img, key) : null;
+        if (fitted) scene.textures.addCanvas(key, fitted);
+        else scene.textures.addImage(key, img);
+      }
       return true;
     }
   }
   return false;
 }
 
-/**
- * Load a piece of art at 1x under a texture key of its own (`as`): the home screen's backdrop is
- * the lobby's painting, kept apart from the lobby's own texture so each is freed on its own.
- */
-export async function loadArtCopy(scene: Phaser.Scene, key: string, as: string): Promise<boolean> {
+/** Load the home backdrop under its own texture key so it is freed with the home scene. */
+export async function loadArtCopy(scene: Phaser.Scene, url: string, as: string): Promise<boolean> {
   if (scene.textures.exists(as)) return true;
-  if (!ART[key]) return false;
-  for (const c of rasterCandidates(baseUrl(), key, 1, PUBLISHED_ART)) {
-    const img = await loadImage(c);
-    if (img) {
-      if (!scene.textures.exists(as)) scene.textures.addImage(as, img);
-      return true;
-    }
-  }
-  return false;
+  const img = await loadImage(url);
+  if (!img) return false;
+  if (!scene.textures.exists(as)) scene.textures.addImage(as, img);
+  return true;
 }
 
 const speciesLoads = new Map<SpeciesId, Promise<boolean>>();
@@ -596,12 +1334,12 @@ export interface LoadReport {
 
 /** The file loading `key` at `scale` asks for first: its SVG when the build ships one, else its best picture. */
 function firstFile(key: string, scale: number): string | undefined {
-  return PUBLISHED_ART.has(`${key}.svg`) ? `${key}.svg` : rasterNames(key, scale, PUBLISHED_ART)[0];
+  return PUBLISHED_ART.has(`${filesOf(key)}.svg`) ? `${filesOf(key)}.svg` : rasterNames(filesOf(key), scale, PUBLISHED_ART)[0];
 }
 
 /** The bytes loading `key` at `scale` downloads: its first file's size (none when its texture is here already). */
 function artBytes(scene: Phaser.Scene, key: string, scale: number): number {
-  if (scene.textures.exists(key)) return 0;
+  if (scene.textures.exists(key) || drawnAsSizeBox(key)) return 0;
   const name = firstFile(key, scale);
   return name ? (ART_BYTES.get(name) ?? 0) : 0;
 }
@@ -675,6 +1413,12 @@ export function ensurePlaceholder(scene: Phaser.Scene, key: string): void {
       g.fillRect(0, 460, w, h - 460);
       break;
     }
+    case 'kit':
+      drawKitOps(g, kitPlaceholder(key) ?? []);
+      break;
+    case 'edge':
+      drawKitOps(g, edgePlaceholder(key) ?? []);
+      break;
     case 'piece':
       g.fillStyle(0xc9a227, 0.18);
       g.fillEllipse(w / 2, h / 2, w * 0.6, h * 0.8);
@@ -737,4 +1481,9 @@ function drawOwlPlaceholder(g: Phaser.GameObjects.Graphics, key: string): void {
       g.fillTriangle(92, 96, 108, 96, 100, 112);
       break;
   }
+}
+
+/** Whether this page draws a skin trial in this room: it has a trial on and the room draws a slot the trial has files for. */
+export function drawsSkinTrial(roomId: string, room?: RoomDef): boolean {
+  return !!skin && roomArtKeys(roomId, room).some((k) => trialFilesOf(k, skin, PUBLISHED_ART) !== null);
 }

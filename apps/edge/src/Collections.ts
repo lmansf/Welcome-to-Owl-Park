@@ -19,9 +19,18 @@ import {
   ArcadeBook,
   ClimbBook,
   CollectionBook,
+  CourseBook,
   LEAF_FEATHERS_PER_DAY,
   NestBook,
+  PuzzleBook,
   QuestBook,
+  acceptPuzzleAware,
+  payEscape,
+  type EscapePaid,
+  puzzleRunsOf,
+  puzzleStep,
+  type PuzzleRequest,
+  type PuzzleResult,
   leafFeathers,
   secureNestId,
   type AbandonResult,
@@ -31,6 +40,12 @@ import {
   type ClimbFlags,
   type ClimbLookup,
   type ClimbStart,
+  type CourseAnswer,
+  type CourseBoardRow,
+  type FallAnswer,
+  type FinishAnswer,
+  type PieceKind,
+  type ReachAnswer,
   type GameWall,
   type OwnBests,
   type PortraitLook,
@@ -40,17 +55,21 @@ import {
   type RunSettled,
   type BuyResult,
   type FeedbackDraft,
+  type FeedbackLadderState,
   type FurnitureGiftResult,
   type GatherResult,
   type GiftResult,
   type GrantResult,
   type HandInResult,
+  type InteractableKind,
   type Inventory,
   type MyNest,
   type NestEditResult,
   type NestLook,
   type NestVisit,
   type OwlAccount,
+  type ReferralOffer,
+  type ReferralView,
   type TravelState,
   type OwlPicture,
   type QuestBoard,
@@ -65,23 +84,33 @@ import {
   type Vec2,
   type Wear,
 } from '@owl-park/shared';
-import { AccountBook, type CarriedEmail, type LinkKind, type Protected, type Restored } from './accountBook';
+import { AccountBook, type CarriedEmail, type GoogleFor, type GoogleLink, type LinkKind, type Protected, type Restored } from './accountBook';
+import { ReferralBook, type Credited, type InviteResult } from './referralBook';
 import { TravelBook } from './travelBook';
-import { CollectLog, collectibleType, furnitureId, logConfig, type CollectibleType, type PurchaseData, type Visit } from './collectLog';
-import { FeedbackBox, type FeedbackAdd, type FeedbackRow, type FeedbackStatus } from './feedbackBox';
+import { CollectLog, cleanVisit, collectibleType, furnitureId, logConfig, logRoom, type CollectibleType, type PlayEventData, type PurchaseData, type Visit } from './collectLog';
+import { FeedbackBox, thankForNote, type FeedbackAdd, type FeedbackRow, type FeedbackStatus } from './feedbackBox';
 import { type CopyOut, type ExportTarget, type RestoreResult, bucketOf, copyIn, copyOut } from './parkExport';
 import { ParkStats, type Sighting, type StatsLook } from './parkStats';
 import { randomDeviceId } from './pass';
-import { ROOMS } from './rooms';
+import { ROOMS, roomDef } from './rooms';
+import { COURSES } from '@owl-park/shared/rooms';
 import { SqlClimbStore } from './sqlClimbStore';
+import { SqlCourseStore } from './sqlCourseStore';
 import { SqlNestStore } from './sqlNestStore';
+import { SqlPuzzleStore } from './sqlPuzzleStore';
 import { SqlScoreStore } from './sqlScoreStore';
-import { SqlCollectionStore } from './sqlStore';
+import { SqlCollectionStore, type QuestRowState } from './sqlStore';
+import { questProgressEvents } from './questLog';
 import type { Env } from './env';
 
 /** A uniform [0, 1) from the platform's cryptographic source. */
 function secureRandom(): number {
   return crypto.getRandomValues(new Uint32Array(1))[0]! / 4294967296;
+}
+
+/** 128 random bits as hex: a puzzle run's seed or id (OP-255). */
+function secureToken(): string {
+  return [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 /** Random bytes from the platform's cryptographic source. */
@@ -95,6 +124,8 @@ export interface EventResult {
   board?: QuestBoard;
 }
 
+export type { PuzzleRequest, PuzzleResult } from '@owl-park/shared';
+
 export interface FlopResult extends EventResult {
   feathers: number;
   total: number;
@@ -103,11 +134,17 @@ export interface FlopResult extends EventResult {
 export class Collections extends DurableObject<Env> {
   private readonly book: CollectionBook;
   private readonly quests: QuestBook;
+  private readonly puzzles: PuzzleBook;
   private readonly nests: NestBook;
   private readonly arcade: ArcadeBook;
   private readonly climb: ClimbBook;
+  private readonly course: CourseBook;
+  /** The course book's store, read for a run's start time on the log's play events (OP-304). */
+  private readonly courseStore: SqlCourseStore;
   private readonly feedbackBox: FeedbackBox;
   private readonly accounts: AccountBook;
+  /** Bring a friend (OP-056): who brought whom, and the free Day Tickets waiting. */
+  private readonly referrals: ReferralBook;
   private readonly travel: TravelBook;
   private readonly log: CollectLog;
   private readonly stats: ParkStats;
@@ -119,15 +156,23 @@ export class Collections extends DurableObject<Env> {
     const sql = ctx.storage.sql;
     this.log = new CollectLog(sql, logConfig(env), { fetch: (url, init) => fetch(url, init), now: () => Date.now(), wake: (at) => this.wake(at) });
     this.stats = new ParkStats(sql, this.log);
-    const store = new SqlCollectionStore(sql, (cid, variant, source, at) => this.acquired(cid, variant, collectibleType(variant, source), at));
+    const store = new SqlCollectionStore(
+      sql,
+      (cid, variant, source, at) => this.acquired(cid, variant, collectibleType(variant, source), at),
+      (before, after) => this.questChanged(before, after),
+    );
     this.book = new CollectionBook(store);
     this.quests = new QuestBook(store, this.book, SPOTS);
+    this.puzzles = new PuzzleBook(new SqlPuzzleStore(sql), SPOTS, { newSeed: secureToken, newId: secureToken });
     const nestStore = new SqlNestStore(sql, (cid, item, source, at) => this.acquired(cid, furnitureId(item), collectibleType(item, source), at));
     this.nests = new NestBook(nestStore, this.book, { newId: () => secureNestId(randomBytes), random: secureRandom });
     this.arcade = new ArcadeBook(new SqlScoreStore(sql), this.book);
     this.climb = new ClimbBook(new SqlClimbStore(sql), this.book, () => crypto.getRandomValues(new Uint32Array(1))[0]!);
+    this.courseStore = new SqlCourseStore(sql);
+    this.course = new CourseBook(this.courseStore, this.book, COURSES, roomDef);
     this.feedbackBox = new FeedbackBox(sql);
     this.accounts = new AccountBook(sql, randomBytes);
+    this.referrals = new ReferralBook(sql, secureToken);
     this.travel = new TravelBook(sql);
   }
 
@@ -139,6 +184,47 @@ export class Collections extends DurableObject<Env> {
     this.log.record({ cid, collectible, type, at, visit: this.visit });
     this.stats.gained(this.visit?.pass);
     this.ctx.waitUntil(this.log.flush());
+  }
+
+  /**
+   * A quest row changed (OP-266): its steps' events into the log's outbox in this same step, with the
+   * visit and room the owl is in (the call's own visit when it came with one, else its live stay), and
+   * sent as soon as the step is done.
+   */
+  private questChanged(before: QuestRowState | null, after: QuestRowState | null): void {
+    if (!this.log.on) return;
+    const cid = (after ?? before)!.cid;
+    const live = this.stats.liveOf(cid);
+    const visit = cleanVisit(this.visit);
+    const place = { pass: visit.pass ?? live?.pass ?? null, room: visit.room ?? live?.room ?? null };
+    const events = questProgressEvents(before, after, Date.now(), place);
+    if (!events.length) return;
+    for (const e of events) this.log.questProgress(e);
+    this.ctx.waitUntil(this.log.flush());
+  }
+
+  /**
+   * A play event (OP-304): into the log's outbox with the visit the owl is in (the call's own visit
+   * when it came with one, else its live stay) and sent as soon as the step is done.
+   */
+  private played(d: Omit<PlayEventData, 'pass' | 'room' | 'at'> & { room: string }): void {
+    if (!this.log.on) return;
+    const live = this.stats.liveOf(d.cid);
+    const visit = cleanVisit(this.visit);
+    const at = Date.now();
+    if (this.log.playEvent({ ...d, at, pass: visit.pass ?? live?.pass ?? null, room: logRoom(d.room) })) this.ctx.waitUntil(this.log.flush());
+  }
+
+  /** A course run's start time, its id in the log (OP-304), when the owl has one in this course. */
+  private runStart(cid: string, room: string): { course: string; run: number; practice: boolean } | null {
+    const r = this.courseStore.run(cid);
+    const course = roomDef(room)?.course?.id;
+    return r && course !== undefined && r.course === course ? { course, run: r.startedAt, practice: r.practice === true } : null;
+  }
+
+  /** A thing used by a free guest (OP-191, OP-243), whose use never comes here otherwise: for the log only. */
+  async practiceUsed(cid: string, what: InteractableKind, id: string, room: string): Promise<void> {
+    this.played({ event: 'interact', cid, room, thing: `${what}:${id}`, practice: true });
   }
 
   /** An owl in a room, by the room object's word (a hello, a new look): its visit and its look, for the player stats (OP-111). */
@@ -259,8 +345,22 @@ export class Collections extends DurableObject<Env> {
   }
 
   async accept(cid: string, quest: string, here: string): Promise<AcceptResult> {
-    return this.quests.accept(cid, quest, Date.now(), here);
+    // A puzzle whose every lock this owl already opened this period is ready at once (OP-255).
+    return acceptPuzzleAware(this.quests, this.puzzles, cid, quest, Date.now(), here);
   }
+
+  // ---------- puzzle quests (OP-255, puzzles.ts): where the owl stands is the room object's to give ----------
+
+  /** A puzzle quest's run: start, join, leave, read a clue, take a key, work a lock, or just its state. */
+  async puzzle(cid: string, req: PuzzleRequest): Promise<PuzzleResult> {
+    return puzzleStep(this.quests, this.puzzles, cid, req, Date.now());
+  }
+
+  /** Which of these collectors are in a run of this puzzle quest, and how far it is (the room's join list). */
+  async puzzleRuns(cids: readonly string[], quest: string): Promise<Record<string, { members: number; opened: number }>> {
+    return puzzleRunsOf(this.puzzles, cids, quest, Date.now());
+  }
+
 
   async abandon(cid: string, quest: string): Promise<AbandonResult> {
     return this.quests.abandon(cid, quest, Date.now());
@@ -269,6 +369,7 @@ export class Collections extends DurableObject<Env> {
   /** Count a talk, visit, use or emote toward the collector's quests. */
   async questEvent(cid: string, ev: QuestEvent, here: string): Promise<EventResult> {
     const now = Date.now();
+    if (ev.kind === 'interact') this.played({ event: 'interact', cid, room: here, thing: `${ev.what}:${ev.id}` });
     const updates = this.quests.event(cid, ev, now, here);
     return updates.length ? { updates, board: this.quests.board(cid, now) } : { updates };
   }
@@ -276,6 +377,7 @@ export class Collections extends DurableObject<Env> {
   /** A flop into a leaf pile: maybe feathers (capped per day), and quest progress. */
   async flop(cid: string, ev: QuestEvent, here: string): Promise<FlopResult> {
     const now = Date.now();
+    if (ev.kind === 'interact') this.played({ event: 'interact', cid, room: here, thing: `${ev.what}:${ev.id}` });
     const { added, feathers } = this.book.earnCapped(cid, 'leaves', leafFeathers(secureRandom), LEAF_FEATHERS_PER_DAY, now);
     const updates = this.quests.event(cid, ev, now, here);
     return { feathers: added, total: feathers, updates, ...(updates.length ? { board: this.quests.board(cid, now) } : {}) };
@@ -287,6 +389,23 @@ export class Collections extends DurableObject<Env> {
    */
   async play(cid: string, feathers: number, ev: PlayEvent | null): Promise<PlayResult> {
     return this.book.play(cid, feathers, ev, Date.now());
+  }
+
+  /**
+   * The sealed hollow (OP-310): a ticket holder's escape, settled once per escape by the room object (which
+   * never asks this for a spectator): its feathers once a park day, the Hollow Moth the first time ever.
+   */
+  async escapePaid(cid: string, visit?: Visit): Promise<EscapePaid> {
+    // The Hollow Moth goes to the collection log with the visit it came in, as every collectible granted does.
+    return this.during(visit, () => payEscape(this.book, cid, Date.now()));
+  }
+
+  /**
+   * A party game this collector finished (OP-314): its feathers by place, for the first few games of
+   * the park day. The room server asks once per game and owl, and never for a spectator or a park owl.
+   */
+  async partyGame(cid: string, place: number): Promise<{ added: number; total: number; games: number }> {
+    return this.book.partyGame(cid, place, Date.now());
   }
 
   /** The collector's feather balance, and nothing more: a spectator's practice answers carry it (OP-191). */
@@ -344,6 +463,64 @@ export class Collections extends DurableObject<Env> {
     });
   }
 
+  // ---------- the parkour courses (OP-224, coursebook.ts): where the owl stands is the room object's to check first ----------
+
+  /** The owl's course as it stands, in the course this room is an act of. */
+  async courseState(cid: string, room: string): Promise<CourseAnswer> {
+    return this.course.state(cid, room, Date.now());
+  }
+
+  /** A run starts by the trail gate's way in (`practice`: a spectator's, OP-191). */
+  async courseStart(cid: string, room: string, practice = false): Promise<CourseAnswer> {
+    const res = this.course.start(cid, room, Date.now(), practice);
+    const run = res.ok ? this.runStart(cid, room) : null;
+    if (run) this.played({ event: 'course_start', cid, room, ...run });
+    return res;
+  }
+
+  /** A bench, a part or a lost feather reached. */
+  async courseReach(cid: string, room: string, kind: PieceKind, id: string): Promise<ReachAnswer> {
+    const res = this.course.reach(cid, room, kind, id, Date.now());
+    // A bench or a part reached for the first time in this run: how far runs get (a lost feather is a collectible, logged as one).
+    const run = res.ok && res.first && kind !== 'feather' ? this.runStart(cid, room) : null;
+    if (run) this.played({ event: kind === 'bench' ? 'course_bench' : 'course_part', cid, room, thing: id, ...run });
+    return res;
+  }
+
+  /** A shortcut opened from its far side, for good. */
+  async courseOpen(cid: string, room: string, id: string): Promise<ReachAnswer> {
+    return this.course.open(cid, room, id, Date.now());
+  }
+
+  /**
+   * A fall: where the owl goes back to. `pos`: where it fell, for the log's fail spots (OP-304) and for
+   * choosing between its bench and `entry`, the way the room saw it come in (OP-343).
+   */
+  async courseFall(cid: string, room: string, pos?: { x: number; y: number }, entry?: string): Promise<FallAnswer> {
+    const res = this.course.fall(cid, room, Date.now(), { ...(entry !== undefined ? { entry } : {}), ...(pos ? { pos } : {}) });
+    if (res.ok) {
+      const run = this.runStart(cid, room);
+      const course = roomDef(room)?.course?.id;
+      if (course !== undefined) this.played({ event: 'course_fall', cid, room, course, ...(run ?? {}), ...(pos ? { x: pos.x, y: pos.y } : {}) });
+    }
+    return res;
+  }
+
+  /** The finish shrine: what it pays, on the visit it came in (its items go to the collection log). */
+  async courseFinish(cid: string, room: string, visit?: Visit, practice = false): Promise<FinishAnswer> {
+    return this.during(visit, () => {
+      const run = this.runStart(cid, room);
+      const res = this.course.finish(cid, room, Date.now(), practice);
+      if (res.ok && run) this.played({ event: 'course_clear', cid, room, ...run, ms: res.paid.ms, practice: run.practice || practice });
+      return res;
+    });
+  }
+
+  /** The course board for one owl (for a Commons to show): cleared, best time and the rewards left, per course. */
+  async courseBoard(cid: string): Promise<CourseBoardRow[]> {
+    return this.course.board(cid, Date.now());
+  }
+
   /** A run by the reference a visitor quotes, for the keepers. */
   async climbLookup(ref: string): Promise<ClimbLookup | null> {
     return this.climb.lookup(ref);
@@ -397,14 +574,31 @@ export class Collections extends DurableObject<Env> {
    * to the owner's analytics project for the morning feedback run (OP-166): into the log's outbox in
    * this same step, and sent once the step is done, so the note never waits on the log.
    */
-  async addFeedback(cid: string, draft: FeedbackDraft, ua: string | null, visit?: Visit): Promise<FeedbackAdd> {
+  /**
+   * A visitor's note for the keepers. With `earns` (the owl is past the turnstiles), a note that counts
+   * climbs the owl's thanks ladder (OP-272): the grey mouse first, then feathers.
+   */
+  async addFeedback(cid: string, draft: FeedbackDraft, ua: string | null, visit?: Visit, earns = false): Promise<FeedbackAdd> {
     const at = Date.now();
     const r = this.feedbackBox.add(cid, draft, ua, at);
     if (r.ok && this.log.on) {
       this.log.feedback({ cid, id: r.id, kind: draft.kind, text: draft.text, at, visit: { ...visit, room: draft.room } });
       this.ctx.waitUntil(this.log.flush());
     }
-    return r;
+    if (!r.ok || !earns) return r;
+    const reward = this.during(visit, () => thankForNote(this.book, this.feedbackBox, cid, r.id, draft.text, at));
+    return reward ? { ...r, reward } : r;
+  }
+
+  /** The thanks ladder as the page sees it (OP-272). */
+  async feedbackRewards(cid: string): Promise<FeedbackLadderState> {
+    return this.feedbackBox.ladder(cid);
+  }
+
+  /** The owl closed the page's card about the grey mouse (OP-272). */
+  async closeFeedbackCard(cid: string): Promise<FeedbackLadderState> {
+    this.feedbackBox.closeCard(cid, Date.now());
+    return this.feedbackBox.ladder(cid);
   }
 
   async feedback(status: FeedbackStatus | 'all', limit: number): Promise<FeedbackRow[]> {
@@ -468,5 +662,59 @@ export class Collections extends DurableObject<Env> {
 
   async accountBind(nonce: string, code: string, here: { cid: string; dev: string | null } | null): Promise<Restored | 'gone' | 'no-owl'> {
     return this.accounts.restore(nonce, code, here, randomDeviceId, Date.now());
+  }
+
+  // Sign in with Google (OP-313; the Worker calls these only with GOOGLE_SIGNIN on and Google's client set).
+
+  async accountGoogleStart(nonce: string, kind: GoogleFor, cid: string | null, ipHash: string): Promise<number | null> {
+    return this.accounts.googleStart(nonce, kind, cid, ipHash, Date.now());
+  }
+
+  async accountGoogleBack(nonce: string): Promise<{ kind: GoogleFor; cid: string | null } | null> {
+    return this.accounts.googleBack(nonce, Date.now());
+  }
+
+  async accountGoogleLink(kind: GoogleFor, cid: string | null, emailHash: string, emailSeal: string, nonce: string): Promise<GoogleLink> {
+    return this.accounts.googleLink(kind, cid, emailHash, emailSeal, nonce, Date.now());
+  }
+
+  // ---------- bring a friend (OP-056; the Worker calls these only with REFERRALS not off; the rules are referralBook.ts) ----------
+
+  /** What the owl's Menu shows; `hadTicket` is the ticket book's word. */
+  async referralView(cid: string, hadTicket: boolean): Promise<ReferralView> {
+    const now = Date.now();
+    return this.referrals.view(cid, this.accounts.account(cid, now).friendCode, hadTicket, now);
+  }
+
+  /** A friend typed an owl's code (`code`, checked as a friend code by the Worker). */
+  async referralInvite(cid: string, code: string, hadTicket: boolean, ipHash: string): Promise<InviteResult> {
+    const now = Date.now();
+    const me = this.accounts.account(cid, now);
+    return this.referrals.invite({ cid, device: me.device, emailHash: this.accounts.emailHashOf(cid) }, this.accounts.byCode(code), hadTicket, ipHash, now);
+  }
+
+  /** A store checkout opened for one of the owl's free Day Tickets, by its token's hash: the offer, or null for none. */
+  async referralCheckout(cid: string, tokenHash: string): Promise<ReferralOffer | null> {
+    return this.referrals.checkout(cid, tokenHash, Date.now());
+  }
+
+  /** A paid order with the free Day Ticket's code: whether its checkout spends an offer still waiting (a friend's only with an email, `emailHash`, that never had one). */
+  async referralSpend(tokenHash: string, order: string, emailHash: string | null): Promise<boolean> {
+    return this.referrals.spend(tokenHash, order, emailHash, Date.now());
+  }
+
+  /** The owl that brought this friend and waits to be thanked, or null. */
+  async referralPending(friend: string): Promise<string | null> {
+    return this.referrals.pending(friend);
+  }
+
+  /** The friend's first time through the gate: thank the owl that brought them (`member`: it holds an annual pass). */
+  async referralCredit(friend: string, member: boolean): Promise<Credited | null> {
+    const now = Date.now();
+    const referrer = this.referrals.pending(friend);
+    if (!referrer) return null;
+    const a = this.accounts.emailHashOf(referrer);
+    const sameEmail = a !== null && a === this.accounts.emailHashOf(friend);
+    return this.referrals.credit(friend, member, sameEmail, (cid, n) => this.book.addFeathers(cid, n, now), now);
   }
 }

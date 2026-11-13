@@ -16,11 +16,18 @@ function seenOn(storage: Store | null): string[] {
 
 /**
  * Tell the visitor about each present from the park in their collection, once per device (a page that
- * cannot keep the note, in a private window, says it again next visit). Returns what was announced.
+ * cannot keep the note, in a private window, says it again next visit), while its note is in season
+ * (OP-297: no Halloween greeting in November). Returns what was announced.
  */
-export function announcePresents(owned: readonly string[], toast: (message: string, ms: number, accent: string) => void, storage: Store | null): Present[] {
+export function announcePresents(
+  owned: readonly string[],
+  toast: (message: string, ms: number, accent: string) => void,
+  storage: Store | null,
+  now = Date.now(),
+  presents: readonly Present[] = PRESENTS,
+): Present[] {
   const seen = seenOn(storage);
-  const fresh = PRESENTS.filter((p) => owned.includes(p.variant) && !seen.includes(p.variant));
+  const fresh = presents.filter((p) => owned.includes(p.variant) && !seen.includes(p.variant) && (p.noteUntil === undefined || now < p.noteUntil));
   for (const p of fresh) {
     const v = parseVariant(p.variant);
     toast(p.note, 8000, v ? RARITY_COLOURS[v.rarity] : '#FFD36A');

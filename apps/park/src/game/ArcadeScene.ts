@@ -132,6 +132,8 @@ export class ArcadeScene extends Phaser.Scene {
   private onStep: ((sim: ArcadeSim) => void) | null = null;
   /** When the game last stepped (the page's clock), null before a run's first frame. */
   private lastStep: number | null = null;
+  /** The run is paused (OP-345): it is drawn as it stands and its clock does not move. */
+  private paused = false;
   /** A run asked for before the scene had started: it begins once the scene is up. */
   private pending: { sim: ArcadeSim; look: OwlLook; onStep: (sim: ArcadeSim) => void } | null = null;
 
@@ -181,6 +183,7 @@ export class ArcadeScene extends Phaser.Scene {
     this.sim = sim;
     this.onStep = onStep;
     this.lastStep = null;
+    this.paused = false;
     const rnd = runRandom(7);
     this.stars = Array.from({ length: 40 }, () => ({ x: rnd() * FIELD_W, y: rnd() * (FIELD_H - 120), r: 0.6 + rnd() * 1.4 }));
     this.owl?.destroy();
@@ -269,6 +272,11 @@ export class ArcadeScene extends Phaser.Scene {
     if (this.g) this.layout();
   }
 
+  /** Pause the run or let it go on (OP-345). A new run starts unpaused. */
+  setPaused(on: boolean): void {
+    this.paused = on;
+  }
+
   private layout(): void {
     const cam = this.cameras.main;
     const { width, height } = this.scale.gameSize;
@@ -291,8 +299,12 @@ export class ArcadeScene extends Phaser.Scene {
     // Phaser's floor (200 ms, a slow device under load) it steps by an old, short delta and the game
     // would crawl at a few percent of its speed. The game's clock lets a stall go (MAX_CATCH_UP_MS).
     const now = performance.now();
-    sim.advance(this.lastStep === null ? delta : now - this.lastStep);
-    this.lastStep = now;
+    // Paused: nothing moves, and the time spent paused is no time of the run's when it goes on.
+    if (this.paused) this.lastStep = null;
+    else {
+      sim.advance(this.lastStep === null ? delta : now - this.lastStep);
+      this.lastStep = now;
+    }
     g.clear();
     this.frameG.clear();
     this.frameLines(this.frameG, sim.game);

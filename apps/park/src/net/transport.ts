@@ -1,5 +1,6 @@
-import type { Air, FeedbackDraft, LineStatus, OwlAccount, OwlLook, OwlPicture, ParkMessage, PlayerState, PortraitLook, RealmsSettings, Vec2, Walk } from '@owl-park/shared';
-import type { ActivityLink, ActivityPushes, NestLink, NestPushes, QuestLink, QuestPushes } from '../collect/service';
+import type { PartyKey, PartyOp, ServerParty, ServerStump } from '@owl-park/shared';
+import type { Air, ClosedView, EscapeAct, FeedbackDraft, LineStatus, OwlAccount, OwlLook, OwlPicture, ParkMessage, PlayerState, PortraitLook, PuzzleSymbol, RealmsSettings, ReferralRefusal, ReferralView, ServerEscape, Vec2, Walk } from '@owl-park/shared';
+import type { ActivityLink, ActivityPushes, CourseLink, NestLink, NestPushes, QuestLink, QuestPushes } from '../collect/service';
 import type { TicketLink } from './ticketLinks';
 
 export type ConnectionStatus = 'connecting' | 'online' | 'offline';
@@ -54,8 +55,28 @@ export interface RoomHandlers extends QuestPushes, ActivityPushes, NestPushes {
   onRestart?(): void;
   /** The park is closed for setup (OP-205): the owl goes to the home screen, which shows these words until the park opens again. */
   onSetup?(words: string): void;
+  /** The ticket that let the owl in ran out of time (OP-237): the owl goes to the home screen, and Play brings it back through the gate. */
+  onTicketEnded?(): void;
   /** Whether this owl walks the park as a spectator (OP-191): said with every welcome, and false once a ticket admits it in place. */
   onSpectator?(spectator: boolean): void;
+  /** The sealed hollow (OP-310): its run as it now stands, pushed when another owl moved it, or what this owl's escape earned. Times on this page's clock. */
+  onEscape?(f: ServerEscape): void;
+  /** The Old Stump's seats (OP-314): the room's answer to a party frame there, or the seats as they changed. */
+  onStump?(frame: ServerStump): void;
+  /** A party game as it stands, an owl's input in its minigame, or what it paid (OP-314). */
+  onParty?(frame: ServerParty): void;
+  /** The party game's room turned this owl away, or its game is over (OP-314): back to the Party Grove. */
+  onPartyClosed?(): void;
+}
+
+/** The party game (OP-314) through the room server: what a page asks at the stump and in a game. */
+export interface PartyLink {
+  send(op: PartyOp, more?: { bots?: boolean; k?: PartyKey; v?: number }): void;
+}
+
+/** The sealed hollow's steps (OP-310), checked by the room server; the answer's times on this page's clock. */
+export interface EscapeLink {
+  ask(a: EscapeAct, args?: { lock?: string; n?: number; code?: PuzzleSymbol[]; vine?: string }): Promise<ServerEscape>;
 }
 
 export interface RoomConnection {
@@ -68,14 +89,22 @@ export interface RoomConnection {
   link?: QuestLink;
   /** The room's activities, run by the same server. */
   acts?: ActivityLink;
+  /** The parkour course in one of its acts, checked by the same server (OP-224). */
+  course?: CourseLink;
   /** The nests on the street and in a nest, kept by the same server. */
   nests?: NestLink;
+  /** The sealed hollow's doorway and its run, kept by the same server (OP-310). */
+  escape?: EscapeLink;
+  /** The room server's clock now (ms), as this socket has reckoned it: what the room's gusts keep time by (updraft.ts). */
+  serverNow?(): number;
   /** Drop the socket as a bad network would (the room server only); it reconnects on its own. For the browser tests. */
   drop?(): void;
   /** A spectator's ticket went through (OP-191): the room server takes the admitted pass in place. False: it did not, and `renew` is the fallback. */
   admit?(): Promise<boolean>;
   /** Open the room's socket again at once, on the pass as it now stands (the room server only, OP-191). */
   renew?(): void;
+  /** The party game (OP-314): only the room server runs it. */
+  party?: PartyLink;
 }
 
 /**
@@ -90,6 +119,10 @@ export interface ParkTransport {
   vote?(realm: string): Promise<Response>;
   /** Send the visitor's feedback to the park's keepers; only the room server keeps it (net/feedback.ts). */
   feedback?(draft: FeedbackDraft): Promise<Response>;
+  /** The thanks ladder for feedback (OP-272): where this owl stands, and whether its notes climb it. */
+  feedbackRewards?(): Promise<Response>;
+  /** The owl closed the card about the grey mouse; the park keeps it closed for this owl. */
+  closeFeedbackCard?(): Promise<Response>;
   /**
    * What the front gate needs: whether the park takes tickets yet, and whether this visitor's pass
    * goes through. Transports without a server have an open gate.
@@ -104,11 +137,33 @@ export interface ParkTransport {
   readonly tickets?: TicketWallet;
   /** The line in front of the park on busy nights (OP-075); only the room server has one. */
   readonly line?: LineLink;
+  /**
+   * Whether the park is closed for setup (OP-233), for the home screen; null when the park did not say
+   * (out of reach, or too many asks). Transports without a server are never closed.
+   */
+  closed?(): Promise<ClosedView | null>;
+  /** How many owls are in the park right now, every room added up (/api/counts), for the home screen; null when the park did not say. */
+  parkCount?(): Promise<number | null>;
   /** The owl's account (OP-139): only the room server keeps them, and only with ACCOUNTS on. */
   readonly accounts?: AccountLink;
+  /** Bring a friend (OP-056): only the room server has it, and only with REFERRALS not off. */
+  readonly referrals?: ReferralLink;
 }
 
-/** What sending a link to a grown-up's email came to. */
+/** Bring a friend, as the park says it now: off for the whole park, a preview (shown with ?friends=1) or on; and whether its free Day Ticket can be checked out. */
+export type ReferralState = ReferralView & { mode: 'preview' | 'on'; free: boolean };
+
+/** Bring a friend (OP-056), as the Menu uses it. */
+export interface ReferralLink {
+  /** This owl's card; null while it is off or the park is out of reach. */
+  view(): Promise<ReferralState | null>;
+  /** A friend's code typed in: the card as it is now, or why not. */
+  invite(code: string): Promise<{ ok: true; state: ReferralState } | { ok: false; reason: ReferralRefusal | 'offline' }>;
+  /** The store's cart link for one free Day Ticket waiting on this owl; null when none can be had. */
+  freeTicket(): Promise<string | null>;
+}
+
+/** What sending a link to the protecting email came to. */
 export type AccountSend = 'sent' | 'bad-email' | 'try-later' | 'not-ready' | 'offline';
 
 /** A protect link opened: the owl it protects now (`mine`: this screen's own), or why not. */
@@ -128,7 +183,17 @@ export interface AccountLink {
   owls(token: string): Promise<OwlPicture[] | 'gone' | 'offline'>;
   /** The tap: this screen holds that owl from now on (the page starts again with it). */
   bind(token: string, code: string): Promise<'bound' | 'gone' | 'no-owl' | 'offline'>;
+  /** Whether the park offers Sign in with Google (OP-313) beside the email box: asked once, false while it is off. */
+  googleReady(): Promise<boolean>;
+  /**
+   * Sign in with Google instead of a mailed link (OP-313): the page goes to Google, which sends it back
+   * with the link the email would have carried. Resolves only when it could not go.
+   */
+  google(kind: 'protect' | 'restore'): Promise<AccountGoogle>;
 }
+
+/** Why a Google sign-in could not start (OP-313). */
+export type AccountGoogle = 'not-ready' | 'try-later' | 'offline';
 
 /** The line in front of the park (OP-075), as the home screen uses it. */
 export interface LineLink {

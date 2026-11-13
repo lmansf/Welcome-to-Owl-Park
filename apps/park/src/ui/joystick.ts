@@ -1,7 +1,7 @@
 import type { Vec2 } from '@owl-park/shared';
 
 /**
- * The thumbstick on touch screens: a see-through stick in the bottom-right corner that walks the
+ * The thumbstick on touch screens: a see-through stick in the bottom-left corner that walks the
  * owl while held, the way WASD does on a keyboard, so a thumb never has to tap the floor between the
  * buttons. It points one of eight ways, like the keys. In a game played by flicks (Hoot & Hop,
  * OP-137) it points one of four, and each push into a way is one flick; in a game played by a pull
@@ -9,6 +9,8 @@ import type { Vec2 } from '@owl-park/shared';
  */
 
 const D = Math.SQRT1_2;
+/** How far a finger still down may be from where the stick's thumb was last seen and still be that thumb (client px). */
+const THUMB_SLACK_PX = 60;
 /** Right, down-right, down, down-left, left, up-left, up, up-right (screen y points down). */
 export const STICK_WAYS: readonly Vec2[] = [
   { x: 1, y: 0 },
@@ -47,9 +49,16 @@ export interface StickPull {
   release(): void;
 }
 
+/** Whether the stick came to rest: it pointed a way (`was`) and points none now. */
+export function cameToRest(was: number | null, now: number | null): boolean {
+  return was !== null && now === null;
+}
+
 export interface Joystick {
   /** Where the stick points: one of eight unit vectors, or null while it rests. */
   direction(): Vec2 | null;
+  /** How many times the stick has come to rest from pointing a way: the thumb lifted, or back at the middle (keyboard.ts, Keys.rests). */
+  rests(): number;
   /** While `cb` is set the stick points four ways, and calls it once for each push into one (null: eight ways again). */
   flicks(cb: ((dir: Vec2) => void) | null): void;
   /**
@@ -61,26 +70,44 @@ export interface Joystick {
   detach(): void;
 }
 
+/**
+ * The stick goes quiet while the visitor's own owl is under it (OP-349). On a phone held sideways the
+ * stick lies over the west end of the room, and a course's way in is always there: a visitor started
+ * every course with the owl under their thumb. Quiet, the stick is drawn at this much of itself; a
+ * thumb on it brings it back at once.
+ */
+export const STICK_QUIET = 0.3;
+/** How far round the stick the owl counts as under it (CSS px): its body is wider than the point at its feet. */
+export const STICK_PAD = 26;
+/** How far over its feet an owl's middle is on the screen, about (CSS px). */
+export const OWL_MID_UP = 34;
+
+/** Whether an owl with its feet at `feet` on the screen (CSS px) is under the stick's box: its feet or its middle inside the box grown by STICK_PAD. */
+export function underStick(feet: { x: number; y: number }, box: { left: number; top: number; right: number; bottom: number }): boolean {
+  const inside = (x: number, y: number) => x >= box.left - STICK_PAD && x <= box.right + STICK_PAD && y >= box.top - STICK_PAD && y <= box.bottom + STICK_PAD;
+  return inside(feet.x, feet.y) || inside(feet.x, feet.y - OWL_MID_UP);
+}
+
 /** The HUD's own stick keeps its plain class (`stick`, as the settings and the tests know it); another screen's is `<prefix>-stick`. */
 const classOf = (prefix: string) => (prefix === 'hud' ? 'stick' : `${prefix}-stick`);
 
 const css = (prefix: string) => `
 #hud .${classOf(prefix)}{position:absolute;right:0;bottom:0;width:128px;height:128px;border-radius:50%;display:none;pointer-events:auto;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;background:rgba(12,30,54,.28);border:2px solid rgba(246,241,227,.32);box-shadow:inset 0 0 18px rgba(0,0,0,.25)}
 #hud .${classOf(prefix)} i{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;background:rgba(246,241,227,.4);border:2px solid rgba(246,241,227,.5);box-shadow:0 2px 8px rgba(0,0,0,.3);transition:transform .12s ease-out}
+#hud .${classOf(prefix)}{transition:opacity .2s ease-out}
+#hud .${classOf(prefix)}.quiet:not(.on){opacity:${STICK_QUIET}}
 #hud .${classOf(prefix)}.on{background:rgba(12,30,54,.38);border-color:rgba(255,211,106,.55)}
 #hud .${classOf(prefix)}.on i{transition:none;background:rgba(255,211,106,.5)}
 @media (pointer:coarse){
   #hud .${classOf(prefix)}{display:block}
 }
 `;
-/** The HUD's own stick sits in the bottom bar's corner and makes room for the buttons beside it. */
+/** The HUD's own stick sits in the bottom bar's left corner; the HUD lays out the buttons round it (ui/hud.ts). */
 const HUD_CSS = `
 @media (pointer:coarse){
-  #hud .bottom .left{max-width:calc(100% - 140px)}
-  #hud .bottom .actions{position:absolute;right:0;bottom:140px;flex-direction:column;align-items:flex-end}
+  #hud .bottom .stick{left:0;right:auto}
 }
 `;
-
 /**
  * Put a thumbstick in `parent` (it shows on touch screens only): the HUD's bottom bar, or the climb
  * screen's own corner. `prefix` scopes its class (`stick` for the HUD, `climb-stick`) so each screen styles its own.
@@ -100,6 +127,7 @@ export function createJoystick(parent: HTMLElement, prefix = 'hud'): Joystick {
 
   let pointer: number | null = null;
   let way: number | null = null;
+  let rests = 0;
   let flick: ((dir: Vec2) => void) | null = null;
   let pulled: StickPull | null = null;
 
@@ -118,15 +146,30 @@ export function createJoystick(parent: HTMLElement, prefix = 'hud'): Joystick {
     if (pulled) return pulled.pull(dx / reach, dy / reach);
     const was = way;
     way = stickWay(dx, dy, radius, way, flick ? 4 : 8);
+    if (cameToRest(was, way)) rests += 1;
     if (flick && way !== null && way !== was) flick(STICK_WAYS[way]!);
   };
+  /** Where the thumb on the stick was last seen (client px), to know it is still down when another touch ends. */
+  let at: { x: number; y: number } | null = null;
   const rest = () => {
     pointer = null;
+    if (cameToRest(way, null)) rests += 1;
     way = null;
+    at = null;
     knob.style.transform = '';
     stick.classList.remove('on');
   };
   const onDown = (e: PointerEvent) => {
+    // One thumb works the stick. A new touch on it while another is still held means the old one's lift
+    // never came (Safari can drop it amid quick taps elsewhere, Logan 2026-11-05): the new thumb takes over.
+    if (pointer !== null && pointer !== e.pointerId) {
+      try {
+        stick.releasePointerCapture(pointer);
+      } catch {
+        /* that pointer is gone already */
+      }
+      rest();
+    }
     if (pointer !== null) return;
     pointer = e.pointerId;
     try {
@@ -135,15 +178,21 @@ export function createJoystick(parent: HTMLElement, prefix = 'hud'): Joystick {
       /* the move and up events still arrive while the thumb stays on the stick */
     }
     stick.classList.add('on');
+    at = { x: e.clientX, y: e.clientY };
     aim(e);
     e.preventDefault();
   };
   const onMove = (e: PointerEvent) => {
-    if (e.pointerId === pointer) aim(e);
+    if (e.pointerId !== pointer) return;
+    at = { x: e.clientX, y: e.clientY };
+    aim(e);
   };
   /** The thumb lifted: a pull is let go. */
   const onUp = (e: PointerEvent) => {
     if (e.pointerId !== pointer) return;
+    lifted();
+  };
+  const lifted = () => {
     const p = pulled;
     rest();
     p?.release();
@@ -159,16 +208,32 @@ export function createJoystick(parent: HTMLElement, prefix = 'hud'): Joystick {
   const onHide = () => {
     if (document.visibilityState !== 'visible') cut();
   };
+  /**
+   * The touch screen's own word, whatever became of the pointer events: when a touch ends and no finger
+   * still down is anywhere near where the stick's thumb was, that thumb has lifted.
+   */
+  const onTouchEnd = (e: TouchEvent) => {
+    if (pointer === null) return;
+    const left = Array.from(e.touches);
+    const near = at && left.some((t) => Math.hypot(t.clientX - at!.x, t.clientY - at!.y) <= THUMB_SLACK_PX);
+    if (!near) lifted();
+  };
   stick.addEventListener('pointerdown', onDown);
   stick.addEventListener('pointermove', onMove);
   stick.addEventListener('pointerup', onUp);
   stick.addEventListener('pointercancel', onCut);
   stick.addEventListener('lostpointercapture', onCut);
+  // The stick's lift wherever it lands, in case the stick never held on to its pointer.
+  window.addEventListener('pointerup', onUp, true);
+  window.addEventListener('pointercancel', onCut, true);
+  window.addEventListener('touchend', onTouchEnd, true);
+  window.addEventListener('touchcancel', onTouchEnd, true);
   window.addEventListener('blur', cut);
   document.addEventListener('visibilitychange', onHide);
 
   return {
     direction: () => (way === null ? null : STICK_WAYS[way]!),
+    rests: () => rests,
     flicks(cb) {
       flick = cb;
       rest();
@@ -178,6 +243,10 @@ export function createJoystick(parent: HTMLElement, prefix = 'hud'): Joystick {
       rest();
     },
     detach() {
+      window.removeEventListener('pointerup', onUp, true);
+      window.removeEventListener('pointercancel', onCut, true);
+      window.removeEventListener('touchend', onTouchEnd, true);
+      window.removeEventListener('touchcancel', onTouchEnd, true);
       window.removeEventListener('blur', cut);
       document.removeEventListener('visibilitychange', onHide);
       stick.remove();

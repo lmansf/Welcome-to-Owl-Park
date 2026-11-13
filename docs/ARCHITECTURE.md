@@ -3,7 +3,7 @@
 - Status: mixed; each section is tagged BUILT or PLANNED (OP-xxx)
 - Verified against: branch claude/op-202-docs off main 01e9722 (2026-11-02)
 - Code: apps/edge/src (the Worker's routes in apps/edge/src/routes), packages/shared/src, packages/shared/rooms, apps/park/src, apps/park/index.html, apps/park/public/_headers, apps/park-log, apps/edge/wrangler.jsonc, .github/workflows
-- Tickets: OP-002, OP-010, OP-022, OP-038, OP-048, OP-051, OP-055, OP-059, OP-065, OP-067, OP-068, OP-071, OP-075, OP-077, OP-082, OP-083, OP-084, OP-098, OP-107, OP-108, OP-111, OP-113, OP-124, OP-126, OP-127, OP-129, OP-130, OP-136, OP-137, OP-138, OP-139, OP-140, OP-141, OP-142, OP-144, OP-148, OP-149, OP-150, OP-153, OP-155, OP-156, OP-162, OP-173, OP-180, OP-191, OP-192, OP-198, OP-201; planned OP-024, OP-050, OP-052, OP-053, OP-063, OP-072, OP-076
+- Tickets: OP-002, OP-010, OP-022, OP-038, OP-048, OP-051, OP-055, OP-059, OP-065, OP-067, OP-068, OP-071, OP-075, OP-077, OP-082, OP-083, OP-084, OP-098, OP-107, OP-108, OP-111, OP-113, OP-124, OP-126, OP-127, OP-129, OP-130, OP-136, OP-137, OP-138, OP-139, OP-140, OP-141, OP-142, OP-144, OP-148, OP-149, OP-150, OP-153, OP-155, OP-156, OP-162, OP-173, OP-180, OP-191, OP-192, OP-198, OP-201, OP-211; planned OP-024, OP-050, OP-052, OP-053, OP-063, OP-072, OP-076
 - Related: docs/CAPACITY.md, docs/DEPLOY.md, docs/PLAYBOOK.md, docs/GLOSSARY.md
 
 How to read this file: headings carry [BUILT] or [PLANNED (OP-xxx)]; inside a section, `PLANNED (OP-xxx)` marks
@@ -305,7 +305,8 @@ it, so doorways, spots and walks are as before.
   perch of that height is under the owl or within `perchReachPx` of its walk (the `perch` rejection).
   The room never closes a socket over air. Nothing about flight is logged.
 - **Perches** (`packages/shared/src/perches.ts`; a room's `perches`): each an `area` on the floor
-  plan and a `top`, its height in room pixels (at most `MAX_PERCH_TOP`, 540). A `solid` perch is a
+  plan and a `top`, its height in room pixels (at most `MAX_PERCH_TOP`, 540, in a room one screen
+  high, and as much higher as a taller room is taller: `perchTopLimit`). A `solid` perch is a
   wall to an owl below its top; one that is not is walked under and jumped up through. The ground
   under an owl is the top of the highest perch at or a little above its height there (within
   `PERCH_SLACK`, 4 px), else the floor (`groundAt`). Walking at a height is walking as before, on the
@@ -339,10 +340,17 @@ and plays every game, and earns nothing:
   stands and `practice: true`, keep nothing on the wall or in the owl's bests, and pay nothing; a
   practice climb's bands answer `added: 0`, keep no band rows and grant no item. A run started as a
   spectator stays practice after a ticket. A ticket holder's climb start drops an open practice run.
-- The quests, the NPC owls, the leaf piles, the stalls, the quest items and today's tasks answer
-  `refused` (or `act` with `ok: false`) with reason `spectator`. A spectator's arrivals and emotes
-  count for no quest.
-- A spectator's look shows no Realm Vote pledge.
+- The quests, the NPC owls, the quest items and today's tasks answer `refused` (or `act` with
+  `ok: false`) with reason `spectator`. A spectator's arrivals and emotes count for no quest.
+- The leaf piles, the stalls and the moonbeam are open to a spectator, checked for reach and the
+  cooldown as anyone's (OP-243): a pile it flops is gone for everyone (`used`), as after anyone's
+  flop, and the answer is `useResult` with 0 feathers, `total: -1` and `practice: true`. The
+  collections object is never asked, so no feather, quest step or task comes of it.
+- A spectator's look shows no Realm Vote pledge, and is otherwise drawn as anyone's: nothing marks
+  an owl as a spectator to the others (OP-243). Every collector holds `STARTER_PACK`
+  (`packages/shared/src/collectibles.ts`): the Hoot and Flap emotes, Sparkle, and a Beanie, Round
+  Glasses and Knit Scarf in their original colours; a collector made before a piece was added gets it
+  the next time its collection is read (`CollectionBook`), as with the presents.
 - A room lets a spectator in while it holds fewer owls than its cap times `SPECTATOR_SHARE`
   (`spectatorLimit` in `apps/edge/src/rooms.ts`); past that a spectator gets `full` with
   `spectators: true`. Ticket holders come in up to the full cap.
@@ -357,8 +365,10 @@ The page's half (`apps/park/src/ui/spectator.ts`, its words and choices, unit-te
 Get a Day Ticket button. Every Get a Day Ticket opens the turnstiles' own sale (`sellDayTicket`, the
 card before the store then checkout, OP-180) with a line above it. Locked on the page as well as on
 the server: no NPC marks or quest items are drawn, talking to an NPC owl (the feather shop's keeper
-and the gift included), a leaf pile or a stall, the gift shop's door and the Quests tab sell a Day
-Ticket instead, and the idol says the vote line, then the card. A `refused` with reason `spectator`
+and the gift included), the gift shop's door and the Quests tab sell a Day Ticket instead, and the
+idol says the vote line, then the card. Leaf piles, stalls and the moonbeam play as anyone's
+(OP-243); a `practice` flop turns up nothing, and the first one on the page toasts once that a Day
+Ticket turns up feathers (`createOnceHint`), with no card. A `refused` with reason `spectator`
 opens the card too. The arcade's and the climb's result cards for a practice run say what the run
 would have earned (worked out on the page with `runFeathers` and `BAND_FEATHERS`, without the
 day's-best or brisk bonus) over Get a Day Ticket and Play again; fishing, the copy game, the quiz
@@ -374,7 +384,8 @@ tests' room server (`playwright.config.ts`).
 ## 5. Room data (`packages/shared/rooms/index.ts`)
 
 Rooms are data shared by the client and the server: a `size` (one screen is 1600 x 900; a room
-may be up to 6400 x 1800, `ROOM_MAX_W` x `ROOM_MAX_H`, and the camera follows the owl across it),
+may be up to 6400 x 4500, `ROOM_MAX_W` x `ROOM_MAX_H`, and the camera follows the owl across it
+and up it; a kit backdrop's `rows` draw it down a tall room's screens),
 `walkable` polygons, `spawns`, `doors`
 (open with `to`, or closed with an approved `closedSign`), `mood` for ambience, `spots` where
 quests hide their items, and anchors for large set pieces. NPC owls and interactables are placed
@@ -570,6 +581,42 @@ What it means:
   frame), and copies of a room (item 3). A full room still answers `full`, and the page walks the owl
   back where it came from. How each works and when to use it: `docs/CAPACITY.md`.
 
+### Measured again (OP-211, 2026-11-02)
+
+On 2026-11-02 two Load test runs of a branch showed 80 busy owls in the hub at an echo p95 of about
+230 ms, three times the 71 ms above. Run again the same evening with the same settings (one object
+per room, steps 3 and 5, 60 seconds each), the code from main on 2026-10-23 (67ca3ab), today's main
+(503b9bf) and that branch's commit (d8857a8) each gave both fast and slow runs. The commit was not
+what decided it: which GitHub runner, in which region, the bots ran from was.
+
+| Code | Runner | 80 in the hub, busy: p50 / p95 / p99 (ms) | Unanswered | 240 in four rooms: p50 / p95 / p99 (ms) | Unanswered |
+| --- | --- | --- | --- | --- | --- |
+| main on 2026-10-23 (67ca3ab) | northcentralus | 59 / 116 / 152 | 274 of 4,891 | 60 / 110 / 148 | 403 of 14,890 |
+| main on 2026-10-23 (67ca3ab) | northcentralus | 56 / 83 / 108 | 287 of 4,931 | 55 / 93 / 122 | 438 of 14,850 |
+| main (503b9bf) | eastus | 46 / 74 / 102 | 624 of 5,004 | 42 / 84 / 124 | 400 of 15,032 |
+| main (503b9bf) | westus3 | 52 / 115 / 164 | 372 of 4,977 | 42 / 104 / 153 | 637 of 14,928 |
+| the 2026-11-02 branch (d8857a8) | westus3 | 59 / 283 / 297 | 354 of 4,273 | 68 / 287 / 296 | 374 of 14,675 |
+| the 2026-11-02 branch (d8857a8) | centralus | 57 / 71 / 90 | 501 of 5,030 | 57 / 69 / 81 | 478 of 15,072 |
+| the 2026-11-02 branch (d8857a8), the first two runs (41507562487, 41508326416) | centralus | 65 / 236 / 276 (the second run only) | 345 of 5,159 | 54 to 55 / 227 to 239 / 252 to 302 | 368 to 447 of about 15,100 |
+
+What it means:
+
+- No run overloaded: no socket was closed with 1013, at most one owl in a run was not welcomed, and
+  about 3 to 12 in every 100 moves went unanswered, as on 2026-10-23. Two runs saw a few sockets
+  dropped (1006, 4 and 13 to 17 of them), the network's doing. A room still holds 80 busy owls, and four rooms
+  at their caps still hold with one object per room.
+- The echo is the runner's network as much as the server: the same code gave a p95 of 71 ms and of
+  283 ms. Read one run's p95 as a range, roughly 70 to 300 ms for 80 busy owls in one room, and the
+  p50 as 40 to 70 ms (it was 20 to 31 ms on 2026-10-23). Compare code only with runs from the same
+  runner region (the job's "Set up job" step names it), or several runs of each.
+- The room's own work per move grew a little with flight, perches and the position checks (OP-084,
+  OP-149): about 60 µs a move for 80 owls on a development machine, against about 49 µs on
+  2026-10-23, a millisecond of an object's second at 80 moves a second. That is not where the echo
+  goes.
+- Since OP-209 the throwaway copy needs a signing key of its own, or it answers every pass 503 and
+  the Load test stops at "Wait for the copy to answer". The main rows above ran with that change
+  (PR 62: the copy's keys go up as secrets).
+
 ## 7. The Realm Vote [BUILT; opens with tickets]
 
 Canon: every ticket-holder gets one vote per park day, cast by walking up to a realm's idol (its
@@ -649,10 +696,10 @@ in the `Collections` object's SQLite beside the collections. Each owl's account 
   and never logged. One email may protect several owls. An owl without one lives only on its screen;
 - its look, for the picture a restoring screen shows.
 
-A child never types an email. A grown-up protects an owl in Settings (`POST /api/account/protect`,
+A player protects an owl in Settings (`POST /api/account/protect`,
 then the emailed link, `/api/account/confirm`), or a ticket's buyer is mailed a one-tap protect link
 as the ticket lands on an owl (OP-186), which carries the address sealed in its own token, so the
-park keeps nothing about it unless the link is opened. To bring an owl to another screen, a grown-up
+park keeps nothing about it unless the link is opened. To bring an owl to another screen, the player
 types the protecting email there (`/api/account/restore`, answered the same whether the email
 protects any owl or not), opens the link sent to it on that screen, and taps the owl's picture
 (`/api/account/owls`, then `/api/account/bind` with its friend code): that screen holds the owl from
@@ -698,8 +745,8 @@ closed row.
 
 **The card before the store** BUILT (OP-153, OP-180, OP-198; `apps/park/src/ui/storeCard.ts`).
 Every way from the park to the store's pages first shows one card: a short line and two buttons,
-Continue and Not now, with no timer and no spending limit. Its line is `STORE_WORDS.ask` ("Ask a
-grown-up before buying"), a draft until the owner approves it. It shows once for each purchase,
+Continue and Not now, with no timer and no spending limit. Its line is `STORE_WORDS.ask` ("This opens
+the store in a new tab"), a draft until the owner approves it. It shows once for each purchase,
 right before it: at a turnstile reached without a ticket that works, before checkout opens for a Day
 Ticket; before opening night's pass checkout; and at the gift shop's door, before the store's page.
 Continue goes on in the same click, so a popup blocker lets the window through: a way that opens a
@@ -1076,10 +1123,12 @@ Vote, the nightly restart, and the weekly export (OP-185, below).
   (`apps/park/public/_headers`). An upgraded socket goes as it is.
 - **The page's policy** (`parkPolicy`, set by `guardedPage` with a fresh nonce on each load), each
   source with why it is there: `default-src 'self'`; `script-src 'self'` and the nonce, for the page's
-  own bundles and its two inline scripts; `style-src 'self' 'unsafe-inline'`, as the load screen's
+  own bundles and its two inline scripts, and `https://in.heycatch.ai`, for the HeyCatch analytics SDK's
+  one helper script (`ANALYTICS_HOST`); `style-src 'self' 'unsafe-inline'`, as the load screen's
   leaves and the HUD set their styles inline; `img-src 'self' data: blob:`, for the pictures the page
   makes itself (a nest's picture, the Menu's drawn edges, art fetched whole); `connect-src 'self'` and
-  the host's own `wss://`, for the API and the room sockets; `object-src 'none'`, `base-uri 'none'`,
+  the host's own `wss://`, for the API and the room sockets, and `https://in.heycatch.ai`, where the
+  analytics SDK (started in `apps/park/src/main.ts`) sends its events; `object-src 'none'`, `base-uri 'none'`,
   `form-action 'self'`, `frame-ancestors 'none'` (and `X-Frame-Options: DENY`); `report-uri
   /api/csp-report`. The page also goes out with `Referrer-Policy: strict-origin-when-cross-origin`.
 - **What the policy blocked**: a browser reports it to `/api/csp-report` (`CSP_REPORT_PATH`, at most

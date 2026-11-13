@@ -1,6 +1,8 @@
-import { MAX_ACTIVE_QUESTS, TASKS_BONUS, TASK_FEATHERS, getNpc, placeName, variantName, type ActiveQuestView, type NpcDef, type QuestOfferView, type QuestReward } from '@owl-park/shared';
+import { ACTIVE_SLOTS, MAX_ACTIVE_QUESTS, TASKS_BONUS, getQuest, questPuzzle, type LockView, type PuzzleSymbol, TASK_FEATHERS, getNpc, placeName, placeWords, variantName, type ActiveQuestView, type NpcDef, type QuestOfferView, type QuestReward } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { TaskState } from '../collect/tasks';
+import { walkingMap } from '../game/walkingMap';
+import { PUZZLE_CSS, createCodePad, puzzleBox } from './puzzle';
 
 export interface QuestActions {
   accept(quest: string): Promise<unknown>;
@@ -10,6 +12,10 @@ export interface QuestActions {
   collect(quest: string): Promise<unknown>;
   /** Nova's shop (from her dialogue). */
   openShop(): void;
+  /** A puzzle quest's run (OP-255): start one, look for owls close by, join one of them, leave. */
+  puzzle?(op: 'start' | 'near' | 'join' | 'leave', quest: string, owl?: string): Promise<unknown>;
+  /** Try a code at the lock the owl stands at. */
+  tryCode?(quest: string, lock: string, code: PuzzleSymbol[]): Promise<unknown>;
 }
 
 export interface QuestUi {
@@ -26,6 +32,13 @@ export interface QuestUi {
   resetJournal(): void;
   /** The room the owl is in: the lobby shows its welcome, and a finished quest can be collected where its giver stands. */
   setRoom(room: string): void;
+  /** The code pad of a code lock the owl walked up to (OP-255). */
+  openLock(quest: string, lock: LockView): void;
+  closeLock(): void;
+  /** Which lock the pad shows, if it is open. */
+  lockShowing(): { quest: string; lock: string } | null;
+  /** How the last try went, on the pad. */
+  lockNote(text: string): void;
 }
 
 const CSS = `
@@ -75,7 +88,10 @@ const CSS = `
 #hud .today .task.done span{opacity:.6;text-decoration:line-through}
 `;
 
-const CHIP_WORDS = { easy: 'Easy', medium: 'Medium', hard: 'Hard', short: 'Short', long: 'Long', story: 'Story', daily: 'Today', weekly: 'This week' } as const;
+/** What the quests are for, in a visitor's terms, at the top of the journal. Visitor-facing. */
+export const QUEST_JOB = "Something to do on today's visit, even a short one.";
+
+const CHIP_WORDS = { easy: 'Easy', medium: 'Medium', hard: 'Hard', short: 'Short', long: 'Long', story: 'Story', daily: 'Today', weekly: 'This week', monthly: 'This month' } as const;
 
 /** "5 h", "40 min", "3 days": how long until `at`. */
 export function timeLeft(at: number, now = Date.now()): string {
@@ -100,10 +116,13 @@ export function progressText(q: Pick<ActiveQuestView, 'ready' | 'step' | 'steps'
   return q.ready ? 'Done' : `${q.step}/${q.steps.length}`;
 }
 
+/** Words as this owl is shown them: each place named as the park it walks names it (OP-346; shared placeWords). */
+const shown = (text: string) => placeWords(text, walkingMap());
+
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = ''): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
-  if (text) e.textContent = text;
+  if (text) e.textContent = shown(text);
   return e;
 }
 
@@ -128,7 +147,7 @@ function steps(texts: string[], current: number | null, progress?: { count: numb
   const ol = el('ol');
   texts.forEach((t, i) => {
     const li = el('li', current === null ? '' : i < current ? 'done' : i === current ? 'now' : '');
-    li.textContent = i === current && progress && progress.need > 1 ? `${t} (${progress.count} of ${progress.need})` : t;
+    li.textContent = shown(i === current && progress && progress.need > 1 ? `${t} (${progress.count} of ${progress.need})` : t);
     ol.appendChild(li);
   });
   return ol;
@@ -144,9 +163,12 @@ type JournalTab = 'underway' | 'today' | 'more';
  * `onOpen` makes room before a screen or the dialogue opens; `back` returns from the quests screen to
  * the Menu.
  */
+/** In place of "Loading" while the park can't reach the quest board (OP-280): it keeps trying on its own. */
+export const OFFLINE_LINE = 'The quest board isn’t answering right now. It will try again by itself, so you can keep exploring.';
+
 export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestState, actions: QuestActions, onOpen: () => void, tasks: TaskState): QuestUi {
   const style = document.createElement('style');
-  style.textContent = CSS;
+  style.textContent = CSS + PUZZLE_CSS;
   document.head.appendChild(style);
 
   const welcome = el('div', 'welcome');
@@ -160,6 +182,7 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
   const dialogue = el('section', 'sheet dialogue');
   dialogue.setAttribute('aria-label', 'Talking');
   root.append(dialogue);
+  const pad = createCodePad(root, (quest, lock, code) => actions.tryCode?.(quest, lock, code) ?? Promise.resolve());
 
   let talking: NpcDef | null = null;
   let greeting = '';
@@ -193,6 +216,22 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
     top.append(chips(q));
     card.appendChild(top);
     card.appendChild(steps([...q.steps, `Take it back to ${npcName(q.giver)}`], q.ready ? q.steps.length : q.step, q.current));
+    // A puzzle quest's run (OP-255): start or join one, and where each lock stands.
+    const def = getQuest(q.id);
+    if (inJournal && !q.ready && def && questPuzzle(def) && actions.puzzle) {
+      const act = actions.puzzle;
+      let owlNo = 0;
+      const names = new Map<string, string>();
+      const nameOf = (owl: string) => names.get(owl) ?? (names.set(owl, `Owl ${++owlNo} close by`), names.get(owl)!);
+      card.appendChild(
+        puzzleBox(state.puzzles.get(q.id), state.near.get(q.id), {
+          start: () => void run(() => act('start', q.id)),
+          near: () => void run(() => act('near', q.id)),
+          join: (owl) => void run(() => act('join', q.id, owl)),
+          leave: () => void run(() => act('leave', q.id)),
+        }, pending, nameOf),
+      );
+    }
     if (inJournal && q.ready) {
       const row = el('div', 'collect');
       // The giver hands the reward over: from here when it stands in this room, otherwise it says where.
@@ -240,8 +279,10 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
     const box = el('div', 'quests journal');
     host.appendChild(box);
     const focused = (document.activeElement as HTMLElement | null)?.dataset?.['tab'] ?? null;
-    const sum = el('p', 'qsum', board ? `${board.active.length} of ${MAX_ACTIVE_QUESTS} carried · ${board.feathers} feathers` : 'Loading…');
+    const sum = el('p', 'qsum', board ? `${board.active.length} of ${MAX_ACTIVE_QUESTS} carried · ${board.feathers} feathers` : state.offline ? 'Not answering' : 'Loading…');
+    if (board) sum.title = `Room for ${ACTIVE_SLOTS.story} story, ${ACTIVE_SLOTS.daily} daily, ${ACTIVE_SLOTS.weekly} weekly and ${ACTIVE_SLOTS.monthly} monthly quests`;
     sum.dataset['sub'] = '';
+    box.appendChild(el('p', 'qsum qjob', QUEST_JOB));
     box.appendChild(sum);
     const today = tasks.view;
     const tabs: Array<[JournalTab, string]> = [
@@ -269,7 +310,7 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
     box.appendChild(panel);
     if (focused) box.querySelector<HTMLElement>(`[data-tab="${focused}"]`)?.focus();
     if (tab === 'today') {
-      if (!today) return void panel.appendChild(el('p', 'empty', 'Loading today’s tasks…'));
+      if (!today) return void panel.appendChild(el('p', 'empty', state.offline ? OFFLINE_LINE : 'Loading today’s tasks…'));
       const list = el('div', 'today');
       for (const t of today.tasks) {
         const done = t.done >= t.count;
@@ -280,14 +321,14 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
       panel.append(list, el('p', 'empty', `${today.bonus ? 'All three done, bonus paid.' : `Each task pays ${TASK_FEATHERS} feathers, and all three ${TASKS_BONUS} more.`} New tasks in ${timeLeft(today.endsAt)}.`));
       return;
     }
-    if (!board) return void panel.appendChild(el('p', 'empty', 'Loading your quests…'));
+    if (!board) return void panel.appendChild(el('p', 'empty', state.offline ? OFFLINE_LINE : 'Loading your quests…'));
     if (tab === 'more') {
       const givers = Object.entries(board.offers).filter(([, list]) => list.length);
       panel.appendChild(el('h3', '', 'Who has quests for you'));
       const who = el('div', 'who');
       for (const [npc, list] of givers) who.appendChild(el('span', '', `${npcName(npc)} at ${npcPlace(npc)}: ${list.length === 1 ? list[0]!.title : `${list.length} quests`}`));
       if (!givers.length) who.appendChild(el('span', 'empty', 'Nobody right now. New quests arrive every day at midnight, park time.'));
-      panel.append(who, el('p', 'empty', `Daily quests change in ${timeLeft(board.nextDay)}; weekly ones in ${timeLeft(board.nextWeek)}.`));
+      panel.append(who, el('p', 'empty', `Daily quests change in ${timeLeft(board.nextDay)}, weekly ones in ${timeLeft(board.nextWeek)} and monthly ones in ${timeLeft(board.nextMonth)}.`));
       return;
     }
     if (board.active.length) for (const q of [...board.active].sort((a, b) => Number(b.ready) - Number(a.ready))) panel.appendChild(activeCard(q, true));
@@ -324,8 +365,9 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
     }
     if (offers.length) {
       dialogue.appendChild(el('h3', '', 'Quests'));
-      const full = (state.board?.active.length ?? 0) >= MAX_ACTIVE_QUESTS;
-      for (const q of offers) dialogue.appendChild(offerCard(q, full));
+      // Each tier has its own room (OP-254): a full week leaves the month and the day free.
+      const carried = (cadence: string) => (state.board?.active ?? []).filter((a) => a.cadence === cadence).length;
+      for (const q of offers) dialogue.appendChild(offerCard(q, carried(q.cadence) >= (ACTIVE_SLOTS[q.cadence as keyof typeof ACTIVE_SLOTS] ?? MAX_ACTIVE_QUESTS)));
     }
     if (underway.length) {
       dialogue.appendChild(el('h3', '', 'Under way'));
@@ -351,7 +393,12 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
     delete dialogue.dataset['npc'];
   };
 
-  state.onChange(render);
+  state.onChange(() => {
+    render();
+    // The pad follows its lock: a friend's find shows at once, and an opened lock closes it.
+    const showing = pad.showing();
+    if (showing) pad.update(state.puzzles.get(showing.quest)?.locks.find((l) => l.id === showing.lock) ?? null);
+  });
   tasks.onChange(renderJournal);
   render();
 
@@ -378,5 +425,12 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
     resetJournal() {
       tab = 'underway';
     },
+    openLock(quest, lock) {
+      onOpen();
+      pad.open(quest, lock);
+    },
+    closeLock: () => pad.close(),
+    lockShowing: () => pad.showing(),
+    lockNote: (text) => pad.note(text),
   };
 }

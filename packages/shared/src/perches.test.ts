@@ -109,10 +109,13 @@ describe('perches (OP-084)', () => {
   });
 
   it('a hop too small for the bench comes back down at its face', () => {
-    const { fl, pos } = fly({ x: 800, y: 760 }, { x: 800, y: 690 }, [
-      [PRESS, 1], // a tap: the cut jump rises far less than the bench's top
+    // A tap is a jump that clears a first step (OP-343), so the hop too small here is a jump taken
+    // too far back: it is past its top and under the bench's by the time the owl is at the face.
+    const { fl, pos, path } = fly({ x: 800, y: 880 }, { x: 800, y: 690 }, [
+      [PRESS, 1],
       [NONE, steps(900)],
     ]);
+    expect(Math.max(...path.map((p) => p.z))).toBeGreaterThan(80);
     expect(fl.air.s).toBe(GROUNDED);
     expect(fl.air.z).toBe(0);
     expect(pos.y).toBeGreaterThanOrEqual(730);

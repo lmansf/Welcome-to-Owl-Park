@@ -4,7 +4,20 @@ import {
   CLIMB_RUN_MAX_MS,
   CLOSE,
   ClimbBook,
+  ESCAPE_DOOR,
+  ESCAPE_FEATHERS,
+  ESCAPE_HINT_AFTER_MS,
+  ESCAPE_ITEM,
+  ESCAPE_LOCKS,
+  ESCAPE_PERCH_TOP,
+  ESCAPE_PLACES,
+  GROUNDED,
+  escapeLayout,
+  payEscape,
   CollectionBook,
+  CourseBook,
+  MemoryCourseStore,
+  AIRBORNE,
   EDGE_PROTOCOL_VERSION,
   FURNITURE,
   MemoryClimbStore,
@@ -44,6 +57,7 @@ import type { Env } from '../src/env';
 import { captureLogs, loggerFor } from '../src/logs';
 import { mintEntry, mintKeeper, mintPass, signingSecret } from '../src/pass';
 import { roomDef } from '../src/rooms';
+import { COURSES, ROOMS as PARK_ROOMS } from '@owl-park/shared/rooms';
 import { TravelBook } from '../src/travelBook';
 import { eventsOf, logged } from './logged';
 import { sqlStorage } from './sqlite';
@@ -62,7 +76,7 @@ vi.mock('cloudflare:workers', () => ({
 }));
 vi.stubGlobal('WebSocketRequestResponsePair', class {});
 vi.stubGlobal('WebSocket', { READY_STATE_OPEN: 1 });
-const { RESTART_CLOSE_MS, RoomObject, sightingOf, spectatorSocket } = await import('../src/RoomObject');
+const { INPUT_MARK_EVERY_MS, NO_INPUT_CLOSE_MS, RESTART_CLOSE_MS, RoomObject, STANDING_KEEP_MS, isInput, quietFor, sightingOf, spectatorSocket } = await import('../src/RoomObject');
 const { LIMITS, Room } = await import('../src/Room');
 
 /** 2026-10-19 12:00 Eastern (16:00 UTC), a Monday. */
@@ -137,6 +151,38 @@ class FakeCollections {
   readonly arcade = new ArcadeBook(new MemoryScoreStore(), this.book);
   readonly climbStore = new MemoryClimbStore();
   readonly climb = new ClimbBook(this.climbStore, this.book, () => 0x5eed);
+  /** The parkour courses (OP-224): the real course book, and each call the room object made, as `act:room:id`. */
+  readonly courses = new CourseBook(new MemoryCourseStore(), this.book, COURSES, (id) => PARK_ROOMS[id]);
+  readonly courseCalls: string[] = [];
+  courseState(cid: string, room: string) {
+    this.courseCalls.push(`state:${room}`);
+    return this.answer(this.courses.state(cid, room, Date.now()));
+  }
+  courseStart(cid: string, room: string, practice?: boolean) {
+    this.practiceOnly(cid, practice, 'courseStart');
+    this.courseCalls.push(`start:${room}`);
+    return this.answer(this.courses.start(cid, room, Date.now(), practice));
+  }
+  courseReach(cid: string, room: string, kind: 'bench' | 'part' | 'feather', id: string) {
+    this.courseCalls.push(`${kind}:${room}:${id}`);
+    return this.answer(this.courses.reach(cid, room, kind, id, Date.now()));
+  }
+  courseOpen(cid: string, room: string, id: string) {
+    this.courseCalls.push(`shortcut:${room}:${id}`);
+    return this.answer(this.courses.open(cid, room, id, Date.now()));
+  }
+  /** The way in the room object named with each fall (OP-343), null when it named none. */
+  readonly fallEntries: (string | null)[] = [];
+  courseFall(cid: string, room: string, pos?: { x: number; y: number }, entry?: string) {
+    this.courseCalls.push(`fall:${room}`);
+    this.fallEntries.push(entry ?? null);
+    return this.answer(this.courses.fall(cid, room, Date.now(), { ...(entry !== undefined ? { entry } : {}), ...(pos ? { pos } : {}) }));
+  }
+  courseFinish(cid: string, room: string, _visit?: unknown, practice?: boolean) {
+    this.practiceOnly(cid, practice, 'courseFinish');
+    this.courseCalls.push(`finish:${room}`);
+    return this.answer(this.courses.finish(cid, room, Date.now(), practice));
+  }
   /** While set, nest lookups wait for it: the collections object is slow to answer. */
   hold: Promise<void> | null = null;
   down = false;
@@ -192,6 +238,24 @@ class FakeCollections {
   }
   feathers(cid: string) {
     return this.answer(this.book.feathers(cid, Date.now()));
+  }
+  /** The sealed hollow's pay (OP-310): the real pay on the real book; never asked for a spectator. */
+  readonly escapeCalls: string[] = [];
+  escapePaid(cid: string) {
+    this.noAward(cid, 'escapePaid');
+    this.escapeCalls.push(cid);
+    return this.answer(payEscape(this.book, cid, Date.now()));
+  }
+  /** Puzzle runs (OP-255): the calls asked, and the collectors this fake says are in a run. */
+  readonly puzzleCalls: Array<{ cid: string; op: string; other?: string; pos?: unknown }> = [];
+  readonly inRuns = new Set<string>();
+  puzzle(cid: string, req: { op: string; other?: string; pos?: unknown }) {
+    this.noAward(cid, 'puzzle');
+    this.puzzleCalls.push({ cid, op: req.op, ...(req.other ? { other: req.other } : {}), ...(req.pos ? { pos: req.pos } : {}) });
+    return this.answer({ ok: true, view: { puzzle: 'lockbox', title: 't', run: null, locks: [], mine: 0, total: 4, complete: false }, credited: [], members: [...this.inRuns] });
+  }
+  puzzleRuns(cids: string[]) {
+    return this.answer(Object.fromEntries(cids.filter((c) => this.inRuns.has(c)).map((c) => [c, { members: 1, opened: 2 }])));
   }
   /** The quests' own calls: none is ever asked for a spectator; a ticket holder's are not played in this fake. */
   board(cid: string) {
@@ -784,6 +848,12 @@ class KeepingState extends FakeState {
 
 describe('an owl back from a dropped connection (OP-138)', () => {
   /** A page's hello from where its owl stands now. */
+  /** The room server stopped at once (killed, or a deploy): its sockets gone with it, nothing told; its storage stays. */
+  const killed = () => {
+    const kept = (state as KeepingState).kept;
+    state = new KeepingState();
+    for (const [k, v] of kept) (state as KeepingState).kept.set(k, v);
+  };
   const helloAt = (obj: Obj, ws: FakeSocket, pos: Vec2) => send(obj, ws, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK, pos });
   const lost = async (obj: Obj, ws: FakeSocket) => {
     ws.close(1006, 'network gone');
@@ -818,8 +888,9 @@ describe('an owl back from a dropped connection (OP-138)', () => {
     await send(obj, a, { t: 'move', to: { x: 3400, y: 780 }, seq: 1 });
     clock += 6_000;
     await lost(obj, a);
-    // Its connection dropped (no goodbye), so one back soon has reconnected (OP-134).
-    expect((state as KeepingState).kept.get('leavers')).toEqual({ hub: { v_a: { pos: { x: 3400, y: 780 }, leftAt: clock, dropped: true } } });
+    // Its connection dropped (no goodbye), so one back soon has reconnected (OP-134). The owl still in
+    // the room is written down where it stands, as if it had just dropped too (OP-321).
+    expect((state as KeepingState).kept.get('leavers')).toEqual({ hub: { v_a: { pos: { x: 3400, y: 780 }, leftAt: clock, dropped: true }, v_b: { pos: expect.any(Object), leftAt: clock, dropped: true } } });
     // The object sleeps with the other owl's socket open, and wakes on the same storage.
     clock += 2_000;
     const woken = roomObject();
@@ -837,49 +908,112 @@ describe('an owl back from a dropped connection (OP-138)', () => {
     await helloAt(roomObject(), late, { x: 3300, y: 780 });
     expect(late.last('welcome')?.you.pos).not.toEqual({ x: 3300, y: 780 });
   });
+
+  it('resumes where its owl stood after the room server stops without a goodbye, as the moves since were written down (OP-321)', async () => {
+    state = new KeepingState();
+    const obj = roomObject();
+    const a = connect('hub', 'v_a');
+    await helloAt(obj, a, { x: 2400, y: 730 });
+    await send(obj, a, { t: 'move', to: { x: 3400, y: 780 }, seq: 1 });
+    // Walked over and standing there; a frame a while on writes down where it stands.
+    clock += STANDING_KEEP_MS + 1_000;
+    await send(obj, a, { t: 'rest', asleep: false });
+    expect((state as KeepingState).kept.get('leavers')).toEqual({ hub: { v_a: { pos: { x: 3400, y: 780 }, leftAt: clock, dropped: true } } });
+    // The room server stops: no close, no goodbye. It comes back on the same storage a few seconds on.
+    clock += 4_000;
+    killed();
+    const back = roomObject();
+    await settle(); // the constructor reads its storage
+    const page = connect('hub', 'v_a');
+    await helloAt(back, page, { x: 3400, y: 780 });
+    expect(page.last('welcome')?.you.pos).toEqual({ x: 3400, y: 780 });
+  });
+
+  it('writes down where an owl stands as it comes in, so one that came in just before the room server stopped is let back where it walked (OP-321)', async () => {
+    state = new KeepingState();
+    const obj = roomObject();
+    const first = connect('hub', 'v_first');
+    await helloAt(obj, first, { x: 2400, y: 730 });
+    // Another owl comes in a moment later, well inside STANDING_KEEP_MS, and walks off; no frame after.
+    clock += 2_000;
+    const b = connect('hub', 'v_b');
+    await helloAt(obj, b, { x: 2400, y: 730 });
+    await send(obj, b, { t: 'move', to: { x: 3400, y: 780 }, seq: 1 });
+    clock += 8_000;
+    // The room server stops without a goodbye and comes back on the same storage.
+    clock += 4_000;
+    killed();
+    const back = roomObject();
+    await settle();
+    const page = connect('hub', 'v_b');
+    await helloAt(back, page, { x: 3400, y: 780 });
+    expect(page.last('welcome')?.you.pos).toEqual({ x: 3400, y: 780 });
+  });
+
+  it('writes down where the owls stand at most every STANDING_KEEP_MS while frames come in (OP-321)', async () => {
+    state = new KeepingState();
+    const obj = roomObject();
+    const a = connect('hub', 'v_a');
+    await helloAt(obj, a, { x: 2400, y: 730 });
+    const puts: unknown[] = [];
+    const put = (state as KeepingState).storage.put;
+    (state as KeepingState).storage.put = async (key: string, value: unknown) => {
+      if (key === 'leavers') puts.push(value);
+      await put(key, value);
+    };
+    for (let i = 0; i < 10; i++) {
+      clock += 1_000;
+      await send(obj, a, { t: 'rest', asleep: false });
+    }
+    expect(puts.length).toBe(0);
+    clock += STANDING_KEEP_MS;
+    await send(obj, a, { t: 'rest', asleep: false });
+    expect(puts.length).toBeGreaterThanOrEqual(1);
+  });
 });
 
 describe('the realms switch (the stained-glass climb)', () => {
   const tell = (o: Obj, realms: unknown) => o.fetch(new Request('https://park/notice', { method: 'POST', body: JSON.stringify({ words: null, realms }) }));
 
+  // Today's park and the new map have no gated room now (the whole map open, Nov 8): a level of the tree is the switch's.
   it('turns an owl away from a gated realm until the keepers open it, with the arch’s phrase, and lets everyone know the switch', async () => {
     const obj = roomObject();
     const hub = await join(obj, 'hub', 'v_hub');
     expect(hub.last('welcome')?.realms).toEqual({ open: [], portal: false, night: null });
-    const shut = await join(obj, 'glass', 'v_shut');
-    expect(shut.last('closed')).toEqual({ t: 'closed', room: 'glass', why: 'realm', sign: 'Hatching Soon' });
+    const shut = await join(obj, 'l3', 'v_shut');
+    expect(shut.last('closed')).toEqual({ t: 'closed', room: 'l3', why: 'realm', sign: 'Pardon Our Feathers' });
     expect(shut.closed?.code).toBe(CLOSE.REALM_CLOSED);
     expect(shut.last('welcome')).toBeUndefined();
-    // An ungated room never consults the switch.
-    expect((await join(obj, 'grove', 'v_grove')).last('welcome')).toBeDefined();
-    await tell(obj, { open: ['glass'], portal: true, night: null });
-    expect(hub.last('realms')).toEqual({ t: 'realms', realms: { open: ['glass'], portal: true, night: null } });
-    const inside = await join(obj, 'glass', 'v_in');
-    expect(inside.last('welcome')?.realms?.open).toEqual(['glass']);
+    // An ungated room never consults the switch: the realms, the glass one among them, and the new map's root stair.
+    for (const room of ['grove', 'glass', 'm3-under']) expect((await join(obj, room, `v_${room}`)).last('welcome'), room).toBeDefined();
+    await tell(obj, { open: ['l3'], portal: true, night: null });
+    expect(hub.last('realms')).toEqual({ t: 'realms', realms: { open: ['l3'], portal: true, night: null } });
+    const inside = await join(obj, 'l3', 'v_in');
+    expect(inside.last('welcome')?.realms?.open).toEqual(['l3']);
     expect(inside.closed).toBeNull();
   });
 
   it('sends the owls out of a realm that closes, and keeps the switch in storage across a wake', async () => {
     state = new KeepingState();
     const obj = roomObject();
-    await tell(obj, { open: ['glass'], portal: true, night: 'easy' });
-    const a = await join(obj, 'glass', 'v_a');
-    const b = await join(obj, 'glass', 'v_b');
+    await tell(obj, { open: ['l3'], portal: true, night: 'easy' });
+    const a = await join(obj, 'l3', 'v_a');
+    const b = await join(obj, 'l3', 'v_b');
     expect(a.closed).toBeNull();
     // Woken from hibernation on the same storage, the object still has the realm open.
     const woken = roomObject();
     await settle(); // the constructor reads its storage
-    const c = await join(woken, 'glass', 'v_c');
-    expect(c.last('welcome')?.realms).toEqual({ open: ['glass'], portal: true, night: 'easy' });
+    const c = await join(woken, 'l3', 'v_c');
+    expect(c.last('welcome')?.realms).toEqual({ open: ['l3'], portal: true, night: 'easy' });
     await tell(woken, { open: [], portal: true, night: 'easy' });
-    expect(c.last('closed')).toEqual({ t: 'closed', room: 'glass', why: 'realm', sign: 'Hatching Soon' });
+    expect(c.last('closed')).toEqual({ t: 'closed', room: 'l3', why: 'realm', sign: 'Pardon Our Feathers' });
     expect(c.closed?.code).toBe(CLOSE.REALM_CLOSED);
     // The first object, told the same, sends its owls out too; a malformed switch is read as closed.
     await tell(obj, { open: [], portal: true, night: 'easy' });
     expect(a.closed?.code).toBe(CLOSE.REALM_CLOSED);
     expect(b.closed?.code).toBe(CLOSE.REALM_CLOSED);
     await tell(obj, 'nonsense');
-    expect((await join(obj, 'glass', 'v_d')).closed?.code).toBe(CLOSE.REALM_CLOSED);
+    expect((await join(obj, 'l3', 'v_d')).closed?.code).toBe(CLOSE.REALM_CLOSED);
   });
 });
 
@@ -932,8 +1066,8 @@ describe('the tree (map 2), dark until it opens (OP-156)', () => {
     const owl = await join(obj, 'l1', 'v_owl');
     expect(owl.closed).toBeNull();
     expect(owl.last('welcome')?.realms).toEqual({ open: [], portal: false, night: null, tree: 30 });
-    // Today's gated realm keeps to its own checkbox.
-    expect((await join(obj, 'glass', 'v_glass')).closed?.code).toBe(CLOSE.REALM_CLOSED);
+    // The new map's copies of the tree's levels are open to every owl whatever the tree does (Nov 8).
+    expect((await join(obj, 'm3-under', 'v_under')).closed).toBeNull();
     // Back to 0: the tree goes dark, and the owl in it is told so and sent out.
     await realms({ open: [], portal: false, night: null });
     expect(owl.last('closed')).toMatchObject({ t: 'closed', room: 'l1', why: 'realm' });
@@ -1043,6 +1177,9 @@ describe('the player stats from the room object (OP-111)', () => {
     expect(sightingOf({ ...owl, room: 'hub' })).toMatchObject({ spec: false });
     for (const room of ['lobby', 'homes', 'nest-abcdefgh']) expect(sightingOf({ ...owl, room })).not.toHaveProperty('spec');
     expect(sightingOf({ id: PASS, room: 'hub' })).toBeNull();
+    // One of our own test visits (the Worker's X-Test-Visit) says so; a player's says nothing.
+    expect(sightingOf({ ...owl, room: 'm3-hall', test: true })).toMatchObject({ test: true });
+    expect(sightingOf({ ...owl, room: 'm3-hall' })).not.toHaveProperty('test');
   });
 
   it('tells the collections object of each owl that comes in, changes its look, is still here, and leaves', async () => {
@@ -1060,10 +1197,33 @@ describe('the player stats from the room object (OP-111)', () => {
     // The minute heartbeat: every owl still here, at once.
     await obj.alarm();
     expect(collections.aliveCalls).toEqual([[me]]);
-    // Its socket closes: the visit was here until now.
+    // Its socket closes: the visit was here until now, and the line was lost (no close code from the page, OP-265).
     await obj.webSocketClose(ws as unknown as WebSocket);
     await settle();
-    expect(collections.aliveCalls).toEqual([[me], [me]]);
+    expect(collections.aliveCalls).toEqual([[me], [{ ...me, left: 'drop' }]]);
+  });
+
+  it("tells the collections object of a goodbye from the page, which the close after it can't (OP-265)", async () => {
+    const env = { GATE: 'open', COLLECTIONS: { getByName: () => collections }, ...LOGGED } as unknown as Env;
+    const obj = new RoomObject(state as unknown as DurableObjectState, env);
+    const ws = await join(obj, 'hub', PASS, OWNER);
+    await settle();
+    const me = { cid: OWNER, pass: PASS, device: null, room: 'hub', spec: false };
+    // The page says bye (it walked on, or closed): a log off for its stay here, said once.
+    await send(obj, ws, { t: 'bye' });
+    await obj.webSocketClose(ws as unknown as WebSocket, 1000);
+    await settle();
+    expect(collections.aliveCalls).toEqual([[{ ...me, left: 'bye' }]]);
+  });
+
+  it('tells the collections object of a socket that errored, as a lost line (OP-265)', async () => {
+    const env = { GATE: 'open', COLLECTIONS: { getByName: () => collections }, ...LOGGED } as unknown as Env;
+    const obj = new RoomObject(state as unknown as DurableObjectState, env);
+    const ws = await join(obj, 'hub', PASS, OWNER);
+    await settle();
+    await obj.webSocketError(ws as unknown as WebSocket);
+    await settle();
+    expect(collections.aliveCalls).toEqual([[{ cid: OWNER, pass: PASS, device: null, room: 'hub', spec: false, left: 'drop' }]]);
   });
 
   it("says an owl coming into its own nest is home, and one coming into another's is not (OP-113)", async () => {
@@ -1094,12 +1254,17 @@ describe('the climb in the room object (the stained-glass realm)', () => {
   const open = (o: Obj, realms: unknown) => o.fetch(new Request('https://park/notice', { method: 'POST', body: JSON.stringify({ words: null, realms }) }));
   const LIVE = { open: ['glass'], portal: true, night: 'easy' };
   const EASY = NIGHTS['easy']!;
-  /** Walk an owl from the glass room's doorway to the portal at its far end and let the walk finish. */
+  /** Walk an owl from the glass room's knot-hole to the portal at the way on and let the walk finish. */
   async function toPortal(obj: Obj, ws: FakeSocket) {
-    // In front of the idol's plinth (no floor itself, OP-127), then along the street.
-    await send(obj, ws, { t: 'move', to: { x: 1200, y: 850 }, seq: 1 });
+    // The room scatters an owl round the arrival, perhaps up by the knot-hole: first straight down onto
+    // the open floor, then along its front past the guardian (its base is no floor, OP-276), then up to the way on.
+    await send(obj, ws, { t: 'move', to: { x: ws.last('welcome')!.you.pos.x, y: 760 }, seq: 1 });
     clock += 10_000;
-    await send(obj, ws, { t: 'move', to: { x: 2885, y: 745 }, seq: 2 });
+    await send(obj, ws, { t: 'move', to: { x: 700, y: 820 }, seq: 2 });
+    clock += 10_000;
+    await send(obj, ws, { t: 'move', to: { x: 1200, y: 800 }, seq: 3 });
+    clock += 10_000;
+    await send(obj, ws, { t: 'move', to: { x: 1500, y: 600 }, seq: 4 });
     clock += 10_000;
   }
   const act = (ws: FakeSocket, r: number) => ws.of('act').find((f) => f.r === r);
@@ -1422,8 +1587,8 @@ describe('the room server’s log (OP-134)', () => {
     await join(full, 'hub', 'v_b');
     logged(cap.lines, 'room_join_refused', { room: 'hub', ...owl('v_b'), reason: 'cap', cap: 1 });
     const obj = roomObject();
-    await join(obj, 'glass', 'v_c');
-    logged(cap.lines, 'room_join_refused', { room: 'glass', ...owl('v_c'), reason: 'realm' });
+    await join(obj, 'l3', 'v_c');
+    logged(cap.lines, 'room_join_refused', { room: 'l3', ...owl('v_c'), reason: 'realm' });
     const nestId = collections.nests.mine(OWNER, COLOURS, clock).nest.nestId;
     collections.nests.setOpen(OWNER, false, clock);
     await join(obj, `nest-${nestId}`, 'v_d', GUEST);
@@ -1585,6 +1750,24 @@ describe('the park’s nightly restart (OP-181)', () => {
     expect(later.closed).toBeNull();
   });
 
+  it("tells the player stats that every owl's stay here ends with the restart, at its moment (OP-265)", async () => {
+    const LOGGED = { PARK_LOG_URL: 'https://log.example/functions/v1/owl-park-log', FRAUD_SCORE_KEY: 'k'.repeat(32), FRAUD_HASH_SALT: 's'.repeat(24) };
+    const obj = roomObject(undefined, LOGGED);
+    await join(obj, 'hub', 'v_a', OWNER);
+    await join(obj, 'grove', 'v_b', GUEST);
+    await settle();
+    await restart(obj);
+    await settle();
+    const restarts = () => (collections.aliveCalls as Array<Array<{ left?: string }>>).filter((call) => call.some((s) => s.left === 'restart'));
+    expect(restarts()).toEqual([]); // the notice ends nothing
+    clock += RESTART_CLOSE_MS;
+    await obj.alarm();
+    await settle();
+    expect(restarts()).toEqual([
+      [expect.objectContaining({ cid: OWNER, pass: 'v_a', room: 'hub', left: 'restart' }), expect.objectContaining({ cid: GUEST, pass: 'v_b', room: 'grove', left: 'restart' })],
+    ]);
+  });
+
   it('closes them though the object slept between the notice and its alarm', async () => {
     const obj = roomObject();
     const a = await join(obj, 'hub', 'v_a');
@@ -1620,6 +1803,74 @@ describe('the park’s nightly restart (OP-181)', () => {
     await woken.alarm();
     expect(a.closed).toBeNull();
     expect(alarms.kept.has('restart')).toBe(false);
+  });
+});
+
+describe('a ticket’s time running out mid-visit (OP-237)', () => {
+  let cap: ReturnType<typeof captureLogs>;
+  beforeEach(() => {
+    cap = captureLogs();
+  });
+  afterEach(() => cap.restore());
+  /** An owl in a room whose ticket runs out at `until`, as the Worker tells the room. */
+  async function ticketed(obj: Obj, room: string, id: string, until: number) {
+    const ws = connect(room, id);
+    ws.serializeAttachment({ ...(ws.deserializeAttachment() as object), until });
+    await hello(obj, ws);
+    return ws;
+  }
+
+  it('closes the socket at the alarm once its ticket has run out, and its owl leaves', async () => {
+    const obj = roomObject();
+    const owl = await ticketed(obj, 'hub', 'v_a', clock + 60_000);
+    const untimed = await join(obj, 'hub', 'v_b');
+    clock += 59_999;
+    await obj.alarm();
+    expect(owl.closed).toBeNull();
+    clock += 1;
+    await obj.alarm();
+    expect(owl.closed).toEqual({ code: CLOSE.TICKET_ENDED, reason: 'ticket ended' });
+    expect(untimed.closed).toBeNull();
+    logged(cap.lines, 'ticket_ended', { component: 'room.leave', room: 'hub', session_id: hashForLog('v_a') });
+    logged(cap.lines, 'room_leave', { session_id: hashForLog('v_a'), reason: 'kick', detail: 'ticket-ended' });
+    expect(await (await obj.fetch(new Request('https://park/counts'))).json()).toMatchObject({ hub: 1 });
+  });
+
+  it('closes it on its next frame once the ticket has run out, before the frame is handled', async () => {
+    const obj = roomObject();
+    const owl = await ticketed(obj, 'hub', 'v_a', clock + 30_000);
+    const other = await join(obj, 'hub', 'v_b');
+    await send(obj, owl, { t: 'move', to: { x: 800, y: 760 }, seq: 1 });
+    expect(owl.closed).toBeNull();
+    clock += 30_000;
+    const before = other.frames.length;
+    await send(obj, owl, { t: 'move', to: { x: 900, y: 760 }, seq: 2 });
+    expect(owl.closed?.code).toBe(CLOSE.TICKET_ENDED);
+    expect(other.frames.slice(before).some((f) => f.t === 'move' && (f as { seq?: number }).seq === 2)).toBe(false);
+  });
+
+  it('takes the time only from the Worker’s header', async () => {
+    vi.stubGlobal(
+      'WebSocketPair',
+      class {
+        0 = new FakeSocket();
+        1 = new FakeSocket();
+      },
+    );
+    const obj = roomObject();
+    const open = async (until?: string) => {
+      const headers: Record<string, string> = { Upgrade: 'websocket', 'X-Room': 'hub', 'X-Visitor-Id': 'v_fetchAAAA', 'X-Visitor-Ip': `192.0.2.${state.sockets.length + 10}`, 'X-Visitor-Kind': 'visitor' };
+      if (until !== undefined) headers['X-Ticket-Until'] = until;
+      await obj.fetch(new Request('https://room/ws', { headers })).catch(() => undefined);
+      return (state.sockets.at(-1)!.ws.deserializeAttachment() as { until?: number }).until;
+    };
+    expect(await open(String(clock + 5_000))).toBe(clock + 5_000);
+    expect(await open()).toBeUndefined();
+    expect(await open('soon')).toBeUndefined();
+    expect(await open('-1')).toBeUndefined();
+    vi.unstubAllGlobals();
+    vi.stubGlobal('WebSocketRequestResponsePair', class {});
+    vi.stubGlobal('WebSocket', { READY_STATE_OPEN: 1 });
   });
 });
 
@@ -1716,21 +1967,87 @@ describe('spectators in the room object (OP-191)', () => {
     expect(c.last('welcome')).toBeDefined();
   });
 
+  it('never lists a spectator next to a ticket holder as an owl to join (OP-255)', async () => {
+    const obj = roomObject();
+    const a = await join(obj, 'hub', 'v_a', OWNER);
+    await spectator(obj, 'hub');
+    collections.inRuns.add(OWNER);
+    await send(obj, a, { t: 'puzzle', op: 'near', quest: 'puzzle-lockbox', r: 1 });
+    await settle();
+    expect(a.last('puzzle')).toEqual({ t: 'puzzle', r: 1, quest: 'puzzle-lockbox', ok: true, near: [] });
+  });
+
   it('refuses it the quests, the NPC owls, the quest items and today’s tasks, and tells it once', async () => {
     const obj = roomObject();
     const ws = await spectator(obj, 'hub');
     await send(obj, ws, { t: 'quests', r: 1 });
     await send(obj, ws, { t: 'talk', npc: 'elder', r: 2 });
     await send(obj, ws, { t: 'accept', quest: 'q1', r: 3 });
-    await send(obj, ws, { t: 'use', target: 'lamp', r: 4 });
+    await send(obj, ws, { t: 'handin', quest: 'q1', r: 4 });
     await send(obj, ws, { t: 'gather', quest: 'q1', n: 0, r: 5 });
     await send(obj, ws, { t: 'act', a: 'tasks', r: 6 });
+    // A use of something the room does not have is unknown, as anyone's (OP-243: uses are open to it).
+    await send(obj, ws, { t: 'use', target: 'lamp', r: 7 });
+    // Nor can it start or join a puzzle quest's run (OP-255).
+    await send(obj, ws, { t: 'puzzle', op: 'start', quest: 'puzzle-lockbox', r: 8 });
+    await send(obj, ws, { t: 'puzzle', op: 'join', quest: 'puzzle-lockbox', with: 'v_a', r: 9 });
     await settle();
-    expect(ws.of('refused')).toEqual([1, 2, 3, 4, 5].map((r) => ({ t: 'refused', r, reason: 'spectator' })));
+    expect(ws.of('refused')).toEqual([...[1, 2, 3, 4, 5].map((r) => ({ t: 'refused', r, reason: 'spectator' })), { t: 'refused', r: 7, reason: 'unknown' }, ...[8, 9].map((r) => ({ t: 'refused', r, reason: 'spectator' }))]);
     expect(act(ws, 6)).toEqual({ t: 'act', r: 6, a: 'tasks', ok: false, reason: 'spectator' });
     logged(cap.lines, 'spectator_refused', { component: 'room.play', room: 'hub', frame: 'quests' });
     expect(eventsOf(cap.lines).filter((e) => e === 'spectator_refused')).toHaveLength(1);
     expect(collections.questCalls).toEqual([]);
+  });
+
+  it('lets it flop into a leaf pile for everyone to see, for no feathers, no quest and no task (OP-243)', async () => {
+    const obj = roomObject();
+    const holder = await join(obj, 'hub', 'v_holder', OWNER);
+    const ws = await spectator(obj, 'hub');
+    await settle();
+    await walk(obj, ws, floor(ws), { x: 1930, y: 800 });
+    await send(obj, ws, { t: 'use', target: 'hub-leaves-1', r: 1 });
+    await settle();
+    expect(ws.of('useResult')).toEqual([{ t: 'useResult', r: 1, ok: true, feathers: 0, total: -1, updates: [], practice: true }]);
+    // The pile is gone for everyone, the ticket holder included, as after anyone's flop.
+    expect(holder.last('used')).toMatchObject({ t: 'used', id: 'hub-leaves-1', by: SPEC_ID });
+    expect(ws.last('used')).toMatchObject({ id: 'hub-leaves-1', by: SPEC_ID });
+    // Gone means gone for the guest too, and nothing was asked of its collection.
+    clock += 2_000;
+    await send(obj, ws, { t: 'use', target: 'hub-leaves-1', r: 2 });
+    await settle();
+    expect(ws.of('useResult').find((f) => f.r === 2)).toMatchObject({ ok: false, reason: 'gone', feathers: 0 });
+    expect(collections.book.feathers(SPEC, clock)).toBe(0);
+    expect(collections.questCalls).toEqual([`visit:${OWNER}`]);
+    expect(ws.of('tasks')).toEqual([]);
+    expect(eventsOf(cap.lines)).not.toContain('spectator_refused');
+  });
+
+  it('lets it bask in the moonbeam as anyone does, counting for nothing (OP-243)', async () => {
+    const obj = roomObject();
+    const ws = await spectator(obj, 'hub');
+    await settle();
+    await walk(obj, ws, floor(ws), { x: 2400, y: 800 });
+    await send(obj, ws, { t: 'use', target: 'hub-moonbeam', r: 1 });
+    await settle();
+    expect(ws.of('useResult')).toEqual([{ t: 'useResult', r: 1, ok: true, feathers: 0, total: -1, updates: [], practice: true }]);
+    expect(ws.of('used')).toEqual([]);
+    expect(collections.questCalls).toEqual([]);
+  });
+
+  it('still keeps its uses to reach and the cooldown, as anyone’s (OP-243)', async () => {
+    const obj = roomObject();
+    const ws = await spectator(obj, 'hub');
+    await settle();
+    await walk(obj, ws, floor(ws), { x: 400, y: 800 });
+    await send(obj, ws, { t: 'use', target: 'hub-leaves-1', r: 1 });
+    await settle();
+    expect(ws.of('refused')).toEqual([{ t: 'refused', r: 1, reason: 'far' }]);
+    await walk(obj, ws, { x: 2400, y: 800 });
+    await send(obj, ws, { t: 'use', target: 'hub-moonbeam', r: 2 });
+    await send(obj, ws, { t: 'use', target: 'hub-moonbeam', r: 3 });
+    await settle();
+    expect(ws.of('useResult').map((f) => f.r)).toEqual([2]);
+    expect(ws.of('refused').find((f) => f.r === 3)).toEqual({ t: 'refused', r: 3, reason: 'busy' });
   });
 
   it('keeps it a spectator through the object’s sleep', async () => {
@@ -1785,7 +2102,7 @@ describe('spectators in the room object (OP-191)', () => {
     const obj = roomObject();
     await obj.fetch(new Request('https://park/notice', { method: 'POST', body: JSON.stringify({ words: null, realms: { open: ['glass'], portal: true, night: 'easy' } }) }));
     const ws = await spectator(obj, 'glass');
-    await walk(obj, ws, { x: 1200, y: 850 }, { x: 2885, y: 745 });
+    await walk(obj, ws, { x: ws.last('welcome')!.you.pos.x, y: 760 }, { x: 700, y: 820 }, { x: 1200, y: 800 }, { x: 1500, y: 600 });
     await send(obj, ws, { t: 'act', a: 'climb', r: 1 });
     await settle();
     const started = act(ws, 1) as { seed: number; startedAt: number };
@@ -1901,5 +2218,535 @@ describe('spectators in the room object (OP-191)', () => {
     const visitor = await join(obj, 'hub', 'v_holder', OWNER);
     await send(obj, visitor, { t: 'admit', pass: await pass({}), r: 1 });
     expect(await answered(visitor, 1)).toEqual({ t: 'admitted', r: 1, ok: true });
+  });
+});
+
+describe('a parkour course in the room object (OP-224)', () => {
+  const KEY = 'keeper-tests-signing-key-0123456789';
+  const keeperJoin = async (obj: Obj, room: string, id: string, cid?: string) => {
+    const ws = connect(room, id, cid);
+    await send(obj, ws, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK, keeper: await mintKeeper(KEY, Math.floor(clock / 1000) + 600) });
+    return ws;
+  };
+  const course = (ws: FakeSocket, r: number) => ws.of('course').find((f) => f.r === r);
+  const walkTo = async (obj: Obj, ws: FakeSocket, to: Vec2, seq: number) => {
+    await send(obj, ws, { t: 'move', to, seq });
+    clock += 10_000;
+  };
+
+  it('keeps the test course for the keepers: any other owl is turned away', async () => {
+    const obj = roomObject(undefined, { PASS_SIGNING_KEY: KEY });
+    for (const room of ['trail-head', 'trail-1', 'trail-3']) {
+      const guest = await join(obj, room, `v_guest_${room}`);
+      expect(guest.last('closed'), room).toMatchObject({ t: 'closed', room, why: 'realm' });
+      expect(guest.closed?.code, room).toBe(CLOSE.REALM_CLOSED);
+    }
+    const keeper = await keeperJoin(obj, 'trail-1', 'v_keeper', OWNER);
+    expect(keeper.closed).toBeNull();
+    expect(keeper.last('welcome')).toBeDefined();
+  });
+
+  it('checks where the owl stands before it asks the collections object anything', async () => {
+    const obj = roomObject(undefined, { PASS_SIGNING_KEY: KEY });
+    const ws = await keeperJoin(obj, 'trail-1', 'v_keeper', OWNER);
+    // No collector: unknown, and nothing asked.
+    const nobody = await keeperJoin(obj, 'trail-1', 'v_nobody');
+    await send(obj, nobody, { t: 'course', a: 'start', r: 1 });
+    await settle();
+    expect(course(nobody, 1)).toMatchObject({ ok: false, reason: 'unknown' });
+    // At the trail gate's way in: a run starts.
+    await send(obj, ws, { t: 'course', a: 'start', r: 1 });
+    await settle();
+    expect(course(ws, 1)).toMatchObject({ ok: true, view: { course: 'trail', run: { parts: [], bench: null } } });
+    // The bell from the way in: far, and the collections object never hears of it.
+    await send(obj, ws, { t: 'course', a: 'part', id: 'bell-1', r: 2 });
+    await settle();
+    expect(course(ws, 2)).toMatchObject({ ok: false, reason: 'far' });
+    // A fall where there is no pit: far.
+    await send(obj, ws, { t: 'course', a: 'fall', r: 3 });
+    await settle();
+    expect(course(ws, 3)).toMatchObject({ ok: false, reason: 'far' });
+    // The shrine is not in this act.
+    await send(obj, ws, { t: 'course', a: 'finish', r: 4 });
+    await settle();
+    expect(course(ws, 4)).toMatchObject({ ok: false, reason: 'far' });
+    expect(collections.courseCalls).toEqual(['start:trail-1']);
+    // Walked over to the bench past the pit, then the bell: each counts.
+    await walkTo(obj, ws, { x: 1020, y: 460 }, 1);
+    await send(obj, ws, { t: 'course', a: 'bench', id: 'b2', r: 5 });
+    await walkTo(obj, ws, { x: 1280, y: 470 }, 2);
+    await send(obj, ws, { t: 'course', a: 'part', id: 'bell-1', r: 6 });
+    await settle();
+    expect(course(ws, 5)).toMatchObject({ ok: true, first: true, view: { run: { bench: 'b2' } } });
+    expect(course(ws, 6)).toMatchObject({ ok: true, first: true, view: { run: { parts: ['bell-1'] } } });
+    // Into the pit: a fall, back at the bench, for everyone.
+    await walkTo(obj, ws, { x: 800, y: 600 }, 3);
+    await send(obj, ws, { t: 'course', a: 'fall', r: 7 });
+    await settle();
+    expect(course(ws, 7)).toMatchObject({ ok: true, at: { x: 1020, y: 450 } });
+    expect(collections.courseCalls).toEqual(['start:trail-1', 'bench:trail-1:b2', 'part:trail-1:bell-1', 'fall:trail-1']);
+    // The collections object away: offline.
+    collections.down = true;
+    await send(obj, ws, { t: 'course', a: 'state', r: 8 });
+    await settle();
+    expect(course(ws, 8)).toMatchObject({ ok: false, reason: 'offline' });
+  });
+
+  it('sends a fall back the way the owl came into the room, when it saw it come in (OP-343)', async () => {
+    const obj = roomObject();
+    // Down from the trunk into the first act's far end, then west into the bramble: back at that way in, not at the gate four screens off.
+    const ws = connect('canopy-1', 'v_far', OWNER);
+    await send(obj, ws, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK, spawn: 'from-trunk' });
+    expect(ws.last('welcome')).toBeDefined();
+    await walkTo(obj, ws, { x: 3900, y: 770 }, 1);
+    await send(obj, ws, { t: 'course', a: 'fall', r: 1 });
+    await settle();
+    expect(course(ws, 1)).toMatchObject({ ok: true, at: PARK_ROOMS['canopy-1']!.spawns['from-trunk'] });
+    expect(collections.fallEntries).toEqual(['from-trunk']);
+    // An owl the room did not see come in by a doorway (no way in named): the act's own way in, as before.
+    const plain = connect('canopy-1', 'v_plain', OTHER);
+    await send(obj, plain, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK, pos: { x: 4660, y: 770 } });
+    await walkTo(obj, plain, { x: 3900, y: 770 }, 1);
+    await send(obj, plain, { t: 'course', a: 'fall', r: 1 });
+    await settle();
+    expect(course(plain, 1)).toMatchObject({ ok: true, at: PARK_ROOMS['canopy-1']!.spawns['from-gate'] });
+    expect(collections.fallEntries).toEqual(['from-trunk', null]);
+    // A way in the room does not have is not kept.
+    const odd = connect('canopy-1', 'v_odd', GUEST);
+    await send(obj, odd, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK, spawn: 'from-nowhere' });
+    await walkTo(obj, odd, { x: 900, y: 770 }, 1);
+    await send(obj, odd, { t: 'course', a: 'fall', r: 1 });
+    await settle();
+    expect(course(odd, 1)).toMatchObject({ ok: true, at: PARK_ROOMS['canopy-1']!.spawns['from-gate'] });
+    expect(collections.fallEntries).toEqual(['from-trunk', null, null]);
+  });
+
+  it('takes a dash only in the air, and tells the others it was one', async () => {
+    const obj = roomObject(undefined, { PASS_SIGNING_KEY: KEY });
+    const ws = await keeperJoin(obj, 'trail-1', 'v_keeper', OWNER);
+    const other = await keeperJoin(obj, 'trail-1', 'v_other', OTHER);
+    const at = ws.last('welcome')!.you.pos;
+    await send(obj, ws, { t: 'dash', to: { x: at.x + 160, y: at.y }, seq: 1 });
+    expect(ws.last('move')).toMatchObject({ seq: 1 });
+    expect(ws.last('move')?.dash).toBeUndefined();
+    await send(obj, ws, { t: 'air', air: { z: 7.2, vz: 858.3, s: AIRBORNE, f: 1 } });
+    await send(obj, ws, { t: 'dash', to: { x: at.x + 160, y: at.y }, seq: 2 });
+    expect(ws.last('move')).toMatchObject({ seq: 2, dash: true });
+    expect(other.last('move')).toMatchObject({ id: ws.last('welcome')!.id, dash: true });
+  });
+});
+
+describe('puzzle quests in the room object (OP-255)', () => {
+  it('lists the owls next to you that are in a run, joins one by its owl id, and refuses an owl not next to you', async () => {
+    const obj = roomObject();
+    // Both on the spawn, side by side: a plain join scatters them, sometimes too far apart to be next to each other.
+    const a = connect('hub', 'v_a', OWNER);
+    await send(obj, a, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK, pos: { x: 2400, y: 730 } });
+    const b = connect('hub', 'v_b', GUEST);
+    await send(obj, b, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK, pos: { x: 2440, y: 730 } });
+    collections.inRuns.add(GUEST);
+    await send(obj, a, { t: 'puzzle', op: 'near', quest: 'puzzle-lockbox', r: 1 });
+    await settle();
+    expect(a.last('puzzle')).toEqual({ t: 'puzzle', r: 1, quest: 'puzzle-lockbox', ok: true, near: [{ owl: 'v_b', members: 1, opened: 2 }] });
+    await send(obj, a, { t: 'puzzle', op: 'join', quest: 'puzzle-lockbox', with: 'v_b', r: 2 });
+    await send(obj, a, { t: 'puzzle', op: 'join', quest: 'puzzle-lockbox', with: 'v_nobody', r: 3 });
+    await settle();
+    expect(collections.puzzleCalls.filter((c) => c.op === 'join')).toEqual([expect.objectContaining({ cid: OWNER, other: GUEST })]);
+    expect(a.of('puzzle').find((f) => (f as { r?: number }).r === 3)).toEqual({ t: 'puzzle', r: 3, quest: 'puzzle-lockbox', ok: false, reason: 'far' });
+    // The page is never sent the run's member list.
+    expect(JSON.stringify(a.of('puzzle'))).not.toContain(GUEST);
+  });
+
+  it('gives the collections object where the owl stands, and refreshes the other members’ pages after a step', async () => {
+    const obj = roomObject();
+    const a = await join(obj, 'hub', 'v_a', OWNER);
+    const b = await join(obj, 'hub', 'v_b', GUEST);
+    collections.inRuns.add(OWNER).add(GUEST);
+    await send(obj, a, { t: 'puzzle', op: 'look', quest: 'puzzle-lockbox', lock: 'bark-latch', n: 0, r: 1 });
+    await settle();
+    expect(collections.puzzleCalls[0]).toMatchObject({ cid: OWNER, op: 'look', pos: expect.objectContaining({ x: expect.any(Number) }) });
+    expect(collections.puzzleCalls.map((c) => `${c.op}:${c.cid}`)).toEqual([`look:${OWNER}`, `state:${GUEST}`]);
+    expect(b.last('puzzle')).toMatchObject({ t: 'puzzle', quest: 'puzzle-lockbox', ok: true, view: { puzzle: 'lockbox' } });
+  });
+
+  it('turns away a frame that is not a puzzle step', async () => {
+    const obj = roomObject();
+    const a = await join(obj, 'hub', 'v_a', OWNER);
+    for (const bad of [
+      { t: 'puzzle', op: 'smash', quest: 'puzzle-lockbox', r: 1 },
+      { t: 'puzzle', op: 'open', quest: 'puzzle-lockbox', code: ['moon', 'cheese'], r: 2 },
+      { t: 'puzzle', op: 'look', quest: 'puzzle-lockbox', n: 99, r: 3 },
+    ]) await send(obj, a, bad);
+    await settle();
+    expect(collections.puzzleCalls).toEqual([]);
+  });
+});
+
+describe('a socket that only heartbeats (OP-245)', () => {
+  let cap: ReturnType<typeof captureLogs>;
+  beforeEach(() => {
+    cap = captureLogs();
+    // Its heartbeats come in on time, every one: only what the owl does is in question here.
+    (state as unknown as { getWebSocketAutoResponseTimestamp: () => Date }).getWebSocketAutoResponseTimestamp = () => new Date(clock);
+  });
+  afterEach(() => cap.restore());
+  const minutes = (n: number) => n * 60_000;
+  const atOf = (ws: FakeSocket) => ws.deserializeAttachment() as { inputAt?: number; joinedAt: number };
+
+  it('is closed as idle a quarter of an hour after it came in, and its owl’s leave says why', async () => {
+    const obj = roomObject();
+    const ws = await join(obj, 'hub', 'v_a');
+    clock += NO_INPUT_CLOSE_MS;
+    await obj.alarm();
+    expect(ws.closed).toBeNull(); // not at the quarter hour itself
+    clock += 1;
+    await obj.alarm();
+    expect(ws.closed).toEqual({ code: 1001, reason: 'idle' });
+    logged(cap.lines, 'room_leave', { session_id: hashForLog('v_a'), reason: 'kick', detail: 'no-input' });
+    expect(await (await obj.fetch(new Request('https://park/counts'))).json()).toMatchObject({ hub: 0 });
+  });
+
+  it('stays while its owl walks now and then, and is closed a quarter of an hour after the last walk', async () => {
+    const obj = roomObject();
+    const ws = await join(obj, 'hub', 'v_a');
+    for (let i = 1; i <= 4; i++) {
+      clock += minutes(10);
+      await send(obj, ws, { t: 'move', to: { x: 700 + i * 40, y: 760 }, seq: i });
+      await obj.alarm();
+      expect(ws.closed).toBeNull();
+    }
+    const last = clock;
+    clock = last + NO_INPUT_CLOSE_MS;
+    await obj.alarm();
+    expect(ws.closed).toBeNull();
+    clock = last + NO_INPUT_CLOSE_MS + 1;
+    await obj.alarm();
+    expect(ws.closed?.code).toBe(1001);
+  });
+
+  it('counts waking up but not falling asleep, as the page puts an idle owl to sleep by itself', async () => {
+    const obj = roomObject();
+    const ws = await join(obj, 'hub', 'v_a');
+    clock += minutes(10);
+    await send(obj, ws, { t: 'rest', asleep: true });
+    expect(atOf(ws).inputAt).toBeUndefined();
+    clock += minutes(5) + 1;
+    await obj.alarm();
+    expect(ws.closed?.code).toBe(1001);
+
+    const b = await join(obj, 'hub', 'v_b');
+    clock += minutes(10);
+    await send(obj, b, { t: 'rest', asleep: false });
+    expect(atOf(b).inputAt).toBe(clock);
+    clock += minutes(14);
+    await obj.alarm();
+    expect(b.closed).toBeNull();
+  });
+
+  it('writes the last input down at most once a minute', async () => {
+    const obj = roomObject();
+    const ws = await join(obj, 'hub', 'v_a');
+    clock += INPUT_MARK_EVERY_MS - 1;
+    await send(obj, ws, { t: 'move', to: { x: 760, y: 760 }, seq: 1 });
+    expect(atOf(ws).inputAt).toBeUndefined(); // it came in less than a minute ago
+    clock += 1;
+    await send(obj, ws, { t: 'move', to: { x: 820, y: 760 }, seq: 2 });
+    const marked = clock;
+    expect(atOf(ws).inputAt).toBe(marked);
+    clock += INPUT_MARK_EVERY_MS - 1;
+    await send(obj, ws, { t: 'move', to: { x: 880, y: 760 }, seq: 3 });
+    expect(atOf(ws).inputAt).toBe(marked);
+    clock += 1;
+    await send(obj, ws, { t: 'move', to: { x: 760, y: 760 }, seq: 4 });
+    expect(atOf(ws).inputAt).toBe(clock);
+  });
+
+  it('closes a spectator’s quiet socket the same way', async () => {
+    const obj = roomObject();
+    const ws = connect('grove', 'v_spec', undefined, undefined, true);
+    await hello(obj, ws);
+    clock += NO_INPUT_CLOSE_MS + 1;
+    await obj.alarm();
+    expect(ws.closed).toEqual({ code: 1001, reason: 'idle' });
+  });
+
+  it('calls every frame input but a hello, a goodbye and falling asleep, and counts quiet from the last one or the arrival', () => {
+    expect(isInput({ t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK })).toBe(false);
+    expect(isInput({ t: 'bye' })).toBe(false);
+    expect(isInput({ t: 'rest', asleep: true })).toBe(false);
+    expect(isInput({ t: 'rest', asleep: false })).toBe(true);
+    expect(isInput({ t: 'move', to: { x: 1, y: 1 }, seq: 1 })).toBe(true);
+    expect(isInput({ t: 'say', n: 1 })).toBe(true);
+    expect(quietFor({ joinedAt: 100 }, 400)).toBe(300);
+    expect(quietFor({ joinedAt: 100, inputAt: 250 }, 400)).toBe(150);
+    expect(NO_INPUT_CLOSE_MS).toBe(15 * 60_000); // just past the page's own goodbye, about 12 minutes in
+  });
+});
+
+describe('the sealed hollow in the room object (OP-310)', () => {
+  let cap: ReturnType<typeof captureLogs>;
+  beforeEach(() => {
+    cap = captureLogs();
+  });
+  afterEach(() => {
+    cap.restore();
+    // Whatever each test did, nothing was paid for a spectator.
+    expect(collections.faults).toEqual([]);
+  });
+  const SPEC_CID = 'c_specDDDD';
+  type Inner = { rooms: Map<string, { place(id: string, at: Vec2, top?: number): boolean }>; escapes: Map<string, { seed: string; phase: string; members: unknown[] }> };
+  const inner = (o: Obj) => o as unknown as Inner;
+  let r = 0;
+  /** Ask the room a hollow's step and give back its answer. */
+  async function ask(obj: Obj, ws: FakeSocket, frame: Record<string, unknown>) {
+    const n = ++r;
+    clock += 250;
+    await send(obj, ws, { t: 'escape', r: n, ...frame });
+    await settle();
+    const f = ws.of('escape').find((x) => x.r === n);
+    if (!f) throw new Error(`no answer to ${JSON.stringify(frame)}`);
+    return f;
+  }
+  /** Put an owl down somewhere in its room, on the floor or up on a perch. */
+  const put = (obj: Obj, room: string, id: string, at: Vec2, top = 0) => expect(inner(obj).rooms.get(room)!.place(id, at, top)).toBe(true);
+  /** An owl at the doorway in the plaza asks it for a hollow: a fresh one for a new group. */
+  async function freshHollow(obj: Obj): Promise<string> {
+    const ws = await join(obj, ESCAPE_DOOR.room, 'v_door');
+    put(obj, ESCAPE_DOOR.room, 'v_door', ESCAPE_DOOR.spawn);
+    const f = await ask(obj, ws, { a: 'doors' });
+    expect(f.ok).toBe(true);
+    return f.doors!.fresh;
+  }
+  async function spectator(obj: Obj, room: string, id: string) {
+    const ws = connect(room, id, SPEC_CID, undefined, true);
+    await hello(obj, ws);
+    return ws;
+  }
+  /** Walk a started group of at least two through all four locks (`a` and `b` the two owls that do it). */
+  async function clear(obj: Obj, room: string, a: FakeSocket, b: FakeSocket) {
+    const lay = escapeLayout(inner(obj).escapes.get(room)!.seed);
+    for (let n = 0; n < 3; n++) {
+      put(obj, room, 'v_a', lay.chest.carvings[n]!);
+      expect((await ask(obj, a, { a: 'look', lock: 'chest', n })).ok).toBe(true);
+    }
+    put(obj, room, 'v_a', ESCAPE_LOCKS[0]!.post);
+    expect(await ask(obj, a, { a: 'open', lock: 'chest', code: lay.chest.code })).toMatchObject({ ok: true, opened: 'chest' });
+    put(obj, room, 'v_a', ESCAPE_PLACES.moon);
+    put(obj, room, 'v_b', { x: 640, y: 1020 }, ESCAPE_PERCH_TOP);
+    expect((await ask(obj, a, { a: 'look', lock: 'dial' })).ok).toBe(true);
+    put(obj, room, 'v_a', ESCAPE_LOCKS[1]!.post);
+    expect(await ask(obj, a, { a: 'open', lock: 'dial', code: lay.dial.code })).toMatchObject({ ok: true, opened: 'dial' });
+    put(obj, room, 'v_a', ESCAPE_PLACES.vines[0]);
+    put(obj, room, 'v_b', ESCAPE_PLACES.vines[1]);
+    await ask(obj, a, { a: 'tug', vine: 'west' });
+    expect(await ask(obj, b, { a: 'tug', vine: 'east' })).toMatchObject({ ok: true, opened: 'roots' });
+    const key = (await ask(obj, b, { a: 'state' })).view!.key!;
+    put(obj, room, 'v_b', key, ESCAPE_PERCH_TOP);
+    expect((await ask(obj, b, { a: 'take' })).ok).toBe(true);
+    put(obj, room, 'v_b', ESCAPE_LOCKS[3]!.post);
+    expect(await ask(obj, b, { a: 'open', lock: 'way-out' })).toMatchObject({ ok: true, opened: 'way-out' });
+  }
+
+  it('lets a group of 2 in through the doorway, and start once both are there', async () => {
+    const obj = roomObject();
+    const room = await freshHollow(obj);
+    // Far from the doorway, the plaza has no hollow to give.
+    const far = await join(obj, ESCAPE_DOOR.room, 'v_far');
+    put(obj, ESCAPE_DOOR.room, 'v_far', { x: 900, y: 1000 });
+    expect(await ask(obj, far, { a: 'doors' })).toMatchObject({ ok: false, reason: 'far' });
+    const a = await join(obj, room, 'v_a', OWNER);
+    expect(a.closed).toBeNull();
+    expect(a.last('escape')!.view).toMatchObject({ phase: 'lobby', owls: 1, min: 2, max: 4, member: true });
+    expect(await ask(obj, a, { a: 'start' })).toMatchObject({ ok: false, reason: 'few' });
+    // The doorway shows the waiting group to the next owl, and a fresh room besides.
+    const door = state.sockets.find((s) => s.tags.includes('id:v_door'))!.ws;
+    const doors = (await ask(obj, door, { a: 'doors' })).doors!;
+    expect(doors.groups).toEqual([{ room, owls: 1 }]);
+    expect(doors.fresh).not.toBe(room);
+    const b = await join(obj, room, 'v_b', GUEST);
+    expect(a.last('escape')!.view!.owls).toBe(2);
+    expect(await ask(obj, b, { a: 'start' })).toMatchObject({ ok: true, view: { phase: 'running' } });
+    expect(a.last('escape')!.view!.phase).toBe('running');
+    // A started group is gone from the doorway.
+    expect((await ask(obj, door, { a: 'doors' })).doors!.groups).toEqual([]);
+  });
+
+  it('turns a 5th owl away, and any newcomer once the group has started', async () => {
+    const obj = roomObject();
+    const room = await freshHollow(obj);
+    for (const id of ['v_a', 'v_b', 'v_c', 'v_d']) expect((await join(obj, room, id)).closed).toBeNull();
+    const e = await join(obj, room, 'v_e');
+    expect(e.last('full')).toEqual({ t: 'full', room, cap: 4 });
+    expect(e.closed?.code).toBe(CLOSE.ROOM_FULL);
+    logged(cap.lines, 'room_join_refused', { room, reason: 'cap', cap: 4 });
+    const other = await freshHollow(obj);
+    const a = await join(obj, other, 'v_a2');
+    await join(obj, other, 'v_b2');
+    expect((await ask(obj, a, { a: 'start' })).ok).toBe(true);
+    const late = await join(obj, other, 'v_late');
+    expect(late.closed?.code).toBe(CLOSE.ROOM_FULL);
+    logged(cap.lines, 'room_join_refused', { room: other, reason: 'escape-started' });
+  });
+
+  it('gives every group its own seed: the answers differ between runs', async () => {
+    const obj = roomObject();
+    const seeds = new Set<string>();
+    for (let i = 0; i < 4; i++) {
+      const room = await freshHollow(obj);
+      await join(obj, room, `v_s${i}`);
+      seeds.add(inner(obj).escapes.get(room)!.seed);
+    }
+    expect(seeds.size).toBe(4);
+    expect(new Set([...seeds].map((s) => JSON.stringify(escapeLayout(s)))).size).toBe(4);
+    // A page never sees a seed.
+    for (const s of seeds) expect(everything()).not.toContain(s);
+  });
+
+  it('lights the moon carving only while another owl perches on the stump, and tells the group', async () => {
+    const obj = roomObject();
+    const room = await freshHollow(obj);
+    const a = await join(obj, room, 'v_a', OWNER);
+    const b = await join(obj, room, 'v_b', GUEST);
+    await ask(obj, a, { a: 'start' });
+    const lay = escapeLayout(inner(obj).escapes.get(room)!.seed);
+    for (let n = 0; n < 3; n++) {
+      put(obj, room, 'v_a', lay.chest.carvings[n]!);
+      await ask(obj, a, { a: 'look', lock: 'chest', n });
+    }
+    put(obj, room, 'v_a', ESCAPE_LOCKS[0]!.post);
+    await ask(obj, a, { a: 'open', lock: 'chest', code: lay.chest.code });
+    put(obj, room, 'v_a', ESCAPE_PLACES.moon);
+    put(obj, room, 'v_b', { x: 640, y: 1020 });
+    expect(await ask(obj, a, { a: 'look', lock: 'dial' })).toMatchObject({ ok: false, reason: 'dark', view: { lit: false } });
+    // b hops up onto the stump: its landing lights the carving, and a is told without asking.
+    const before = a.of('escape').length;
+    await send(obj, b, { t: 'air', air: { z: ESCAPE_PERCH_TOP, vz: 0, s: GROUNDED, f: 0 } });
+    expect(a.of('escape').length).toBe(before + 1);
+    expect(a.last('escape')!.view!.lit).toBe(true);
+    expect(a.last('escape')!.view!.locks[1]!.clues.every((c) => c.symbol === null)).toBe(true);
+    const read = await ask(obj, a, { a: 'look', lock: 'dial' });
+    expect(read.ok).toBe(true);
+    expect(read.view!.locks[1]!.clues.map((c) => c.symbol)).toEqual(lay.dial.code);
+    // b saw it read too.
+    expect(b.last('escape')!.view!.locks[1]!.clues.map((c) => c.symbol)).toEqual(lay.dial.code);
+    // b hops down: dark again for everyone.
+    await send(obj, b, { t: 'air', air: { z: 0, vz: 0, s: GROUNDED, f: 0 } });
+    expect(a.last('escape')!.view!.lit).toBe(false);
+  });
+
+  it('opens the root door on two tugs within the window, never on one alone', async () => {
+    const obj = roomObject();
+    const room = await freshHollow(obj);
+    const a = await join(obj, room, 'v_a');
+    const b = await join(obj, room, 'v_b');
+    await ask(obj, a, { a: 'start' });
+    const run = inner(obj).escapes.get(room)! as unknown as { opened: string[] };
+    run.opened.push('chest', 'dial');
+    put(obj, room, 'v_a', ESCAPE_PLACES.vines[0]);
+    put(obj, room, 'v_b', ESCAPE_PLACES.vines[1]);
+    expect(await ask(obj, a, { a: 'tug', vine: 'west' })).toMatchObject({ ok: true });
+    clock += 5000;
+    expect(await ask(obj, b, { a: 'tug', vine: 'east' })).not.toHaveProperty('opened');
+    expect(run.opened).not.toContain('roots');
+    clock += 1000;
+    expect(await ask(obj, a, { a: 'tug', vine: 'west' })).toMatchObject({ ok: true, opened: 'roots' });
+    expect(b.last('escape')!.view!.locks[2]!.open).toBe(true);
+  });
+
+  it('has the hint owl offer a hint after a stuck minute', async () => {
+    const obj = roomObject();
+    const room = await freshHollow(obj);
+    const a = await join(obj, room, 'v_a');
+    await join(obj, room, 'v_b');
+    await ask(obj, a, { a: 'start' });
+    put(obj, room, 'v_a', ESCAPE_PLACES.hintOwl);
+    expect(await ask(obj, a, { a: 'hint' })).toMatchObject({ ok: false, reason: 'not-yet', view: { hint: false } });
+    clock += ESCAPE_HINT_AFTER_MS;
+    expect((await ask(obj, a, { a: 'state' })).view!.hint).toBe(true);
+    expect(await ask(obj, a, { a: 'hint' })).toMatchObject({ ok: true, hint: ESCAPE_LOCKS[0]!.hint });
+  });
+
+  it('pays each ticket holder 60 feathers once a day and the Hollow Moth once; a spectator plays for nothing', async () => {
+    collections.spectators.add(SPEC_CID);
+    const obj = roomObject();
+    const room = await freshHollow(obj);
+    const a = await join(obj, room, 'v_a', OWNER);
+    const b = await join(obj, room, 'v_b', GUEST);
+    const g = await spectator(obj, room, 'v_g');
+    expect(g.closed).toBeNull();
+    expect(g.last('escape')!.view).toMatchObject({ member: true, practice: true });
+    await ask(obj, a, { a: 'start' });
+    await clear(obj, room, a, b);
+    expect(a.last('escape')!.paid).toEqual({ feathers: ESCAPE_FEATHERS, total: ESCAPE_FEATHERS, item: ESCAPE_ITEM });
+    expect(b.last('escape')!.paid).toEqual({ feathers: ESCAPE_FEATHERS, total: ESCAPE_FEATHERS, item: ESCAPE_ITEM });
+    expect(g.last('escape')!.paid).toEqual({ feathers: 0, total: -1, practice: true });
+    expect(collections.escapeCalls.sort()).toEqual([GUEST, OWNER].sort());
+    expect(collections.book.owned(OWNER, undefined, clock)).toContain(ESCAPE_ITEM);
+    // Asking again pays nothing more.
+    await ask(obj, a, { a: 'open', lock: 'way-out' });
+    expect(collections.escapeCalls).toHaveLength(2);
+    // The same day, another run: no feathers, no second moth.
+    for (const ws of [a, b, g]) await obj.webSocketClose(ws as unknown as WebSocket, 1000);
+    expect(inner(obj).escapes.has(room)).toBe(false);
+    const again = await freshHollow(obj);
+    const a2 = await join(obj, again, 'v_a', OWNER);
+    const b2 = await join(obj, again, 'v_b', GUEST);
+    await ask(obj, a2, { a: 'start' });
+    await clear(obj, again, a2, b2);
+    expect(a2.last('escape')!.paid).toEqual({ feathers: 0, total: ESCAPE_FEATHERS, why: 'paid-today' });
+  });
+});
+
+describe('a newcomer at a full room as the line starts by itself (OP-322)', () => {
+  /** A room object whose overflow object answers a full room's ask with `line`, and keeps what it was asked. */
+  function withLine(line: boolean | 'down', caps: Record<string, number>) {
+    const asked: string[] = [];
+    const fetch = async (url: string) => {
+      asked.push(new URL(url).pathname);
+      if (new URL(url).pathname === '/full') {
+        if (line === 'down') throw new Error('unreachable');
+        return Response.json({ line });
+      }
+      return Response.json({ words: null });
+    };
+    const env = { GATE: 'open', COLLECTIONS: { getByName: () => collections }, ROOM_CAPS: JSON.stringify(caps), OVERFLOW: { idFromName: () => 'park', get: () => ({ fetch }) } } as unknown as Env;
+    return { obj: new RoomObject(state as unknown as DurableObjectState, env), asked };
+  }
+  /** A socket whose owl the Worker called a newcomer: no entry, so not inside lately and not through the line. */
+  function newcomer(room: string, id: string): FakeSocket {
+    const ws = connect(room, id);
+    ws.serializeAttachment({ ...(ws.deserializeAttachment() as object), newcomer: true });
+    return ws;
+  }
+
+  it('sends a newcomer to the line (4012), not "room full", when the line takes arrivals', async () => {
+    const { obj, asked } = withLine(true, { hub: 1 });
+    await join(obj, 'hub', 'v_a');
+    const ws = newcomer('hub', 'v_new');
+    await hello(obj, ws);
+    expect(ws.closed?.code).toBe(CLOSE.QUEUED);
+    expect(ws.last('full')).toBeUndefined();
+    expect(ws.last('welcome')).toBeUndefined();
+    expect(asked).toContain('/full');
+  });
+
+  it('still says the room is full to an owl that came with an entry, without asking the line', async () => {
+    const { obj, asked } = withLine(true, { hub: 1 });
+    await join(obj, 'hub', 'v_a');
+    const inside = await join(obj, 'hub', 'v_inside');
+    expect(inside.last('full')).toEqual({ t: 'full', room: 'hub', cap: 1 });
+    expect(inside.closed?.code).toBe(CLOSE.ROOM_FULL);
+    expect(asked).not.toContain('/full');
+  });
+
+  it('says the room is full when the line takes nobody, or does not answer', async () => {
+    for (const line of [false, 'down'] as const) {
+      const { obj } = withLine(line, { hub: 1 });
+      await join(obj, 'hub', `v_a_${line}`);
+      const ws = newcomer('hub', `v_new_${line}`);
+      await hello(obj, ws);
+      expect(ws.closed?.code, String(line)).toBe(CLOSE.ROOM_FULL);
+      expect(ws.last('full'), String(line)).toEqual({ t: 'full', room: 'hub', cap: 1 });
+    }
   });
 });

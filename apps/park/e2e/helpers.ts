@@ -4,6 +4,11 @@ export interface ParkState {
   room: string;
   /** The owl walks this room as a spectator, as its welcome said (OP-191). */
   spectator: boolean;
+  /** The dash (OP-224): held in a parkour course only, spent until the owl lands, and the dashes made in this room. */
+  dash: { holds: boolean; spent: boolean; dashes: number };
+  wind: { currents: number; rides: number };
+  /** In a parkour course: the course as the room has it for this owl, and the falls and finishes this page had answered. */
+  course: { course: string; act: number; run: { ms: number; parts: string[]; bench: string | null; practice?: true } | null; feathers: string[]; shortcuts: string[]; cleared: boolean; bestMs: number | null; falls: number; finishes: number } | null;
   pos: { x: number; y: number };
   walking: boolean;
   look: { body: string; belly: string; accent: string; species?: string; wear?: { head?: string; face?: string; neck?: string; pet?: string; fx?: string } };
@@ -27,8 +32,8 @@ export interface ParkState {
   }>;
   /** How high this visitor's owl is drawn above the floor (OP-084), in room pixels; `pos` stays on the floor. */
   height: number;
-  /** Its flight as it steps: height and speed up (room px, px/s), on the ground (0), in the air (1) or gliding (2), and flaps left. */
-  air: { z: number; vz: number; s: 0 | 1 | 2; f: 0 | 1 };
+  /** Its flight as it steps: height and speed up (room px, px/s), on the ground (0), in the air (1), gliding (2) or held up by an updraft or a wind current (3), and flaps left. */
+  air: { z: number; vz: number; s: 0 | 1 | 2 | 3; f: 0 | 1 | 2 };
   /** Its take-offs as the flight steps them: how many on this page, and the last one's top (room px), whether it glided and how long it was up (ms, once down). */
   flown: { n: number; peak: number; glided: boolean; ms: number };
   /** This visitor's owl is asleep: nothing done on the page for a while (OP-126). */
@@ -38,11 +43,49 @@ export interface ParkState {
   connected: boolean;
   /** The room's paintings drawn at 1x still, their sharp copies on the way (OP-129). */
   soft: string[];
+  /** The room's art drawn as size boxes (`?sizes=1`). */
+  sizeBoxes: string[];
+  sizeLabels: string[];
+  doorSigns: string[];
+  /** Seen from above, the words on the one doorway sign showing now (OP-309). */
+  signShown: string | null;
+  /** Where that sign's words stand (room px), if one shows. */
+  signBox: { left: number; right: number; top: number; bottom: number } | null;
+  /** The words of the course's tip showing now (OP-344), if any. */
+  tipShown: string | null;
+  /** Whether this device's owl has glided off one of the Great Hollow's roots (OP-347). */
+  firstFlight: boolean;
+  /** The words of the prompt over the visitor's own owl (OP-344), if any. */
+  promptShown: string | null;
+  /** The tall art gone see-through because the visitor's own owl is behind it (OP-346), by its art's key. */
+  seeThrough: string[];
+  /** The guardian at the heart of the Great Hollow (OP-359): null on any address without `?guardian=1`. */
+  guardian: {
+    at: { x: number; y: number };
+    scale: number;
+    parts: boolean;
+    attending: string | null;
+    lids: 'open' | 'half' | 'closed';
+    dozing: boolean;
+    hoots: number;
+    beat: number;
+    head: { roll: number; dx: number; dy: number };
+    alpha: number;
+    boxes: Array<{ x: number; y: number; w: number; h: number }>;
+  } | null;
+  /** The sounds played for the visitor's own owl on this page, the newest last (OP-350). */
+  sounds: string[];
+  /** The side camera (OP-351): its lead (room px, to the right is positive), the height it holds and where it looks; null in a room seen from above. */
+  sideCam: { lead: number; level: number; x: number; y: number } | null;
+  trail: { feathers: Array<{ x: number; y: number }>; glints: string[]; on: boolean } | null;
+  floorShown: boolean;
+  /** How many pieces shaping the room's edges seen from above were drawn (edges.ts). */
+  edges: number;
   /** The art tiles that scroll at rates of their own (the tree's sky and overlay, OP-156). */
   layers: Array<{ key: string; rate: number; x: number; y: number; w: number; h: number; fade: { left: number; right: number } }>;
   /** In a room of the tree (OP-173): how many fronts, shades, ledge edges and doorway marks it drew. */
   /** In a room of the tree (OP-173): what it drew to read at a glance, and whether the own owl is drawn behind the raised fronts (a stair's banister) now. */
-  tree: { fronts: number; raised: number; shades: number; lips: number; marks: number; behind: boolean } | null;
+  tree: { fronts: number; raised: number; shades: number; lips: number; marks: number; barriers: number; landings: number; behind: boolean } | null;
   /** How big the own owl is drawn against today's park (the tree's owls: 1.25). */
   owlScale: number;
   /** Where the camera's view is, in room pixels (OP-156). */
@@ -60,6 +103,8 @@ export interface ParkState {
   objects: Array<{ id: string; kind: string; x: number; y: number; top: number; here: boolean }>;
   items: Array<{ quest: string; n: number; kind: string; x: number; y: number; top: number }>;
   actions: string[];
+  /** Seen from the side (the tree, OP-212): the doorway the owl stands in that up would take it through, its up arrow shown. */
+  doorway: string | null;
   talkingTo: string | null;
   play: {
     lanterns: string[];
@@ -133,6 +178,9 @@ export const E2E_ADMIN_KEY = 'e2e-only-admin-key-not-a-secret';
 export const E2E_ACCOUNTS = {
   secret: 'e2e-only-account-secret-not-a-secret',
   from: 'owls@e2e.test',
+  /** Sign in with Google's OAuth client in these tests (OP-313): Google is the stand-in store's machine. */
+  googleClientId: 'owl-park-e2e.apps.googleusercontent.com',
+  googleClientSecret: 'e2e-only-google-secret-not-a-secret',
 };
 
 export const E2E_STORE = {
@@ -150,7 +198,7 @@ export const E2E_STORE = {
 
 /** The card before the store (OP-153): every way from the park to the store shows it first. */
 export const STORE_CARD = '[data-store-card]';
-export const STORE_LINE = 'Ask a grown-up before buying';
+export const STORE_LINE = 'This opens the store in a new tab';
 
 /** The card before the store is up, its line shown and the focus on it (not on Continue). */
 export async function expectStoreCard(page: Page): Promise<void> {
@@ -196,7 +244,10 @@ export async function walkToDoor(page: Page, doorId: string): Promise<void> {
  * Visits start in the lobby; these tests start in the hub unless they name a room.
  */
 export async function openPark(page: Page, params: Record<string, string> = {}): Promise<void> {
-  const q = new URLSearchParams({ transport: 'local', room: 'hub', ...params });
+  // The tree's painted rooms (`kit: '0'`) unless a test asks for the art kit's, which visitors see:
+  // the painted rooms' layers, fronts and shades are what most tests hold, and the kit rooms have kitRooms.spec.ts.
+  // Likewise the Party Grove's earlier paintings (`art: 'old'`); its layered look, which visitors see, has its own test in park.spec.ts.
+  const q = new URLSearchParams({ transport: 'local', room: 'hub', kit: '0', art: 'old', ...params });
   await page.goto(`/?${q.toString()}`);
   await page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
   if (q.get('transport') === 'edge') {
@@ -251,6 +302,76 @@ export async function settleCamera(page: Page): Promise<CameraView> {
     last = now;
   }
   return last;
+}
+
+// ---------- a held clock ----------
+// Time that moves only when the test moves it, a frame at a go: a slow machine then sees exactly what
+// a quick one sees, to the frame, and a look that takes four seconds of the park's time costs the
+// test only as long as its frames take to draw. Hold the clock before the page opens.
+
+/** Time held still from before the page opens: it moves only when the test moves it. */
+export async function holdTheClock(page: Page): Promise<void> {
+  await page.clock.install();
+  await page.clock.pauseAt(new Date(Date.now() + 1_000));
+}
+
+/** On a held clock, a frame every tenth of a second, as a slow device draws them: the park moves the same at any frame rate. */
+export const HELD_FRAME_MS = 100;
+
+/** On a held clock: time moved on a frame at a go until `done` says so (or the test fails: `what` did not come about). */
+export async function heldUntil(page: Page, what: string, done: () => Promise<boolean>): Promise<void> {
+  for (let i = 0; i < 400; i++) {
+    if (await done()) return;
+    await page.clock.fastForward(HELD_FRAME_MS);
+  }
+  throw new Error(`on the held clock: ${what} did not come about`);
+}
+
+/** On a held clock: `ms` of time, a frame at a go. */
+export async function heldPass(page: Page, ms: number): Promise<void> {
+  for (let t = 0; t < ms; t += HELD_FRAME_MS) await page.clock.fastForward(HELD_FRAME_MS);
+}
+
+/** What the page says now (on a held clock nothing waits, so nothing is polled for). */
+export const stateNow = (page: Page) => page.evaluate(() => window.owlPark.state()!) as Promise<ParkState>;
+
+/** A room opened on a held clock: back as soon as the room is built (openPark waits on the page's own time, which is held). */
+export async function openHeld(page: Page, params: Record<string, string>): Promise<void> {
+  const q = new URLSearchParams({ transport: 'local', kit: '0', art: 'old', ...params });
+  await page.goto(`/?${q.toString()}`);
+  await heldUntil(page, 'the room coming up', () => page.evaluate(() => window.owlPark?.state() != null));
+}
+
+/**
+ * On a held clock: the owl walked to a spot and stood there until the camera has come to rest. Says
+ * where the owl stands, the camera's view, and how far down that view the owl is (0 its top, 1 its foot).
+ */
+export async function heldStandingAt(page: Page, spot: { x: number; y: number }): Promise<{ pos: { x: number; y: number }; view: CameraView; down: number }> {
+  await page.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), spot);
+  await heldUntil(page, `the owl standing at ${spot.x},${spot.y}`, async () => {
+    const at = await stateNow(page);
+    return !at.walking && Math.hypot(at.pos.x - spot.x, at.pos.y - spot.y) < 30;
+  });
+  const view = await heldCameraAtRest(page);
+  const pos = (await stateNow(page)).pos;
+  return { pos, view, down: (pos.y - view.viewY) / view.viewH };
+}
+
+/**
+ * On a held clock: the camera once it has stopped moving. It eases toward where it rests by a share of
+ * the way each frame, and its view is given in whole pixels, so one frame unchanged is not rest: eight
+ * in a row is (under two pixels from it).
+ */
+export async function heldCameraAtRest(page: Page): Promise<CameraView> {
+  let view = await cameraView(page);
+  let same = 0;
+  await heldUntil(page, 'the camera at rest', async () => {
+    const now = await cameraView(page);
+    same = now.viewX === view.viewX && now.viewY === view.viewY && now.viewW === view.viewW ? same + 1 : 0;
+    view = now;
+    return same >= 8;
+  });
+  return view;
 }
 
 /** Convert a room point to a CSS-pixel screen point using the live camera's visible world rectangle. */
@@ -352,7 +473,7 @@ export async function holdSpace(page: Page, ms: number): Promise<void> {
 }
 
 /** How fast an owl still rises once Jump is let go on the way up (JUMP_CUT_SPEED, packages/shared jump.ts). */
-const CUT_SPEED = 180;
+const CUT_SPEED = 640;
 
 /**
  * A jump held `jumpMs` (by default to its top and a little past), then the flap, held `ms`: from the
@@ -396,10 +517,18 @@ export async function jumpFlapGlide(page: Page, ms: number, { jumpMs = 500, spar
   );
 }
 
+/**
+ * The button that does action `id` where the owl stands: its button in the row, or on a phone, for the
+ * first action, the pad's Interact, which wears its name in place of the row's button (OP-242).
+ */
+export function actionButton(page: Page, id: string) {
+  return page.locator(`[data-action="${id}"], [data-pad-interact][data-act="${id}"]`).filter({ visible: true });
+}
+
 /** Wait for an action button where the owl stands, then press it. */
 export async function doAction(page: Page, id: string): Promise<void> {
   await expect.poll(async () => (await state(page)).actions, { timeout: 10_000, intervals: [50] }).toContain(id);
-  await page.locator(`[data-action="${id}"]`).click();
+  await actionButton(page, id).click();
 }
 
 /** From the grove's clearing along the lawn to the pond, and out to the end of the jetty (owls walk in straight lines). */

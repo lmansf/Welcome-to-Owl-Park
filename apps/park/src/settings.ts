@@ -11,12 +11,14 @@ export interface Settings {
   bubbles: boolean;
   /** The park's sounds (the Menu's knock on wood, OP-108). On by default; off mutes them all. */
   sound: boolean;
+  /** The feather trail (OP-307): feathers toward a doorway not tried yet, and a glint on each such doorway. On by default. */
+  trail: boolean;
 }
 
 export const SETTINGS_KEY = 'owl-park:settings';
 
 export function defaultSettings(reducedMotion: boolean): Settings {
-  return { thumbstick: true, calm: reducedMotion, bubbles: true, sound: true };
+  return { thumbstick: true, calm: reducedMotion, bubbles: true, sound: true, trail: true };
 }
 
 /** Settings from what storage holds: each one a boolean, else its default. Anything else is dropped. */

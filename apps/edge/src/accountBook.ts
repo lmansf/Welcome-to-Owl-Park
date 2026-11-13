@@ -11,15 +11,30 @@
  * A ticket's order email (OP-186) is kept nowhere here until its buyer says so: the owl that took the
  * ticket is offered a one-tap protect link whose row names the owl and nothing about the email (the
  * address travels sealed in the link itself), and only opening it protects the owl as the Menu's does.
+ *
+ * A Google sign-in (OP-313) is a row here while it is out at Google: its state's nonce, what it is for
+ * (protect this owl, or bring an owl here) and the owl, good once for GOOGLE_STATE_MS. When Google
+ * comes back with a verified email, the Worker asks here for the link that email would have been
+ * mailed, and the page opens it as it opens a mailed one. Nothing of the Google account is kept.
  */
 import { moduleLog } from './logs';
-import { LINKS_PER_EMAIL_PER_HOUR, LINKS_PER_IP_PER_HOUR, MAGIC_LINK_MS, ORDER_LINK_MS, friendCodeFrom, isLook, portraitLook, type OwlAccount, type OwlPicture, type PortraitLook } from '@owl-park/shared';
+import { GOOGLE_STARTS_PER_IP_PER_HOUR, GOOGLE_STATE_MS, LINKS_PER_EMAIL_PER_HOUR, LINKS_PER_IP_PER_HOUR, MAGIC_LINK_MS, ORDER_LINK_MS, friendCodeFrom, isLook, portraitLook, type OwlAccount, type OwlPicture, type PortraitLook } from '@owl-park/shared';
 
 const HOUR_MS = 3600_000;
 /** Spent and lapsed links are kept this long (for a keeper's question), then dropped. */
 const LINKS_KEPT_MS = 24 * HOUR_MS;
 
 export type LinkKind = 'protect' | 'restore';
+/** What a Google sign-in (OP-313) was started for: protect the page's owl, or bring an owl to this screen. */
+export type GoogleFor = 'protect' | 'restore';
+/** A row of the links table: a mailed link, or a Google sign-in out at Google. */
+type RowKind = LinkKind | `google-${GoogleFor}`;
+/**
+ * The link a Google sign-in comes back to (OP-313): a protect link for the owl it was started for, a
+ * restore link for an email that protects owls, or (`offer`) a protect link for the owl on the
+ * screen that opens it, offered first, for an email that protects none.
+ */
+export type GoogleLink = { exp: number; kind: LinkKind | 'offer' };
 
 export interface Account {
   cid: string;
@@ -33,7 +48,7 @@ export interface Account {
 }
 
 export interface LinkRow {
-  kind: LinkKind;
+  kind: RowKind;
   /** The owl a protect link protects. */
   cid: string | null;
   /** The email's hash; empty for a ticket's protect link (OP-186), which carries its email itself. */
@@ -160,6 +175,17 @@ export class AccountBook {
     return dev !== null ? r['device'] === dev : r['bound_at'] === null;
   }
 
+  /** The owl with this friend code (OP-056: a friend typed it), with its device and its email's hash; null for none. */
+  byCode(code: string): { cid: string; device: string | null; emailHash: string | null } | null {
+    const r = this.sql.exec('SELECT cid, device, email_hash FROM owl_accounts WHERE friend_code = ?', code).toArray()[0] as Record<string, unknown> | undefined;
+    return r ? { cid: String(r['cid']), device: (r['device'] as string | null) ?? null, emailHash: (r['email_hash'] as string | null) ?? null } : null;
+  }
+
+  /** The hash of the email protecting the owl, or null (OP-056: two owls of one email bring no friend). */
+  emailHashOf(cid: string): string | null {
+    return (this.row(cid)?.['email_hash'] as string | null | undefined) ?? null;
+  }
+
   /** The owl's colours and kind as its screen shows them now, for its picture (written only when they changed). */
   setLook(cid: string, look: PortraitLook, now: number): void {
     this.account(cid, now);
@@ -181,7 +207,7 @@ export class AccountBook {
   }
 
   /** A link sent: good once, for MAGIC_LINK_MS (or `ttl`). Its expiry (ms). */
-  noteLink(nonce: string, kind: LinkKind, link: Omit<LinkRow, 'kind'>, now: number, ttl = MAGIC_LINK_MS): number {
+  noteLink(nonce: string, kind: RowKind, link: Omit<LinkRow, 'kind'>, now: number, ttl = MAGIC_LINK_MS): number {
     this.sql.exec('DELETE FROM account_links WHERE exp <= ?', now - LINKS_KEPT_MS);
     const exp = now + ttl;
     this.sql.exec('INSERT INTO account_links (nonce, kind, cid, email_hash, email_seal, exp) VALUES (?, ?, ?, ?, ?, ?)', nonce, kind, link.cid, link.emailHash, link.emailSeal, exp);
@@ -189,14 +215,14 @@ export class AccountBook {
   }
 
   /** A link that is still good (never used, not run out): what it is for, without using it. */
-  peekLink(nonce: string, kind: LinkKind, now: number): LinkRow | null {
+  peekLink(nonce: string, kind: RowKind, now: number): LinkRow | null {
     const r = this.sql.exec('SELECT * FROM account_links WHERE nonce = ? AND kind = ?', nonce, kind).toArray()[0] as Record<string, unknown> | undefined;
     if (!r || r['used_at'] !== null || Number(r['exp']) <= now) return null;
     return { kind, cid: (r['cid'] as string | null) ?? null, emailHash: String(r['email_hash']), emailSeal: (r['email_seal'] as string | null) ?? null };
   }
 
   /** A link used: what it was for if it was still good, and spent from now on. */
-  useLink(nonce: string, kind: LinkKind, now: number): LinkRow | null {
+  useLink(nonce: string, kind: RowKind, now: number): LinkRow | null {
     const link = this.peekLink(nonce, kind, now);
     if (link) this.sql.exec('UPDATE account_links SET used_at = ? WHERE nonce = ?', now, nonce);
     return link;
@@ -238,7 +264,7 @@ export class AccountBook {
    */
   orderLink(cid: string, orderHash: string, nonce: string, now: number): number | null {
     // A protected owl keeps its email: the mail would tell the buyer it is not protected, and opening
-    // the link would move it to theirs. Its grown-up can still change it in the Menu.
+    // the link would move it to theirs. Its owner can still change it in the Menu.
     if (this.row(cid)?.['email_hash']) return null;
     this.sql.exec('DELETE FROM account_order_offers WHERE at <= ?', now - ORDER_LINK_MS - LINKS_KEPT_MS);
     if (this.sql.exec('SELECT 1 FROM account_order_offers WHERE order_hash = ? AND cid = ?', orderHash, cid).toArray().length) return null;
@@ -279,6 +305,41 @@ export class AccountBook {
     this.protect(cid, email.emailHash, email.emailSeal, now);
     const a = this.account(cid, now);
     return { cid, account: accountView(a), look: a.look };
+  }
+
+  /**
+   * A Google sign-in started (OP-313), if the limit on one address allows: its state's nonce, good once
+   * for GOOGLE_STATE_MS, noting what it is for and the owl (the page's own, to protect). Its expiry
+   * (ms), or null. Nothing about an email: Google has not said one yet.
+   */
+  googleStart(nonce: string, kind: GoogleFor, cid: string | null, ipHash: string, now: number): number | null {
+    this.sql.exec('DELETE FROM account_sends WHERE at <= ?', now - HOUR_MS);
+    const key = `g:${ipHash}`;
+    const started = Number((this.sql.exec('SELECT COUNT(*) AS n FROM account_sends WHERE key = ?', key).toArray()[0] as { n: number }).n);
+    if (started >= GOOGLE_STARTS_PER_IP_PER_HOUR) return null;
+    this.sql.exec('INSERT INTO account_sends (key, at) VALUES (?, ?)', key, now);
+    return this.noteLink(nonce, `google-${kind}`, { cid: kind === 'protect' ? cid : null, emailHash: '', emailSeal: null }, now, GOOGLE_STATE_MS);
+  }
+
+  /** A Google sign-in back from Google: what it was for and its owl, once; null for a state spent, lapsed or never started. */
+  googleBack(nonce: string, now: number): { kind: GoogleFor; cid: string | null } | null {
+    for (const kind of ['protect', 'restore'] as const) {
+      const row = this.useLink(nonce, `google-${kind}`, now);
+      if (row) return { kind, cid: row.cid };
+    }
+    return null;
+  }
+
+  /**
+   * The link a Google sign-in's verified email opens (OP-313), as the email's mail would have carried
+   * it, with no mail and no limit on mails (Google said the email is theirs): to protect, a protect link
+   * for the owl it was started for; to bring an owl here, a restore link when the email protects owls,
+   * or else a protect link for whichever owl is on the screen that opens it, which the page offers first.
+   */
+  googleLink(kind: GoogleFor, cid: string | null, emailHash: string, emailSeal: string, nonce: string, now: number): GoogleLink {
+    if (kind === 'protect' && cid) return { exp: this.noteLink(nonce, 'protect', { cid, emailHash, emailSeal }, now), kind: 'protect' };
+    if (this.owlsOf(emailHash).length) return { exp: this.noteLink(nonce, 'restore', { cid: null, emailHash, emailSeal: null }, now), kind: 'restore' };
+    return { exp: this.noteLink(nonce, 'protect', { cid: null, emailHash, emailSeal }, now), kind: 'offer' };
   }
 
   /** A restore link's owls, as pictures to tap (the link stays good); null for a spent or lapsed link. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ROOM_H, ROOM_W, TILE_GROW, backgroundTiles, foregroundTiles, mapOf, tilePlacement, type RoomDef, type RoomTile } from './room';
+import { ROOM_H, ROOM_W, TILE_GROW, backgroundTiles, foregroundTiles, mapOf, seenFromSide, tilePlacement, viewOf, type RoomDef, type RoomTile } from './room';
 
 const base: RoomDef = { id: 'r', size: { w: ROOM_W, h: ROOM_H }, background: 'r', walkable: [], spawns: { default: { x: 1, y: 1 } }, doors: [], mood: 'hub' };
 
@@ -71,5 +71,20 @@ describe('a tile that scrolls at a rate of its own', () => {
   it('belongs to today\'s park unless the room says the tree', () => {
     expect(mapOf({})).toBe(1);
     expect(mapOf({ map: 2 })).toBe(2);
+  });
+
+  it('is seen as its park is unless the room says otherwise (OP-284)', () => {
+    expect(viewOf({})).toBe('top');
+    expect(viewOf({ map: 2 })).toBe('side');
+    expect(viewOf({ map: 2, view: 'top' })).toBe('top');
+    expect(viewOf({ view: 'side' })).toBe('side');
+    expect(seenFromSide({ map: 2 })).toBe(true);
+    expect(seenFromSide({ map: 2, view: 'top' })).toBe(false);
+    expect(seenFromSide({ view: 'side' })).toBe(true);
+    // The park it belongs to stays its map, however it is seen.
+    const treeSeenFromAbove: Pick<RoomDef, 'map' | 'view'> = { map: 2, view: 'top' };
+    const parkSeenFromSide: Pick<RoomDef, 'map' | 'view'> = { view: 'side' };
+    expect(mapOf(treeSeenFromAbove)).toBe(2);
+    expect(mapOf(parkSeenFromSide)).toBe(1);
   });
 });

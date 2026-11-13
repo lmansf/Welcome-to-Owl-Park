@@ -31,3 +31,49 @@ export function owlFact(start: number, n: number): string {
   const len = OWL_FACTS.length;
   return OWL_FACTS[(((Math.trunc(start) + n) % len) + len) % len]!;
 }
+
+/**
+ * The party game's Owl Fact space (OP-314): a wrong twist of each fact above, line for line, so a fact
+ * can be asked as true or false. Each twist is plainly untrue of real owls, and as short as its fact.
+ */
+export const OWL_FACT_TWISTS: readonly string[] = [
+  'Owls can turn their heads all the way around, twice.',
+  'A group of owls is called a herd.',
+  'Owls flap so loudly you can hear them from far away.',
+  'Barn owls can only find mice in bright sunlight.',
+  'Owls roll their eyes around to look behind them.',
+  'A snowy owl eats only one lemming a year.',
+  'Burrowing owls live high up at the tops of tall trees.',
+  'Every owl has its two ears at exactly the same height.',
+  'A great horned owl’s “horns” are made of bone.',
+  'Screech owls can only screech, and never trill.',
+  'Owls chew their food for a long time, like cows.',
+  'There are only two kinds of owl.',
+  'An owl’s eyes are tiny, like a mouse’s.',
+  'Baby owls are called puppies.',
+  'Every owl sleeps all day and never hunts in daylight.',
+  'Owls have no eyelids at all.',
+  'A barn owl has a square face to keep the rain off.',
+  'Owls live only in Antarctica.',
+  'Male owls are always much bigger than females.',
+  'Snowy owls have bare feet with no feathers.',
+];
+
+/** A true-or-false question: the words, and whether they are true. */
+export interface OwlFactQuestion {
+  text: string;
+  truth: boolean;
+}
+
+/**
+ * The `k`th Owl Fact question of a game whose questions start at `start`: the facts come round in
+ * order, and whether each is asked true or as its twist is decided by the same numbers, so the room
+ * server and a test always ask the same thing.
+ */
+export function owlFactQuestion(start: number, k: number): OwlFactQuestion {
+  const len = OWL_FACTS.length;
+  const i = (((Math.trunc(start) + Math.trunc(k)) % len) + len) % len;
+  // About half and half: the fact's place and the question's turn, mixed.
+  const truth = ((Math.imul(i + 1, 2654435761) ^ Math.imul(Math.trunc(k) + 7, 40503)) >>> 7) % 2 === 0;
+  return { text: truth ? OWL_FACTS[i]! : OWL_FACT_TWISTS[i]!, truth };
+}

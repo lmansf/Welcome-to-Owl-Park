@@ -14,7 +14,7 @@ function opener() {
 
 describe('the card before the store (OP-153)', () => {
   it('says its one line, with Continue and Not now, from one set of words', () => {
-    expect(STORE_WORDS).toEqual({ ask: 'Ask a grown-up before buying', go: 'Continue', stay: 'Not now', label: 'Before the store' });
+    expect(STORE_WORDS).toEqual({ ask: 'This opens the store in a new tab', go: 'Continue', stay: 'Not now', label: 'Before the store' });
   });
 
   it('Continue opens a way’s window in its own click, before anything is awaited', () => {
@@ -89,6 +89,7 @@ describe('no way to the store skips the card (OP-153)', () => {
   });
 
   it('the page itself never goes to the store: it only tidies its own address', () => {
-    expect(where(/\blocation\s*\.\s*(?:assign|replace)\s*\(|(?<![\w.])location\s*\.\s*href\s*=(?!=)|\b(?:window|document|globalThis)\s*\.\s*location\s*(?:\.\s*href\s*)?=(?!=)/)).toEqual([]);
+    // But for Sign in with Google (OP-313), which goes only to Google's own sign-in page, and back.
+    expect(where(/\blocation\s*\.\s*(?:assign|replace)\s*\(|(?<![\w.])location\s*\.\s*href\s*=(?!=)|\b(?:window|document|globalThis)\s*\.\s*location\s*(?:\.\s*href\s*)?=(?!=)/)).toEqual(['net/toGoogle.ts']);
   });
 });

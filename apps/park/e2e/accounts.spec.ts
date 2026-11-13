@@ -51,15 +51,20 @@ async function openLink(page: Page, mail: Mail, kind: 'protect' | 'restore', par
   await page.goto(`/?${new URLSearchParams({ transport: 'edge', room: 'hub', ...params }).toString()}#${kind}=${token}`);
 }
 
-/** A tap on an owl's picture: the page starts again holding that owl, and is in the park again. */
-async function pick(page: Page, code: string): Promise<void> {
+/** A tap on an owl's picture reloads the page holding that owl. */
+async function pickOwl(page: Page, code: string): Promise<void> {
   const owl = page.locator(`.modal.account [data-owl="${code}"]`);
   await expect(owl).toBeVisible({ timeout: 15_000 });
   await Promise.all([page.waitForEvent('load', { timeout: 30_000 }), owl.click()]);
+}
+
+/** The email test links open a room directly. */
+async function pick(page: Page, code: string): Promise<void> {
+  await pickOwl(page, code);
   await page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 30_000 });
 }
 
-/** A grown-up types an email in the open account box and sends the link. */
+/** The player types an email in the open account box and sends the link. */
 async function sendLink(page: Page, email: string): Promise<void> {
   const box = page.locator('.modal.account');
   await box.locator('[data-account-email]').fill(email);
@@ -70,7 +75,7 @@ async function sendLink(page: Page, email: string): Promise<void> {
 const friendCodeOf = async (page: Page) => (await openMenu(page, 'nest')).locator('[data-friend-code]').getAttribute('data-friend-code');
 
 test.describe('accounts without passwords (OP-139)', () => {
-  test('a free owl has a friend code and lives on its screen until a grown-up protects it by an emailed link', async ({ browser }) => {
+  test('a free owl has a friend code and lives on its screen until its player protects it by an emailed link', async ({ browser }) => {
     const a = await screen(browser);
     const menu = await openMenu(a, 'nest');
     const code = await menu.locator('[data-friend-code]').getAttribute('data-friend-code');
@@ -185,5 +190,109 @@ test.describe('accounts without passwords (OP-139)', () => {
     await openLink(page, mail, 'protect');
     await expect.poll(isProtected, { timeout: 15_000 }).toBe(true);
     await page.context().close();
+  });
+});
+
+test.describe('sign in with Google beside the email box (OP-313), Google stood in on this machine', () => {
+  /** Who the stand-in Google says the next sign-ins are, or that the player says no there. */
+  const asGoogle = (page: Page, who: { email?: string; deny?: boolean }) => page.request.post(`${E2E_STORE.origin}/test/google`, { data: who });
+  /** The open account box's Google button pressed: the page goes to Google and back. */
+  const viaGoogle = async (page: Page) => {
+    const google = page.locator('.modal.account [data-account-google]');
+    await expect(google).toBeVisible({ timeout: 15_000 });
+    await Promise.all([page.waitForEvent('load', { timeout: 30_000 }), google.click()]);
+  };
+
+  /** A return to the home screen needs Play before the in-park Menu is available. */
+  const playHome = async (page: Page) => {
+    const play = page.locator('[data-home-btn="play"]');
+    await expect(play).toBeVisible({ timeout: 20_000 });
+    expect(await page.evaluate(() => window.owlPark.home())).toEqual({ shown: true, loggedIn: true });
+    await play.click();
+    await expect.poll(async () => (await state(page)).nest?.mine, { timeout: 30_000 }).toBe(true);
+  };
+
+  test('protects an owl with Google instead of a mailed link, and another screen brings it over by Google and a tap', async ({ browser }) => {
+    test.slow(); // two live parks and five page loads between them
+    const phone = await screen(browser);
+    const code = await friendCodeOf(phone);
+    await phone.getByRole('dialog', { name: 'Menu' }).locator('[data-protect]').click();
+    const email = freshEmail('google');
+    await asGoogle(phone, { email });
+    await viaGoogle(phone);
+    await expect(phone.getByText('This owl is protected now.')).toBeVisible({ timeout: 20_000 });
+    // Back where it was, with nothing of the sign-in left in the address.
+    expect(new URL(phone.url()).search).toContain('transport=edge');
+    expect(new URL(phone.url()).hash).toBe('');
+    await expect((await openMenu(phone, 'nest')).locator('[data-protected]')).toHaveAttribute('data-protected', 'true');
+
+    const tabletCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const tablet = await tabletCtx.newPage();
+    await tablet.goto('/?transport=edge');
+    await tablet.locator('[data-home-btn="restore"]').click();
+    await viaGoogle(tablet);
+    await pickOwl(tablet, code!);
+    await playHome(tablet);
+    expect(await friendCodeOf(tablet)).toBe(code);
+    await expect(phone.locator('[data-moved]')).toBeVisible({ timeout: 15_000 });
+    await phone.context().close();
+    await tabletCtx.close();
+  });
+
+  test('an email Google says protects no owl is offered for the owl on this screen, and a no at Google is met kindly', async ({ browser }) => {
+    const a = await screen(browser);
+    const before = await friendCodeOf(a);
+    await a.keyboard.press('Escape');
+    await a.goto('/?transport=edge');
+    // The player says no at Google: nothing changes, and the email box is there again with a kind line.
+    await asGoogle(a, { deny: true });
+    await a.locator('[data-home-btn="restore"]').click();
+    await viaGoogle(a);
+    await expect(a.locator('.modal.account [data-account-status]')).toContainText('Google sign-in was stopped, and nothing changed.', { timeout: 15_000 });
+    await expect(a.locator('.modal.account [data-account-email]')).toBeVisible();
+    // An email that protects no owl yet: offered for this screen's owl, and protected on the tap.
+    await asGoogle(a, { email: freshEmail('google.new') });
+    await viaGoogle(a);
+    await a.locator('.modal.account [data-account-offer]').click();
+    await expect(a.getByText('This owl is protected now.')).toBeVisible({ timeout: 15_000 });
+    await playHome(a);
+    const menu = await openMenu(a, 'nest');
+    await expect(menu.locator('[data-friend-code]')).toHaveAttribute('data-friend-code', before!);
+    await expect(menu.locator('[data-protected]')).toHaveAttribute('data-protected', 'true');
+    await a.context().close();
+  });
+});
+
+test.describe('bringing a friend (OP-056), a preview with ?friends=1', () => {
+  test('the Menu’s card shows only with the flag; a new owl types a friend’s code and its free Day Ticket waits', async ({ browser }) => {
+    test.slow(); // Three browser contexts render the park before checking the offer.
+    const plain = await screen(browser);
+    await openMenu(plain, 'nest');
+    await expect(plain.locator('[data-friend-code]')).toBeVisible();
+    await expect(plain.locator('[data-referral]')).toHaveCount(0);
+    await plain.context().close();
+
+    const alice = await screen(browser, { friends: '1' });
+    const aliceCard = (await openMenu(alice, 'nest')).locator('[data-referral]');
+    await expect(aliceCard).toBeVisible({ timeout: 15_000 });
+    const code = await aliceCard.locator('[data-referral-code]').getAttribute('data-referral-code');
+    expect(code).toMatch(/^[A-HJ-NP-Z]{4}$/);
+
+    const bea = await screen(browser, { friends: '1' });
+    const beaCard = (await openMenu(bea, 'nest')).locator('[data-referral]');
+    await expect(beaCard).toBeVisible({ timeout: 15_000 });
+    // Its own code is refused, and says why.
+    const own = await beaCard.locator('[data-referral-code]').getAttribute('data-referral-code');
+    await beaCard.locator('input[name="friend-code"]').fill(own!.toLowerCase());
+    await beaCard.getByRole('button', { name: 'Use code' }).click();
+    await expect(beaCard.getByText('That’s your own code!')).toBeVisible();
+    await beaCard.locator('input[name="friend-code"]').fill(code!);
+    await beaCard.getByRole('button', { name: 'Use code' }).click();
+    const card = bea.getByRole('dialog', { name: 'Menu' }).locator('[data-referral]');
+    await expect(card.getByText('Welcome, friend!')).toBeVisible({ timeout: 15_000 });
+    await expect(card.locator('[data-offer="friend"]')).toBeVisible();
+    await expect(card.locator('input[name="friend-code"]')).toHaveCount(0);
+    await alice.context().close();
+    await bea.context().close();
   });
 });

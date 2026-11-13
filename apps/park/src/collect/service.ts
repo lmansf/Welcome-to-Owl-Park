@@ -4,6 +4,9 @@ import type {
   BuyResult,
   ClimbTier,
   ClimbWhy,
+  CoursePaid,
+  CourseRefusal,
+  CourseView,
   FurnitureGiftResult,
   GameWall,
   GiftResult,
@@ -14,6 +17,10 @@ import type {
   NestView,
   OwlLook,
   OwnBests,
+  PieceKind,
+  PuzzleStep,
+  PuzzleSymbol,
+  PuzzleView,
   QuestBoard,
   QuestEvent,
   QuestUpdate,
@@ -51,6 +58,38 @@ export interface UseReply {
   updates: QuestUpdate[];
   /** The board after progress, when the answer carries it (the room server pushes it separately). */
   board?: QuestBoard;
+  /** A free guest's use (OP-243): it played, but turned up nothing and counted for nothing. */
+  practice?: true;
+}
+
+/** An owl standing close by that is in a run of the same puzzle quest (one it could join). */
+export interface PuzzleNeighbour {
+  owl: string;
+  members: number;
+  opened: number;
+}
+
+/** The answer to a puzzle quest step (OP-255): the run as it now stands, and the board if a quest moved. */
+export interface PuzzleReply {
+  ok: boolean;
+  /** Why not: 'offline', 'far', 'not-active', 'no-run', 'full', 'locked', 'no-key', 'jammed', 'wrong', ... */
+  reason?: string;
+  /** Tries left before the lock jams, after a wrong code. */
+  left?: number;
+  view: PuzzleView | null;
+  /** For 'near': owls close by in a run of this puzzle. */
+  near?: PuzzleNeighbour[];
+  board?: QuestBoard;
+  updates: QuestUpdate[];
+}
+
+/** What a puzzle step carries besides its quest. */
+export interface PuzzleArgs {
+  lock?: string;
+  n?: number;
+  code?: PuzzleSymbol[];
+  /** For a join: the owl (room id) to join. */
+  with?: string;
 }
 
 /**
@@ -72,12 +111,16 @@ export interface QuestLink {
   gather(quest: string, n: number): Promise<QuestReply>;
   /** An arrival or an emote, for quests that ask for one (the room server notices these itself). */
   note(ev: QuestEvent): void;
+  /** A puzzle quest's run (OP-255): its state, start, the owls close by, join, leave, read a clue, take a key, work a lock. */
+  puzzle(op: PuzzleStep | 'near', quest: string, args?: PuzzleArgs): Promise<PuzzleReply>;
 }
 
 /** What the room pushes without being asked. */
 export interface QuestPushes {
   /** The board after an arrival or an emote moved a quest along. */
   onQuests?(board: QuestBoard, updates: QuestUpdate[]): void;
+  /** Someone else in this owl's run moved it along (OP-255): the run as it now stands, and the board if this owl's quest moved. */
+  onPuzzle?(quest: string, view: PuzzleView, board?: QuestBoard, updates?: QuestUpdate[]): void;
   /** Every shared object used up right now: id -> when it is back (this device's clock). */
   onObjects?(until: Record<string, number>): void;
   /** Someone used a shared object (`by` is null for this visitor); it is back at `until` (this device's clock). */
@@ -170,6 +213,30 @@ export interface ActivityPushes {
   onWall?(walls: GameWall[], mine: OwnBests | null): void;
 }
 
+/** A course step as the room answered it (OP-224): the owl's course as it now stands, or why not. */
+export type CourseReply = { ok: true; view: CourseView; first?: boolean; at?: Vec2; top?: number; paid?: CoursePaid } | { ok: false; reason: CourseRefusal | 'far' | 'offline' };
+
+/**
+ * A parkour course in one of its acts (course.ts in @owl-park/shared): the room server checks where
+ * the owl stands and decides every reward; the page only asks. Null in a room that is no act.
+ */
+export interface CourseLink {
+  /** The owl's course as it stands (its run, lost feathers found, shortcuts open). */
+  state(): Promise<CourseReply>;
+  /** Start a run, by the trail gate's way into the first act. */
+  start(): Promise<CourseReply>;
+  /** A bench, a part of the objective or a lost feather reached. */
+  reach(kind: PieceKind, id: string): Promise<CourseReply>;
+  /** A shortcut's opener reached from its far side. */
+  open(id: string): Promise<CourseReply>;
+  /** The owl is down in a pit, or in thorns: `at` is where it goes back to. */
+  fall(): Promise<CourseReply>;
+  /** The finish shrine: what the clear paid. */
+  finish(): Promise<CourseReply>;
+  /** The owl left the room. */
+  close(): void;
+}
+
 /** A nest as the room shows it to this visitor; its owner also learns what it owns and today's gift. */
 export interface NestSeen {
   nest: NestView;
@@ -236,6 +303,12 @@ export interface CollectionService {
    * browser's (`look` gives the owl's colours for its portrait on the arcade's wall).
    */
   activityLink(room: string, conn: RoomConnection | null, pushes: ActivityPushes, where: () => Vec2, look: () => OwlLook): ActivityLink | null;
+  /**
+   * The parkour course in a room that is one of its acts, the same way (null in any other room). `air`
+   * gives how high the owl is and the way it came into the room, which the room server sees for itself
+   * and this browser's own course needs to judge a fall as the server does (OP-343).
+   */
+  courseLink(room: string, conn: RoomConnection | null, where: () => Vec2, ground: () => number, air?: () => { z: number; entry: string | undefined }): CourseLink | null;
   /**
    * The nests, the same way, on the street and in a nest (null in any other room). `look` gives the
    * visitor's colours for the flag on its own door.

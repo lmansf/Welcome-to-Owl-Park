@@ -6,7 +6,7 @@
  * doorway in the far wall that comes out in a side wall turns a corner, and the owl arrives at the
  * spawn as it always has.
  */
-import { isWalkable, pointInRect, type Rect } from './geometry';
+import { isWalkable, pointInRect, segmentTouchesRect, type Rect } from './geometry';
 import { nestDoorIndex } from './homes';
 import type { Vec2 } from './protocol';
 import { findSpawn, type DoorDef, type RoomDef } from './room';
@@ -66,13 +66,44 @@ export function laneThrough(room: RoomDef, door: DoorDef, p: Vec2): Lane {
  * Inside a doorway that leads somewhere: arriving there would bounce the owl straight back out. A
  * nest door on the street leads into a nest though it has no `to` (each visitor's door goes to its own place).
  */
-/** Where `door` leads an owl walking `map`: its way back to the tree for a tree owl, where it has one, else its own (OP-162). */
-export function doorTarget(door: DoorDef, map: 1 | 2): DoorDef['to'] {
+/**
+ * The park an owl walks: today's park (1), the tree (2), or the new map (3), the park laid out as one
+ * tree (rooms/index.ts, NEW_MAP), which every owl the tree takes walks.
+ */
+export type WalkMap = 1 | 2 | 3;
+
+/**
+ * Where `door` leads an owl walking `map`: its way back to the tree for a tree owl, where it has one, else
+ * its own (OP-162). On the new map, its way there where it has one (`toNew`), else its own: the tree's
+ * ways are not the new map's. `cameFrom` is the room the owl came in from.
+ */
+export function doorTarget(door: DoorDef, map: WalkMap, cameFrom?: string): DoorDef['to'] {
+  // On the new map a way of today's park that it leads elsewhere still takes an owl back the way it came
+  // in: into a realm from the Party Grove's arch, its way out leads back to the arch, not its landing.
+  if (map === 3) return door.toNew && door.to && door.to.room === cameFrom ? door.to : (door.toNew ?? door.to);
+  if (map === 2 && door.closedInTree) return undefined;
   return map === 2 && door.toTree ? door.toTree : door.to;
 }
 
+/** The words on a doorway's sign for an owl walking map `map` (DoorDef.label, labelNew), or undefined for none. */
+export function doorLabel(door: DoorDef, map: WalkMap): string | undefined {
+  return map === 3 ? (door.labelNew ?? door.label) : door.label;
+}
+
 export function inExit(room: RoomDef, p: Vec2): boolean {
-  return room.doors.some((d) => (d.to !== undefined || nestDoorIndex(d.id) !== null) && pointInRect(p, d.rect));
+  return room.doors.some((d) => leadsOut(d) && pointInRect(p, d.rect));
+}
+
+/** A doorway that takes an owl out of its room: one that leads somewhere, or a nest's door on the street. */
+const leadsOut = (d: DoorDef): boolean => d.to !== undefined || nestDoorIndex(d.id) !== null;
+
+/**
+ * Whether the straight walk from `from` to `to` passes through a doorway out of `room` (inExit's
+ * doorways). An owl walked that way by the park itself, not by its visitor, would leave the room it
+ * has only just come into: the room server puts no arrival where its step aside would do that.
+ */
+export function walkCrossesExit(room: RoomDef, from: Vec2, to: Vec2): boolean {
+  return room.doors.some((d) => leadsOut(d) && segmentTouchesRect(from, to, d.rect));
 }
 
 /**

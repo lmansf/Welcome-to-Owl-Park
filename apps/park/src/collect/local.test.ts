@@ -37,6 +37,50 @@ function linkIn(page: LocalCollections, room: string, pos: Vec2) {
   return { link: page.questLink(room, null, pushes, () => where), where, pushed };
 }
 
+describe("a course's fall in this browser's own park (OP-343)", () => {
+  /** A course link in `room` with the owl at `where`, `z` up, in by `entry`: all three movable. */
+  function courseIn(page: LocalCollections, room: string, at: Vec2, entry?: string) {
+    const me = { pos: { ...at }, z: 0, ground: 0, entry };
+    const link = page.courseLink(room, null, () => me.pos, () => me.ground, () => ({ z: me.z, entry: me.entry }))!;
+    return { link, me };
+  }
+
+  it('is a fall as the room server sees one: down in a pit or in thorns at any height, and nowhere else', async () => {
+    const { page } = rig();
+    const { link, me } = courseIn(page, 'canopy-1', { x: 120, y: 770 }, 'from-gate');
+    expect((await link.start()).ok).toBe(true);
+    // On the walk before the bramble: no fall.
+    expect(await link.fall()).toEqual({ ok: false, reason: 'far' });
+    // Down in the bramble: a fall, back at the way in.
+    me.pos.x = 900;
+    expect(await link.fall()).toMatchObject({ ok: true, at: { x: 120, y: 770 } });
+    // Up on a frond over the bramble (standing 160 up): not one.
+    me.ground = 160;
+    me.z = 160;
+    expect(await link.fall()).toEqual({ ok: false, reason: 'far' });
+    // In the thorns that hang over safe floor (H1, from 260 up), which a preview used to let an owl fly through.
+    me.pos.x = 1990;
+    me.ground = 0;
+    me.z = 400;
+    expect(await link.fall()).toMatchObject({ ok: true });
+    // Under them, well clear: not one.
+    me.z = 100;
+    expect(await link.fall()).toEqual({ ok: false, reason: 'far' });
+  });
+
+  it('goes back the way the owl came into the room, as the room server sends it', async () => {
+    const { page } = rig();
+    const gate = courseIn(page, 'canopy-1', { x: 120, y: 770 }, 'from-gate');
+    expect((await gate.link.start()).ok).toBe(true);
+    // In again at the far end (down from the trunk), into the bramble near there: back at that way in.
+    const far = courseIn(page, 'canopy-1', { x: 3900, y: 770 }, 'from-trunk');
+    expect(await far.link.fall()).toMatchObject({ ok: true, at: { x: 4660, y: 770 } });
+    // No way in known: the act's own, the gate.
+    const plain = courseIn(page, 'canopy-1', { x: 3900, y: 770 });
+    expect(await plain.link.fall()).toMatchObject({ ok: true, at: { x: 120, y: 770 } });
+  });
+});
+
 describe('LocalCollections', () => {
   it('keeps one collection per browser and remembers its id', () => {
     const storage = new MemoryStorage();
@@ -171,7 +215,7 @@ describe('LocalCollections', () => {
 });
 
 describe('the stained-glass climb in the local mode', () => {
-  const PORTAL = { x: 2885, y: 745 };
+  const PORTAL = { x: 1500, y: 600 };
   const FLOORS_EASY = CLIMB_FLOORS['city-2']!.easy;
 
   function climber(storage = new MemoryStorage(), clock = { now: at }) {
@@ -202,5 +246,45 @@ describe('the stained-glass climb in the local mode', () => {
     const clouds = await again.link.ascent(seed, 6);
     expect(clouds).toMatchObject({ ok: true, banked: 6, added: 8, total: 10, item: { variant: 'glass-circlet~0', first: true } });
     expect((await again.page.inventory()).owned).toContain('glass-circlet~0');
+  });
+});
+
+describe('puzzle quests in this browser (OP-255)', () => {
+  it('starts a run, picks up a key where it stands, keeps the run in storage and has nobody to join', async () => {
+    const { page, storage } = rig('c_puzzle');
+    const pip = getNpc('pip')!.pos;
+    const stand = { x: pip.x, y: pip.y, top: 0 };
+    const link = page.questLink('hub', null, {}, () => stand, () => stand.top);
+    expect(await link.puzzle('state', 'puzzle-moon-gate')).toMatchObject({ ok: false, reason: 'not-active' });
+    expect((await link.accept('puzzle-moon-gate')).ok).toBe(true);
+    const before = await link.puzzle('state', 'puzzle-moon-gate');
+    expect(before.ok).toBe(true);
+    expect(before.view?.run).toBeNull();
+    const started = await link.puzzle('start', 'puzzle-moon-gate');
+    expect(started.view?.run).toMatchObject({ members: 1, host: true });
+    // The root door's key is hidden in this room: standing at it picks it up.
+    const door = started.view!.locks.find((l) => l.id === 'root-door')!;
+    expect(door.key?.room).toBe('hub');
+    // Well away from the key (its spot is picked per run, so it can fall next to Pip).
+    Object.assign(stand, { x: door.key!.x + 3000, y: door.key!.y, top: 0 });
+    expect((await link.puzzle('take', 'puzzle-moon-gate', { lock: 'root-door' })).reason).toBe('far');
+    Object.assign(stand, { x: door.key!.x, y: door.key!.y, top: door.key!.top ?? 0 });
+    const took = await link.puzzle('take', 'puzzle-moon-gate', { lock: 'root-door' });
+    expect(took.ok).toBe(true);
+    expect(took.view?.locks.find((l) => l.id === 'root-door')?.hasKey).toBe(true);
+    // A code lock checks the code here too; a wrong one says how many tries are left.
+    const dial = took.view!.locks.find((l) => l.id === 'moth-dial')!;
+    Object.assign(stand, { x: dial.post.x, y: dial.post.y, top: dial.post.top ?? 0 });
+    const tried = await link.puzzle('open', 'puzzle-moon-gate', { lock: 'moth-dial', code: ['moon', 'moon', 'moon'] });
+    if (!tried.ok) expect(tried).toMatchObject({ reason: 'wrong', left: 4 });
+    // The run is kept in this browser: a new page picks it back up.
+    expect(storage.data.has('owl-park:puzzles')).toBe(true);
+    const again = new LocalCollections(storage, { collector: 'c_puzzle', tz: 'America/New_York', now: () => at }).questLink('hub', null, {}, () => stand, () => stand.top);
+    const kept = await again.puzzle('state', 'puzzle-moon-gate');
+    expect(kept.view?.run?.id).toBe(started.view!.run!.id);
+    expect(kept.view?.locks.find((l) => l.id === 'root-door')?.hasKey).toBe(true);
+    // Nobody else plays in this browser.
+    expect(await again.puzzle('near', 'puzzle-moon-gate')).toMatchObject({ ok: true, near: [] });
+    expect(await again.puzzle('join', 'puzzle-moon-gate', { with: 'someone' })).toMatchObject({ ok: false, reason: 'far' });
   });
 });

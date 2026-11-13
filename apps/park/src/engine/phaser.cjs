@@ -2,7 +2,7 @@
 // (node_modules/phaser/src/phaser.js) builds it, with only the parts the park draws with. Left out:
 // physics, tilemaps, sound, the asset loader (the park fetches its own art), the actions, and the
 // game objects no scene makes (the park adds images, graphics, containers, text, particles, zones,
-// rectangles and ellipses). vite.config.ts builds this into the one module the dev server, the unit
+// rectangles, ellipses and tile sprites, for a realm's updraft and wind-current art, OP-275). vite.config.ts builds this into the one module the dev server, the unit
 // tests and the build load as 'phaser'; engine.test.ts fails when the park's code asks for a part
 // left out here, which is then added below (Phaser's entry shows how).
 
@@ -35,6 +35,7 @@ var GameObjects = {
     Shape: require('phaser/src/gameobjects/shape/Shape'),
     Ellipse: require('phaser/src/gameobjects/shape/ellipse/Ellipse'),
     Rectangle: require('phaser/src/gameobjects/shape/rectangle/Rectangle'),
+    TileSprite: require('phaser/src/gameobjects/tilesprite/TileSprite'),
     Factories: {
         Container: require('phaser/src/gameobjects/container/ContainerFactory'),
         Graphics: require('phaser/src/gameobjects/graphics/GraphicsFactory'),
@@ -43,7 +44,8 @@ var GameObjects = {
         Text: require('phaser/src/gameobjects/text/TextFactory'),
         Zone: require('phaser/src/gameobjects/zone/ZoneFactory'),
         Ellipse: require('phaser/src/gameobjects/shape/ellipse/EllipseFactory'),
-        Rectangle: require('phaser/src/gameobjects/shape/rectangle/RectangleFactory')
+        Rectangle: require('phaser/src/gameobjects/shape/rectangle/RectangleFactory'),
+        TileSprite: require('phaser/src/gameobjects/tilesprite/TileSpriteFactory')
     },
     Creators: {
         Container: require('phaser/src/gameobjects/container/ContainerCreator'),
@@ -51,7 +53,8 @@ var GameObjects = {
         Image: require('phaser/src/gameobjects/image/ImageCreator'),
         Particles: require('phaser/src/gameobjects/particles/ParticleEmitterCreator'),
         Text: require('phaser/src/gameobjects/text/TextCreator'),
-        Zone: require('phaser/src/gameobjects/zone/ZoneCreator')
+        Zone: require('phaser/src/gameobjects/zone/ZoneCreator'),
+        TileSprite: require('phaser/src/gameobjects/tilesprite/TileSpriteCreator')
     }
 };
 

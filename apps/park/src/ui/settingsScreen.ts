@@ -8,6 +8,7 @@ export interface SettingsScreen {
 }
 
 const CSS = `
+#hud .modal.settings .x{min-height:44px}
 #hud .settings h3{margin:4px 0 0;font-size:12px;letter-spacing:.06em;text-transform:uppercase;opacity:.7}
 #hud .settings .opt{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:14px;background:rgba(246,241,227,.06);border:1px solid rgba(246,241,227,.12)}
 #hud .settings .opt > span{flex:1;display:flex;flex-direction:column;gap:2px;font-size:15px;font-weight:700}
@@ -28,8 +29,11 @@ const CSS = `
 /** What the keys do, for the Controls part (the same keys as ui/keyboard.ts). */
 export const KEY_HELP: ReadonlyArray<[keys: string[], what: string]> = [
   [['W', 'A', 'S', 'D'], 'Walk (or the arrow keys)'],
+  // In the tree, seen from the side, up goes through doorways and stairs (OP-212).
+  [['W'], 'In the tree: through the doorway or up the stair you stand in (or the up arrow)'],
   [['E'], 'Do what you are standing at'],
   [['Space'], 'Jump; again in the air to flap, held on the way down to glide'],
+  [['Shift'], 'Dash, in a parkour course: once a jump, in the air'],
   [['M'], 'Map, in the Menu'],
   [['T'], 'Say'],
   [['1–8'], 'Play an emote at once, as numbered on the wheel'],
@@ -121,8 +125,9 @@ export function settingsRows(store: SettingsStore, redraw: () => void, feedback:
       h('On screen'),
       toggle('thumbstick', 'Thumbstick', 'Walk with the stick in the corner. Off: tap the floor to walk.', 'touch-only'),
       toggle('bubbles', 'Show what owls say', ''),
+      toggle('trail', 'Feather trail', 'Feathers lead to a doorway you haven’t been through yet.'),
       h('Sound'),
-      toggle('sound', 'Sounds', 'A soft knock as the Menu opens.'),
+      toggle('sound', 'Sounds', 'Your owl’s wings and landings, bells, feathers and doorways.'),
       h('Motion'),
       toggle('calm', 'Calm motion', 'No drifting fireflies, gold dust or neon rain.'),
     );

@@ -1,0 +1,129 @@
+name: Playtest
+
+# The playtest bots (bots/README.md) on every pull request and every push to main: scripted owls that
+# play every room seen from the side and every course as a kid would (the sim), and walk every room of
+# the park in a browser at a desktop's width and at a phone's (the walk). The Playtest check puts what
+# they found in the run's summary, keeps the screenshots with the run, and fails on a blocker the
+# baseline (bots/baseline.json) doesn't list: a stuck owl, a doorway or course piece no one can reach,
+# a doorway a walk doesn't go through, a room that won't open, or a course hop under the kid bar.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    paths-ignore: ['docs/**', '**/*.md']
+  workflow_dispatch:
+
+concurrency:
+  group: playtest-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  sim:
+    name: Kid sim
+    runs-on: ubuntu-latest
+    # About five minutes on a four-core runner: the rooms run six at a time.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The verdict's failure is the report's to show: the job keeps going so its results are kept.
+      - name: Play every room and course
+        id: sim
+        continue-on-error: true
+        run: pnpm --filter @owl-park/bots playtest
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playtest-sim
+          path: bots/out
+          if-no-files-found: ignore
+          retention-days: 14
+
+  walk:
+    name: Browser walk (${{ matrix.project }} ${{ matrix.shard }}/2)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [desktop, phone]
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - id: playwright
+        name: Playwright's version
+        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - id: browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Install Playwright's browser
+        if: steps.browser.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+      - name: The browser's system packages, only if the runner lacks some
+        if: steps.browser.outputs.cache-hit == 'true'
+        run: timeout 60 node -e "require('@playwright/test').chromium.launch().then((b) => b.close())" || pnpm exec playwright install-deps chromium
+      - name: The plan of every room
+        run: pnpm --filter @owl-park/bots plan
+      - name: Walk every room
+        continue-on-error: true
+        run: pnpm exec playwright test -c bots/browser/playwright.config.ts --project=${{ matrix.project }} --shard=${{ matrix.shard }}/2
+        env:
+          CI: 'true'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playtest-walk-${{ matrix.project }}-${{ matrix.shard }}
+          path: |
+            bots/out/browser
+            bots/out/shots
+          if-no-files-found: ignore
+          retention-days: 14
+
+  report:
+    name: Playtest
+    needs: [sim, walk]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: playtest-*
+          path: bots/out
+          merge-multiple: true
+      - name: Summary and verdict
+        run: node bots/report.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playtest-summary
+          path: |
+            bots/out/summary.md
+            bots/out/summary.json
+          if-no-files-found: ignore
+          retention-days: 14

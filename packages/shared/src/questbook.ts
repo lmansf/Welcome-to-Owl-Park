@@ -14,12 +14,12 @@ import { PICKUP_RADIUS } from './collectibles';
 import { INTERACTABLES, type QuestItemSpot } from './interactables';
 import { NPCS } from './npcs';
 import { sameLevel, type Raised } from './perches';
-import { nextParkDayAt, nextParkWeekAt, parkDay, parkWeek, rotationRandom } from './parktime';
+import { nextParkDayAt, nextParkMonthAt, nextParkWeekAt, parkDay, parkMonth, parkWeek, rotationRandom } from './parktime';
 import type { Vec2 } from './protocol';
-import { DAILY_POOL, QUESTS, WEEKLY_POOL, getQuest } from './questCatalog';
+import { DAILY_POOL, MONTHLY_POOL, MONTHLY_PUZZLE_POOL, QUESTS, WEEKLY_POOL, WEEKLY_PUZZLE_POOL, getQuest } from './questCatalog';
 import {
+  ACTIVE_SLOTS,
   DAILY_OFFER_DIFFICULTIES,
-  MAX_ACTIVE_QUESTS,
   WEEKLY_OFFER_DIFFICULTIES,
   goalCount,
   goalMatches,
@@ -87,6 +87,23 @@ export function dailyQuestIds(day: string): string[] {
 export function weeklyQuestIds(week: string): string[] {
   return rotation(WEEKLY_POOL, `owl-park-quests|week|${week}`, WEEKLY_OFFER_DIFFICULTIES);
 }
+/** This week's puzzle quest (OP-255), offered beside the two grand quests. */
+export function weeklyPuzzleIds(week: string): string[] {
+  const q = shuffled(WEEKLY_PUZZLE_POOL, rotationRandom(`owl-park-puzzles|week|${week}`))[0];
+  return q ? [q.id] : [];
+}
+/** This month's quests (OP-254): its puzzle quest and one tour, from different givers. The same for everyone. */
+export function monthlyQuestIds(month: string): string[] {
+  const rnd = rotationRandom(`owl-park-quests|month|${month}`);
+  const puzzle = shuffled(MONTHLY_PUZZLE_POOL, rnd)[0];
+  const tour = shuffled(MONTHLY_POOL, rnd).find((q) => q.giver !== puzzle?.giver);
+  return [puzzle, tour].flatMap((q) => (q ? [q.id] : []));
+}
+
+/** The period a quest's row belongs to at a moment: '' for story quests, else its park day, week or month. */
+export function questPeriod(q: Pick<QuestDef, 'cadence'>, now: number): string {
+  return q.cadence === 'story' ? '' : q.cadence === 'daily' ? parkDay(now) : q.cadence === 'weekly' ? parkWeek(now) : parkMonth(now);
+}
 
 export class QuestBook {
   constructor(
@@ -96,17 +113,15 @@ export class QuestBook {
   ) {}
 
   private periodOf(q: QuestDef, now: number): string {
-    return q.cadence === 'story' ? '' : q.cadence === 'daily' ? parkDay(now) : parkWeek(now);
+    return questPeriod(q, now);
   }
 
   /** The collector's rows, forgetting expired daily and weekly ones and quests no longer in the catalogue. */
   private rows(cid: string, now: number): QuestRow[] {
-    const day = parkDay(now);
-    const week = parkWeek(now);
     const keep: QuestRow[] = [];
     for (const r of this.store.quests(cid)) {
       const q = getQuest(r.quest);
-      const current = q && (q.cadence === 'story' ? r.period === '' : q.cadence === 'daily' ? r.period === day : r.period === week);
+      const current = q && r.period === questPeriod(q, now);
       if (current) keep.push(r);
       else this.store.dropQuest(cid, r.quest, r.period);
     }
@@ -121,7 +136,9 @@ export class QuestBook {
     const day = parkDay(now);
     const week = parkWeek(now);
     for (const id of dailyQuestIds(day)) if (!has(id, day)) out.push(getQuest(id)!);
-    for (const id of weeklyQuestIds(week)) if (!has(id, week)) out.push(getQuest(id)!);
+    for (const id of [...weeklyQuestIds(week), ...weeklyPuzzleIds(week)]) if (!has(id, week)) out.push(getQuest(id)!);
+    const month = parkMonth(now);
+    for (const id of monthlyQuestIds(month)) if (!has(id, month)) out.push(getQuest(id)!);
     return out;
   }
 
@@ -142,7 +159,7 @@ export class QuestBook {
       current: goal ? { text: goalText(goal), count: r.count, need: goalCount(goal) } : null,
       ready,
       reward: q.reward,
-      endsAt: q.cadence === 'daily' ? nextParkDayAt(now) : q.cadence === 'weekly' ? nextParkWeekAt(now) : 0,
+      endsAt: q.cadence === 'daily' ? nextParkDayAt(now) : q.cadence === 'weekly' ? nextParkWeekAt(now) : q.cadence === 'monthly' ? nextParkMonthAt(now) : 0,
       items: r.items.filter((i) => i.step === r.step && !i.taken).map(({ n, room, x, y, top, kind }) => ({ n, room, x, y, ...(top ? { top } : {}), kind })),
     };
   }
@@ -159,8 +176,10 @@ export class QuestBook {
     return {
       day: parkDay(now),
       week: parkWeek(now),
+      month: parkMonth(now),
       nextDay: nextParkDayAt(now),
       nextWeek: nextParkWeekAt(now),
+      nextMonth: nextParkMonthAt(now),
       active: rows.filter((r) => r.doneAt === null).map((r) => this.view(getQuest(r.quest)!, r, now)),
       offers,
       storyDone: rows.filter((r) => r.period === '' && r.doneAt !== null).map((r) => r.quest),
@@ -196,11 +215,18 @@ export class QuestBook {
     const mine = rows.find((r) => r.quest === q.id && r.period === period);
     if (mine) return { ok: false, reason: mine.doneAt === null ? 'active' : 'done', board: this.board(cid, now) };
     if (!this.offers(rows, now).some((o) => o.id === q.id)) return { ok: false, reason: 'not-offered', board: this.board(cid, now) };
-    if (rows.filter((r) => r.doneAt === null).length >= MAX_ACTIVE_QUESTS) return { ok: false, reason: 'full', board: this.board(cid, now) };
+    // Each tier has its own slots (OP-254): a full list in one never blocks another.
+    if (rows.filter((r) => r.doneAt === null && getQuest(r.quest)?.cadence === q.cadence).length >= ACTIVE_SLOTS[q.cadence]) return { ok: false, reason: 'full', board: this.board(cid, now) };
     const row: QuestRow = { cid, quest: q.id, period, step: 0, count: 0, seen: [], items: this.placeItems(cid, q, period), acceptedAt: now, doneAt: null };
     if (here) this.skipVisits(q, row, here);
     this.store.putQuest(row);
     return { ok: true, board: this.board(cid, now) };
+  }
+
+  /** Whether the collector carries this quest now, not yet handed in (a puzzle's run needs its quest, OP-255). */
+  holds(cid: string, questId: unknown, now: number): boolean {
+    const q = getQuest(questId);
+    return !!q && this.rows(cid, now).some((r) => r.quest === q.id && r.doneAt === null);
   }
 
   abandon(cid: string, questId: unknown, now: number): AbandonResult {

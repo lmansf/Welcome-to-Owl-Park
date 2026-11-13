@@ -49,6 +49,7 @@ import {
   isEmoteId,
   insidePark,
   isNestRoom,
+  isPartyRoom,
   isTimeZone,
   lanternFeathers,
   leafRespawnMs,
@@ -57,6 +58,15 @@ import {
   npcsIn,
   parseClientFrame,
   pointInRect,
+  COURSE_REACH,
+  COURSE_START_REACH,
+  courseOfRoom,
+  inPit,
+  inThorns,
+  pieceIn,
+  shortcutIn,
+  type ClientCourse,
+  type ServerCourse,
   portraitLook,
   cleanRealms,
   climbRef,
@@ -71,6 +81,29 @@ import {
   type ClientFrame,
   type ClientHello,
   type ClientNest,
+  type ClientPuzzle,
+  type ClientEscape,
+  ESCAPE_DOOR,
+  ESCAPE_MIN_OWLS,
+  ESCAPE_MAX_OWLS,
+  cleanEscape,
+  escapeHint,
+  escapeJoin,
+  escapeLeave,
+  escapeLook,
+  escapeOpen,
+  escapeStart,
+  escapeTake,
+  escapeTug,
+  escapeView,
+  isEscapeRoom,
+  newEscape,
+  onStump,
+  randomEscapeRoom,
+  type EscapeAnswer,
+  type EscapePaid,
+  type EscapeStanding,
+  type EscapeState,
   type LanternState,
   type LogFields,
   type Logger,
@@ -97,7 +130,9 @@ import { loggerFor, moduleLog, runIdOf } from './logs';
 import type { Sighting } from './parkStats';
 import { LIMITS, Room, type Leaver, type Peer, type PositionRejection, type VisitorState } from './Room';
 import { ROOMS, isRoomId, publicCounts, roomCap, roomDef, spectatorLimit } from './rooms';
+import { COURSES } from '@owl-park/shared/rooms';
 import { isCollectorId, signingSecret, verifyKeeper, verifyPass } from './pass';
+import { PartyHost, type StumpMark } from './partyHost';
 import type { Env } from './env';
 
 export interface Attachment {
@@ -130,10 +165,23 @@ export interface Attachment {
    * and the quests and today's tasks are locked to it, until a ticket's pass admits it in place.
    */
   spec?: true;
+  /** A newcomer, by the Worker's word (OP-322): not inside lately and not through the line, so a full room may send it to the line. */
+  newcomer?: true;
+  /** When the ticket that let this owl in runs out, in ms (OP-237): the socket closes then, on a frame or the alarm. */
+  until?: number;
+  /** One of our own test visits (the Worker's X-Test-Visit): its visit goes to the log marked, for the reports to leave out. */
+  test?: true;
+  /**
+   * When its owl last did something (OP-245): any frame but a hello, a goodbye or falling asleep, marked
+   * at most once a minute. A socket that only heartbeats has none, and the alarm closes it.
+   */
+  inputAt?: number;
   /** This socket's hello carried a keeper's token that checked out (OP-156): it walks in while the park is closed for setup (OP-205). */
   keeper?: true;
   /** Its upgrade came to a host on this machine: only then may a missing signing key fall back to the development key (OP-209). */
   local?: true;
+  /** At the Old Stump in the Party Grove (OP-314): the seat its owl sits in, or null while it only watches the seats. */
+  stump?: StumpMark;
 }
 
 /**
@@ -154,6 +202,11 @@ function withoutPledge(look: OwlLook): OwlLook {
   return rest;
 }
 
+/** Whether the ticket that let a socket's owl in has run out by now (OP-237). */
+export function ticketOver(att: Pick<Attachment, 'until'>, now: number): boolean {
+  return att.until !== undefined && now >= att.until;
+}
+
 /** Why an owl leaves its room, as the log tells it (OP-134); `afk` is told for a goodbye said asleep. */
 interface LeaveWhy {
   reason: 'user' | 'dropped' | 'timeout' | 'kick';
@@ -161,15 +214,15 @@ interface LeaveWhy {
 }
 
 /** The visit a socket's owl is on, as the collection log takes it: its pass's id, its device and its room. */
-function visitOf(att: Pick<Attachment, 'id' | 'device' | 'room'>): Visit {
-  return { pass: att.id, device: att.device ?? null, room: att.room };
+function visitOf(att: Pick<Attachment, 'id' | 'device' | 'room' | 'test'>): Visit {
+  return { pass: att.id, device: att.device ?? null, room: att.room, ...(att.test ? { test: true } : {}) };
 }
 
 /**
  * A socket's owl as the player stats see it (OP-111): its collector and its visit, and inside the park
  * whether it is a spectator (OP-192), so the log counts free owls beside paid ones. Null without a collector.
  */
-export function sightingOf(att: Pick<Attachment, 'cid' | 'id' | 'device' | 'room' | 'spec'> | null): Sighting | null {
+export function sightingOf(att: Pick<Attachment, 'cid' | 'id' | 'device' | 'room' | 'spec' | 'test'> | null): Sighting | null {
   if (!att?.cid) return null;
   return { cid: att.cid, ...visitOf(att), ...(insidePark(att.room) ? { spec: att.spec === true } : {}) };
 }
@@ -183,6 +236,24 @@ interface OwnedEntry {
 const HELLO_TIMEOUT_MS = 5_000;
 const IDLE_CLOSE_MS = 90_000;
 const ALARM_EVERY_MS = 60_000;
+/**
+ * A socket whose owl does nothing this long is closed (OP-245), heartbeats or not: past the page's own
+ * goodbye to an idle visitor (asleep at 45 s, 'Still here?' 10 minutes later, gone a minute after).
+ */
+export const NO_INPUT_CLOSE_MS = 15 * 60_000;
+/** How often a socket's last input is written down (OP-245): the alarm looks once a minute. */
+export const INPUT_MARK_EVERY_MS = 60_000;
+
+/** Whether a frame is the owl doing something (OP-245): all but a hello, a goodbye and falling asleep. */
+export function isInput(frame: ClientFrame): boolean {
+  if (frame.t === 'hello' || frame.t === 'bye') return false;
+  return !(frame.t === 'rest' && frame.asleep);
+}
+
+/** How long a socket's owl has done nothing (OP-245): since its last input, or since it came in. */
+export function quietFor(att: Pick<Attachment, 'joinedAt' | 'inputAt'>, now: number): number {
+  return now - (att.inputAt ?? att.joinedAt);
+}
 /** Population counts go out at most this often (welcome frames always carry fresh counts). */
 const COUNTS_EVERY_MS = 10_000;
 /** Default sockets per address per object; a household or office shares one address. Override with MAX_SOCKETS_PER_IP. */
@@ -195,6 +266,12 @@ const OBJECTS_KEY = 'objects';
 /** Storage keys for the hub's lantern beam and the last stage quiz round settled. */
 const LANTERNS_KEY = 'lanterns';
 const QUIZ_KEY = 'quiz';
+/** Storage key for the sealed hollows' runs (OP-310), so a group's run outlasts the object's sleep (not the night's restart). */
+const ESCAPES_KEY = 'escapes';
+/** How close to the sealed hollow's doorway an owl asks for its groups (room px from the doorway's middle). */
+const ESCAPE_DOOR_REACH = 220;
+/** The most waiting groups the doorway lists. */
+const ESCAPE_GROUPS_SHOWN = 6;
 /** The busy ribbon (OP-075) is asked of the overflow object at most this often; it also tells the rooms when it changes. */
 const NOTICE_FRESH_MS = 60_000;
 /** Storage key for the realms switch as last heard (the stained-glass climb): a woken object starts from it, not from closed. */
@@ -209,6 +286,13 @@ const SETUP_KEY = 'setup';
 const LEAVERS_KEY = 'leavers';
 /** The most owls kept there, the latest to leave first: the stored value stays small on a busy night. */
 const LEAVERS_KEPT = 500;
+/**
+ * Where the owls in the rooms stand is written down as each owl comes in or leaves, and this often at
+ * most while frames come in (OP-321), so a room server that stops without a goodbye lets each owl back
+ * near where it stood (a hello may be as far from it as the owl could walk since): one storage write
+ * per object every 15 s at the most beside the arrivals and leaves, well inside the free plan's writes.
+ */
+export const STANDING_KEEP_MS = 15_000;
 /**
  * The nightly restart (OP-181): how long after its notice every socket closes, by the object's alarm.
  * No shorter than the Worker keeps what it read of the gate (GATE_KEEP_MS), so every Worker knows of
@@ -339,6 +423,8 @@ export class RoomObject extends DurableObject<Env> {
   private closingAt: number | null = null;
   /** Where owls left each room lately, kept past the rooms themselves (OP-138). */
   private readonly leftBehind = new Map<string, Record<string, Leaver>>();
+  /** When where the owls stand was last written down (OP-321). */
+  private standingKeptAt = 0;
   /** The room server's log (OP-134), at the deployment's level. */
   private readonly log: Logger;
   /** Each room's frames' handling times since its window began (OP-134's tick_latency_p95). */
@@ -349,12 +435,37 @@ export class RoomObject extends DurableObject<Env> {
   private readonly rejected = new Map<string, { n: number; toldAt: number; why: PositionRejection }>();
   /** Spectators' sockets whose first refused frame was told (OP-191's spectator_refused): once per socket. */
   private readonly refusedTold = new Set<string>();
+  /** Each sealed hollow's run (OP-310), by room id: made at its first owl's hello, let go when its last owl leaves. */
+  private readonly escapes = new Map<string, EscapeState>();
+  /** Whether each running hollow's moon carving glowed when its owls were last told, so a sit or a hop off is told once. */
+  private readonly escapeLit = new Map<string, boolean>();
+  /** The Old Stump's seats and the party games, each in its own room (OP-314). */
+  private readonly party: PartyHost;
+  /** When the alarm last looked after every socket: a party game's step between those wakes skips it (OP-314). */
+  private housekeptAt = 0;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.log = loggerFor(env);
     this.statsOn = logConfig(env) !== null;
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(HEARTBEAT_FRAME, HEARTBEAT_FRAME));
+    this.party = new PartyHost({
+      storage: ctx.storage,
+      sockets: (tag) => ctx.getWebSockets(tag),
+      owlsIn: (room) => this.rooms.get(room)?.count ?? 0,
+      send: (ws, frame) => this.send(ws, frame),
+      close: (ws, code, reason) => {
+        closeSocket(ws, code, reason);
+        this.drop(ws, { reason: 'kick', detail: 'party-over' });
+      },
+      log: this.log,
+      logOf: (att) => this.logOf(att as Attachment),
+      closingAt: () => this.closingAt,
+      random: () => crypto.getRandomValues(new Uint32Array(1))[0]! / 4294967296,
+      pay: (cid, place) => this.collections().partyGame(cid, place),
+      wake: (at) => void this.wakeBy(at),
+      waitUntil: (p) => ctx.waitUntil(p),
+    });
     // Wake-up: rebuild rooms from the hibernated sockets' attachments. A socket whose
     // attachment no longer makes sense (room removed, corrupt data) is closed, not fatal.
     for (const ws of ctx.getWebSockets()) {
@@ -387,9 +498,17 @@ export class RoomObject extends DurableObject<Env> {
         this.leftBehind.set(id, kept);
         this.rooms.get(id)?.restoreLeavers(kept);
       }
+      // The sealed hollows' runs whose owls are still here (OP-310): a group's run outlasts the object's sleep.
+      const escapes = await ctx.storage.get<unknown>(ESCAPES_KEY);
+      for (const raw of Array.isArray(escapes) ? escapes : []) {
+        const run = cleanEscape(raw);
+        if (run && this.rooms.get(run.room)?.count) this.escapes.set(run.room, run);
+      }
       // A restart told but not yet closed (OP-181): the alarm still closes it.
       const closing = await ctx.storage.get<unknown>(RESTART_KEY);
       if (typeof closing === 'number') this.closingAt = closing;
+      // The party games going on (OP-314): each picks up where it was.
+      await this.party.load();
     });
   }
 
@@ -439,7 +558,7 @@ export class RoomObject extends DurableObject<Env> {
 
   /** A frame's handling time in a room (every nest together): once its window has run TICK_EVERY_MS, the window's 95th percentile is logged. */
   private sampleTick(roomId: string, ms: number): void {
-    const room = isNestRoom(roomId) ? 'nest' : roomId;
+    const room = isNestRoom(roomId) ? 'nest' : isEscapeRoom(roomId) ? 'escape' : roomId;
     const now = Date.now();
     let w = this.ticks.get(room);
     if (!w) this.ticks.set(room, (w = { since: now, n: 0, ms: [] }));
@@ -477,8 +596,9 @@ export class RoomObject extends DurableObject<Env> {
   }
 
   /**
-   * A spectator asked for something locked to ticket holders (OP-191): a quest, an NPC owl, a leaf pile
-   * or a stall, a quest item, today's tasks. Told once per socket, with the first frame refused.
+   * A spectator asked for something locked to ticket holders (OP-191): a quest, an NPC owl, a quest
+   * item, today's tasks (leaf piles, stalls and the moonbeam are open to it, OP-243). Told once per
+   * socket, with the first frame refused.
    *
    * TODO-DOCS (OP-191): docs/LOGGING.md: spectator_refused (room.play, info): frame (the first refused
    * frame, or `admit` with its reason for a pass that did not admit, told each time).
@@ -539,6 +659,24 @@ export class RoomObject extends DurableObject<Env> {
     const now = Date.now();
     log.info('room.leave', 'room_leave', 'An owl left a room.', { reason, ...(detail ? { detail } : {}), stayed_ms: now - att.joinedAt });
     if (reason === 'afk') log.info('room.rest', 'afk_leave', 'An owl left its room asleep, its visitor away.', sleep?.since != null ? { asleep_ms: now - sleep.since } : {});
+  }
+
+  /**
+   * Whether the line in front of the park takes newcomers now, asked of the overflow object as a room
+   * turns one away as full (OP-322): it counts the park at once rather than by a count up to a few
+   * seconds old. No overflow object (a test's stand-in env), or no answer: no line, as before.
+   */
+  private async lineTakesNewcomers(): Promise<boolean> {
+    const ns = this.env.OVERFLOW as Env['OVERFLOW'] | undefined;
+    if (!ns) return false;
+    try {
+      const r = await ns.get(ns.idFromName('park')).fetch('https://park/full', { method: 'POST', body: '{}' });
+      if (!r.ok) return false;
+      return ((await r.json()) as { line?: unknown }).line === true;
+    } catch (e) {
+      this.log.warn('overflow', 'read_failed', 'The overflow object did not say whether the line takes a newcomer at a full room: it is told the room is full.', { error: e });
+      return false;
+    }
   }
 
   /** The busy ribbon now: asked of the overflow object when last asked more than a minute ago. */
@@ -669,6 +807,15 @@ export class RoomObject extends DurableObject<Env> {
     this.closingAt = null;
     await this.ctx.storage.delete(RESTART_KEY);
     if (now - due > RESTART_STALE_MS) return;
+    // Every owl's live stay here ends with the restart (OP-265), told before its socket closes.
+    const leaving = this.ctx
+      .getWebSockets()
+      .map((ws) => ws.deserializeAttachment() as Attachment | null)
+      .filter((att): att is Attachment => Boolean(att?.state))
+      .map(sightingOf)
+      .filter((s): s is Sighting => s !== null)
+      .map((s): Sighting => ({ ...s, left: 'restart' }));
+    if (leaving.length) this.ctx.waitUntil(this.statsAlive(leaving));
     for (const ws of this.ctx.getWebSockets()) {
       closeSocket(ws, CLOSE.RESTART, 'park restart');
       this.drop(ws, { reason: 'kick', detail: 'restart' });
@@ -787,6 +934,9 @@ export class RoomObject extends DurableObject<Env> {
     if (isTimeZone(tz)) att.tz = tz;
     // A spectator (OP-191), by the Worker's word: inside the park, a socket it did not call a visitor is one.
     if (spectatorSocket(roomId, request.headers.get('X-Visitor-Kind'))) att.spec = true;
+    // When its ticket runs out (OP-237): the Worker's word only.
+    const until = Number(request.headers.get('X-Ticket-Until'));
+    if (Number.isFinite(until) && until > 0) att.until = until;
     // Which copy of the room this is, and the entry for the welcome (OP-075): the Worker's word only.
     const copy = Number(request.headers.get('X-Room-Copy'));
     if (Number.isInteger(copy) && copy > 1) att.copy = copy;
@@ -794,6 +944,10 @@ export class RoomObject extends DurableObject<Env> {
     if (entry && entry.length <= 512) att.entry = entry;
     const device = deviceClass(request.headers.get('User-Agent'), request.headers.get('Sec-CH-UA-Mobile'));
     if (device) att.device = device;
+    // One of our own test visits: the Worker's word only.
+    if (request.headers.get('X-Test-Visit') === '1') att.test = true;
+    // A newcomer (OP-322): the Worker's word only.
+    if (request.headers.get('X-Newcomer') === '1') att.newcomer = true;
     server.serializeAttachment(att);
     await this.freshNotice();
     await this.ensureAlarm();
@@ -807,6 +961,10 @@ export class RoomObject extends DurableObject<Env> {
   override async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     const at = ws.deserializeAttachment() as Attachment | null;
     const t0 = Date.now();
+    if (at && ticketOver(at, t0)) {
+      this.ticketEnded(ws, at);
+      return;
+    }
     try {
       await this.frame(ws, message, at);
     } catch (e) {
@@ -814,7 +972,23 @@ export class RoomObject extends DurableObject<Env> {
       throw e;
     } finally {
       if (at) this.sampleTick(at.room, Date.now() - t0);
+      if (at && Date.now() - this.standingKeptAt >= STANDING_KEEP_MS) this.keepWhereOwlsAre();
     }
+  }
+
+  /** The ticket that let this socket's owl in has run out (OP-237): the socket closes, and the page goes home. */
+  private ticketEnded(ws: WebSocket, att: Attachment): void {
+    this.logOf(att).info('room.leave', 'ticket_ended', 'A socket was closed: the ticket that let its owl in ran out of time.', { room: att.room });
+    closeSocket(ws, CLOSE.TICKET_ENDED, 'ticket ended');
+    this.drop(ws, { reason: 'kick', detail: 'ticket-ended' });
+  }
+
+  /** Write down that this socket's owl did something now, unless that was written in the last minute (OP-245). */
+  private markInput(ws: WebSocket, att: Attachment): void {
+    const now = Date.now();
+    if (quietFor(att, now) < INPUT_MARK_EVERY_MS) return;
+    att.inputAt = now;
+    ws.serializeAttachment(att);
   }
 
   /** The room server is closing this socket for what it sent: its owl's leave is a kick (OP-134). */
@@ -856,11 +1030,14 @@ export class RoomObject extends DurableObject<Env> {
       if (!isNestRoom(att.room)) {
         // A gated realm the keepers have not opened: the page walks the owl back to the hub. A keeper's
         // token (OP-156) lets its owl in, to walk the tree (map 2) while it is dark.
-        if (this.realmClosed(att.room) && !att.keeper) {
+        // The test course's rooms (OP-224) are the keepers' alone: any other owl is walked back to the hub.
+        if ((this.realmClosed(att.room) || roomDef(att.room)?.keeperOnly === true) && !att.keeper) {
           this.logOf(att).info('room.join', 'room_join_refused', 'An owl was turned away from a realm the keepers have not opened.', { reason: 'realm' });
           this.send(ws, { t: 'closed', room: att.room, why: 'realm', sign: this.realmSign(att.room) });
           return closeSocket(ws, CLOSE.REALM_CLOSED, 'realm closed');
         }
+        // A party game's room (OP-314) lets in only the owls its game invited, while it goes on.
+        if (isPartyRoom(att.room)) return this.joinParty(ws, att, frame);
         if (!(frame.via === 'travel' && insidePark(att.room) && att.cid)) {
           await this.join(ws, att, frame);
           return;
@@ -884,18 +1061,29 @@ export class RoomObject extends DurableObject<Env> {
       return done;
     }
 
+    // What the owl does, a minute at a time (OP-245): one that only heartbeats is closed by the alarm.
+    if (isInput(frame)) this.markInput(ws, att);
     const room = this.room(att.room);
     switch (frame.t) {
       case 'hello':
         return this.kick(ws, CLOSE.BAD_PROTOCOL, 'duplicate hello');
       case 'move':
-        return room.move(att.id, frame);
+        room.move(att.id, frame);
+        // In a sealed hollow, an owl stepping off the stump puts out the moon carving (OP-310).
+        if (isEscapeRoom(att.room)) this.escapeStir(att.room);
+        return;
       case 'rest':
         if (room.rest(att.id, frame.asleep) && frame.asleep) this.logOf(att).info('room.rest', 'afk_sleep', 'An owl fell asleep, its visitor idle.');
         return;
+      case 'dash':
+        // The dash (OP-224): a walk at the dash's pace, checked as a walk and against the owl's flight.
+        return room.dash(att.id, frame);
       case 'air':
         // Flight (OP-084): a state of the owl, counted against its own allowance, never logged.
-        return void room.air(att.id, frame.air);
+        room.air(att.id, frame.air);
+        // In a sealed hollow, an owl landing on the stump lights the moon carving (OP-310).
+        if (isEscapeRoom(att.room)) this.escapeStir(att.room);
+        return;
       case 'look': {
         const { look, recheck } = this.vetLook(att, frame.look);
         room.look(att.id, look);
@@ -905,10 +1093,16 @@ export class RoomObject extends DurableObject<Env> {
         else this.rememberEquipped(att, look.wear);
         return;
       }
-      case 'bye':
-        if (room.sessionOf(att.id) === att.sid) this.logLeave(att, room, { reason: 'user' });
+      case 'bye': {
+        // A goodbye from the page (it walked on, or closed): the visit was here until now, and for the
+        // owl's live stay here a log off (OP-265). Said here, as the close that follows finds no state.
+        const s = sightingOf(att);
+        if (s) this.ctx.waitUntil(this.statsAlive([{ ...s, left: 'bye' }]));
+        const owned = room.sessionOf(att.id) === att.sid;
+        if (owned) this.logLeave(att, room, { reason: 'user' });
         this.flushThrottled(att);
         room.leave(att.id, att.sid);
+        if (owned) this.party.left(att, room, Date.now());
         this.keepLeavers(att.room);
         this.acts.get(att.room)?.forget(att.id);
         ws.serializeAttachment({ ...att, state: null } satisfies Attachment);
@@ -916,6 +1110,7 @@ export class RoomObject extends DurableObject<Env> {
         this.forget(att.room);
         this.emitCounts();
         return;
+      }
       case 'emote':
         if (!room.admit(att.id)) return;
         return this.emote(ws, att, room, frame.e);
@@ -931,6 +1126,7 @@ export class RoomObject extends DurableObject<Env> {
       case 'handin':
       case 'use':
       case 'gather':
+      case 'puzzle':
         if (!room.admit(att.id)) return;
         return this.serial(att, () => this.quest(ws, att, room, frame));
       case 'act':
@@ -945,6 +1141,102 @@ export class RoomObject extends DurableObject<Env> {
       case 'admit':
         if (!room.admit(att.id)) return;
         return this.serial(att, () => this.admitPass(ws, att, room, frame));
+      case 'course':
+        if (!room.admit(att.id)) return;
+        return this.serial(att, () => this.course(ws, att, room, frame));
+      case 'escape':
+        if (!room.admit(att.id)) return;
+        return this.serial(att, () => this.escape(ws, att, room, frame));
+      case 'party':
+        if (!room.admit(att.id)) return;
+        return this.party.frame(ws, att, room, frame, Date.now());
+    }
+  }
+
+  // ---------- the party game (OP-314): partyHost.ts keeps the stump's seats and the games ----------
+
+  /** Into a party game's room: only an owl its game invited, while the game goes on; turned back to the Party Grove otherwise. */
+  private async joinParty(ws: WebSocket, att: Attachment, hello: ClientHello): Promise<void> {
+    if (!this.party.admits(att)) {
+      this.logOf(att).info('room.join', 'room_join_refused', 'An owl was turned away from a party game it was not invited into, or one that is over.', { reason: 'party' });
+      this.send(ws, { t: 'closed', room: att.room, why: 'party' });
+      return closeSocket(ws, CLOSE.PARTY_CLOSED, 'not in this game');
+    }
+    if (await this.join(ws, att, hello)) this.party.arrived(att, Date.now());
+  }
+
+  /** Wake no later than `at`: a party game's next step (OP-314). */
+  private async wakeBy(at: number): Promise<void> {
+    const current = await this.ctx.storage.getAlarm();
+    if (current === null || current > at) await this.ctx.storage.setAlarm(at);
+  }
+
+  // ---------- the parkour courses (OP-224): the room checks where the owl is, the collections object keeps the rest ----------
+
+  private async course(ws: WebSocket, att: Attachment, room: Room, frame: ClientCourse): Promise<void> {
+    const { r, a } = frame;
+    const no = (reason: Extract<ServerCourse, { ok: false }>['reason']) => this.send(ws, { t: 'course', r, a, ok: false, reason });
+    if (!att.cid) return no('unknown');
+    if (room.sessionOf(att.id) !== att.sid) return;
+    const def = roomDef(att.room);
+    const course = courseOfRoom(def, COURSES);
+    if (!def || !course) return no('unknown');
+    const cid = att.cid;
+    const stub = this.collections();
+    // A spectator (OP-191) runs the course as anyone does, but its finish pays nothing.
+    const practice = att.spec === true;
+    const pos = room.positionOf(att.id);
+    try {
+      switch (a) {
+        case 'state': {
+          const res = await stub.courseState(cid, att.room);
+          return res.ok ? this.send(ws, { t: 'course', r, a, ok: true, view: res.view }) : no(res.reason);
+        }
+        case 'start': {
+          const way = def.spawns[course.gate.spawn];
+          if (att.room !== course.acts[0] || !way || !room.near(att.id, way, COURSE_START_REACH)) return no('far');
+          const res = await stub.courseStart(cid, att.room, practice);
+          return res.ok ? this.send(ws, { t: 'course', r, a, ok: true, view: res.view }) : no(res.reason);
+        }
+        case 'bench':
+        case 'part':
+        case 'feather': {
+          const piece = pieceIn(def, a, frame.id ?? '');
+          if (!piece || !room.reaches(att.id, piece.at, COURSE_REACH, piece)) return no('far');
+          const res = await stub.courseReach(cid, att.room, a, piece.id);
+          return res.ok ? this.send(ws, { t: 'course', r, a, ok: true, view: res.view, first: res.first }) : no(res.reason);
+        }
+        case 'shortcut': {
+          const cut = shortcutIn(def, frame.id ?? '');
+          const slack = LIMITS.reachSlackPx;
+          const near = cut && pos ? pointInRect(pos, { x: cut.opener.x - slack, y: cut.opener.y - slack, w: cut.opener.w + 2 * slack, h: cut.opener.h + 2 * slack }) : false;
+          if (!cut || !near) return no('far');
+          const res = await stub.courseOpen(cid, att.room, cut.id);
+          return res.ok ? this.send(ws, { t: 'course', r, a, ok: true, view: res.view, first: res.first }) : no(res.reason);
+        }
+        case 'fall': {
+          // A fall is the room's to see: the owl is down on the floor over one of the act's pits (up on a
+          // ledge over a drop, in a course seen from the side, it has not fallen), or in thorns, at any
+          // height; a moment's slack either side of them, as the room has the owl a moment behind.
+          const pit = !!pos && inPit(def, pos) && room.groundOf(att.id) === 0;
+          const slack = LIMITS.reachSlackPx;
+          const thorny = !!pos && [-slack, 0, slack].some((dx) => [-slack, 0, slack].some((dz) => inThorns(def, pos.x + dx, room.heightOf(att.id) + dz)));
+          if (!pit && !thorny) return no('far');
+          const res = await stub.courseFall(cid, att.room, { x: pos!.x, y: pos!.y }, room.cameInBy(att.id));
+          if (!res.ok) return no(res.reason);
+          room.place(att.id, res.at, res.top);
+          return this.send(ws, { t: 'course', r, a, ok: true, view: res.view, at: res.at, ...(res.top ? { top: res.top } : {}) });
+        }
+        case 'finish': {
+          const shrine = def.course?.shrine;
+          if (!shrine || !room.reaches(att.id, shrine.at, COURSE_REACH, shrine)) return no('far');
+          const res = await stub.courseFinish(cid, att.room, visitOf(att), practice);
+          return res.ok ? this.send(ws, { t: 'course', r, a, ok: true, view: res.view, paid: res.paid }) : no(res.reason);
+        }
+      }
+    } catch (e) {
+      this.logOf(att).error('room.play', 'write_failed', 'A course step did not reach the collections object: the page is told to try again.', { frame: 'course', error: e });
+      return no('offline');
     }
   }
 
@@ -983,9 +1275,18 @@ export class RoomObject extends DurableObject<Env> {
     // Back on a new socket (OP-134): before the room saw its old one go, or soon after its connection dropped.
     const replaced = room.has(att.id);
     const back = room.leaverOf(att.id);
+    // A sealed hollow lets in only its own group: while it waits, up to ESCAPE_MAX_OWLS; once started, nobody new (OP-310).
+    if (isEscapeRoom(att.room) && !this.escapeAdmits(ws, att)) return false;
     const result = room.join(peerOf(ws), att.id, { ...hello, look }, att.sid, { ...opts, welcome, ...(att.spec ? { spectator: true } : {}) });
     const log = this.logOf(att);
     if (result === 'full') {
+      // A newcomer at a full park room, as the line starts by itself (OP-322): sent to wait in the line,
+      // as the Worker would send it once the line's count caught up, rather than told the room is full.
+      if (!att.spec && att.newcomer && !isNestRoom(att.room) && !isPartyRoom(att.room) && (await this.lineTakesNewcomers())) {
+        log.info('room.join', 'room_join_refused', 'A newcomer at a full room was sent to wait in the line: the line had just started.', { reason: 'queue', cap: room.cap });
+        closeSocket(ws, CLOSE.QUEUED, 'line');
+        return false;
+      }
       // A spectator is turned away at its share of the cap (OP-191): ticket holders still come in.
       // TODO-DOCS (OP-191): docs/LOGGING.md: room_join_refused reason `spectators` (with cap and limit); room_join_ok `spectator`; climb_band_refused `practice`.
       if (att.spec) log.info('room.join', 'room_join_refused', 'A spectator was turned away: the room holds its spectators’ share of owls.', { reason: 'spectators', cap: room.cap, limit: room.spectatorLimit });
@@ -994,6 +1295,9 @@ export class RoomObject extends DurableObject<Env> {
       closeSocket(ws, CLOSE.ROOM_FULL, 'room full');
       return false;
     }
+    // Where it stands from the moment it is in, not only from the next write (OP-321): a room server
+    // that stops soon after the owl came in still lets it back where it stood.
+    this.keepWhereOwlsAre();
     log.info('room.join', 'room_join_ok', 'An owl joined a room.', { owls: room.count, ...(hello.via ? { via: hello.via } : {}), ...(att.copy ? { copy: att.copy } : {}), ...(att.owner ? { owner: true } : {}), ...(att.spec ? { spectator: true } : {}) });
     if (replaced) log.info('room.join', 'reconnect_ok', 'An owl came back on a new socket before the room saw its old one go.', { gap_ms: 0, replaced: true });
     else if (back?.dropped) log.info('room.join', 'reconnect_ok', 'An owl came back after its connection dropped.', { gap_ms: Date.now() - back.leftAt });
@@ -1004,7 +1308,7 @@ export class RoomObject extends DurableObject<Env> {
       ws.serializeAttachment(kept);
     }
     this.emitCounts();
-    this.statsSeen(att, look, true, hello.via === 'travel');
+    this.statsSeen(att, look, true, hello.via === 'travel', hello.map);
     this.travelNote(att, hello.spawn);
     this.accountLook(att, look);
     this.checkDevice(ws, att);
@@ -1014,6 +1318,8 @@ export class RoomObject extends DurableObject<Env> {
     if (att.room === QUIZ_ROOM) await this.scheduleAlarm();
     // The arcade's score wall as it stands, with this owl's own bests.
     if (isArcadeRoom(att.room)) this.serial(att, () => this.sendWall(ws, att));
+    // Into a sealed hollow's group, and everyone inside sees who is waiting (OP-310).
+    if (isEscapeRoom(att.room)) this.escapeArrived(att);
     // Arriving in a room counts for quests that ask to visit it (none asks for a nest; nor for a spectator's arrival, OP-191).
     if (!isNestRoom(att.room)) this.serial(att, () => this.pushEvent(ws, att, { kind: 'visit', room: att.room }));
     return true;
@@ -1172,11 +1478,33 @@ export class RoomObject extends DurableObject<Env> {
     for (const [id, owl, l] of fresh.slice(0, LEAVERS_KEPT)) (all[id] ??= {})[owl] = l;
     this.leftBehind.clear();
     for (const [id, kept] of Object.entries(all)) this.leftBehind.set(id, kept);
+    this.keepWhereOwlsAre();
+  }
+
+  /**
+   * Write down where owls left lately and where the owls in the rooms stand now (OP-321), the latest
+   * first and no more than LEAVERS_KEPT: after a stop without a goodbye, the object wakes on this and
+   * an owl back soon resumes near where it stood, as one back from a dropped connection does (OP-138).
+   */
+  private keepWhereOwlsAre(): void {
+    const now = Date.now();
+    this.standingKeptAt = now;
+    // A room this object holds says itself who left it lately (an owl back is no longer among them) and who stands in it.
+    const owls: Array<[string, string, Leaver]> = [];
+    for (const [id, kept] of this.leftBehind) {
+      if (this.rooms.has(id)) continue;
+      for (const [owl, l] of Object.entries(kept)) if (now - l.leftAt <= LIMITS.leaverMemoryMs) owls.push([id, owl, l]);
+    }
+    for (const [id, room] of this.rooms) for (const [owl, l] of Object.entries({ ...room.leaversNow(), ...room.standingNow() })) owls.push([id, owl, l]);
+    owls.sort((a, b) => b[2].leftAt - a[2].leftAt);
+    const all: Record<string, Record<string, Leaver>> = {};
+    for (const [id, owl, l] of owls.slice(0, LEAVERS_KEPT)) (all[id] ??= {})[owl] = l;
     void this.ctx.storage.put(LEAVERS_KEY, all);
   }
 
   /** A nest nobody is in or at the door of is let go: its room, and the view kept while owls were there. */
   private forget(roomId: string): void {
+    if (isEscapeRoom(roomId)) return this.escapeTidy(roomId);
     const nestId = nestIdOf(roomId);
     if (!nestId || this.rooms.get(roomId)?.count) return;
     for (const a of this.admitting.values()) if (a.room === roomId) return;
@@ -1219,8 +1547,9 @@ export class RoomObject extends DurableObject<Env> {
     const refuse = (reason: 'far' | 'unknown' | 'busy' | 'offline' | 'spectator') => this.send(ws, { t: 'refused', r, reason });
     if (!att.cid) return refuse('unknown');
     if (room.sessionOf(att.id) !== att.sid) return;
-    // The quests, the NPC owls, the leaf piles, the stalls and the quest items are ticket holders' (OP-191).
-    if (att.spec) {
+    // The quests, the NPC owls and the quest items are ticket holders' (OP-191). A free guest may still
+    // flop into a leaf pile, browse a stall and bask in the moonbeam, for nothing (OP-243).
+    if (att.spec && frame.t !== 'use') {
       this.spectatorRefused(att, frame.t);
       return refuse('spectator');
     }
@@ -1261,6 +1590,7 @@ export class RoomObject extends DurableObject<Env> {
           const rules = KIND_RULES[it.kind];
           if (!room.reaches(att.id, it.pos, rules.reach, it)) return refuse('far');
           if (!room.takeUse(att.id)) return refuse('busy');
+          if (att.spec) return this.practiceUse(ws, room, att, it.id, rules.shared, r);
           const ev = { kind: 'interact' as const, what: it.kind, id: it.id, room: att.room };
           // Leaf piles and stalls count toward today's tasks too.
           const task = it.kind === 'leaf-pile' ? 'flop' : it.kind === 'stall' ? 'browse' : null;
@@ -1285,11 +1615,280 @@ export class RoomObject extends DurableObject<Env> {
           if (res.ok) return this.sendBoard(ws, res.board, res.updates, { r, ok: true });
           return this.sendBoard(ws, await stub.board(cid), [], { r, ok: false, reason: res.reason });
         }
+        case 'puzzle':
+          return await this.puzzle(ws, att, room, frame);
       }
     } catch (e) {
       this.logOf(att).error('room.play', 'write_failed', 'A quest step did not reach the collections object: the page is told to try again.', { frame: frame.t, error: e });
       return refuse('offline');
     }
+  }
+
+  /**
+   * A puzzle quest's run (OP-255). The room gives where the owl stands (and, for a join or the near
+   * list, which owls stand next to it, ticket holders only); the collections object checks the rest.
+   * After a step that moved the run, the other members' pages in this room object are sent their view.
+   * Puzzle quests are described in docs/QUESTS.md (OP-255).
+   */
+  private async puzzle(ws: WebSocket, att: Attachment, room: Room, frame: ClientPuzzle): Promise<void> {
+    const { r, quest } = frame;
+    const cid = att.cid!;
+    const stub = this.collections();
+    const answer = (extra: Omit<Extract<ServerFrame, { t: 'puzzle' }>, 't' | 'r' | 'quest'>) => this.send(ws, { t: 'puzzle', r, quest, ...extra });
+    // Owls next to this one with a collector and a ticket (a spectator never plays a puzzle, OP-191).
+    const neighbours = () => {
+      const out: Array<{ owl: string; cid: string }> = [];
+      for (const other of this.ctx.getWebSockets(`room:${att.room}`)) {
+        const o = other.deserializeAttachment() as Attachment | null;
+        if (!o?.cid || o.spec || o.id === att.id || o.cid === cid || !o.state) continue;
+        const p = room.positionOf(o.id);
+        if (p && room.near(att.id, p, NPC_TALK_RADIUS * 2)) out.push({ owl: o.id, cid: o.cid });
+      }
+      return out;
+    };
+    if (frame.op === 'near') {
+      const near = neighbours();
+      const runs = near.length ? await stub.puzzleRuns(near.map((n) => n.cid), quest) : {};
+      return answer({ ok: true, near: near.flatMap((n) => (runs[n.cid] ? [{ owl: n.owl, ...runs[n.cid]! }] : [])) });
+    }
+    let other: string | undefined;
+    if (frame.op === 'join') {
+      other = neighbours().find((n) => n.owl === frame.with)?.cid;
+      if (!other) return answer({ ok: false, reason: 'far' });
+    }
+    const pos = room.positionOf(att.id);
+    const res = await stub.puzzle(cid, {
+      op: frame.op,
+      quest,
+      room: att.room,
+      ...(frame.lock ? { lock: frame.lock } : {}),
+      ...(frame.n !== undefined ? { n: frame.n } : {}),
+      ...(frame.code ? { code: frame.code } : {}),
+      ...(other ? { other } : {}),
+      ...(pos ? { pos, ground: room.groundOf(att.id) } : {}),
+    });
+    const { members, credited, ...shown } = res;
+    answer(shown);
+    if (!res.ok || frame.op === 'state' || frame.op === 'start') return;
+    // The rest of the run sees the clue, the key or the open lock (those in this room object; others on their next look).
+    for (const m of members ?? []) {
+      if (m === cid) continue;
+      const sockets = this.ctx.getWebSockets(`cid:${m}`);
+      if (!sockets.length) continue;
+      const theirs = await stub.puzzle(m, { op: 'state', quest, room: att.room });
+      const board = credited?.includes(m) ? await stub.board(m) : undefined;
+      for (const s of sockets) this.send(s, { t: 'puzzle', quest, ok: true, ...(theirs.view ? { view: theirs.view } : {}), ...(board ? { board } : {}) });
+    }
+  }
+
+  // ---------- the sealed hollow (OP-310, escape.ts): one group's co-op escape room, its run kept here ----------
+
+  /** Where each owl in a hollow stands now, as the run's rules take it: its feet and what it stands on. */
+  private escapeStanding(room: Room, run: EscapeState): EscapeStanding {
+    const out = new Map<string, { pos: { x: number; y: number }; ground: number }>();
+    for (const m of run.members) {
+      const pos = room.positionOf(m.owl);
+      if (pos) out.set(m.owl, { pos, ground: room.groundOf(m.owl) });
+    }
+    return out;
+  }
+
+  /** Keep the hollows' runs in storage, so a group's run outlasts the object's sleep. */
+  private saveEscapes(): void {
+    this.ctx.waitUntil(this.ctx.storage.put(ESCAPES_KEY, [...this.escapes.values()]));
+  }
+
+  /** The sockets in a hollow now, with their attachments. */
+  private escapeSockets(roomId: string): Array<{ ws: WebSocket; att: Attachment }> {
+    const out: Array<{ ws: WebSocket; att: Attachment }> = [];
+    for (const ws of this.ctx.getWebSockets(`room:${roomId}`)) {
+      const att = ws.deserializeAttachment() as Attachment | null;
+      if (att?.state && att.room === roomId) out.push({ ws, att });
+    }
+    return out;
+  }
+
+  /** Every owl in the hollow sees its run as it now stands (each its own view: whether it is in the group, whether it plays for nothing). */
+  private escapePush(roomId: string, except: string | null = null): void {
+    const run = this.escapes.get(roomId);
+    const room = this.rooms.get(roomId);
+    if (!run || !room) return;
+    const standing = this.escapeStanding(room, run);
+    const now = Date.now();
+    this.escapeLit.set(roomId, onStump(run, standing).length > 0);
+    for (const { ws, att } of this.escapeSockets(roomId)) {
+      if (att.id === except) continue;
+      this.send(ws, { t: 'escape', ok: true, view: escapeView(run, att.id, standing, now) });
+    }
+  }
+
+  /** At a hollow's hello: its group's own owls come in; a fifth owl, or a newcomer once started, is turned away as from a full room. */
+  private escapeAdmits(ws: WebSocket, att: Attachment): boolean {
+    let run = this.escapes.get(att.room);
+    if (!run) {
+      run = newEscape(att.room, randomSid() + randomSid(), Date.now());
+      this.escapes.set(att.room, run);
+    }
+    const res = escapeJoin(structuredClone(run), { owl: att.id, cid: att.cid ?? null, spec: att.spec === true });
+    if (res.ok) return true;
+    // TODO-DOCS (OP-310): docs/LOGGING.md: room_join_refused reason `escape-started` (a sealed hollow whose group has started); a full one logs `cap`.
+    this.logOf(att).info('room.join', 'room_join_refused', 'An owl was turned away from a sealed hollow: its group is full or has started.', { reason: res.reason === 'full' ? 'cap' : 'escape-started', cap: ESCAPE_MAX_OWLS });
+    this.send(ws, { t: 'full', room: att.room, cap: ESCAPE_MAX_OWLS });
+    closeSocket(ws, CLOSE.ROOM_FULL, 'room full');
+    if (!this.rooms.get(att.room)?.count && run.phase === 'lobby' && !run.members.length) this.escapes.delete(att.room);
+    return false;
+  }
+
+  /** An owl is in its hollow: into the group (its place kept once started), and everyone sees it. */
+  private escapeArrived(att: Attachment): void {
+    const run = this.escapes.get(att.room);
+    if (!run) return;
+    if (escapeJoin(run, { owl: att.id, cid: att.cid ?? null, spec: att.spec === true }).ok) this.saveEscapes();
+    this.escapePush(att.room);
+  }
+
+  /**
+   * An owl left a hollow: out of the group while it waits (a started group keeps its place, should it
+   * come back on a dropped line). Its last owl gone, the run and the room are let go: a group's hollow is
+   * its own, and the night's restart (OP-181), closing every socket, ends a run in progress this way.
+   */
+  private escapeTidy(roomId: string): void {
+    const room = this.rooms.get(roomId);
+    for (const a of this.admitting.values()) if (a.room === roomId) return;
+    const run = this.escapes.get(roomId);
+    if (!room?.count) {
+      this.rooms.delete(roomId);
+      this.acts.delete(roomId);
+      this.escapeLit.delete(roomId);
+      if (run) {
+        this.escapes.delete(roomId);
+        this.saveEscapes();
+      }
+      return;
+    }
+    if (!run) return;
+    let moved = false;
+    for (const m of [...run.members]) if (!room.has(m.owl)) moved = escapeLeave(run, m.owl) || moved;
+    if (moved) this.saveEscapes();
+    this.escapePush(roomId);
+  }
+
+  /** An owl moved in a running hollow: when that lit the moon carving or put it out, everyone is told. */
+  private escapeStir(roomId: string): void {
+    const run = this.escapes.get(roomId);
+    const room = this.rooms.get(roomId);
+    if (!run || !room || run.phase !== 'running') return;
+    const lit = onStump(run, this.escapeStanding(room, run)).length > 0;
+    if (lit !== (this.escapeLit.get(roomId) ?? false)) this.escapePush(roomId);
+  }
+
+  /**
+   * The sealed hollow's frames (OP-310). At its doorway in the plaza: the groups waiting there, and a
+   * fresh room for a new group. In a hollow: its run, step by step, where the room says the owl stands.
+   * Anyone may play, a spectator too (OP-191); only an escape's pay is a ticket holder's.
+   */
+  private async escape(ws: WebSocket, att: Attachment, room: Room, frame: ClientEscape): Promise<void> {
+    const { r, a } = frame;
+    const answer = (extra: Omit<Extract<ServerFrame, { t: 'escape' }>, 't' | 'r' | 'a'>) => this.send(ws, { t: 'escape', r, a, ...extra });
+    if (room.sessionOf(att.id) !== att.sid) return;
+    if (a === 'doors') {
+      if (att.room !== ESCAPE_DOOR.room || !room.near(att.id, ESCAPE_DOOR.at, ESCAPE_DOOR_REACH)) return answer({ ok: false, reason: 'far' });
+      const groups = [...this.escapes.values()]
+        .filter((g) => g.phase === 'lobby' && g.members.length > 0 && g.members.length < ESCAPE_MAX_OWLS)
+        .sort((x, y) => y.members.length - x.members.length || x.createdAt - y.createdAt)
+        .slice(0, ESCAPE_GROUPS_SHOWN)
+        .map((g) => ({ room: g.room, owls: g.members.length }));
+      let fresh = randomEscapeRoom(() => crypto.getRandomValues(new Uint32Array(1))[0]! / 4294967296);
+      while (this.escapes.has(fresh) || this.rooms.has(fresh)) fresh = randomEscapeRoom(() => crypto.getRandomValues(new Uint32Array(1))[0]! / 4294967296);
+      return answer({ ok: true, doors: { groups, fresh } });
+    }
+    const run = isEscapeRoom(att.room) ? this.escapes.get(att.room) : undefined;
+    if (!run) return answer({ ok: false, reason: 'unknown' });
+    const now = Date.now();
+    const standing = this.escapeStanding(room, run);
+    let res: EscapeAnswer;
+    switch (a) {
+      case 'state':
+        return answer({ ok: true, view: escapeView(run, att.id, standing, now) });
+      case 'start': {
+        const here = run.members.filter((m) => room.has(m.owl)).length;
+        res = escapeStart(run, att.id, Math.max(here, 0), now);
+        break;
+      }
+      case 'look':
+        res = escapeLook(run, att.id, frame.lock, frame.n ?? 0, standing, now);
+        break;
+      case 'tug':
+        res = escapeTug(run, att.id, frame.vine, standing, now);
+        break;
+      case 'take':
+        res = escapeTake(run, att.id, standing, now);
+        break;
+      case 'open':
+        res = escapeOpen(run, att.id, frame.lock, frame.code, standing, now);
+        break;
+      case 'hint':
+        res = escapeHint(run, att.id, standing, now);
+        break;
+      default:
+        return answer({ ok: false, reason: 'unknown' });
+    }
+    const view = escapeView(run, att.id, standing, now);
+    if (!res.ok) return answer({ ok: false, reason: res.reason, ...(res.left !== undefined ? { left: res.left } : {}), view });
+    answer({ ok: true, view, ...(res.hint ? { hint: res.hint } : {}), ...(res.opened ? { opened: res.opened } : {}) });
+    if (!res.moved) return;
+    this.saveEscapes();
+    this.escapePush(att.room, att.id);
+    if (res.escaped) await this.escapeSettle(run);
+  }
+
+  /**
+   * The group is out: each owl of it still in the hollow is told what its escape earned, once. A ticket
+   * holder's pay is the collections object's (ESCAPE_FEATHERS once a park day, the Hollow Moth once ever);
+   * a spectator's escape is practice and asks it nothing (OP-191).
+   */
+  private async escapeSettle(run: EscapeState): Promise<void> {
+    for (const { ws, att } of this.escapeSockets(run.room)) {
+      const m = run.members.find((x) => x.owl === att.id);
+      if (!m || run.settled.includes(m.owl)) continue;
+      run.settled.push(m.owl);
+      let paid: EscapePaid;
+      if (m.spec || att.spec || !att.cid) paid = { feathers: 0, total: -1, practice: true };
+      else {
+        try {
+          paid = await this.collections().escapePaid(att.cid, visitOf(att));
+          if (paid.item) this.owned.get(att.cid)?.set.add(paid.item);
+        } catch (e) {
+          this.logOf(att).error('room.play', 'write_failed', 'An owl that escaped the sealed hollow was not paid: the collections object did not answer.', { error: e });
+          paid = { feathers: 0, total: -1 };
+        }
+      }
+      this.send(ws, { t: 'escape', ok: true, paid, view: escapeView(run, att.id, new Map(), Date.now()) });
+    }
+    this.saveEscapes();
+  }
+
+  /**
+   * A free guest's use of an interactable (OP-243): a leaf pile poofs for everyone as anyone's flop does,
+   * a stall or the moonbeam answers as for anyone; but it turns up no feathers, moves no quest and counts
+   * for no task, and the collections object is told only for the play log (OP-304). `practice` tells the page so.
+   */
+  private practiceUse(ws: WebSocket, room: Room, att: Attachment, id: string, shared: boolean, r: number): void {
+    if (shared) {
+      if (!room.useObject(att.id, id, Date.now() + leafRespawnMs(Math.random))) return this.send(ws, { t: 'useResult', r, ok: false, reason: 'gone', feathers: 0, total: -1, updates: [] });
+      this.saveObjects();
+    }
+    // The play log (OP-304) counts a guest's use too, so the owner sees what free owls play with: never waited on.
+    const it = getInteractable(id);
+    const cid = att.cid;
+    if (cid && it) {
+      this.ctx.waitUntil(
+        Promise.resolve()
+          .then(() => this.collections().practiceUsed(cid, it.kind, it.id, att.room))
+          .catch((e: unknown) => this.logOf(att).warn('collections.log', 'write_failed', 'A guest’s use was not kept in the play log: the owner’s counts miss it.', { error: e })),
+      );
+    }
+    this.send(ws, { t: 'useResult', r, ok: true, feathers: 0, total: -1, updates: [], practice: true });
   }
 
   // ---------- activities: lanterns, fishing, the copy game, the stage quiz ----------
@@ -1516,6 +2115,8 @@ export class RoomObject extends DurableObject<Env> {
     let next = now + ALARM_EVERY_MS;
     if (this.closingAt !== null) next = Math.min(next, this.closingAt);
     if (this.rooms.get(QUIZ_ROOM)?.count) next = Math.min(next, this.activities(QUIZ_ROOM).nextQuizClose());
+    const party = this.party.due(now);
+    if (party !== null) next = Math.min(next, Math.max(now, party));
     return next;
   }
 
@@ -1546,10 +2147,10 @@ export class RoomObject extends DurableObject<Env> {
    * An owl in a room, for the player stats (OP-111): its visit goes on, and its kind and colour as it
    * shows them. At its hello (`entered`) its time in the room begins (OP-113), in its own nest or not.
    */
-  private statsSeen(att: Attachment, look: OwlLook, entered = false, travel = false): void {
+  private statsSeen(att: Attachment, look: OwlLook, entered = false, travel = false, map?: 1 | 2): void {
     const s = sightingOf(att);
     if (!this.statsOn || !s) return;
-    const sighting: Sighting = entered ? { ...s, entered: true, ...(att.owner ? { own: true } : {}), ...(travel ? { travel: true } : {}) } : s;
+    const sighting: Sighting = entered ? { ...s, entered: true, ...(att.owner ? { own: true } : {}), ...(travel ? { travel: true } : {}), ...(map ? { map } : {}) } : s;
     this.ctx.waitUntil(
       this.collections()
         .seen(sighting, { body: look.body, ...(look.species ? { species: look.species } : {}) })
@@ -1666,12 +2267,18 @@ export class RoomObject extends DurableObject<Env> {
     const att = ws.deserializeAttachment() as Attachment | null;
     const s = att?.state ? sightingOf(att) : null;
     // Closed by the page (1000, or 1001 as it goes away), or a connection that dropped.
-    this.drop(ws, code === 1000 || code === 1001 ? { reason: 'user' } : { reason: 'dropped', ...(code ? { detail: `code ${code}` } : {}) });
-    if (s) this.ctx.waitUntil(this.statsAlive([s]));
+    const bye = code === 1000 || code === 1001;
+    this.drop(ws, bye ? { reason: 'user' } : { reason: 'dropped', ...(code ? { detail: `code ${code}` } : {}) });
+    // How it ended goes with it, for the owl's live stay here (OP-265): a goodbye, or a lost line.
+    if (s) this.ctx.waitUntil(this.statsAlive([{ ...s, left: bye ? 'bye' : 'drop' }]));
   }
 
   override async webSocketError(ws: WebSocket): Promise<void> {
+    // As a close that dropped: the visit was here until now, and its line was lost (OP-265).
+    const att = ws.deserializeAttachment() as Attachment | null;
+    const s = att?.state ? sightingOf(att) : null;
     this.drop(ws, { reason: 'dropped', detail: 'error' });
+    if (s) this.ctx.waitUntil(this.statsAlive([{ ...s, left: 'drop' }]));
   }
 
   /** A socket is gone or sent away: its owl leaves its room (when this socket still holds it), logged once with why (OP-134). */
@@ -1688,7 +2295,10 @@ export class RoomObject extends DurableObject<Env> {
       }
       // A connection lost (not a goodbye, not sent away): one back soon has reconnected.
       room?.leave(att.id, att.sid, !att.kicked && (why.reason === 'dropped' || why.reason === 'timeout'));
-      if (owns) this.keepLeavers(att.room);
+      if (owns) {
+        this.keepLeavers(att.room);
+        this.party.left(att, room, Date.now());
+      }
     }
     this.flushThrottled(att);
     this.forget(att.room);
@@ -1722,12 +2332,23 @@ export class RoomObject extends DurableObject<Env> {
   override async alarm(): Promise<void> {
     await this.closeForRestart(Date.now());
     await this.settleQuiz();
+    // The party games move on (OP-314); a wake for a game's step alone, between the minutes, does no more.
+    this.party.tick(Date.now());
+    if (this.party.due(Date.now()) !== null && Date.now() < this.housekeptAt + ALARM_EVERY_MS) {
+      if (this.ctx.getWebSockets().length > 0 || this.closingAt !== null) await this.ctx.storage.setAlarm(this.nextWake(Date.now()));
+      return;
+    }
+    this.housekeptAt = Date.now();
     await this.freshNotice();
     const now = Date.now();
     const sockets = this.ctx.getWebSockets();
     for (const ws of sockets) {
       const att = ws.deserializeAttachment() as Attachment | null;
       if (!att) continue;
+      if (ticketOver(att, now)) {
+        this.ticketEnded(ws, att);
+        continue;
+      }
       const lastBeat = this.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() ?? att.joinedAt;
       const idleFor = now - Math.max(lastBeat, att.joinedAt);
       const limit = att.state ? IDLE_CLOSE_MS : HELLO_TIMEOUT_MS;
@@ -1735,6 +2356,10 @@ export class RoomObject extends DurableObject<Env> {
         if (!att.state) this.logOf(att).info('room.join', 'room_join_refused', 'A socket said no hello in time and was closed.', { reason: 'no-hello' });
         closeSocket(ws, att.state ? 1001 : CLOSE.BAD_PROTOCOL, att.state ? 'idle' : 'no hello');
         this.drop(ws, { reason: 'timeout' });
+      } else if (att.state && quietFor(att, now) > NO_INPUT_CLOSE_MS) {
+        // Heartbeats and nothing else for a quarter of an hour (OP-245): a script holding a place, as the page says goodbye sooner.
+        closeSocket(ws, 1001, 'idle');
+        this.drop(ws, { reason: 'kick', detail: 'no-input' });
       }
     }
     this.emitCounts(true);

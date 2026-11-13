@@ -34,7 +34,7 @@ export default {
   name: 'The hub filled to its cap, then one more',
   hypothesis: 'With the line set to start by itself, filling the hub to its 80 owls puts the next visitor in the line with the busy ribbon on, and nobody already inside lags (OP-075, OP-088).',
   blastRadius: "The throwaway park's hub: 70 more scripted visitors beside the fleet's 10, then two more; the line's setting changed for the run and put back.",
-  rollback: 'The extra visitors leave, and the line and the ribbon are set back as deployed (no line, no ribbon).',
+  rollbackPlan: 'The extra visitors leave, and the line and the ribbon are set back as deployed (no line, no ribbon).',
   pauseChecks: { names: ['journey'], why: "the journey's page would be an 81st owl in a hub this experiment fills to its 80" },
   expectLogs: [
     {
