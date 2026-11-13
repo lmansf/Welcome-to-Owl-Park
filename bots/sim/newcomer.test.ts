@@ -102,3 +102,55 @@ describe('the ink course’s first screen, as a newcomer plays it (OP-360)', () 
     }
   });
 });
+
+/**
+ * The Blackout Circuit's first screen, played as a newcomer plays it (OP-378). Before it was laid again
+ * the first breaker stood on the first high roof, two jumps up by way of a timed sign: of 2,640 plays
+ * of one press (a tap to a held glide, a flap or two after it, pressed anywhere from the start to the
+ * roof, the signs met at eight times of their cycle) not one stood on that roof. Now the first breaker
+ * stands on the air unit by the start, one hop up over the deck.
+ */
+describe('the Blackout Circuit’s first screen, as a newcomer plays it (OP-378)', () => {
+  const circuit = ROOMS['circuit-1']!;
+  const box = (circuit.kit!.ledges ?? []).find((l) => l.id === 'ac1')!;
+  const breaker = circuit.course!.parts!.find((p) => p.id === 'breaker-1')!;
+  const START = { x: circuit.spawns.default!.x, z: 0 };
+  const play = (p: Play) => playEast(circuit, START, breaker.at.x, p);
+
+  it('the first breaker stands on the air unit by the start, the first landing, and a glint marks it until it is on', () => {
+    expect(breaker.top).toBe(box.top);
+    expect(breaker.at.x).toBeGreaterThan(box.x0);
+    expect(breaker.at.x).toBeLessThan(box.x1);
+    expect(circuit.course!.leads).toEqual([{ id: 'lead-1', at: breaker.at, top: box.top, until: 'breaker-1' }]);
+  });
+
+  it('a plain jump anywhere in the last strides before the box, a tap or held the whole flight, comes down on it by the breaker: the first try', () => {
+    for (let x = box.x0 - 100; x <= box.x0 - 20; x += 20) {
+      for (const holdMs of HOLDS) expect(play({ jumpAt: x, holdMs }).where, `jump at ${x} held ${holdMs}`).toBe('ac1');
+    }
+  });
+
+  // A Jump held the whole way with two flaps after it still glides from the deck over the high roof's
+  // foot and into the street (it comes down past 1,440): the deck is not long enough to land that glide.
+  it('no play of one press, or a press and a flap, on the way to it is a fall: a jump too early, too late or flapped over the box comes down on the deck to try again', () => {
+    const ends: Array<{ play: Play; end: PlayEnd }> = [];
+    for (let x = START.x; x <= box.x1; x += 20) {
+      for (const holdMs of HOLDS) {
+        for (const flaps of [[], [300]]) {
+          for (const flapHoldMs of [150, Number.POSITIVE_INFINITY]) {
+            const p = { jumpAt: x, holdMs, flaps, flapHoldMs };
+            ends.push({ play: p, end: play(p) });
+          }
+        }
+      }
+    }
+    expect(ends.length).toBeGreaterThanOrEqual(300);
+    expect(fallsOf(ends)).toEqual([]);
+    // Even pressed anywhere from the start to the box's far end (under it and past it too), with a flap or
+    // none, a third of the plays take the breaker at once; the rest are back on the deck by it.
+    const took = ends.filter((e) => e.end.where === 'ac1').length;
+    expect(took / ends.length).toBeGreaterThan(0.3);
+    // What the screen asks: one hop. Walking on passes under the box.
+    expect(play({ jumpAt: null, holdMs: 0 }).where).toBe('floor0');
+  });
+});

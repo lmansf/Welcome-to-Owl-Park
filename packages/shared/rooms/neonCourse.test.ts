@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CollectionBook, MemoryCollectionStore } from '../src/book';
 import { SIGN_WARN_MS, litPerches, signEnding, signLit } from '../src/circuit';
-import { courseParts, coursePieces, courseProblems, holdsDash, inPit, inThorns, LOST_FEATHERS } from '../src/course';
+import { courseParts, coursePieces, courseProblems, holdsDash, inPit, inThorns, leadsOpen, LOST_FEATHERS } from '../src/course';
 import { CourseBook, MemoryCourseStore } from '../src/coursebook';
 import { kitDrawPlan, kitProblems } from '../src/kit';
 import { KIT_ART } from '../src/kitArt';
@@ -9,7 +9,7 @@ import { groundAt, perchTopLimit } from '../src/perches';
 import type { Polygon } from '../src/geometry';
 import { mapOf, spawnTop, type RoomDef } from '../src/room';
 import { perchTiers } from '../src/routes';
-import { CIRCUIT_COURSE, CIRCUIT_GROUND, CIRCUIT_ROOMS } from './neonCourse';
+import { CIRCUIT_COURSE, CIRCUIT_GROUND, CIRCUIT_ROOMS, FIRST_ROOF_WALL } from './neonCourse';
 import { COURSES, ROOMS, TREE_GROUND, TREE_REALMS } from './index';
 
 const rooms = (id: string) => ROOMS[id];
@@ -188,5 +188,35 @@ describe('the neon course’s ground and walls (OP-348)', () => {
       }
     }
     expect(own).toBeGreaterThan(40);
+  });
+
+  it('opens on a safe first success (OP-378): the first breaker one hop up before any drop, a glint on it until it is on, the first high roof dimmed', () => {
+    const r = ROOMS['circuit-1']!;
+    const c = r.course!;
+    const breaker = c.parts!.find((p) => p.id === 'breaker-1')!;
+    const street = Math.min(...c.pits!.flat().map((p) => p.x));
+    const ledges = r.kit!.ledges ?? [];
+    // Before the street, on the first box over the deck, and nearer the start than the first sign or the high roof.
+    expect(breaker.at.x).toBeLessThan(street);
+    const firstLanding = ledges.filter((l) => l.top > 0).sort((a, b) => a.x0 - b.x0)[0]!;
+    expect(firstLanding.id).toBe('ac1');
+    expect(breaker.top).toBe(firstLanding.top);
+    expect(breaker.at.x).toBeGreaterThan(firstLanding.x0);
+    expect(breaker.at.x).toBeLessThan(firstLanding.x1);
+    for (const s of r.neonSigns ?? []) expect(s.x0, s.id).toBeGreaterThan(breaker.at.x);
+    // One signal for both: the lead stands over the breaker, and goes once the run has it.
+    expect(c.leads!.map((l) => [l.at, l.top, l.until])).toEqual([[breaker.at, breaker.top, 'breaker-1']]);
+    expect(leadsOpen(r, null).map((l) => l.id)).toEqual(['lead-1']);
+    expect(leadsOpen(r, []).map((l) => l.id)).toEqual(['lead-1']);
+    expect(leadsOpen(r, ['breaker-1'])).toEqual([]);
+    // The bright blue wall of the first high roof is the deck's dark tin; the far roof keeps its lit sheet.
+    const wall = (id: string) => {
+      const mid = ledges.find((l) => l.id === id)!.mid!;
+      return KIT_ART[mid]?.standIn ?? mid;
+    };
+    expect(wall('b1')).toBe(FIRST_ROOF_WALL);
+    expect(wall('b2')).toBe('kit-tex-neon-lit-wall');
+    // No other room of the park leads yet.
+    for (const [id, room] of Object.entries(ROOMS)) if (id !== 'circuit-1') expect(room.course?.leads, id).toBeUndefined();
   });
 });

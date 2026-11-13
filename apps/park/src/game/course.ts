@@ -7,6 +7,7 @@ import {
   distance,
   doorWaitsOn,
   fellInPit,
+  leadsOpen,
   thornsBetween,
   openerAt,
   sameLevel,
@@ -27,6 +28,10 @@ import { COURSES, ROOMS, groundOf } from '../rooms';
 import { COURSE_WORDS, clearLine } from '../ui/courseWords';
 import type { Hud } from '../ui/hud';
 import { createObjectiveStrip, type ObjectiveStrip } from '../ui/objectiveStrip';
+import { glintAt } from './featherTrailView';
+
+/** How far over a lead's spot its glint stands (room px): over the breaker's own box, not on it. */
+const LEAD_LIFT = 90;
 import { SPECTATOR_WORDS } from '../ui/spectator';
 import type { CueName } from './sfxCues';
 
@@ -116,6 +121,8 @@ export class Course {
   private readonly strip: ObjectiveStrip | null;
   private readonly marks = new Map<string, Phaser.GameObjects.GameObject>();
   private readonly gates = new Map<string, Phaser.GameObjects.GameObject>();
+  /** The glints over the room's leads (OP-378), by lead id: shown until the run has the lead's part. */
+  private readonly leads = new Map<string, Phaser.GameObjects.Container>();
   /** The hazards the course draws in the air (a room seen from the side), and the live wires' sparks over them. */
   private thornArt: Phaser.GameObjects.Graphics[] = [];
   private readonly parts: ReturnType<typeof courseParts>;
@@ -222,10 +229,11 @@ export class Course {
   }
 
   /** What the page shows of the course, for the tests and the console. */
-  debug(): { course: string; act: number; run: CourseView['run']; feathers: string[]; shortcuts: string[]; cleared: boolean; bestMs: number | null; falls: number; finishes: number } | null {
+  debug(): { course: string; act: number; run: CourseView['run']; feathers: string[]; shortcuts: string[]; cleared: boolean; bestMs: number | null; falls: number; finishes: number; leads: string[] } | null {
     const v = this.view;
     if (!v) return null;
-    return { course: v.course, act: this.room.course?.act ?? 0, run: v.run, feathers: [...v.feathers], shortcuts: [...v.shortcuts], cleared: v.cleared, bestMs: v.bestMs, falls: this.falls, finishes: this.finishes };
+    const leads = [...this.leads].filter(([, g]) => g.visible).map(([id]) => id);
+    return { course: v.course, act: this.room.course?.act ?? 0, run: v.run, feathers: [...v.feathers], shortcuts: [...v.shortcuts], cleared: v.cleared, bestMs: v.bestMs, falls: this.falls, finishes: this.finishes, leads };
   }
 
   destroy(): void {
@@ -337,6 +345,8 @@ export class Course {
         this.host.scene.tweens.add({ targets: sparks, alpha: { from: 1, to: 0.35 }, duration: 140, yoyo: true, repeat: -1, repeatDelay: 220 });
       }
     }
+    // Where to go first (OP-378): the feather trail's glint over the first landing and breaker, high over the piece's own art.
+    for (const l of c.leads ?? []) this.leads.set(l.id, glintAt(this.host.scene, l.at.x, l.at.y - (l.top ?? 0) - LEAD_LIFT, this.host.calm?.() ?? false));
     for (const s of c.shortcuts ?? []) {
       const xs = s.gate.map((v) => v.x);
       const ys = s.gate.map((v) => v.y);
@@ -369,6 +379,8 @@ export class Course {
       m?.setVisible(!v.feathers.includes(f.id));
     }
     for (const [id, gate] of this.gates) (gate as Phaser.GameObjects.Rectangle).setVisible(!v.shortcuts.includes(id));
+    const open = new Set(leadsOpen(this.room, v.run?.parts ?? null).map((l) => l.id));
+    for (const [id, g] of this.leads) g.setVisible(open.has(id));
   }
 }
 

@@ -48,7 +48,15 @@ function ledge(id: string, x: number, w: number, top: number, look: Omit<KitLedg
  * wall, OP-348) down to the ground line, or for one that stands in a drop (`street`), down to the
  * street. Like every ledge of a room seen from the side it is jumped up through, not a wall.
  */
-const roof = (top: number, street = false) => ({ cap: 'kit-neon-rooftop-ledge', mid: 'kit-tex-neon-lit-wall', depth: top + (street ? STREET_SUNK : 0) });
+const roof = (top: number, street = false, mid = 'kit-tex-neon-lit-wall') => ({ cap: 'kit-neon-rooftop-ledge', mid, depth: top + (street ? STREET_SUNK : 0) });
+/**
+ * The first high roof's wall (OP-378): the realm's dark corrugated tin, the deck's own, in place of its
+ * lit blue sheet, which was the brightest thing on the first screen, louder than the box and the
+ * breaker an owl is there for. Drawn as painted, as every neon wall is (OP-348).
+ */
+export const FIRST_ROOF_WALL = 'kit-tex-neon-corrugated-tin';
+/** Where the first breaker stands, on the air unit by the start (OP-378). */
+export const FIRST_BREAKER_X = 420;
 /** A footbridge strung between towers, over the street. */
 const FOOTBRIDGE = { cap: 'kit-neon-sky-bridge-mid' };
 /** A billboard on its legs: stood on along its top. */
@@ -141,7 +149,7 @@ const ROOFTOPS: RoomKit = {
   paths: [deck('deck-a', 0, 1400), drop('street', 1400, 2700), deck('deck-b', 2700, 3 * ROOM_W)],
   ledges: [
     ledge('ac1', 300, 200, 120, AIR_UNIT),
-    ledge('b1', 1000, 400, 420, roof(420)),
+    ledge('b1', 1000, 400, 420, roof(420, false, FIRST_ROOF_WALL)),
     ledge('bridge1', 1900, 240, 300, FOOTBRIDGE),
     ledge('b2', 3620, 360, 540, roof(540)),
     ledge('board1', 4200, 200, 400, BILLBOARD),
@@ -231,7 +239,11 @@ export const CIRCUIT_ROOMS: Record<string, RoomDef> = inRealmKit('neon', withCou
       act: 1,
       pits: [floor(1400, 2700)],
       benches: [piece('bench-1', 1150, 420)],
-      parts: [piece('breaker-1', 3800, 540)],
+      // The first breaker on the air unit by the start (OP-378): the first move is one hop up over the
+      // deck, where a miss lands back on the deck, and it earns a breaker before anything can be fallen
+      // into. The first sign, the high roof and the street come after a first success.
+      parts: [piece('breaker-1', FIRST_BREAKER_X, 120)],
+      leads: [{ id: 'lead-1', at: { x: FIRST_BREAKER_X, y: G }, top: 120, until: 'breaker-1' }],
       feathers: [piece('feather-1', 2020, 300), piece('feather-2', 4300, 400)],
     },
   }),
