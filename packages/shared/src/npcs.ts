@@ -5,6 +5,7 @@
  * (proposal C31) before they ship.
  */
 import type { OwlLook, Vec2 } from './protocol';
+import { questOwlAt } from './hollowOval';
 import { START_QUEST_OWL } from './realmStart';
 
 export interface NpcDef {
@@ -46,6 +47,10 @@ export const PLACE_NAMES: Readonly<Record<string, string>> = {
   'm3-under': 'the root stair',
   // The inside of the trunk, its four Commons side by side.
   'm3-hall': 'the great hollow',
+  // The parkour courses behind three of the Commons, by the names on their gates (OP-281).
+  'canopy-1': 'Updraft Canopy',
+  'circuit-1': 'Blackout Circuit',
+  'brush-1': 'Brushstroke Bridges',
 };
 
 export function placeName(room: string): string {
@@ -175,6 +180,53 @@ export const NPCS: readonly NpcDef[] = [
     look: { body: '#4B5D8A', belly: '#E6ECF7', accent: '#9FD0FF', wear: { head: 'glass-circlet~0', neck: 'moon-pendant~0' } },
     greetings: ['The light comes through every pane a different colour. I keep count.', 'The guardian listens when you stand in front of it.', 'The climb is just past the nest. Mind the wind.'],
     idle: ['tilt', 'nod'],
+  },
+  // The Great Hollow's quest owls (OP-281, OP-258): one in each Commons round its rim, the ink Commons'
+  // first, each beside its plaza (hollowOval.ts, questOwlAt). Like Prism they give only their own story
+  // quests (questCatalog.ts): the hollow is not one of the town's rooms, so the daily pools are as before.
+  {
+    id: 'quill',
+    name: 'Quill',
+    role: 'Keeper of Brushstroke Bridges',
+    room: 'm3-hall',
+    pos: questOwlAt('ink'),
+    facing: 1,
+    look: { body: '#4A4A4F', belly: '#E8DCC0', accent: '#2B2B30', wear: { head: 'beret~0', face: 'round-glasses~0', pet: 'moth~0' } },
+    greetings: ['Every bridge out there was painted in one stroke. Mind the wet ones.', 'Ink dries slowly in here. So do I.', 'The painted gate in this Commons opens on the bridges. Go on, have a look.'],
+    idle: ['tilt', 'nod'],
+  },
+  {
+    id: 'fern',
+    name: 'Fern',
+    role: 'Guide to the treehouse clearing',
+    room: 'm3-hall',
+    pos: questOwlAt('grove'),
+    facing: -1,
+    look: { body: '#7A5A36', belly: '#F2E1C1', accent: '#7FD46A', wear: { head: 'acorn-cap~0', neck: 'flower-lei~0', pet: 'ladybug~0' } },
+    greetings: ['The air rises warm past the canopy. Spread your wings and let it lift you.', 'Hazel and Juniper are out in the clearing. Tell them Fern says hello.', 'Leaves blow in from the clearing all day. I do not mind.'],
+    idle: ['hop', 'flap'],
+  },
+  {
+    id: 'volt',
+    name: 'Volt',
+    role: 'Guide to the neon street',
+    room: 'm3-hall',
+    pos: questOwlAt('market'),
+    facing: -1,
+    look: { body: '#3A3550', belly: '#BFC9D6', accent: '#FF4FB8', wear: { head: 'beanie~0', face: 'aviator-goggles~0', pet: 'firefly~0' } },
+    greetings: ['The lights on the circuit go out one by one. Find the switches and they come back.', 'Nova keeps the feather shop out on the street. Flicker keeps dropping things.', 'Mind the puddles out there. They glow.'],
+    idle: ['spin', 'wave'],
+  },
+  {
+    id: 'lumen',
+    name: 'Lumen',
+    role: 'Watcher of the glass door',
+    room: 'm3-hall',
+    pos: questOwlAt('glass'),
+    facing: 1,
+    look: { body: '#5B6E99', belly: '#E6ECF7', accent: '#9FD0FF', wear: { head: 'moon-circlet~0', neck: 'pearl-necklace~0', pet: 'dragonfly~0' } },
+    greetings: ['Through that door the light comes in every colour at once.', 'Prism keeps count of the panes out there. I keep count of the owls.', 'Stand in the moonbeam a moment. It is warm.'],
+    idle: ['nod', 'tilt'],
   },
 ];
 

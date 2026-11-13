@@ -193,6 +193,20 @@ export const voteAt = (level: HallLevel): Vec2 => rimAt(commonsS(level), sized(3
 
 /** Each Commons' plaza: out from its idol toward the middle, where its moonbeam falls. */
 export const plazaAt = (level: HallLevel): Vec2 => ringAt(commonsS(level), 0.62);
+
+/**
+ * Where each Commons' quest owl stands (OP-281, OP-258): out on its floor to one side of its plaza, a
+ * few steps from its leaf piles and moonbeam but never on them, clear of its doorways' signs and
+ * landings and of its idol's vote stone. The two Commons at the front stand toward the root runs, the
+ * two at the back toward the knothole, mirrored across the hollow.
+ */
+const QUEST_OWL_SPOT: Readonly<Record<HallLevel, { along: number; ring: number }>> = {
+  ink: { along: 400, ring: 0.66 },
+  market: { along: -400, ring: 0.66 },
+  glass: { along: 400, ring: 0.5 },
+  grove: { along: -400, ring: 0.5 },
+};
+export const questOwlAt = (level: HallLevel): Vec2 => ringAt(commonsS(level) + QUEST_OWL_SPOT[level].along, QUEST_OWL_SPOT[level].ring);
 /** The hollow's heart: the middle of the floor, where the light falls brightest. */
 export const HALL_HEART: Vec2 = { x: HALL_CX, y: HALL_CY - sized(340) };
 

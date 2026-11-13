@@ -9,7 +9,7 @@ import type { Raised } from './perches';
 import { nextParkDayAt, nextParkWeekAt, parkDay, parkWeek } from './parktime';
 import { DAILY_POOL, QUESTS, STORY_QUESTS, WEEKLY_POOL, getQuest } from './questCatalog';
 import { QuestBook, dailyQuestIds, weeklyQuestIds, type QuestSpots } from './questbook';
-import { DAILY_QUEST_FEATHERS, MAX_ACTIVE_QUESTS, WEEKLY_QUEST_FEATHERS, goalCount, goalText, isRewardItem, questFeathers, type QuestDef } from './quests';
+import { ACTIVE_SLOTS, CADENCES, DAILY_QUEST_FEATHERS, MAX_ACTIVE_QUESTS, WEEKLY_QUEST_FEATHERS, goalCount, goalText, isRewardItem, questFeathers, type QuestDef } from './quests';
 import { DAILY_ITEMS, SHOP_PRICES, WEEKLY_MIX, offerFor, shopRotation } from './shop';
 import { SPECIES, getSpecies, isSpecies, selectableSpecies } from './species';
 import { isLook } from './validate';
@@ -370,8 +370,12 @@ describe('quest ledger', () => {
     const { quests } = rig();
     const board = quests.board('c1', MON);
     const all = Object.values(board.offers).flat();
-    for (const o of all.slice(0, MAX_ACTIVE_QUESTS)) expect(quests.accept('c1', o.id, MON).ok, o.id).toBe(true);
-    const extra = all[MAX_ACTIVE_QUESTS];
+    // Each tier fills its own slots (OP-254), whichever order the offers come in: with more story quests
+    // on offer than story slots (the Great Hollow's, OP-281), the first few offers are not all takeable.
+    const taken = CADENCES.flatMap((c) => all.filter((o) => o.cadence === c).slice(0, ACTIVE_SLOTS[c]));
+    expect(taken.length).toBe(MAX_ACTIVE_QUESTS);
+    for (const o of taken) expect(quests.accept('c1', o.id, MON).ok, o.id).toBe(true);
+    const extra = all.find((o) => !taken.includes(o));
     if (extra) expect(quests.accept('c1', extra.id, MON)).toMatchObject({ ok: false, reason: 'full' });
     const daily = quests.board('c1', MON).active.filter((a) => a.cadence === 'daily');
     expect(daily.length).toBeGreaterThan(0);
