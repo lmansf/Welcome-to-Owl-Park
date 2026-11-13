@@ -156,7 +156,7 @@ export interface Hud {
   /** The home screen is up (OP-065): the park's bar, buttons, cards and thumbstick are not shown. */
   setHome(on: boolean): void;
   /** The home screen's buttons: the owl builder and Settings, without the way back to the Menu. */
-  openOwl(opener: HTMLElement): void;
+  openOwl(opener: HTMLElement, play?: () => void): void;
   openSettings(opener: HTMLElement): void;
   /** About the park or Safety and privacy (about.ts), from the home screen. */
   openInfo(kind: InfoKind, opener: HTMLElement): void;
@@ -873,7 +873,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   }
 
   /** `opener` takes the focus back when the screen closes (the Menu button, or a home screen button); `mirror`: Your owl opened at a mirror. */
-  function openScreen(id: ScreenId, fromMenu = false, opener: HTMLElement = menuBtn, mirror = false) {
+  function openScreen(id: ScreenId, fromMenu = false, opener: HTMLElement = menuBtn, mirror = false, play: (() => void) | null = null) {
     makeRoom();
     if (id === 'menu' || id === 'quests' || id === 'map') {
       if (id === 'quests') questUi?.resetJournal();
@@ -891,7 +891,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       builder.setLook(collectionActions?.look() ?? look);
       // The builder covers the whole screen: the bar, the cards and the buttons hide under it.
       root.classList.add('covered');
-      builder.open(fromMenu, undefined, opener, mirror);
+      builder.open(fromMenu, undefined, opener, mirror, play);
     }
     // Settings before the park (the home screen's); in the park they are the Menu's Settings tab.
     else if (id === 'settings') settingsScreen.open(opener);
@@ -1226,7 +1226,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       }
       root.classList.toggle('at-home', on);
     },
-    openOwl: (opener) => openScreen('owl', false, opener),
+    openOwl: (opener, play) => openScreen('owl', false, opener, false, play ?? null),
     openSettings: (opener) => openScreen('settings', false, opener),
     openInfo: (kind, opener) => info.open(kind, opener),
     openWhichOwl,
