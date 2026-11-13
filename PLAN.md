@@ -953,3 +953,10 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   every one green, and is live (deploy run 314 on the merge commit). While those checks ran,
   OP-365 was built in a working copy of its own (`git worktree`, its own dev server on another
   port), so the wait on one pull request was not a wait on the next.
+- 2026-11-13: OP-365's first run of the checks was red on one test it does not touch: the
+  guardian's second (`e2e/guardian.spec.ts`), timed out at 45 s twice. It draws about 170 frames,
+  each when the test moves the held clock: 23 s here on four cores, 38 on two, and past 45 on one,
+  the same failure as the runner's. It and the first of OP-396's camera tests (40 s on a slow
+  runner) now have the slow allowance their neighbours have. Kept for next time: a held clock
+  takes the park's time out of a test, not the machine's; count the frames a test draws and give
+  it the allowance for a runner three times slower than this one.
