@@ -133,18 +133,19 @@ export function badgeView(spectator: boolean): { shown: boolean; label: string; 
 }
 
 const CSS = `
-#hud .spectator{position:absolute;z-index:9;left:max(12px,env(safe-area-inset-left));top:calc(max(10px,env(safe-area-inset-top)) + 50px);display:none;align-items:center;gap:8px;padding:4px 4px 4px 12px;border-radius:999px;
+#hud .spectator{position:relative;z-index:9;margin-top:8px;width:max-content;max-width:calc(100vw - 24px);display:none;align-items:center;gap:8px;padding:4px 4px 4px 12px;border-radius:999px;
   background:rgba(12,30,54,.86);border:1px dashed rgba(255,211,106,.7);color:#FFD36A;font-size:13px;font-weight:700;pointer-events:auto;box-shadow:0 4px 14px rgba(0,0,0,.4)}
 #hud .spectator.show{display:flex}
 #hud .spectator button{min-height:36px;padding:6px 12px;font-size:13px}
 #hud.covered .spectator,#hud.at-home .spectator{display:none}
 /*
- * On a phone (OP-242) the badge is one slim line in the flow under the bar, so it never sits on the
- * keepers' ribbon; while the ribbon shows, the badge waits (the Menu and the shop still sell a ticket),
- * and it comes back once the ribbon is hidden or gone.
+ * The badge stands in the HUD's flow under the bar (OP-369), below the keepers' ribbon and any card
+ * there, so it never lies over them: on a computer it was set at a height of its own, over the
+ * ribbon's words. On a phone (OP-242) it is one slim line, and while the ribbon shows the badge waits
+ * (the Menu and the shop still sell a ticket) and comes back once the ribbon is hidden or gone.
  */
 @media (pointer:coarse){
-  #hud .spectator{position:relative;left:auto;top:auto;margin-top:8px;width:max-content;max-width:calc(100vw - 24px);padding:3px 3px 3px 11px;font-size:12px;gap:6px}
+  #hud .spectator{padding:3px 3px 3px 11px;font-size:12px;gap:6px}
   #hud .spectator button{min-height:34px;padding:5px 12px}
   #hud.ribbon-on .spectator.show{display:none}
 }

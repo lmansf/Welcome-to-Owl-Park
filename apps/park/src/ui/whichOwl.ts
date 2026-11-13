@@ -108,6 +108,9 @@ const CSS = `
 #hud .which-owl .wo-actions button{min-height:48px;padding:8px 22px;font-size:17px}
 @media (prefers-reduced-motion:no-preference){#hud .which-owl .wo-step{animation:wo-in .28s ease-out}}
 @keyframes wo-in{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:none}}
+/* While the quiz is up the feedback button keeps to the corner's row, at its other end (OP-369): halfway down the left edge it
+   lay over the first answer on a phone. The row is the one the quiz keeps clear for Skip, so nothing of a card is ever there. */
+#hud.quiz-up .fb-bug{top:max(10px,env(safe-area-inset-top));transform:none}
 `;
 
 let styled = false;
@@ -334,6 +337,7 @@ export function createWhichOwlScreen(root: HTMLElement): WhichOwlScreen {
   }
 
   modal.onClose(() => {
+    root.classList.remove('quiz-up');
     const r = run;
     if (pause !== null) window.clearTimeout(pause);
     pause = null;
@@ -353,6 +357,7 @@ export function createWhichOwlScreen(root: HTMLElement): WhichOwlScreen {
       run = next;
       ending = null;
       attempt = 0;
+      root.classList.add('quiz-up');
       modal.open(opener);
       begin(true);
     },

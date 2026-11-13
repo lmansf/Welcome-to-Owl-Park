@@ -107,6 +107,12 @@ async function answerCards(page: Page, pick: number, isMobile: boolean): Promise
         }),
         boxes: el.querySelectorAll('.wo-pic, [data-wo-art]').length,
         text: (el as HTMLElement).innerText,
+        // The answers the feedback button lies over (OP-369): none.
+        under: answers.filter((a) => {
+          const bug = document.querySelector('#hud .fb-bug')?.getBoundingClientRect();
+          const r = a.getBoundingClientRect();
+          return !!bug && bug.width > 0 && Math.min(bug.right, r.right) - Math.max(bug.left, r.left) > 1 && Math.min(bug.bottom, r.bottom) - Math.max(bug.top, r.top) > 1;
+        }).length,
       };
     });
     const { id } = seen;
@@ -125,6 +131,8 @@ async function answerCards(page: Page, pick: number, isMobile: boolean): Promise
     for (const size of seen.sizes) expect(size).toBeGreaterThanOrEqual(44);
     expect(seen.boxes).toBe(0);
     expect(seen.text).not.toMatch(/\d+\s*[×x]\s*\d+/);
+    // The feedback button, on screen through the quiz, lies over no answer: on a phone it sat on the first (OP-369).
+    expect(seen.under, `the feedback button over an answer of card ${id}`).toBe(0);
     // No emoji anywhere on the card.
     expect(seen.text).not.toMatch(/\p{Extended_Pictographic}/u);
     await tap(page, `[data-wo-answer="${Math.min(pick, count - 1)}"]`, isMobile);

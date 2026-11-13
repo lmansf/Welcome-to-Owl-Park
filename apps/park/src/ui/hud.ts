@@ -37,6 +37,7 @@ import { startCheckout } from './checkout';
 import { REFERRAL_WORDS, referralCard } from './referral';
 import { createGatePrompt, type GateAsk } from './gatePrompt';
 import { SPECTATOR_WORDS, createSpectatorBadge } from './spectator';
+import { watchTopStack } from './topStack';
 import { createTurnPhone } from './turnPhone';
 
 /** What the HUD asks of the park for the visitor's collection: wearing things, emotes, messages. */
@@ -352,7 +353,7 @@ const CSS = `
 #hud .feathers.show{display:flex}
 #hud .feathers svg{width:18px;height:18px;filter:drop-shadow(0 0 4px rgba(255,211,106,.7))}
 #hud .toast.accent{border-left:6px solid var(--accent)}
-#hud .notices{position:absolute;z-index:10;left:50%;transform:translateX(-50%);top:calc(max(10px,env(safe-area-inset-top)) + 54px);display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none}
+#hud .notices{position:absolute;z-index:10;left:50%;transform:translateX(-50%);top:var(--notices-top,calc(max(10px,env(safe-area-inset-top)) + 54px));display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none}
 #hud .notice{background:rgba(12,30,54,.92);color:#FFD36A;border:1px solid rgba(255,211,106,.55);border-radius:999px;padding:7px 16px;font-size:14px;font-weight:700;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.4);animation:hud-in .25s ease-out}
 /*
  * Touch screens: a pad laid out like a game controller's (OP-082, OP-114; Logan, 2026-11-03, OP-242).
@@ -1011,6 +1012,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     setTimeout(() => el.remove(), ms);
   };
   const badge = createSpectatorBadge(root, () => getTicket?.(SPECTATOR_WORDS.keep));
+  // One safe area along the top (OP-369): the strip and the notices are kept clear of the ribbon, the badge and the cards.
+  watchTopStack(root);
 
   return {
     setCount(n) {

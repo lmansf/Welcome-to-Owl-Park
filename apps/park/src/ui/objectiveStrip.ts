@@ -26,7 +26,7 @@ export function clockWords(ms: number, goldMs: number): string {
 }
 
 const CSS = `
-#objective-strip{position:absolute;z-index:9;left:50%;transform:translateX(-50%);top:calc(max(10px,env(safe-area-inset-top)) + 54px);display:flex;gap:14px;align-items:center;padding:6px 14px;border-radius:999px;background:rgba(12,30,54,.86);border:1px solid rgba(255,211,106,.45);color:#F6F1E3;font:700 13px/1.2 system-ui,sans-serif;white-space:nowrap;pointer-events:none;box-shadow:0 4px 14px rgba(0,0,0,.35)}
+#objective-strip{position:absolute;z-index:9;left:50%;transform:translateX(-50%);top:var(--strip-top,calc(max(10px,env(safe-area-inset-top)) + 54px));display:flex;gap:14px;align-items:center;padding:6px 14px;border-radius:999px;background:rgba(12,30,54,.86);border:1px solid rgba(255,211,106,.45);color:#F6F1E3;font:700 13px/1.2 system-ui,sans-serif;white-space:nowrap;pointer-events:none;box-shadow:0 4px 14px rgba(0,0,0,.35)}
 #objective-strip .pips{display:inline-flex;gap:5px;margin-left:6px;vertical-align:-1px}
 #objective-strip .pip{display:inline-block;width:10px;height:10px;border-radius:50%;border:2px solid rgba(255,211,106,.7)}
 #objective-strip .pip.on{background:#FFD36A;border-color:#FFD36A}
