@@ -4443,7 +4443,7 @@ export class RoomScene extends Phaser.Scene {
     const covered = this.sheetPx > 0 ? { top: 0, bottom: 0 } : this.viewEdges(this.hud.coveredEdges());
     const b = cameraBounds(this.room.size, covered, this.cfg.pixelRatio / cam.zoom);
     cam.setBounds(b.x, b.y, b.w, b.h);
-    // A room taller than a screen, seen from above: the owl stands lower on screen, the back of the room in view (hudInset.ts).
+    // A plaza (seen from above, taller than a screen): the owl stands lower on screen, the back of the room in view (hudInset.ts).
     cam.setFollowOffset(0, this.leadOver(h / cam.zoom));
     for (const { t, img } of this.parallax) this.placeParallax(t, img);
   }

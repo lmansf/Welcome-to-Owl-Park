@@ -59,6 +59,9 @@ export function coveredBy(rects: ReadonlyArray<{ top: number; bottom: number; wi
  * above the owl shows less of the way there. Before OP-396 the hall had the lead on a plain address
  * and lost it after its opening look or a ride on its rising air; centred is what every owl through
  * the turnstiles had, and it is now what every owl has.
+ *
+ * TODO-DOCS (OP-396): docs/ARCHITECTURE.md's camera notes say where the camera rests: above the owl
+ * in a plaza, on it in the Great Hollow, and back at rest after anything that had it (RoomScene's followOwl).
  */
 export function followLead(roomH: number, sideView: boolean, viewH: number, screenH: number, allRound = false): number {
   if (sideView || allRound || roomH <= screenH || !(viewH > 0)) return 0;

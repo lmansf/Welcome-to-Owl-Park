@@ -21,12 +21,18 @@
 - The larger change (OP-359): on Nov 12 the owner asked for one larger-than-life change that
   would make the park far more inviting to a new player or bring a player back. The one
   recommended was to bring the guardian to life, and his word the same day was "I like it, and I
-  like it living in the heart of the great hollow". Its first slice, behind `?guardian=1`, is
-  planned under "After the pass" below. Switching it on for every visitor is a change of its own,
-  after his look.
+  like it living in the heart of the great hollow". Its first slice is merged and live behind
+  `?guardian=1` (PR 240), as "After the pass" below says. Switching it on for every visitor is a
+  change of its own, after his look; four things about it are his to say (its lids, the carving on
+  the rim, its size, and whether it goes on as it is or waits for a painting in parts).
 - Asked for the same day and filed as OP-362: a critique of the art across the park against what
-  a top studio ships, with a verdict and ranked fixes. It is written in the waits on the
-  guardian's checks; nothing is generated or changed under it.
+  a top studio ships, with a verdict and ranked fixes. Delivered on Nov 12 as a document for the
+  owner, with pictures (the link is on the ticket). Verdict: not triple-A; about 2 of 5 across ten
+  things a top studio checks; ten gaps ranked; about a third of the fixes need no money. Its gaps
+  map onto the tickets of his audit of Nov 12 (OP-364 to OP-378); the four that had none are
+  OP-397 to OP-400. Nothing was generated or changed under it.
+- OP-396, found while building the guardian: the Great Hollow's camera rested two ways in one
+  visit. Under "After the pass" below.
 - Still the owner's to say: OP-335 and OP-341 (each needs a change under `.github/`, which his
   rules keep his unless he says so of that change); the "at the park" quest step (naming the
   place changes a logged step's words); OP-357 (the art tool's own tests are not part of CI and
@@ -405,7 +411,7 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
 - Should move, once it is on for every visitor (behind the flag only the owner sees it): visits
   that end in the hall within a minute (down); visits that reach the arcade or a course (up); owls
   back on another day (up).
-- As built (Nov 13):
+- As built (Nov 12):
   - It stands on the hall's middle line with its foot 142 px in front of the root runs, 1.06 times
     the painting's size: about nine owls tall. No way into the hall sets an owl down hidden behind
     it (a test holds every spawn to that), and its ear tufts end 167 px under the owl that comes in
@@ -441,7 +447,7 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
     on the rising air, the camera loses the lead that keeps the back of the room in view over the
     owl (the scene fits the camera and then starts following again, and the follow call resets the
     lead). Every owl through the turnstiles has it. Not part of this slice: it changes the view for
-    every visitor, so it goes up as an ordinary change of its own.
+    every visitor, so it goes up as an ordinary change of its own (the section below).
   - The roots' tips ("Hop up the roots...") stand over the inner ends of the two root runs, and at
     the hall's zoom their words reach over the guardian's sides by a few px.
   - An owl set down in the hall's middle (a plain link to the hall, travel by the map) stands at
@@ -451,6 +457,47 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   - The owner's audit of Nov 12 was turned into tickets by another session the same night (OP-363
     to OP-395). OP-370 (the hall at arrival) names the guardian as the landmark its arrival view
     frames, once this slice is on.
+
+### OP-396: the Great Hollow's camera rests the same however the owl came by it
+
+- What was wrong: in a room seen from above that is taller than a screen the camera rests a fifth
+  of the view above the owl (`hudInset.ts`, `followLead`; made for the plazas on Nov 8, so what is
+  painted along a plaza's back stays in view). The Great Hollow had that lead on a plain address
+  and lost it after its opening look, and after a ride on its rising air, until the window was
+  resized. Every owl through the turnstiles gets the opening look, so one visit saw the hall two
+  ways: on the owl at first, a fifth above it once the owl was back from a course. And at the end
+  of a ride the view jumped by up to that fifth in one frame.
+- Cause: the engine's follow call clears the lead and puts the camera on the owl, and the scene
+  called it after fitting the camera (which sets the lead) at the end of the opening look and of a
+  ride. The guardian's view (OP-359) had the two the other way round, which kept the lead but let
+  the camera drop to the owl and slide back up.
+- The choice, and why it is not "put the lead back": the hall's ways were measured. An owl comes
+  in at the back (the knothole, y 280 of 2,380), and of the four places a newcomer is led to,
+  three are on the front rim (the arcade's hatch at y 2,145, the neon and ink courses at y 2,028;
+  the canopy course is at the back). With the lead an owl walking down the hall sees 450 px ahead
+  of it on a computer and about 280 on a phone held sideways; with the camera on the owl it sees
+  750 and about 465. The lead's reason is a painted back wall with the room's doorways along it,
+  and the oval has ways all round. So the hall has no lead, for every arrival: the view every owl
+  through the turnstiles has had since the town view went live, now also the view of an owl back
+  from a course. The plazas keep theirs.
+- The change: `followLead` is told whether the room has ways all round it (a room with a bowl) and
+  gives no lead there. One helper in `RoomScene.ts`, `followOwl`, puts the camera back on the owl
+  wherever something else had it (a room coming in, the end of the opening look, the end of a ride,
+  the guardian's view, the mirror, Decorate): followed first, fitted second, then set where the
+  follow would ease it to. A plaza on a phone now comes in with its camera at rest; it came in on
+  the owl and slid up to its lead under the fade.
+- Tests, each failing on main: on a held clock, on a computer and a phone, the camera rests the
+  same after the opening look as on a plain address, and the frame after a ride ends it is where it
+  rested before; at the end of the guardian's third test, handed back, the camera comes to rest
+  once; a unit test holds the rule to its reason (the knothole in the hall's back half, more of
+  the ways to play in its front half). The held-clock helpers moved from the guardian's spec into
+  `e2e/helpers.ts`.
+- Should move: nothing the play log counts on its own. It is the newcomer's view of the first big
+  room, the same on every visit to it; OP-370 (the hall at arrival) builds on it.
+- Left, and a ticket if the owner wants it: a camera that looks where the owl is going in rooms
+  seen from above (the side camera's idea, OP-351, for the town view) would show more of the way
+  ahead than either a lead or none. It changes the feel of every room seen from above, so it would
+  be built behind a flag for his look on a phone.
 
 ## Log
 
@@ -848,9 +895,20 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   live (deploy run 312 on the merge commit). The same day the owner said yes to the guardian
   (OP-359) and where it lives, and asked for a critique of the art across the park (OP-362). The
   guardian's first slice is planned under "After the pass".
-- 2026-11-13: OP-359's first slice built, as "After the pass" says, behind `?guardian=1`. Kept for
+- 2026-11-12: OP-359's first slice built, as "After the pass" says, behind `?guardian=1`. Kept for
   next time: look at the thing from where a player stands before calling it done. The rules and
   their tests were green while the guardian's face was off the top of the screen for any owl
   standing in front of it; only the pictures showed it, and the camera's rule near it came from
   them. And a worker restart mid-run (two browser runs at once ran the machine out of memory)
   lost nothing because the work was on disk; it is now pushed as a checkpoint before any long run.
+- 2026-11-12: OP-359's first slice merged through the sweep (PR 240, f9f1197), every check green,
+  and is live behind `?guardian=1` (deploy run 313 on the merge commit). The art critique (OP-362)
+  delivered to the owner as a document with pictures; four tickets filed from it (OP-397 to
+  OP-400).
+- 2026-11-12: OP-396 built, as "After the pass" says. Kept for next time: the ticket said "put the
+  lead back", and the before and after pictures said otherwise: with the lead back, the hall's
+  front rim, where the arcade's hatch and two courses are, was off the bottom of the screen for an
+  owl standing in the middle of the floor. A bug that makes a room behave two ways is a question
+  about which of the two is right, and the answer is in where the room's things are, not in which
+  came first. Also: the dev server reloads the first page opened after a served file changes, so a
+  run starts with a throwaway page load.

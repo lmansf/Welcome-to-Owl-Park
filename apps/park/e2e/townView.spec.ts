@@ -135,8 +135,22 @@ test.describe('the town view (OP-336)', () => {
  * is handed back on is the frame looked at.
  */
 test.describe('the Great Hollow’s camera rests the same however the owl came by it (OP-396)', () => {
-  /** A spot on the hall's floor well down from its back wall, where a view with a lead and one without are far apart on any screen. */
-  const SPOT = { x: 2720, y: 1620 };
+  /**
+   * A spot on the hall's floor between its root runs: far enough from the back wall and the front rim
+   * that neither holds the camera there, on a computer or on a phone held upright (whose view is nearly
+   * 2,000 px of the room tall), so a view with a lead and one without are far apart on any screen.
+   */
+  const SPOT = { x: 2720, y: 1300 };
+
+  /** How far down its view the owl stands, in the room's own px. */
+  const downView = (at: { pos: { y: number }; view: { viewY: number } }) => at.pos.y - at.view.viewY;
+
+  /**
+   * How far apart two rests of the same camera may be: the engine's follow keeps whole pixels by
+   * rounding down, so it stops up to 8 px short of an owl it followed south or east and none short of
+   * one it followed north or west. The fault was 186 to 388 px, by the screen.
+   */
+  const SAME_REST = 10;
 
   test('after the opening look the owl stands where it stands on a plain address: at the middle of the view', async ({ page }) => {
     await holdTheClock(page);
@@ -154,8 +168,7 @@ test.describe('the Great Hollow’s camera rests the same however the owl came b
     await heldUntil(page, 'the camera in on the owl again', async () => (await cameraView(page)).viewW <= plain.view.viewW + 1);
     const after = await heldStandingAt(page, SPOT);
     expect(after.view.viewW).toBe(plain.view.viewW);
-    expect(Math.abs(after.view.viewY - plain.view.viewY)).toBeLessThanOrEqual(4);
-    expect(after.down).toBeCloseTo(plain.down, 2);
+    expect(Math.abs(downView(after) - downView(plain))).toBeLessThanOrEqual(SAME_REST);
   });
 
   test('after a ride on the rising air the camera is back where it rested before it, at once', async ({ page }) => {
@@ -176,11 +189,11 @@ test.describe('the Great Hollow’s camera rests the same however the owl came b
     const down = await cameraView(page);
     const landed = (await stateNow(page)).pos;
     expect(down.viewW).toBe(atHeart.view.viewW);
-    expect(Math.abs(down.viewY - atHeart.view.viewY)).toBeLessThanOrEqual(Math.abs(landed.y - atHeart.pos.y) + 3);
+    expect(Math.abs(down.viewY - atHeart.view.viewY)).toBeLessThanOrEqual(Math.abs(landed.y - atHeart.pos.y) + SAME_REST);
 
     // And back at the spot the camera rests where it did before the ride.
     const after = await heldStandingAt(page, SPOT);
-    expect(Math.abs(after.view.viewY - before.view.viewY)).toBeLessThanOrEqual(4);
-    expect(after.down).toBeCloseTo(before.down, 2);
+    expect(after.view.viewW).toBe(before.view.viewW);
+    expect(Math.abs(downView(after) - downView(before))).toBeLessThanOrEqual(SAME_REST);
   });
 });
