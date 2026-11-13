@@ -285,6 +285,12 @@ const LEAVERS_KEY = 'leavers';
 /** The most owls kept there, the latest to leave first: the stored value stays small on a busy night. */
 const LEAVERS_KEPT = 500;
 /**
+ * Where the owls in the rooms stand is written down this often at most while frames come in (OP-321),
+ * so a room server that stops without a goodbye lets each owl back near where it stood: one storage
+ * write per object every 15 s at the most, well inside the free plan's daily writes.
+ */
+export const STANDING_KEEP_MS = 15_000;
+/**
  * The nightly restart (OP-181): how long after its notice every socket closes, by the object's alarm.
  * No shorter than the Worker keeps what it read of the gate (GATE_KEEP_MS), so every Worker knows of
  * the restart before the owls it sent home can ask to come back in.
@@ -414,6 +420,8 @@ export class RoomObject extends DurableObject<Env> {
   private closingAt: number | null = null;
   /** Where owls left each room lately, kept past the rooms themselves (OP-138). */
   private readonly leftBehind = new Map<string, Record<string, Leaver>>();
+  /** When where the owls stand was last written down (OP-321). */
+  private standingKeptAt = 0;
   /** The room server's log (OP-134), at the deployment's level. */
   private readonly log: Logger;
   /** Each room's frames' handling times since its window began (OP-134's tick_latency_p95). */
@@ -941,6 +949,7 @@ export class RoomObject extends DurableObject<Env> {
       throw e;
     } finally {
       if (at) this.sampleTick(at.room, Date.now() - t0);
+      if (at && Date.now() - this.standingKeptAt >= STANDING_KEEP_MS) this.keepWhereOwlsAre();
     }
   }
 
@@ -1436,6 +1445,23 @@ export class RoomObject extends DurableObject<Env> {
     for (const [id, owl, l] of fresh.slice(0, LEAVERS_KEPT)) (all[id] ??= {})[owl] = l;
     this.leftBehind.clear();
     for (const [id, kept] of Object.entries(all)) this.leftBehind.set(id, kept);
+    this.keepWhereOwlsAre();
+  }
+
+  /**
+   * Write down where owls left lately and where the owls in the rooms stand now (OP-321), the latest
+   * first and no more than LEAVERS_KEPT: after a stop without a goodbye, the object wakes on this and
+   * an owl back soon resumes near where it stood, as one back from a dropped connection does (OP-138).
+   */
+  private keepWhereOwlsAre(): void {
+    const now = Date.now();
+    this.standingKeptAt = now;
+    const owls: Array<[string, string, Leaver]> = [];
+    for (const [id, kept] of this.leftBehind) for (const [owl, l] of Object.entries(kept)) if (now - l.leftAt <= LIMITS.leaverMemoryMs) owls.push([id, owl, l]);
+    for (const [id, room] of this.rooms) for (const [owl, l] of Object.entries(room.standingNow())) owls.push([id, owl, l]);
+    owls.sort((a, b) => b[2].leftAt - a[2].leftAt);
+    const all: Record<string, Record<string, Leaver>> = {};
+    for (const [id, owl, l] of owls.slice(0, LEAVERS_KEPT)) (all[id] ??= {})[owl] = l;
     void this.ctx.storage.put(LEAVERS_KEY, all);
   }
 

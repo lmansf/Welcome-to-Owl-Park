@@ -76,7 +76,7 @@ vi.mock('cloudflare:workers', () => ({
 }));
 vi.stubGlobal('WebSocketRequestResponsePair', class {});
 vi.stubGlobal('WebSocket', { READY_STATE_OPEN: 1 });
-const { INPUT_MARK_EVERY_MS, NO_INPUT_CLOSE_MS, RESTART_CLOSE_MS, RoomObject, isInput, quietFor, sightingOf, spectatorSocket } = await import('../src/RoomObject');
+const { INPUT_MARK_EVERY_MS, NO_INPUT_CLOSE_MS, RESTART_CLOSE_MS, RoomObject, STANDING_KEEP_MS, isInput, quietFor, sightingOf, spectatorSocket } = await import('../src/RoomObject');
 const { LIMITS, Room } = await import('../src/Room');
 
 /** 2026-10-19 12:00 Eastern (16:00 UTC), a Monday. */
@@ -882,8 +882,9 @@ describe('an owl back from a dropped connection (OP-138)', () => {
     await send(obj, a, { t: 'move', to: { x: 3400, y: 780 }, seq: 1 });
     clock += 6_000;
     await lost(obj, a);
-    // Its connection dropped (no goodbye), so one back soon has reconnected (OP-134).
-    expect((state as KeepingState).kept.get('leavers')).toEqual({ hub: { v_a: { pos: { x: 3400, y: 780 }, leftAt: clock, dropped: true } } });
+    // Its connection dropped (no goodbye), so one back soon has reconnected (OP-134). The owl still in
+    // the room is written down where it stands, as if it had just dropped too (OP-321).
+    expect((state as KeepingState).kept.get('leavers')).toEqual({ hub: { v_a: { pos: { x: 3400, y: 780 }, leftAt: clock, dropped: true }, v_b: { pos: expect.any(Object), leftAt: clock, dropped: true } } });
     // The object sleeps with the other owl's socket open, and wakes on the same storage.
     clock += 2_000;
     const woken = roomObject();
@@ -900,6 +901,46 @@ describe('an owl back from a dropped connection (OP-138)', () => {
     const late = connect('hub', 'v_a');
     await helloAt(roomObject(), late, { x: 3300, y: 780 });
     expect(late.last('welcome')?.you.pos).not.toEqual({ x: 3300, y: 780 });
+  });
+
+  it('resumes where its owl stood after the room server stops without a goodbye, as the moves since were written down (OP-321)', async () => {
+    state = new KeepingState();
+    const obj = roomObject();
+    const a = connect('hub', 'v_a');
+    await helloAt(obj, a, { x: 2400, y: 730 });
+    await send(obj, a, { t: 'move', to: { x: 3400, y: 780 }, seq: 1 });
+    // Walked over and standing there; a frame a while on writes down where it stands.
+    clock += STANDING_KEEP_MS + 1_000;
+    await send(obj, a, { t: 'rest', asleep: false });
+    expect((state as KeepingState).kept.get('leavers')).toEqual({ hub: { v_a: { pos: { x: 3400, y: 780 }, leftAt: clock, dropped: true } } });
+    // The room server stops: no close, no goodbye. It comes back on the same storage a few seconds on.
+    clock += 4_000;
+    const back = roomObject();
+    await settle(); // the constructor reads its storage
+    const page = connect('hub', 'v_a');
+    await helloAt(back, page, { x: 3400, y: 780 });
+    expect(page.last('welcome')?.you.pos).toEqual({ x: 3400, y: 780 });
+  });
+
+  it('writes down where the owls stand at most every STANDING_KEEP_MS while frames come in (OP-321)', async () => {
+    state = new KeepingState();
+    const obj = roomObject();
+    const a = connect('hub', 'v_a');
+    await helloAt(obj, a, { x: 2400, y: 730 });
+    const puts: unknown[] = [];
+    const put = (state as KeepingState).storage.put;
+    (state as KeepingState).storage.put = async (key: string, value: unknown) => {
+      if (key === 'leavers') puts.push(value);
+      await put(key, value);
+    };
+    for (let i = 0; i < 10; i++) {
+      clock += 1_000;
+      await send(obj, a, { t: 'rest', asleep: false });
+    }
+    expect(puts.length).toBe(0);
+    clock += STANDING_KEEP_MS;
+    await send(obj, a, { t: 'rest', asleep: false });
+    expect(puts.length).toBeGreaterThanOrEqual(1);
   });
 });
 

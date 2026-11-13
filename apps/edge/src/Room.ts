@@ -496,6 +496,18 @@ export class Room {
     return out;
   }
 
+  /**
+   * Where each owl in the room stands now, kept by the room object as if each had just dropped (OP-321):
+   * a room server that stops without a goodbye (killed, or a deploy) sends nobody off, so without this
+   * an owl back after it returns has no place left to resume at and is let in by the door.
+   */
+  standingNow(): Record<string, Leaver> {
+    const now = this.now();
+    const out: Record<string, Leaver> = {};
+    for (const [id, v] of this.visitors) out[id] = { pos: this.currentPos(v), leftAt: now, dropped: true };
+    return out;
+  }
+
   /** Where and when an owl left this room lately (within the memory window), and whether its connection dropped. */
   leaverOf(id: string): Leaver | undefined {
     const l = this.leavers.get(id);
