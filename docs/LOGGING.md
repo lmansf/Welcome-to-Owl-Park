@@ -65,7 +65,7 @@ out of the line.
 
 | Component | Who logs |
 | --- | --- |
-| `worker` | The Worker itself: an error no route handled, the cron, the nightly restart |
+| `worker` | The Worker itself: an error no route handled, the cron, the nightly restart, the weekly export (OP-185) |
 | `worker.pass` | Guest passes: issued, taken, refused; the signing key |
 | `worker.store` | The store's webhooks, its orders, its copy of tickets, a buyer for the contacts |
 | `worker.tickets` | Ticket links (claim, share, checkout), ticket events for the park's log, the ticket tables |
@@ -206,6 +206,10 @@ carry `run_id` (the request's chaos run). **Socket fields** are `room`, `session
 | `csp_violation` | `worker.guard` | warn | The page's policy blocked something (a browser's report to `CSP_REPORT_PATH`, `/api/csp-report`): one line per kind (directive and blocked place) per `REPORT_EVERY_MS` (10 minutes) (`noteViolation`, `guard.ts`) | `directive`, `blocked`, `page`, `source` and `line` (when the report gives them), `count` (reports of this kind since last told) |
 | `gate_switched` | `worker.admin` | info | The keepers changed the opening switch (`/api/admin/gate`, OP-067) | `gate` (the mode now), `by`: `switch` or `deployed` (set back to `GATE`) |
 | `park_restart` | `worker` | info; warn when a room object missed it | The nightly restart (OP-181), by its cron or by hand (`restartPark`, `routes/admin.ts`) | `by`: `cron` or `key`; `objects`; `missed`; `owls` (sent home); `restart_at` (ISO, when the vote ledger kept the time) |
+| `park_export` | `worker` | info; warn when an object was not copied | The weekly export (OP-185), by its cron or by hand (`exportPark`, `parkExport.ts`; `POST /api/admin/export`): each exported object wrote its file to the `PARK_EXPORTS` bucket, the manifest went beside them, and files dated more than four weeks back were deleted | `by`: `cron` or `key`; `date` (the files' UTC day); `objects` (files written); `missed`; `bytes`; `rows`; `pruned` (files deleted) |
+| `park_export_skipped` | `worker`; `worker.admin` | warn | The Worker has no `PARK_EXPORTS` binding: the weekly export did not run (`worker`), or a keeper asked for the last one (`worker.admin`, `GET /api/admin/export`). Nothing else changes | `by`: `cron` or `key`; `reason`: `no-bucket` |
+| `park_restore` | `worker.admin` | info | A keeper loaded an export back into its object (`POST /api/admin/restore`, OP-185) | `object` (`<kind>:<name>`), `date`, `force`, `tables`, `rows`, `skipped` (tables and columns the object no longer has) |
+| `park_restore_refused` | `worker.admin` | warn | A restore was refused; the object is as it was | `object`, `date`, `force`; `reason`: `not-empty` (the object holds records and `force` was not given; with `rows`, how many), `no-file`, `bad-file` (not an export of this object), `no-bucket` |
 | `room_restart` | `room.leave` | info | A room object was told of the nightly restart: every owl there is told, and the alarm closes its sockets (`RoomObject.restart`, OP-181). Each owl's `room_leave` follows as `kick`, detail `restart` | `owls`, `sockets`, `close_in_ms` (`RESTART_CLOSE_MS`, 10 s; 0 with no sockets) |
 | `room_setup` | `room.leave` | info | The park closed for setup (OP-205): every owl in the room object but a keeper's was sent to the home screen with the closed card's words. Each owl's `room_leave` follows as `kick`, detail `setup` | `owls` |
 | `setup_on` | `overflow` | info | The keepers closed the park for setup on the capacity page (OP-205) | |
@@ -316,6 +320,7 @@ No call logs a reserved event yet, so none has a component or level; `worker.fra
 | `routes/account.ts` | `worker.accounts`, error | A room object told an owl moved to another screen | `object`, `collector_hash`, `error` |
 | `routes/admin.ts` | `worker.admin`, error | The opening switch (the vote ledger refused it) | `status` |
 | `routes/admin.ts` | `worker.admin`, warn | A change to the busy-night settings | `status` |
+| `parkExport.ts` (`exportPark`) | `worker`, error | An object's file for the weekly export (its last good copy stands); or the deletion of files older than four weeks (they go on the next run) | `object` (`<kind>:<name>`, for a file), `by`, `error` |
 | `routes/admin.ts` (`restartPark`) | `worker`, error | The nightly restart's time (passes from before it still pass the turnstiles; the rooms restart all the same) | `by`, `error` |
 | `routes/masks.ts` | `overflow`, error | A tree room's ledge draft (the overflow object refused it) | `room`, `status` |
 | `Overflow.ts` | `overflow`, warn | A room object told the ribbon or the realms switch (it asks again within a minute) | `object`, `error` |
@@ -341,7 +346,7 @@ No call logs a reserved event yet, so none has a component or level; `worker.fra
 | Where | Component | When | Fields |
 | --- | --- | --- | --- |
 | `index.ts` | `worker` | A request failed with an error no route handled | `route`, `error` |
-| `index.ts` | `worker` | A cron failed: the Realm Vote's month-end close, the nightly restart, or a cron with no job | `job` (`vote-close`, `restart`, or `none`), `cron`, `error` |
+| `index.ts` | `worker` | A cron failed: the Realm Vote's month-end close, the nightly restart, the weekly export, or a cron with no job | `job` (`vote-close`, `restart`, `export`, or `none`), `cron`, `error` |
 | `RoomObject.ts` | `room.join` | A socket's owl could not be put back in its room after the object woke; the socket is closed | `error` |
 | `RoomObject.ts` | `room.tick` | A frame failed | socket fields (when the socket has its attachment), `error` |
 | `RoomObject.ts` | `room.play` | A visitor's quest or game work failed | socket fields, `error` |
@@ -355,7 +360,7 @@ No call logs a reserved event yet, so none has a component or level; `worker.fra
 
 ## Every event, checked
 
-`LOG_EVENTS` holds 68 events, every one in the table above: `log_field_refused`,
+`LOG_EVENTS` holds 78 events, every one in the table above: `log_field_refused`,
 `signing_key_missing`, `signing_key_refused`, `pass_issued`, `pass_verified`, `pass_rejected`, `claim_moved`,
 `claim_in_use`, `referral_invited`, `referral_refused`, `referral_thanked`, `referral_held`,
 `order_protect_mailed`, `order_protect_unsent`, `room_join_ok`,
@@ -363,7 +368,7 @@ No call logs a reserved event yet, so none has a component or level; `worker.fra
 `tick_latency_p95`, `emote_throttled`, `position_rejected`, `webhook_received`,
 `webhook_rejected`, `webhook_duplicate`, `webhook_failed`, `order_recorded`, `store_unreachable`,
 `admin_denied`, `admin_ok`, `request_refused`, `rate_limited`, `csp_violation`, `gate_switched`,
-`park_restart`, `room_restart`, `room_setup`, `setup_on`, `setup_off`, `capacity_set`, `realms_set`, `masks_saved`, `masks_refused`,
+`park_restart`, `park_export`, `park_export_skipped`, `park_restore`, `park_restore_refused`, `room_restart`, `room_setup`, `setup_on`, `setup_off`, `capacity_set`, `realms_set`, `masks_saved`, `masks_refused`,
 `collect_logged`, `collect_log_failed`, `collect_log_retried`, `collect_log_full`,
 `collect_log_dropped`, `afk_sleep`, `afk_leave`, `gate_crossed`, `gate_flag_cleared`,
 `health_check`, `climb_band_refused`, `spectator_refused`, `spectator_admitted`, `read_failed`,

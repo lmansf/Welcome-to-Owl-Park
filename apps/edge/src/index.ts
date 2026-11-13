@@ -12,6 +12,7 @@ import { limitsOn, overLimit } from './limits';
 import { loggerFor } from './logs';
 import { jobOf } from './crons';
 import { isPage, uncachedPage } from './page';
+import { exportPark } from './parkExport';
 import { restartPark } from './routes/admin';
 import { SigningKeyMissing } from './pass';
 import { clientIp, noSigningKey, passOf } from './routes/http';
@@ -65,11 +66,12 @@ const park = {
     return isPage(url.pathname) ? guardedPage(uncachedPage(asset), url) : asset;
   },
 
-  /** Each cron its own job (crons.ts): month-end decides the previous park month's Realm Vote; every night the park restarts (OP-181). */
+  /** Each cron its own job (crons.ts): month-end decides the previous park month's Realm Vote; every night the park restarts (OP-181); every Sunday its stored data is exported (OP-185). */
   async scheduled(controller: ScheduledController, env: Env): Promise<void> {
     const job = jobOf(controller.cron);
     if (job === 'vote-close') await votes(env).fetch('https://park/close', { method: 'POST' });
     else if (job === 'restart') await restartPark(env, loggerFor(env), 'cron');
+    else if (job === 'export') await exportPark(env, loggerFor(env), 'cron', controller.scheduledTime);
     else throw new Error(`the park has no job for the cron ${controller.cron}`);
   },
 } satisfies ExportedHandler<Env>;
@@ -93,7 +95,8 @@ export default {
       await park.scheduled(controller, env);
     } catch (e) {
       const job = jobOf(controller.cron);
-      const msg = job === 'vote-close' ? 'The month-end close of the Realm Vote failed.' : job === 'restart' ? 'The nightly restart failed.' : 'A cron ran that the park has no job for.';
+      const msg =
+        job === 'vote-close' ? 'The month-end close of the Realm Vote failed.' : job === 'restart' ? 'The nightly restart failed.' : job === 'export' ? 'The weekly export failed.' : 'A cron ran that the park has no job for.';
       loggerFor(env).error('worker', 'unhandled_error', msg, { job: job ?? 'none', cron: controller.cron, error: e });
       throw e;
     }

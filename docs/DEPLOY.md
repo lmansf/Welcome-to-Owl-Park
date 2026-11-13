@@ -322,6 +322,37 @@ three together, or none. The steps on the Supabase side are `apps/park-log/READM
 - `POST /api/admin/collect-log` sends, once, the collectibles the collections already hold, as
   backfill rows (their real acquisition times; no visit, room or device).
 
+### The weekly export's bucket (OP-185): before the first deploy with it
+
+The Worker binds the R2 bucket `owl-park-exports` as `PARK_EXPORTS` (`apps/edge/wrangler.jsonc`) for
+the weekly export of the park's stored data (`docs/ARCHITECTURE.md`, section 13). R2 is a Cloudflare
+product of its own, turned on per account, and a deploy cannot bind a bucket on an account without it:
+**turn R2 on and make the bucket before the deploy that brings the binding in**, or that deploy (and
+every one after it) fails.
+
+1. In the Cloudflare dashboard of the park's account, open **R2 Object Storage** and turn it on
+   (the free tier: 10 GB stored, a million writes and ten million reads a month; Cloudflare may ask
+   for a payment method to turn R2 on even within it). A week's copy is a few files, well inside it.
+2. **Create bucket**: name `owl-park-exports`, location Automatic, the Standard storage class. Leave it
+   private: no public `r2.dev` address and no custom domain. Or from a machine with Wrangler signed in
+   to the park's account: `pnpm --filter @owl-park/edge exec wrangler r2 bucket create owl-park-exports`.
+3. Check the deploy token can see it: the API token behind `CLOUDFLARE_API_TOKEN` needs
+   the account's **Workers R2 Storage** permission at Edit (Write) level (the "Edit Cloudflare Workers"
+   template includes it; a token made by hand may not). Without it the deploy cannot check the bucket and fails as above.
+
+How a deploy meets the binding (Wrangler 4.151, `wrangler deploy`): it looks the bucket up first. Found,
+it binds it. Missing, with R2 on and the token allowed, Wrangler's resource provisioning (on by
+default) creates `owl-park-exports` itself and deploys (private, like any new bucket); so step 2 can
+be left to the first deploy, but making it by hand keeps the choice of location the owner's. With R2
+off, the look-up fails and the deploy stops before the Worker is uploaded: the live Worker stays as it
+was. There is no setting that keeps the binding and deploys without R2: to deploy before R2 is on,
+take the `r2_buckets` lines out of `wrangler.jsonc`; the Worker runs without the binding (the export
+logs `park_export_skipped`), and the lines go back in once R2 is on.
+
+After the first deploy with it: `POST /api/admin/export` with the `X-Admin-Key` header makes the first
+copy at once, and `GET /api/admin/export` shows it (the date, three objects and their bytes). The
+copies are also in the dashboard, R2, `owl-park-exports`, under `exports/`.
+
 ### Coding agents
 
 Claude Code picks up the Cloudflare skills vendored in `.claude/skills/` and the Cloudflare MCP
@@ -338,9 +369,9 @@ Configuration lives in `apps/edge/wrangler.jsonc`: `ROOM_SHARDING` (`single` or 
 to close a month by hand, to issue tickets without a store order, to read visitors' feedback on
 `/admin/feedback` and opening night's count on `/admin/opening`, and to flip the gate on
 `/admin/gate`), and the store's
-secrets (above). Two cron triggers (`triggers.crons`, `apps/edge/src/crons.ts`): 05:05 UTC on the 1st
-closes the Realm Vote month, and 09:00 UTC every day restarts the park for the night (OP-181,
-below).
+secrets (above). Three cron triggers (`triggers.crons`, `apps/edge/src/crons.ts`): 05:05 UTC on the 1st
+closes the Realm Vote month, 09:00 UTC every day restarts the park for the night (OP-181,
+below), and 08:00 UTC every Sunday exports the park's stored data to R2 (OP-185, above).
 
 ## The keepers' routes
 
@@ -366,6 +397,8 @@ page and keep it in that tab only.
 | `/api/admin/opening`, `/admin/opening` | GET | the key | opening night's count, `?csv` for the CSV (step 10) |
 | `/api/admin/gate`, `/admin/gate` | GET, POST | the key | the opening switch (step 8) |
 | `/api/admin/restart` | POST | the key | the nightly restart, now (OP-181, below) |
+| `/api/admin/export` | GET, POST | the key | the last weekly export (its day, objects and bytes, and every day kept); POST makes one now (OP-185) |
+| `/api/admin/restore` | POST | the key | `{kind, date, force?}`: that day's export loaded back into its object; refused while the object holds records unless `force` is true (OP-185, `docs/ARCHITECTURE.md` section 13) |
 | `/api/admin/capacity`, `/admin/capacity` | GET, POST | the key | the busy-night settings and the tree's share (`docs/CAPACITY.md`, section 2) |
 | `/api/vote/tally` | GET | the key, unless `VOTE_TALLY_PUBLIC` is `"true"` | the Realm Vote's standings |
 | `/api/vote/close` | POST | the key | close the vote's month by hand |

@@ -8,11 +8,15 @@ export const VOTE_CLOSE_CRON = '5 5 1 * *';
 /** The nightly restart (OP-181): 09:00 UTC every day, 4:00 AM Eastern in winter and 5:00 AM in summer. */
 export const RESTART_CRON = '0 9 * * *';
 
-export type CronJob = 'vote-close' | 'restart';
+/** The weekly export of the park's stored data (OP-185): 08:00 UTC every Sunday, before the nightly restart. */
+export const EXPORT_CRON = '0 8 * * 0';
+
+export type CronJob = 'vote-close' | 'restart' | 'export';
 
 /** The job a cron runs; null for a cron the park has no job for. */
 export function jobOf(cron: string): CronJob | null {
   if (cron === VOTE_CLOSE_CRON) return 'vote-close';
   if (cron === RESTART_CRON) return 'restart';
+  if (cron === EXPORT_CRON) return 'export';
   return null;
 }

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LINE_DEFAULTS, REALMS_DEFAULTS, RIBBON_DEFAULTS } from '@owl-park/shared';
 import type { Env } from '../src/env';
-import { RESTART_CRON, VOTE_CLOSE_CRON, jobOf } from '../src/crons';
+import { EXPORT_CRON, RESTART_CRON, VOTE_CLOSE_CRON, jobOf } from '../src/crons';
 import { forgetGate } from '../src/gateSwitch';
 import { forgetLimits } from '../src/limits';
 import { captureLogs } from '../src/logs';
@@ -129,9 +129,9 @@ afterEach(() => {
 });
 
 describe('the nightly restart’s cron (OP-181)', () => {
-  it('is in wrangler.jsonc beside the month-end one, at 09:00 UTC every day', () => {
+  it('is in wrangler.jsonc beside the month-end one and the weekly export (OP-185), at 09:00 UTC every day', () => {
     const crons = /"crons":\s*(\[[^\]]*\])/.exec(wrangler)?.[1];
-    expect(JSON.parse(crons ?? 'null')).toEqual([VOTE_CLOSE_CRON, RESTART_CRON]);
+    expect(JSON.parse(crons ?? 'null')).toEqual([VOTE_CLOSE_CRON, RESTART_CRON, EXPORT_CRON]);
     expect(RESTART_CRON).toBe('0 9 * * *');
     expect(jobOf(RESTART_CRON)).toBe('restart');
     expect(jobOf(VOTE_CLOSE_CRON)).toBe('vote-close');
