@@ -21,6 +21,7 @@ export interface FlagSpec {
 //   ropeSwings: { param: 'ropes', note: 'Rope swings between the canopy nests' },
 export const FLAGS = {
   friends: { param: 'friends', note: 'Play with your friends preview: co-op escape room, party game, friend invites' },
+  guardian: { param: 'guardian', note: 'The guardian alive at the heart of the Great Hollow: it breathes, turns its head to an owl, and hoots back' },
 } as const satisfies Record<string, FlagSpec>;
 
 export type FlagName = keyof typeof FLAGS;

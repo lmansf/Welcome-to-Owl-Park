@@ -24,6 +24,15 @@ export function artBox(img: Phaser.GameObjects.Image): Rect {
   return { x: left + img.displayWidth * 0.1, y: top, w: img.displayWidth * 0.8, h: img.displayHeight };
 }
 
+/**
+ * Every box a picture's own drawing fills (room px): the ones it was given, for a piece that is not one
+ * shape (`artBoxes` in its data: the guardian's head and its body, guardianView.ts), else its one box.
+ */
+export function artBoxes(img: Phaser.GameObjects.Image): Rect[] {
+  const given = img.data ? (img.getData('artBoxes') as Rect[] | undefined) : undefined;
+  return Array.isArray(given) && given.length > 0 ? given : [artBox(img)];
+}
+
 interface Tall {
   img: Phaser.GameObjects.Image;
   /** Its own alpha, when nothing is behind it. */
@@ -48,7 +57,7 @@ export class SeeThrough {
   frame(feet: Vec2, z: number): void {
     for (const t of this.tall) {
       if (!t.img.active) continue;
-      const hidden = hiddenBehind(feet, z, artBox(t.img), t.img.depth);
+      const hidden = artBoxes(t.img).some((box) => hiddenBehind(feet, z, box, t.img.depth));
       if (hidden === t.faded) continue;
       t.faded = hidden;
       t.tween?.stop();
