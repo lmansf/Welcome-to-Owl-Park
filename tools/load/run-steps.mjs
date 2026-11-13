@@ -52,7 +52,28 @@ const SPREAD = [
   ['m3-stair-2', 0.07],
   ['m3-stair-3', 0.06],
 ];
+/** Past 240 owls the Hollow holds the most a room takes (120) and the rest go to the other rooms in turn. */
+const SPREAD_PAST_HOLLOW = [
+  ['m3-hall', 0],
+  ['lobby', 0.3],
+  ['m3-ground', 0.3],
+  ['m3-stair-1', 0.14],
+  ['m3-stair-2', 0.14],
+  ['m3-stair-3', 0.12],
+];
 function spread(total) {
+  if (total > 240) {
+    const rest = total - 120;
+    const rooms = { 'm3-hall': 120 };
+    let left = rest;
+    for (const [i, [room, share]] of SPREAD_PAST_HOLLOW.entries()) {
+      if (i === 0) continue;
+      const n = i === SPREAD_PAST_HOLLOW.length - 1 ? left : Math.round(rest * share);
+      rooms[room] = n;
+      left -= n;
+    }
+    return rooms;
+  }
   const rooms = {};
   let left = total;
   for (const [i, [room, share]] of SPREAD.entries()) {
@@ -66,6 +87,8 @@ const TREE_STEPS = [
   ...[40, 60, 80, 100, 120].map((n) => ({ name: `Great Hollow ${n}, busy`, rooms: { 'm3-hall': n }, tap: BUSY })),
   ...[60, 80, 100, 120, 160].map((n) => ({ name: `new map spread ${n}, busy`, rooms: spread(n), tap: BUSY })),
   { name: 'new map spread 200, calm', rooms: spread(200), tap: CALM },
+  // Past what the first ramp found (2026-11-13: 160 walking held): where the one object slows and breaks.
+  ...[240, 300, 400].map((n) => ({ name: `new map spread ${n}, busy`, rooms: spread(n), tap: BUSY })),
 ];
 
 const arg = (name) => {
