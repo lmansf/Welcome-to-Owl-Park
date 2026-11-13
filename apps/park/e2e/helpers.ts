@@ -304,6 +304,76 @@ export async function settleCamera(page: Page): Promise<CameraView> {
   return last;
 }
 
+// ---------- a held clock ----------
+// Time that moves only when the test moves it, a frame at a go: a slow machine then sees exactly what
+// a quick one sees, to the frame, and a look that takes four seconds of the park's time costs the
+// test only as long as its frames take to draw. Hold the clock before the page opens.
+
+/** Time held still from before the page opens: it moves only when the test moves it. */
+export async function holdTheClock(page: Page): Promise<void> {
+  await page.clock.install();
+  await page.clock.pauseAt(new Date(Date.now() + 1_000));
+}
+
+/** On a held clock, a frame every tenth of a second, as a slow device draws them: the park moves the same at any frame rate. */
+export const HELD_FRAME_MS = 100;
+
+/** On a held clock: time moved on a frame at a go until `done` says so (or the test fails: `what` did not come about). */
+export async function heldUntil(page: Page, what: string, done: () => Promise<boolean>): Promise<void> {
+  for (let i = 0; i < 400; i++) {
+    if (await done()) return;
+    await page.clock.fastForward(HELD_FRAME_MS);
+  }
+  throw new Error(`on the held clock: ${what} did not come about`);
+}
+
+/** On a held clock: `ms` of time, a frame at a go. */
+export async function heldPass(page: Page, ms: number): Promise<void> {
+  for (let t = 0; t < ms; t += HELD_FRAME_MS) await page.clock.fastForward(HELD_FRAME_MS);
+}
+
+/** What the page says now (on a held clock nothing waits, so nothing is polled for). */
+export const stateNow = (page: Page) => page.evaluate(() => window.owlPark.state()!) as Promise<ParkState>;
+
+/** A room opened on a held clock: back as soon as the room is built (openPark waits on the page's own time, which is held). */
+export async function openHeld(page: Page, params: Record<string, string>): Promise<void> {
+  const q = new URLSearchParams({ transport: 'local', kit: '0', art: 'old', ...params });
+  await page.goto(`/?${q.toString()}`);
+  await heldUntil(page, 'the room coming up', () => page.evaluate(() => window.owlPark?.state() != null));
+}
+
+/**
+ * On a held clock: the owl walked to a spot and stood there until the camera has come to rest. Says
+ * where the owl stands, the camera's view, and how far down that view the owl is (0 its top, 1 its foot).
+ */
+export async function heldStandingAt(page: Page, spot: { x: number; y: number }): Promise<{ pos: { x: number; y: number }; view: CameraView; down: number }> {
+  await page.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), spot);
+  await heldUntil(page, `the owl standing at ${spot.x},${spot.y}`, async () => {
+    const at = await stateNow(page);
+    return !at.walking && Math.hypot(at.pos.x - spot.x, at.pos.y - spot.y) < 30;
+  });
+  const view = await heldCameraAtRest(page);
+  const pos = (await stateNow(page)).pos;
+  return { pos, view, down: (pos.y - view.viewY) / view.viewH };
+}
+
+/**
+ * On a held clock: the camera once it has stopped moving. It eases toward where it rests by a share of
+ * the way each frame, and its view is given in whole pixels, so one frame unchanged is not rest: eight
+ * in a row is (under two pixels from it).
+ */
+export async function heldCameraAtRest(page: Page): Promise<CameraView> {
+  let view = await cameraView(page);
+  let same = 0;
+  await heldUntil(page, 'the camera at rest', async () => {
+    const now = await cameraView(page);
+    same = now.viewX === view.viewX && now.viewY === view.viewY && now.viewW === view.viewW ? same + 1 : 0;
+    view = now;
+    return same >= 8;
+  });
+  return view;
+}
+
 /** Convert a room point to a CSS-pixel screen point using the live camera's visible world rectangle. */
 export async function toScreen(page: Page, x: number, y: number): Promise<{ x: number; y: number }> {
   const cam = await cameraView(page);

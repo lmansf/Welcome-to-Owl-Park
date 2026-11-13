@@ -52,9 +52,19 @@ export function coveredBy(rects: ReadonlyArray<{ top: number; bottom: number; wi
  * than a screen (a plaza, Nov 8): the owl stands lower on the screen, so what is painted along the
  * back of the room (a realm's guardian, its idol, its doorways) stays in view while the owl stands on
  * the painted floor below it. One screen tall, or seen from the side, the camera centres on the owl.
+ *
+ * So it does in a room with ways `allRound` its rim (the Great Hollow's oval, OP-396), which has no
+ * back to keep in view: its owls come in at the back, by the knothole, and three of the four places a
+ * newcomer is led to (the arcade's hatch and two courses) are on its front rim, so a camera resting
+ * above the owl shows less of the way there. Before OP-396 the hall had the lead on a plain address
+ * and lost it after its opening look or a ride on its rising air; centred is what every owl through
+ * the turnstiles had, and it is now what every owl has.
+ *
+ * TODO-DOCS (OP-396): docs/ARCHITECTURE.md's camera notes say where the camera rests: above the owl
+ * in a plaza, on it in the Great Hollow, and back at rest after anything that had it (RoomScene's followOwl).
  */
-export function followLead(roomH: number, sideView: boolean, viewH: number, screenH: number): number {
-  if (sideView || roomH <= screenH || !(viewH > 0)) return 0;
+export function followLead(roomH: number, sideView: boolean, viewH: number, screenH: number, allRound = false): number {
+  if (sideView || allRound || roomH <= screenH || !(viewH > 0)) return 0;
   return Math.round(viewH * FOLLOW_LEAD);
 }
 

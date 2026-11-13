@@ -629,14 +629,28 @@ test.describe('a first flight where owls arrive (OP-347)', () => {
     await openPark(page, { room: 'm3-hall', spawn: 'on-stump', keeper: '1', newmap: '1' });
     await expect.poll(async () => (await state(page)).tipShown, { timeout: 10_000 }).toBe(touch ? 'Jump off the top and hold Jump to glide.' : 'Jump off the top and hold Space to glide.');
     const from = (await state(page)).pos;
-    await page.keyboard.down('ArrowLeft');
+    // The line that marks the glide is up for four seconds, and the page notes it as it comes. Looked for after
+    // the fact it was raced for: each of this test's steps takes up to a second on a slow runner, and the five
+    // between the glide being marked and the look once took longer than the line lasts.
+    await page.evaluate(() => {
+      const said: string[] = [];
+      (window as unknown as { __said: string[] }).__said = said;
+      new MutationObserver((changes) => {
+        for (const change of changes) for (const line of change.addedNodes) said.push(line.textContent ?? '');
+      }).observe(document.querySelector('#hud [data-toasts]')!, { childList: true });
+    });
+    // Jump first, then the push west. Whenever the push comes the owl is in the air over the stump, or back
+    // down on it with Jump still held, so it glides off the stump however far apart the two keys land. The
+    // push first, an owl on a slow runner had walked off the stump and down to the floor before the jump came.
     await page.keyboard.down('Space');
+    await page.keyboard.down('ArrowLeft');
     await expect.poll(async () => (await state(page)).firstFlight, { timeout: 15_000, intervals: [100] }).toBe(true);
-    await page.keyboard.up('Space');
     await page.keyboard.up('ArrowLeft');
+    await page.keyboard.up('Space');
     const landed = (await state(page)).pos;
     expect(from.x - landed.x, 'a glide, not a step off').toBeGreaterThan(320);
-    await expect(page.locator('#hud [data-toasts]')).toContainText('That is flying!');
+    const said = await page.evaluate(() => (window as unknown as { __said: string[] }).__said);
+    expect(said.filter((line) => line.includes('That is flying!')), 'the line that marks the first glide, said once').toHaveLength(1);
     // The tips have done their work: none now, and none on the next visit of this device.
     expect((await state(page)).tipShown).toBeNull();
     await openPark(page, { room: 'm3-hall', spawn: 'on-stump', keeper: '1', newmap: '1' });

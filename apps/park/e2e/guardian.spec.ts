@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { openPark, state } from './helpers';
+import { HELD_FRAME_MS, heldPass as pass, heldUntil as until, holdTheClock, openHeld, openPark, state, stateNow as now } from './helpers';
 
 /**
  * The guardian alive at the heart of the Great Hollow (OP-359), which is behind `?guardian=1`
@@ -9,41 +9,11 @@ import { openPark, state } from './helpers';
  * an owl that came in by the knothole, answers a hoot with its own, goes see-through while the
  * visitor's own owl is behind it, and beats while that owl rides the rising air at the heart. Its
  * rules, to the millisecond, are in src/game/guardian.test.ts; here it is in the room, on a held
- * clock, so a slow machine sees what a quick one sees.
+ * clock (helpers.ts), so a slow machine sees what a quick one sees.
  */
 
-/** Time held still from before the page opens: it moves only when the test moves it. */
-async function holdTheClock(page: Page): Promise<void> {
-  await page.clock.install();
-  await page.clock.pauseAt(new Date(Date.now() + 1_000));
-}
-
-/** A frame every tenth of a second, as a slow device draws them: the guardian and the owl's flight are the same at any frame rate. */
-const FRAME_MS = 100;
-
-/** Time moved on a frame at a go until `done` says so (or the test fails: `what` did not come about). */
-async function until(page: Page, what: string, done: () => Promise<boolean>): Promise<void> {
-  for (let i = 0; i < 400; i++) {
-    if (await done()) return;
-    await page.clock.fastForward(FRAME_MS);
-  }
-  throw new Error(`on the held clock: ${what} did not come about`);
-}
-
-/** `ms` of time, a frame at a go. */
-async function pass(page: Page, ms: number): Promise<void> {
-  for (let t = 0; t < ms; t += FRAME_MS) await page.clock.fastForward(FRAME_MS);
-}
-
-/** What the page says now (the clock is held: nothing waits). */
-const now = (page: Page) => page.evaluate(() => window.owlPark.state()!) as Promise<Awaited<ReturnType<typeof state>>>;
-
 /** The Great Hollow opened on the held clock with the guardian's flag, the owl in by the knothole: back as soon as the room is built. */
-async function openHallWithGuardian(page: Page): Promise<void> {
-  const q = new URLSearchParams({ transport: 'local', kit: '0', art: 'old', room: 'm3-hall', newmap: '1', spawn: 'from-lobby', guardian: '1' });
-  await page.goto(`/?${q.toString()}`);
-  await until(page, 'the hall coming up', () => page.evaluate(() => window.owlPark?.state() != null));
-}
+const openHallWithGuardian = (page: Page) => openHeld(page, { room: 'm3-hall', newmap: '1', spawn: 'from-lobby', guardian: '1' });
 
 const inside = (p: { x: number; y: number }, b: { x: number; y: number; w: number; h: number }) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
 
@@ -163,5 +133,21 @@ test.describe('the guardian at the heart of the Great Hollow (OP-359, behind ?gu
       return !at.walking && at.pos.y > g.at.y + 560;
     });
     await until(page, 'its head and the owl both in view from further back', bothInView);
+
+    // Well away to one side the camera is the owl's own again, and it comes to rest once: handed back,
+    // it does not jump and come back (OP-396).
+    await page.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), { x: g.at.x + 1080, y: g.at.y + 200 });
+    await until(page, 'the owl well away to one side', async () => {
+      const at = await now(page);
+      return !at.walking && at.pos.x > g.at.x + 1040;
+    });
+    const tops: number[] = [];
+    for (let i = 0; i < 70; i++) {
+      await page.clock.fastForward(HELD_FRAME_MS);
+      tops.push((await page.evaluate(() => window.owlPark.camera()!)).viewY);
+    }
+    const rest = tops.at(-1)!;
+    const near = tops.findIndex((top) => Math.abs(top - rest) <= 3);
+    expect(Math.max(...tops.slice(near).map((top) => Math.abs(top - rest)))).toBeLessThanOrEqual(3);
   });
 });

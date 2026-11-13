@@ -2243,10 +2243,12 @@ export class RoomScene extends Phaser.Scene {
   mirrorView(frame: PreviewFrame | null): void {
     this.mirrorFrame = frame;
     if (!this.built) return;
-    const cam = this.cameras.main;
-    if (frame) cam.stopFollow();
+    if (!frame) {
+      this.followOwl();
+      return;
+    }
+    this.cameras.main.stopFollow();
     this.fitCamera();
-    if (!frame) cam.startFollow(this.followed(), true, this.followEase(), this.followEase());
   }
 
   /**
@@ -4290,8 +4292,7 @@ export class RoomScene extends Phaser.Scene {
     this.decor?.hideSpots();
     this.hud.closeDecorate();
     if (!camera) return;
-    this.fitCamera();
-    this.cameras.main.startFollow(this.followed(), true, this.followEase(), this.followEase());
+    this.followOwl();
   }
 
   /** A spot was chosen, in the room (a tap on its ring) or on the sheet. */
@@ -4370,12 +4371,30 @@ export class RoomScene extends Phaser.Scene {
   // ---------- camera ----------
 
   private setupCamera(): void {
-    const cam = this.cameras.main;
-    cam.startFollow(this.followed(), true, this.followEase(), this.followEase());
+    this.followOwl();
     const fit = () => this.fitCamera();
-    fit();
     this.scale.on(Phaser.Scale.Events.RESIZE, fit);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.scale.off(Phaser.Scale.Events.RESIZE, fit));
+  }
+
+  /**
+   * The camera back on the owl, at rest where following the owl brings it (OP-396): as a room comes
+   * in, and after anything that had the camera to itself (the opening look, a ride on rising air, the
+   * view near the guardian, the mirror, Decorate). Followed first and fitted second, because the
+   * engine's follow call clears the lead the fit sets (hudInset.ts, followLead: in a plaza the camera
+   * rests above the owl) and puts the camera on the owl with none: fitted first, the Great Hollow's
+   * view dropped by a fifth of itself after its opening look and stayed dropped until the window was
+   * resized. Then the camera is put where the follow would ease it to, so a room with a lead comes in
+   * at rest and not on a slide up to it.
+   */
+  private followOwl(): void {
+    const cam = this.cameras.main;
+    const at = this.followed();
+    cam.startFollow(at, true, this.followEase(), this.followEase());
+    this.fitCamera();
+    // Something else has the camera still (fitCamera): it has set it.
+    if (this.mirrorFrame || this.opening || this.rise?.back || this.guardianCam?.on) return;
+    cam.centerOn(at.x - cam.followOffset.x, at.y - cam.followOffset.y);
   }
 
   /**
@@ -4424,9 +4443,14 @@ export class RoomScene extends Phaser.Scene {
     const covered = this.sheetPx > 0 ? { top: 0, bottom: 0 } : this.viewEdges(this.hud.coveredEdges());
     const b = cameraBounds(this.room.size, covered, this.cfg.pixelRatio / cam.zoom);
     cam.setBounds(b.x, b.y, b.w, b.h);
-    // A room taller than a screen, seen from above: the owl stands lower on screen, the back of the room in view (hudInset.ts).
-    cam.setFollowOffset(0, followLead(this.room.size.h, seenFromSide(this.room), h / cam.zoom, ROOM_H));
+    // A plaza (seen from above, taller than a screen): the owl stands lower on screen, the back of the room in view (hudInset.ts).
+    cam.setFollowOffset(0, this.leadOver(h / cam.zoom));
     for (const { t, img } of this.parallax) this.placeParallax(t, img);
+  }
+
+  /** How far above the owl the camera rests in a view `viewH` of the room tall (hudInset.ts, followLead): not at all in an oval with ways all round it. */
+  private leadOver(viewH: number): number {
+    return followLead(this.room.size.h, seenFromSide(this.room), viewH, ROOM_H, this.room.bowl !== undefined);
   }
 
   /** Whether this room has the town view (OP-336, townView.ts): every room seen from above. */
@@ -4482,7 +4506,7 @@ export class RoomScene extends Phaser.Scene {
     const view = { w: width / zoom, h: height / zoom };
     const bounds = cameraBounds(this.room.size, this.viewEdges(covered), this.cfg.pixelRatio / zoom);
     const at = this.followed();
-    const lead = followLead(this.room.size.h, seenFromSide(this.room), view.h, ROOM_H);
+    const lead = this.leadOver(view.h);
     return { zoom, ...restAt({ x: at.x, y: at.y - lead }, view, bounds) };
   }
 
@@ -4498,8 +4522,7 @@ export class RoomScene extends Phaser.Scene {
     if (k <= 0) {
       this.opening = null;
       cam.setBackgroundColor('rgba(0,0,0,0)');
-      this.fitCamera();
-      cam.startFollow(this.followed(), true, this.followEase(), this.followEase());
+      this.followOwl();
       return;
     }
     const { width, height } = this.scale.gameSize;
@@ -4529,8 +4552,7 @@ export class RoomScene extends Phaser.Scene {
       this.rise = null;
       if (!r.back) return;
       cam.setBackgroundColor('rgba(0,0,0,0)');
-      this.fitCamera();
-      cam.startFollow(this.followed(), true, this.followEase(), this.followEase());
+      this.followOwl();
       return;
     }
     if (!r.back) {
@@ -4567,11 +4589,10 @@ export class RoomScene extends Phaser.Scene {
     if (want === 0 && g.hold < 0.004) {
       g.hold = 0;
       if (!g.on) return;
-      // Back to the owl's own camera: followed first, then fitted, so the fit's lead over the owl is kept.
+      // Back to the owl's own camera, at rest where it left off (followOwl).
       g.on = false;
       cam.setBackgroundColor('rgba(0,0,0,0)');
-      cam.startFollow(this.followed(), true, this.followEase(), this.followEase());
-      this.fitCamera();
+      this.followOwl();
       return;
     }
     if (!g.on) {

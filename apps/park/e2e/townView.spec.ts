@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { openPark, settleCamera, state } from './helpers';
+import { HELD_FRAME_MS, cameraView, heldStandingAt, heldUntil, holdTheClock, openHeld, openPark, settleCamera, state, stateNow } from './helpers';
 
 /**
  * The town view (OP-336, on for every visitor since OP-356): a room seen from above shows more of
@@ -122,5 +122,78 @@ test.describe('the town view (OP-336)', () => {
     // was in well before the look would have drawn in left to itself (close on four seconds).
     expect(seen.drewIn! - seen.first!).toBeGreaterThan(1300);
     expect(seen.drewIn! - seen.first!).toBeLessThan(3000);
+  });
+});
+
+/**
+ * The Great Hollow's camera is the same however the owl came by it (OP-396). Whatever has the camera
+ * to itself for a while (the opening look, a ride on the rising air) hands it back resting where it
+ * rests on a plain address: on the owl, with no lead toward the back wall (hudInset.ts, followLead:
+ * the hall is an oval with ways all round it). Before, a plain address had the plazas' lead (the
+ * camera a fifth of the view above the owl) and the hall lost it after either, until the window was
+ * resized, so one visit saw the hall two ways. On a held clock (helpers.ts), so the frame the camera
+ * is handed back on is the frame looked at.
+ */
+test.describe('the Great Hollow’s camera rests the same however the owl came by it (OP-396)', () => {
+  /**
+   * A spot on the hall's floor between its root runs: far enough from the back wall and the front rim
+   * that neither holds the camera there, on a computer or on a phone held upright (whose view is nearly
+   * 2,000 px of the room tall), so a view with a lead and one without are far apart on any screen.
+   */
+  const SPOT = { x: 2720, y: 1300 };
+
+  /** How far down its view the owl stands, in the room's own px. */
+  const downView = (at: { pos: { y: number }; view: { viewY: number } }) => at.pos.y - at.view.viewY;
+
+  /**
+   * How far apart two rests of the same camera may be: the engine's follow keeps whole pixels by
+   * rounding down, so it stops up to 8 px short of an owl it followed south or east and none short of
+   * one it followed north or west. The fault was 186 to 388 px, by the screen.
+   */
+  const SAME_REST = 10;
+
+  test('after the opening look the owl stands where it stands on a plain address: at the middle of the view', async ({ page }) => {
+    await holdTheClock(page);
+    // A plain address has no opening look.
+    await openHeld(page, { room: 'm3-hall', newmap: '1' });
+    const plain = await heldStandingAt(page, SPOT);
+    // On the owl: as much of the hall ahead of it as behind, whichever way it walks.
+    expect(plain.down).toBeGreaterThan(0.47);
+    expect(plain.down).toBeLessThan(0.53);
+
+    // In by the knothole, as through the turnstiles: the whole oval, then in on the owl.
+    await openHeld(page, { room: 'm3-hall', newmap: '1', spawn: 'from-lobby' });
+    const hallW = (await stateNow(page)).doors.find((d) => d.id === 'up')!.x * 2;
+    await heldUntil(page, 'the whole oval in view', async () => (await cameraView(page)).viewW >= hallW - 1);
+    await heldUntil(page, 'the camera in on the owl again', async () => (await cameraView(page)).viewW <= plain.view.viewW + 1);
+    const after = await heldStandingAt(page, SPOT);
+    expect(after.view.viewW).toBe(plain.view.viewW);
+    expect(Math.abs(downView(after) - downView(plain))).toBeLessThanOrEqual(SAME_REST);
+  });
+
+  test('after a ride on the rising air the camera is back where it rested before it, at once', async ({ page }) => {
+    test.slow(); // two walks, a rise and the way down
+    await holdTheClock(page);
+    await openHeld(page, { room: 'm3-hall', newmap: '1' });
+    const before = await heldStandingAt(page, SPOT);
+    const beam = (await stateNow(page)).objects.find((o) => o.id === 'm3-hall-moonbeam-heart')!;
+    const atHeart = await heldStandingAt(page, { x: beam.x, y: beam.y });
+
+    // Jump held in the rising air and let go on the way up: the camera draws back, and the owl comes down where it rose.
+    expect(await page.evaluate(() => window.owlPark.jump(2_500))).toBe(true);
+    await heldUntil(page, 'the owl lifted', async () => (await stateNow(page)).air.s === 3);
+    await heldUntil(page, 'the camera drawn back', async () => (await cameraView(page)).viewW > atHeart.view.viewW * 1.15);
+    await heldUntil(page, 'the owl down', async () => (await stateNow(page)).air.s === 0);
+    // The frame after it lands the camera is where it rested before the ride, with no drop and no slide.
+    await page.clock.fastForward(HELD_FRAME_MS);
+    const down = await cameraView(page);
+    const landed = (await stateNow(page)).pos;
+    expect(down.viewW).toBe(atHeart.view.viewW);
+    expect(Math.abs(down.viewY - atHeart.view.viewY)).toBeLessThanOrEqual(Math.abs(landed.y - atHeart.pos.y) + SAME_REST);
+
+    // And back at the spot the camera rests where it did before the ride.
+    const after = await heldStandingAt(page, SPOT);
+    expect(after.view.viewW).toBe(before.view.viewW);
+    expect(Math.abs(downView(after) - downView(before))).toBeLessThanOrEqual(SAME_REST);
   });
 });
