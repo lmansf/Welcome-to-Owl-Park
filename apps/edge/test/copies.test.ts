@@ -232,3 +232,38 @@ describe('the Worker answering looks at a long line (OP-075)', () => {
     forgetOverflow();
   });
 });
+
+describe('the Worker taking a number as the park fills (OP-322)', () => {
+  it('asks the line for a number while it starts by itself, though the line was not active when last read; with the line off it does not ask', async () => {
+    for (const mode of ['auto', 'off'] as const) {
+      forgetOverflow();
+      const asked: string[] = [];
+      const read: OverflowState = { line: { mode, threshold: 80, holdMin: 3 }, active: false, waiting: 0, front: 0, rate: 0, ribbon: RIBBON_DEFAULTS, notice: null, copies: {}, count: 79, countedAt: 0, realms: REALMS_DEFAULTS };
+      const OVERFLOW = {
+        idFromName: () => 'park',
+        get: () => ({
+          fetch: async (url: string) => {
+            if (url.endsWith('/state')) return Response.json(read);
+            asked.push(new URL(url).pathname);
+            return Response.json({ state: 'waiting', n: 1, place: 1, waitMin: null });
+          },
+        }),
+      };
+      const e = { OVERFLOW, VOTES, ROOM_SHARDING: 'single', GATE: 'open', PASS_SIGNING_KEY: KEY } as unknown as Env;
+      const pass = await mintPass(KEY, { id: 'v_filling1', exp: Math.floor(Date.now() / 1000) + 600, adm: false, cid: 'c_filling1' });
+      const take = async () => (await worker.fetch(new Request('https://park.example/api/line', { method: 'POST', headers: { Authorization: `Bearer ${pass}`, 'Content-Type': 'application/json' }, body: '{}' }), e, {} as ExecutionContext)).json();
+      const got = (await take()) as { state: string };
+      if (mode === 'auto') {
+        expect(got).toEqual({ state: 'waiting', n: 1, place: 1, waitMin: null });
+        expect(asked).toEqual(['/line/join']);
+      } else {
+        expect(got.state).toBe('go');
+        expect(asked).toEqual([]);
+      }
+      // A look at a number with the line not active is still answered here: go.
+      const look = (await (await worker.fetch(new Request('https://park.example/api/line?n=1', { headers: { Authorization: `Bearer ${pass}` } }), e, {} as ExecutionContext)).json()) as { state: string };
+      expect(look.state, mode).toBe('go');
+    }
+    forgetOverflow();
+  });
+});

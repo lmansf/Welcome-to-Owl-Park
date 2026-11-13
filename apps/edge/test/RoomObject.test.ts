@@ -2696,3 +2696,57 @@ describe('the sealed hollow in the room object (OP-310)', () => {
     expect(a2.last('escape')!.paid).toEqual({ feathers: 0, total: ESCAPE_FEATHERS, why: 'paid-today' });
   });
 });
+
+describe('a newcomer at a full room as the line starts by itself (OP-322)', () => {
+  /** A room object whose overflow object answers a full room's ask with `line`, and keeps what it was asked. */
+  function withLine(line: boolean | 'down', caps: Record<string, number>) {
+    const asked: string[] = [];
+    const fetch = async (url: string) => {
+      asked.push(new URL(url).pathname);
+      if (new URL(url).pathname === '/full') {
+        if (line === 'down') throw new Error('unreachable');
+        return Response.json({ line });
+      }
+      return Response.json({ words: null });
+    };
+    const env = { GATE: 'open', COLLECTIONS: { getByName: () => collections }, ROOM_CAPS: JSON.stringify(caps), OVERFLOW: { idFromName: () => 'park', get: () => ({ fetch }) } } as unknown as Env;
+    return { obj: new RoomObject(state as unknown as DurableObjectState, env), asked };
+  }
+  /** A socket whose owl the Worker called a newcomer: no entry, so not inside lately and not through the line. */
+  function newcomer(room: string, id: string): FakeSocket {
+    const ws = connect(room, id);
+    ws.serializeAttachment({ ...(ws.deserializeAttachment() as object), newcomer: true });
+    return ws;
+  }
+
+  it('sends a newcomer to the line (4012), not "room full", when the line takes arrivals', async () => {
+    const { obj, asked } = withLine(true, { hub: 1 });
+    await join(obj, 'hub', 'v_a');
+    const ws = newcomer('hub', 'v_new');
+    await hello(obj, ws);
+    expect(ws.closed?.code).toBe(CLOSE.QUEUED);
+    expect(ws.last('full')).toBeUndefined();
+    expect(ws.last('welcome')).toBeUndefined();
+    expect(asked).toContain('/full');
+  });
+
+  it('still says the room is full to an owl that came with an entry, without asking the line', async () => {
+    const { obj, asked } = withLine(true, { hub: 1 });
+    await join(obj, 'hub', 'v_a');
+    const inside = await join(obj, 'hub', 'v_inside');
+    expect(inside.last('full')).toEqual({ t: 'full', room: 'hub', cap: 1 });
+    expect(inside.closed?.code).toBe(CLOSE.ROOM_FULL);
+    expect(asked).not.toContain('/full');
+  });
+
+  it('says the room is full when the line takes nobody, or does not answer', async () => {
+    for (const line of [false, 'down'] as const) {
+      const { obj } = withLine(line, { hub: 1 });
+      await join(obj, 'hub', `v_a_${line}`);
+      const ws = newcomer('hub', `v_new_${line}`);
+      await hello(obj, ws);
+      expect(ws.closed?.code, String(line)).toBe(CLOSE.ROOM_FULL);
+      expect(ws.last('full'), String(line)).toEqual({ t: 'full', room: 'hub', cap: 1 });
+    }
+  });
+});
