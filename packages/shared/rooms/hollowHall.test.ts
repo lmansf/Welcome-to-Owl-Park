@@ -218,7 +218,7 @@ describe('the Great Hollow (Nov 7; an oval, Nov 8)', () => {
     expect(new Set(named.map((d) => d.label)).size).toBe(named.length);
     expect(doorOf('to-party').label).toBe('Out to the Party Grove');
     expect(doorOf('up').label).toBe('Up to the Treetop Commons');
-    expect(doorOf('down').label).toBe('Down to the arcade');
+    expect(doorOf('down').label).toBe('Down to Neon Roost, the arcade');
     for (const d of named) {
       // On the floor, by its own doorway, where an owl walking up to it reads it.
       expect(onFloor(d.labelAt!), d.id).toBe(true);
