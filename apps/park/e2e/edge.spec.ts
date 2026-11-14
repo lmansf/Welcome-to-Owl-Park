@@ -612,26 +612,20 @@ test.describe('room server', () => {
     test.slow(); // live parks drawn with software WebGL on CI runners, and two rooms
     const watcher = await visitor(browser, { room: 'canopy-2a' });
     expect((await state(watcher)).movers).toBeNull();
-    // From now on, the highest the watcher's page has drawn any other owl.
-    await watcher.evaluate(() => {
-      const w = window as unknown as { peerTop: number };
-      w.peerTop = 0;
-      const look = () => {
-        for (const p of window.owlPark?.state?.()?.peers ?? []) w.peerTop = Math.max(w.peerTop, p.height);
-        requestAnimationFrame(look);
-      };
-      requestAnimationFrame(look);
-    });
     const diver = await visitor(browser, { room: 'canopy-2b', spawn: 'from-below', movers: '1' });
     await walkToDoor(diver, 'down');
     await expect.poll(async () => (await state(diver)).room, { timeout: 20_000 }).toBe('canopy-2a');
     await diver.waitForFunction(() => document.querySelector('[data-dot]')?.getAttribute('data-status') === 'online', null, { timeout: 20_000 });
     expect((await state(diver)).movers?.cameBy).toBe('dive');
-    // Down on the storey's floor for both pages, and the watcher saw it well up in the air on the way.
+    // Down on the storey's floor for both pages, and the watcher's page brought the diver down from well up
+    // in the air: one flight with no glide in it, by its own record of the flight it was told. A fall is
+    // over in half a second, so the heights a slow page drew of it are no measure.
     await expect.poll(async () => (await state(diver)).air.s, { timeout: 10_000 }).toBe(0);
     await expect.poll(async () => (await state(watcher)).peers.length, { timeout: 15_000 }).toBe(1);
+    const fell = await steppedPeerFlight(watcher, 0);
+    expect(fell).toMatchObject({ takeoffs: 1, glided: false });
+    expect(fell.peak).toBeGreaterThan(100);
     await expect.poll(async () => (await state(watcher)).peers[0]?.height ?? -1, { timeout: 15_000 }).toBe(0);
-    expect(await watcher.evaluate(() => (window as unknown as { peerTop: number }).peerTop)).toBeGreaterThan(100);
     await expect.poll(async () => dist((await state(watcher)).peers[0]!.pos, (await state(diver)).pos), { timeout: 15_000 }).toBeLessThan(8);
     expect((await state(diver)).air.z).toBe(0);
     for (const page of [watcher, diver]) await page.context().close();

@@ -634,6 +634,13 @@ export class RoomScene extends Phaser.Scene {
   private cameBy: CameBy | null = null;
   /** The downdraft that has taken the owl down, until it lands. */
   private diving: Downdraft | null = null;
+  /**
+   * The last dive a downdraft took the owl on, as its flight stepped it (for tests): which downdraft, how
+   * high the owl was when the air took it, and how long the fall from there was. A dive is over in half
+   * a second and a slow device draws two or three frames of it, so the frames are no measure of one.
+   * Kept from room to room, as `flown` is: a dive ends in the room below.
+   */
+  private dove: { id: string; z: number; ms: number } | null = null;
   /** The end the lane the owl rides is carrying it to; and the lane that has set it down, until it lands or leaves it. */
   private laneTo: Vec2 | null = null;
   private laneSetDown: string | null = null;
@@ -2610,10 +2617,11 @@ export class RoomScene extends Phaser.Scene {
     tipShown: string | null;
     /**
      * The movers (OP-287): null on a page without the `movers` flag. Else the pieces drawn in this room, the
-     * downdraft that has taken the owl down, the lanes it has caught on this page and the end it is being
-     * carried to, and how it came into the room.
+     * downdraft that has taken the owl down, the last dive one took it on as its flight stepped it (which
+     * downdraft, from how high, and how long the fall was, ms), the lanes it has caught on this page and the
+     * end it is being carried to, and how it came into the room.
      */
-    movers: { pieces: MoverPiece[]; diving: string | null; laneRides: number; laneTo: Vec2 | null; cameBy: CameBy | null } | null;
+    movers: { pieces: MoverPiece[]; diving: string | null; dove: { id: string; z: number; ms: number } | null; laneRides: number; laneTo: Vec2 | null; cameBy: CameBy | null } | null;
     /** Whether this device's owl has glided off one of the Great Hollow's roots (OP-347). */
     firstFlight: boolean;
     /** Whether this device's owl has ridden this room's rising air (OP-363, the Treetop Commons); null in a room that marks no such ride. */
@@ -2707,7 +2715,7 @@ export class RoomScene extends Phaser.Scene {
       firstWays: [...this.firstNamed],
       signBox: this.doorSigns?.shownBox() ?? null,
       tipShown: this.tips?.shown() ?? null,
-      movers: this.moversOn ? { pieces: this.moversView?.pieces() ?? [], diving: this.diving?.id ?? null, laneRides: this.laneRides, laneTo: this.laneTo, cameBy: this.cameBy } : null,
+      movers: this.moversOn ? { pieces: this.moversView?.pieces() ?? [], diving: this.diving?.id ?? null, dove: this.dove ? { ...this.dove } : null, laneRides: this.laneRides, laneTo: this.laneTo, cameBy: this.cameBy } : null,
       firstFlight: this.firstFlown,
       firstRise: marksFirstRise(this.room, this.rootTips) ? !this.riseWaits : null,
       promptShown: this.reach?.shown() ?? null,
@@ -3561,9 +3569,10 @@ export class RoomScene extends Phaser.Scene {
         }
         if (!this.diving) {
           this.diving = sink;
+          this.dove = { id: sink.id, z: air.z, ms: 0 };
           const going = this.me.walk?.to;
           if (distance(place, sink.pos) > 12 && !(going && distance(going, sink.pos) < 12)) this.walkTo({ x: sink.pos.x, y: sink.pos.y });
-        }
+        } else if (this.dove) this.dove.ms += FLIGHT_STEP_MS;
       }
       // What the step did is heard (OP-350): a jump, a flap, the wings spread, a landing.
       for (const c of airCues(before, air)) this.sfx.play(c.cue, c.strength);
@@ -3603,6 +3612,7 @@ export class RoomScene extends Phaser.Scene {
         // Down inside the downdraft that took it: through the knot hole (OP-287). Else a flight as any other.
         const dived = this.diving;
         this.diving = null;
+        if (dived && this.dove) this.dove.ms += FLIGHT_STEP_MS;
         if (dived && inDowndraft(dived, place, DIVE_LAND_SLACK)) this.diveThrough(dived);
         else this.landedFromFlight(place);
       }
