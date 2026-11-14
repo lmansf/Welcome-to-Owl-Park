@@ -166,3 +166,21 @@ test.describe('the parkour courses (OP-224)', () => {
     expect((await state(page)).dash.dashes).toBe(0);
   });
 });
+
+test.describe('a course while the park cannot connect (OP-405)', () => {
+  test('the walk east into the ink course’s pond is a fall, back at the door, with the room server out of reach', async ({ page }) => {
+    test.skip(test.info().project.name !== 'edge', 'a room server whose socket closes as it opens');
+    // Every room's socket closes as it opens: the room never answers the fall, so the page puts the owl back itself.
+    await page.routeWebSocket(/\/ws\//, (ws) => ws.close());
+    await page.goto(`/?${new URLSearchParams({ transport: 'edge', room: 'brush-1', spawn: 'from-gate', kit: '1' })}`);
+    await page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
+    await expect(page.locator('[data-dot][data-status]')).toHaveAttribute('data-status', 'offline', { timeout: 20_000 });
+    const door = (await state(page)).pos;
+    // East along the bank with the walking key alone, past the first stone and into the water.
+    await page.keyboard.down('ArrowRight');
+    await expect.poll(async () => (await state(page)).pos.x, { timeout: 10_000 }).toBeGreaterThan(700);
+    await expect(page.locator('[data-toasts]')).toContainText('Back to your last checkpoint', { timeout: 5_000 });
+    await page.keyboard.up('ArrowRight');
+    await expect.poll(async () => Math.abs((await state(page)).pos.x - door.x), { timeout: 5_000 }).toBeLessThan(2);
+  });
+});
