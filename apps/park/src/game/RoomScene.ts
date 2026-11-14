@@ -116,6 +116,7 @@ import {
   airOut,
   liftAt,
   thermalAt,
+  thermalTop,
   spendDash,
   windAt,
   windEnd,
@@ -189,11 +190,12 @@ import { TRIAL_BACKDROP_VEIL, trialBackdropVeiled } from './skinTrial';
 import { PUZZLE_ART_KEYS, artScale, drawnAsSizeBox, drawsSkinTrial, loadArt, opensSoft, prefetchRoomArt, releaseArt, roomArtCap, roomArtKeys, roomOpeningArt, sharpCopy, sharpenArt } from './art';
 import { SpeechBubbles } from './bubbles';
 import { backWaits, carriedIn, doorwayUnder, doorwaysOff, heldAtFall, roomsAhead, stillCarried, stillHeldSinceFall, takesDoorway, upCounts, type HeldAtFall } from './doors';
-import { PLAY_SPOTS, ROOTS_SPOT, TriedDoors, doorSpot, leadsToPlay, playSpotsAt, trailTo, type PlaySpot } from './featherTrail';
+import { PLAY_SPOTS, RISE_SPOT, ROOTS_SPOT, TriedDoors, doorSpot, leadsToPlay, playSpotsAt, trailTo, type PlaySpot } from './featherTrail';
 import { CALLS, GUARDIAN_ROOM, GUARDIAN_VIEW, guardianShade, lookShowing, mustShow, presence, type OwlSeen } from './guardian';
 import { GuardianView, type GuardianState } from './guardianView';
 import { FIRST_FLIGHT_MARK, glidedOff, hallTipFor, hallTips } from './hallTips';
-import { HALL_WORDS } from '../ui/hallWords';
+import { FIRST_RISE_MARK, marksFirstRise, rodeUp } from './firstRise';
+import { COMMONS_WORDS, HALL_WORDS } from '../ui/hallWords';
 import { FeatherTrail } from './featherTrailView';
 import { admitTarget } from './gateAdmit';
 import { enteredRoom, walkingMap } from './walkingMap';
@@ -252,6 +254,8 @@ export interface RoomStart {
   ticket?: WalletEntry | undefined;
 }
 
+/** Past a plaza's edges, where a ride on its rising air draws the camera back past them (OP-363, the Treetop Commons): the night sky its painting ends in. */
+const PLAZA_BEYOND = '#081226';
 /** What an owl is told the first time it stands in a thermal (OP-340): the one line of words the thermal has. */
 const THERMAL_WORDS = 'Warm air rises here. Jump and keep holding to ride it up.';
 /** How far a tap may drift before it counts as a drag (game pixels). */
@@ -591,13 +595,15 @@ export class RoomScene extends Phaser.Scene {
   private readonly slopeBelow = (p: Vec2, z: number) => slopeUnder(this.room.perches, p, z);
   private airRefilledAt = 0;
   /** The owl's take-offs as its flight steps them (for tests): how many on this page, and the last one's top, whether it glided and how long it was up. */
-  private flown = { n: 0, peak: 0, glided: false, ms: 0 };
+  private flown = { n: 0, peak: 0, glided: false, lifted: false, ms: 0 };
   private flownFrom = 0;
   /** Where the flight under way left the ground, and how high that was (a perch's top, 0 on the floor). */
   private flownOff: { pos: Vec2; z: number } = { pos: { x: 0, y: 0 }, z: 0 };
   /** Whether this room has the Great Hollow's root tips (hallTips.ts), and whether this device's owl has made its first glide off a root (OP-347). */
   private rootTips = false;
   private firstFlown = false;
+  /** Whether this room still waits for this device's owl to ride its rising air for the first time (OP-363, firstRise.ts: the Treetop Commons). */
+  private riseWaits = false;
   /** When the HUD was last told where the owl is on the screen (the thumbstick's quiet, OP-349). */
   private owlToldAt = 0;
   /** Where the room put the own owl when it last let it in (its welcome), until the room is caught up with the owl (OP-138). */
@@ -1192,6 +1198,7 @@ export class RoomScene extends Phaser.Scene {
     const hall = courseDef ? [] : hallTips(room, TOUCH_SCREEN);
     this.rootTips = hall.length > 0;
     this.firstFlown = this.rootTips && triedDoors().has(room.id, FIRST_FLIGHT_MARK);
+    this.riseWaits = marksFirstRise(room, this.rootTips) && !triedDoors().has(room.id, FIRST_RISE_MARK);
     const pick = tips.length
       ? () => tipFor(tips, this.me.pos.x, this.flier.air.z)?.id ?? null
       : () => (this.firstFlown ? null : (hallTipFor(hall, this.me.pos, this.flier.air.z)?.id ?? null));
@@ -2019,6 +2026,17 @@ export class RoomScene extends Phaser.Scene {
    * leads on to a doorway.
    */
   private landedFromFlight(at: Vec2): void {
+    // The first ride on a room's rising air (OP-363, the Treetop Commons): marked once on this device,
+    // a line says so, and the trail leads on to the turnstiles.
+    if (this.riseWaits && rodeUp(this.flown.lifted, this.flown.peak, thermalTop(this.room))) {
+      this.riseWaits = false;
+      triedDoors().add(this.room.id, FIRST_RISE_MARK);
+      triedDoors().add(this.room.id, RISE_SPOT);
+      this.hud.toast(COMMONS_WORDS.flown, 4200);
+      this.sfx.play('bench');
+      this.layTrail();
+      return;
+    }
     if (!this.rootTips || this.firstFlown || !this.flown.glided) return;
     if (!glidedOff(this.flownOff.pos, this.flownOff.z, at)) return;
     this.firstFlown = true;
@@ -2473,7 +2491,7 @@ export class RoomScene extends Phaser.Scene {
      * for a fraction of a second, which a slow machine can step through between two frames it draws,
      * so `height` may never show it.
      */
-    flown: { n: number; peak: number; glided: boolean; ms: number };
+    flown: { n: number; peak: number; glided: boolean; lifted: boolean; ms: number };
     /**
      * The others, with how high each is drawn, whether on the ground (0), in the air (1) or gliding (2),
      * and its take-offs as this page carried them on from the states it was told (as `flown` is for the own owl).
@@ -2537,6 +2555,8 @@ export class RoomScene extends Phaser.Scene {
     tipShown: string | null;
     /** Whether this device's owl has glided off one of the Great Hollow's roots (OP-347). */
     firstFlight: boolean;
+    /** Whether this device's owl has ridden this room's rising air (OP-363, the Treetop Commons); null in a room that marks no such ride. */
+    firstRise: boolean | null;
     /** The words of the prompt over the visitor's own owl (OP-344), if any. */
     promptShown: string | null;
     /** The tall art gone see-through because the visitor's own owl is behind it (OP-346), by its art's key. */
@@ -2627,6 +2647,7 @@ export class RoomScene extends Phaser.Scene {
       signBox: this.doorSigns?.shownBox() ?? null,
       tipShown: this.tips?.shown() ?? null,
       firstFlight: this.firstFlown,
+      firstRise: marksFirstRise(this.room, this.rootTips) ? !this.riseWaits : null,
       promptShown: this.reach?.shown() ?? null,
       seeThrough: this.seeThrough?.faded() ?? [],
       guardian: this.guardian?.state() ?? null,
@@ -3409,12 +3430,13 @@ export class RoomScene extends Phaser.Scene {
       }
       if (air.s !== GROUNDED) {
         if (grounded) {
-          this.flown = { n: this.flown.n + 1, peak: 0, glided: false, ms: 0 };
+          this.flown = { n: this.flown.n + 1, peak: 0, glided: false, lifted: false, ms: 0 };
           this.flownFrom = at;
           this.flownOff = { pos: { x: place.x, y: place.y }, z: stoodAt };
         }
         this.flown.peak = Math.max(this.flown.peak, air.z);
         if (air.s === GLIDING || air.s === LIFTED) this.flown.glided = true;
+        if (air.s === LIFTED) this.flown.lifted = true;
       } else if (!grounded) {
         this.flown.ms = at - this.flownFrom;
         this.landedFromFlight(place);
@@ -4506,6 +4528,15 @@ export class RoomScene extends Phaser.Scene {
     return this.townViewed() ? { top: 0, bottom: covered.bottom } : covered;
   }
 
+  /**
+   * What shows past the room's edges while the camera is drawn back past them: the dark of the tree's
+   * wood round the oval (its painting's own, where it has one), and over a plaza the night sky its
+   * painting ends in.
+   */
+  private beyond(): string {
+    return artTrialFor(globalThis.location?.search ?? '', this.room.id)?.beyond ?? (this.room.bowl ? BOWL_BEYOND : PLAZA_BEYOND);
+  }
+
   /** The camera's zoom while it follows the owl on a screen this size (the game's own pixels). */
   private viewZoom(screen: { w: number; h: number }): number {
     return this.townViewed() ? townZoom(this.room.size, screen, this.cfg.pixelRatio) : screenZoom(this.room.size, screen);
@@ -4524,7 +4555,7 @@ export class RoomScene extends Phaser.Scene {
     cam.stopFollow();
     cam.removeBounds();
     // Past the room's edges the screen is the dark of the tree's wood, as round the oval itself.
-    cam.setBackgroundColor(artTrialFor(globalThis.location?.search ?? '', this.room.id)?.beyond ?? BOWL_BEYOND);
+    cam.setBackgroundColor(this.beyond());
     this.frameOpening(this.opening.at);
   }
 
@@ -4597,7 +4628,7 @@ export class RoomScene extends Phaser.Scene {
       r.back = true;
       cam.stopFollow();
       cam.removeBounds();
-      cam.setBackgroundColor(artTrialFor(globalThis.location?.search ?? '', this.room.id)?.beyond ?? BOWL_BEYOND);
+      cam.setBackgroundColor(this.beyond());
     }
     const { width, height } = this.scale.gameSize;
     const look = lookBetween(this.nearLook(r.covered), wholeLook(this.room.size, { w: width, h: height }, RISE_HEAD), k);
@@ -4638,7 +4669,7 @@ export class RoomScene extends Phaser.Scene {
       g.covered = this.hud.coveredEdges();
       cam.stopFollow();
       cam.removeBounds();
-      cam.setBackgroundColor(artTrialFor(globalThis.location?.search ?? '', this.room.id)?.beyond ?? BOWL_BEYOND);
+      cam.setBackgroundColor(this.beyond());
     }
     const { width, height } = this.scale.gameSize;
     const near = this.nearLook(g.covered);

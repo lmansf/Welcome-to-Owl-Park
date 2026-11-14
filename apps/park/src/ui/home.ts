@@ -147,7 +147,7 @@ export function walletSummary(tickets: readonly WalletEntry[], gate: Entry['gate
 
 export interface HomeActions {
   logIn(button: HTMLElement): void;
-  /** Look around free (the second audit, D2.1): a ready-made owl on this device, straight in, as a guest at the turnstiles. */
+  /** Play free now (the second audit's Look around free, D2.1): a ready-made owl on this device, straight in beside the Treetop Commons' rising air (OP-363), a guest at the turnstiles. */
   lookAround(): void;
   /** Into the owl's own nest (OP-105), through the line while the park has one. */
   play(): void;

@@ -35,7 +35,7 @@ export interface ParkState {
   /** Its flight as it steps: height and speed up (room px, px/s), on the ground (0), in the air (1), gliding (2) or held up by an updraft or a wind current (3), and flaps left. */
   air: { z: number; vz: number; s: 0 | 1 | 2 | 3; f: 0 | 1 | 2 };
   /** Its take-offs as the flight steps them: how many on this page, and the last one's top (room px), whether it glided and how long it was up (ms, once down). */
-  flown: { n: number; peak: number; glided: boolean; ms: number };
+  flown: { n: number; peak: number; glided: boolean; lifted: boolean; ms: number };
   /** This visitor's owl is asleep: nothing done on the page for a while (OP-126). */
   asleep: boolean;
   /** The phrases in bubbles over the owls: whose (this visitor's own id included), and which. */
@@ -61,6 +61,8 @@ export interface ParkState {
   tipShown: string | null;
   /** Whether this device's owl has glided off one of the Great Hollow's roots (OP-347). */
   firstFlight: boolean;
+  /** Whether this device's owl has ridden this room's rising air (OP-363); null in a room that marks no such ride. */
+  firstRise: boolean | null;
   /** The words of the prompt over the visitor's own owl (OP-344), if any. */
   promptShown: string | null;
   /** The tall art gone see-through because the visitor's own owl is behind it (OP-346), by its art's key. */
