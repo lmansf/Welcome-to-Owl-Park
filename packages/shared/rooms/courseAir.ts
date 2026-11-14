@@ -35,8 +35,13 @@ export const COURSE_AIR: Readonly<Record<string, { updrafts?: Updraft[]; winds?:
   // (The column over the pond and the wind from it to the second cliff are gone: the second column does
   // their work where the climb is, and the first wind a visitor meets is the rain's, in act 2.)
   'brush-1': { updrafts: [up('cliff-lift', 1100, 430, 260), up('far-cliff-lift', 2800, 450, 440)] },
-  // Act 2: up beside the first rock; then on the wind toward the falls ledge.
-  'brush-2': { updrafts: [up('river-lift', 1150, 450)], winds: [wind('rain-wind', 3460, 4060, 580)] },
+  // Act 2: up beside the first rock; up over the mooring post to r2 and its bench (OP-361); then on
+  // the wind toward the falls ledge. At the end of the third bridge r2 stands 220 up past the post, and
+  // before the post's column no press a newcomer makes there came down on it: it took a flap or a dash,
+  // which the first screen never teaches. Now a Jump held from the bridge's last strides rides the air
+  // onto r2, as the held Jump by the first rock does. It tops out 40 over r2 and under the post, so it lifts
+  // no owl past r2, and the post's lost feather is a flap up from its top.
+  'brush-2': { updrafts: [up('river-lift', 1150, 450), up('post-lift', 2860, 300, 180)], winds: [wind('rain-wind', 3460, 4060, 580)] },
   // Act 3a: up over the water to m2. (No current here: the cloud bank across the drop from m1 is a fall
   // from its foot up, so a current toward m2 would carry an owl into it; the same goes for act 3b.)
   'brush-3a': { updrafts: [up('scroll-lift', 1850, 420, 110)] },

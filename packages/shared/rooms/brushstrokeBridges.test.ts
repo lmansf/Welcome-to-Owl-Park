@@ -123,8 +123,10 @@ describe('Brushstroke Bridges (OP-235)', () => {
     // does not fly well yet, and the upward stroke the way to the seal for every owl.
     expect(fromTheDoor(false)).toMatchObject({ k1: 1, isle1: 3, k2: 3, k3: 3, isle2: 3, c1: 3, c2: 3, c3: null });
     expect(tiersFrom('brush-1', false)).toMatchObject({ c3: null });
-    // Past it, with no ink the crossing to the falls and the high ledges of the scroll are out of reach.
-    expect(tiersFrom('brush-2', false)).toMatchObject({ post: null, r2: null, k9: null, k10: null, 'falls-ledge': null });
+    // Past it, with no ink the crossing to the falls is no climb or flapped hop: only an owl that flies
+    // well (a jump, both flaps and a glide into the rising air over the mooring post, OP-361) gets past
+    // the third bridge's gap without the bridge. The bridges stay the way for an owl that does not.
+    expect(tiersFrom('brush-2', false)).toMatchObject({ post: 3, r2: 3, k9: 3, k10: 3, 'falls-ledge': 3 });
     // On the scroll the treads are the way up; the cloud banks that stop the long glides past k14's and
     // k18's bridges are hazards in the air, which the route check does not count (the plan's section 5).
     expect(tiersFrom('brush-3a', false)).toMatchObject({ pine: null, m1: null, m3: null, m4: null });
