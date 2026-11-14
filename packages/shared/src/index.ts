@@ -43,6 +43,7 @@ export * from './flight';
 export * from './updraft';
 export * from './thermal';
 export * from './wind';
+export * from './movers';
 export * from './brush';
 export * from './circuit';
 export * from './dash';

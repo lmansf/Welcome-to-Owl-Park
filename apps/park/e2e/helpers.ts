@@ -63,6 +63,14 @@ export interface ParkState {
   firstFlight: boolean;
   /** Whether this device's owl has ridden this room's rising air (OP-363); null in a room that marks no such ride. */
   firstRise: boolean | null;
+  /** The movers (OP-287): null on a page without the `movers` flag. */
+  movers: {
+    pieces: Array<{ key: string; x: number; y: number; w: number; h: number; art: boolean }>;
+    diving: string | null;
+    laneRides: number;
+    laneTo: { x: number; y: number } | null;
+    cameBy: 'dive' | 'tunnel' | null;
+  } | null;
   /** The words of the prompt over the visitor's own owl (OP-344), if any. */
   promptShown: string | null;
   /** The tall art gone see-through because the visitor's own owl is behind it (OP-346), by its art's key. */

@@ -49,6 +49,8 @@ import {
   liftHolds,
   thermalHolds,
   thermalTop,
+  laneHolds,
+  laneTop,
   LIFTED,
   landDash,
   roomDashEnd,
@@ -220,8 +222,8 @@ export class Room {
   constructor(def: RoomDef, opts: RoomOptions) {
     this.def = def;
     this.opts = opts;
-    // The highest an owl stands or is lifted here, and a jump and its flaps over that: a perch's top, or a thermal's (OP-340).
-    this.airTop = Math.max(highestTop(def), thermalTop(def)) + LIMITS.maxRise;
+    // The highest an owl stands or is lifted here, and a jump and its flaps over that: a perch's top, a thermal's (OP-340) or a glide lane's height (OP-287).
+    this.airTop = Math.max(highestTop(def), thermalTop(def), laneTop(def)) + LIMITS.maxRise;
     this.standing = standingRanges(def);
     this.lifts = liftColumns(def);
     this.anyFooting = footing(def, Number.POSITIVE_INFINITY).walkable;
@@ -803,9 +805,15 @@ export class Room {
     const air = checkAir(a, this.airTop, this.standing);
     if (!air) return false;
     // Lifted only inside a column of this room that is on, rising to its top (updraft.ts), held in a wind current
-    // at its height (wind.ts), or inside a thermal of a room seen from above, rising to its top (thermal.ts).
+    // at its height (wind.ts), inside a thermal of a room seen from above, rising to its top (thermal.ts), or
+    // beside a glide lane of such a room, held at its height (movers.ts, OP-287).
     const at = air.s === LIFTED ? this.currentPos(v) : null;
-    if (at && !liftHolds(this.lifts, at.x, air.h!, now, LIMITS.reachSlackPx) && !thermalHolds(this.def.thermals, at, air.h!, LIMITS.reachSlackPx)) {
+    if (
+      at &&
+      !liftHolds(this.lifts, at.x, air.h!, now, LIMITS.reachSlackPx) &&
+      !thermalHolds(this.def.thermals, at, air.h!, LIMITS.reachSlackPx) &&
+      !laneHolds(this.def.movers?.lanes, at, air.h!, LIMITS.reachSlackPx)
+    ) {
       this.opts.rejected?.(id, 'lift');
       return false;
     }

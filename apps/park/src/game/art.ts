@@ -385,6 +385,11 @@ export const ART: Record<string, ArtSpec> = {
   'kit-doorway-stone': { w: 240, h: 320, kind: 'piece' },
   'kit-doorway-knothole': { w: 240, h: 320, kind: 'piece' },
   'kit-hatch-down': { w: 240, h: 120, kind: 'piece' },
+  // The movers' three pieces (OP-287, movers.ts), not painted yet: each is drawn as its size box behind the
+  // `movers` flag (moversView.ts), and a file delivered under its key takes the box's place.
+  'mover-knot-hole-mouth': { w: 240, h: 120, kind: 'piece' },
+  'mover-downdraft-column': { w: 260, h: 420, kind: 'piece' },
+  'mover-glide-lane-streamers': { w: 400, h: 90, kind: 'piece' },
   'kit-arch-portal-bare': { w: 360, h: 420, kind: 'piece' },
   'kit-arch-portal-boarded': { w: 360, h: 420, kind: 'piece' },
   'kit-arch-portal-open': { w: 360, h: 420, kind: 'piece' },

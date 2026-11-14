@@ -28,6 +28,10 @@ describe('the vote desk in the Great Hollow (OP-288)', () => {
     for (const door of HALL_ROOM.doors) expect(overlaps(footprint, door.rect), door.id).toBe(false);
   });
 
+  it('stands off the knot hole’s sinking air, where owls dive down to the arcade (OP-287)', () => {
+    for (const d of HALL_ROOM.movers?.downdrafts ?? []) expect(fromBox(d.pos, footprint), d.id).toBeGreaterThan(d.r + 60);
+  });
+
   it('shows each realm’s share in whole percents by the names visitors know, never a count', () => {
     const shares = voteShares({ grove: 7, market: 2, glass: 1 }, VOTABLE_REALMS);
     expect(deskRows(shares)).toEqual([

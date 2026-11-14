@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { AIRBORNE, LIFTED, UPDRAFT_RISE, AIR_DASH_COOLDOWN_MS, AIR_DASH_DISTANCE, AIR_DASH_MS, AIR_DASH_SPEED, DASH_SLACK_PX, CLOSE, EDGE_PROTOCOL_VERSION, EMOTE_EVERY_MS, GROUNDED, ON_GROUND, STREET_DOORS, STREET_ROOM, WALK_SPEED, arrivalPoint, distance, isWalkable, nestDoorIndex, resolveTarget, type Air, type ClientHello, type RoomDef, type ServerFrame, type Vec2, segmentTouchesRect, walkCrossesExit } from '@owl-park/shared';
+import { AIRBORNE, DIVE_ARRIVAL, DIVE_SPEED, LIFTED, UPDRAFT_RISE, dive, AIR_DASH_COOLDOWN_MS, AIR_DASH_DISTANCE, AIR_DASH_MS, AIR_DASH_SPEED, DASH_SLACK_PX, CLOSE, EDGE_PROTOCOL_VERSION, EMOTE_EVERY_MS, GROUNDED, ON_GROUND, STREET_DOORS, STREET_ROOM, WALK_SPEED, arrivalPoint, distance, isWalkable, nestDoorIndex, resolveTarget, type Air, type ClientHello, type RoomDef, type ServerFrame, type Vec2, segmentTouchesRect, walkCrossesExit } from '@owl-park/shared';
 import { FIRST_LOOK_SPAWN, ROOMS, roomFor } from '@owl-park/shared/rooms';
 import { Room, LIMITS, type Peer, type PositionRejection, type VisitorState } from '../src/Room';
 
@@ -1163,6 +1163,78 @@ describe('Room: a thermal, in a room seen from above (OP-340)', () => {
     expect(room.air('a', { z: warm.top, vz: UPDRAFT_RISE, s: LIFTED, f: 0, h: warm.top })).toBe(true);
     // And a glide down from there, toward the turnstiles.
     expect(room.air('a', { z: warm.top - 20, vz: -80, s: 2, f: 0 })).toBe(true);
+  });
+});
+
+describe('Room: the movers of a room seen from above (OP-287)', () => {
+  let now = 1_000_000;
+  const rejected: PositionRejection[] = [];
+  beforeEach(() => {
+    now = 1_000_000;
+    rejected.length = 0;
+  });
+
+  it('holds a lifted owl at a glide lane’s height only beside that lane, and lets it stand as high as the lane and a jump over', () => {
+    const probe = new Room(def, { now: () => now, random: () => 0.5, cap: 5 });
+    probe.join(new FakePeer(), 'p', hello());
+    const at = probe.positionOf('p')!;
+    // A lane through where an owl comes in, 150 up; another far across the room, 180 up.
+    const laned = {
+      ...def,
+      movers: {
+        lanes: [
+          { id: 'row', a: { x: at.x - 200, y: at.y }, b: { x: at.x + 600, y: at.y }, z: 150, r: 80 },
+          { id: 'far', a: { x: at.x - 200, y: at.y - 900 }, b: { x: at.x + 600, y: at.y - 900 }, z: 180, r: 80 },
+        ],
+      },
+    };
+    const room = new Room(laned, { now: () => now, random: () => 0.5, cap: 5, rejected: (_id, why) => rejected.push(why) });
+    const a = new FakePeer();
+    const b = new FakePeer();
+    room.join(a, 'a', hello());
+    room.join(b, 'b', hello());
+    const held: Air = { z: 150, vz: UPDRAFT_RISE, s: LIFTED, f: 0, h: 150 };
+    expect(room.air('a', held)).toBe(true);
+    expect(b.last('air')).toMatchObject({ id: 'a', air: held });
+    // The far lane's height, which the owl is nowhere near: refused.
+    expect(room.air('a', { ...held, z: 180, h: 180 })).toBe(false);
+    expect(rejected).toEqual(['lift']);
+    // Let go, it glides and falls from the lane's height: taken as any air.
+    expect(room.air('a', { z: 148, vz: -80, s: 2, f: 0 })).toBe(true);
+  });
+
+  it('takes a dive anywhere, as the fall it is, and the other owl is told it', () => {
+    const room = new Room(def, { now: () => now, random: () => 0.5, cap: 5, rejected: (_id, why) => rejected.push(why) });
+    const a = new FakePeer();
+    const b = new FakePeer();
+    room.join(a, 'a', hello());
+    room.join(b, 'b', hello());
+    const told = dive({ z: 320, vz: -80, s: 2, f: 0 });
+    expect(told.vz).toBe(-DIVE_SPEED);
+    expect(room.air('a', told)).toBe(true);
+    expect(b.last('air')).toMatchObject({ id: 'a', air: told });
+    expect(rejected).toEqual([]);
+  });
+
+  it('the arcade’s own lane: an owl that comes in from the Great Hollow is held beside it, and across the room is not', () => {
+    const arcade = ROOMS['arcade']!;
+    const lane = arcade.movers!.lanes![0]!;
+    const room = new Room(arcade, { now: () => now, random: () => 0.5, cap: 5, rejected: (_id, why) => rejected.push(why) });
+    // A diver's own landing spot (HALL_KNOT_HOLE.lands), on the lane's line: wherever within its scatter the room
+    // sets the owl down, it is inside the lane's reach, so a dive held on into a glide is carried straight on.
+    room.join(new FakePeer(), 'a', hello({ spawn: 'from-dive' }));
+    expect(distance(room.positionOf('a')!, arcade.spawns['from-dive']!)).toBeLessThanOrEqual(LIMITS.scatterDoor);
+    expect(LIMITS.scatterDoor).toBeLessThan(lane.r);
+    const held: Air = { z: lane.z, vz: UPDRAFT_RISE, s: LIFTED, f: 0, h: lane.z };
+    expect(room.air('a', held)).toBe(true);
+    // An owl that came in falling from a dive, under the room's ceiling for an owl in the air.
+    expect(room.air('a', { z: DIVE_ARRIVAL.z, vz: DIVE_ARRIVAL.vz, s: AIRBORNE, f: 0 })).toBe(true);
+    // Walked to the front of the plaza, far from the lane's line: no longer held.
+    room.move('a', { t: 'move', to: { x: 300, y: 1250 }, seq: 1 });
+    now += 10_000;
+    expect(distance(room.positionOf('a')!, { x: 300, y: 1250 })).toBeLessThan(40);
+    expect(room.air('a', held)).toBe(false);
+    expect(rejected).toEqual(['lift']);
   });
 });
 

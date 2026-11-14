@@ -583,6 +583,31 @@ test.describe('room server', () => {
     for (const page of [a, b]) await page.context().close();
   });
 
+  test('a glide lane’s rider is held up for the room server: another owl, with no flag of its own, sees it carried along at the lane’s height (OP-287)', async ({ browser }) => {
+    test.slow(); // live parks drawn with software WebGL on CI runners, and a ride of some seconds
+    const watcher = await visitor(browser, { room: 'arcade' });
+    // The rider comes in where an owl that dived down the knot hole does: the room sets an arrival down a
+    // little off its spawn, and from that spot it is still under the lane.
+    const rider = await visitor(browser, { room: 'arcade', spawn: 'from-dive', movers: '1' });
+    await expect.poll(async () => (await state(watcher)).peers.length, { timeout: 15_000 }).toBe(1);
+    expect((await state(watcher)).movers).toBeNull();
+    const from = (await state(rider)).pos;
+    // Jump held where an owl comes in, under the lane: caught, and carried for the far end.
+    await rider.keyboard.down('Space');
+    await expect.poll(async () => (await state(rider)).air.s, { timeout: 10_000, intervals: [50] }).toBe(3);
+    // The room took it lifted (it holds a lifted owl only beside a lane, at the lane's height) and walks it
+    // along as any walk: the other page sees it up there, and well along the lane.
+    await expect.poll(async () => (await state(watcher)).peers[0]?.height ?? 0, { timeout: 15_000 }).toBe(150);
+    await expect.poll(async () => (await state(watcher)).peers[0]?.pos.x ?? 0, { timeout: 30_000 }).toBeGreaterThan(from.x + 400);
+    expect((await state(watcher)).peers[0]?.height).toBe(150);
+    // Let go: down on the floor for the other page too, where the rider stands.
+    await rider.keyboard.up('Space');
+    await expect.poll(async () => (await state(watcher)).peers[0]?.height ?? -1, { timeout: 10_000 }).toBe(0);
+    await expect.poll(async () => (await state(rider)).air.s, { timeout: 10_000 }).toBe(0);
+    await expect.poll(async () => dist((await state(watcher)).peers[0]!.pos, (await state(rider)).pos), { timeout: 15_000 }).toBeLessThan(8);
+    for (const page of [watcher, rider]) await page.context().close();
+  });
+
   test('quests live on the server: talk, take on and progress are checked there', async ({ browser }) => {
     const a = await visitor(browser);
     await expect.poll(async () => (await state(a)).npcs.find((n) => n.id === 'bramble')?.mark, { timeout: 15_000 }).toBe('offer');

@@ -60,6 +60,7 @@ import type { Perch } from '../src/perches';
 import type { Vec2 } from '../src/protocol';
 import type { DoorDef, RoomBowl, RoomDef, RoomKit, RoomPiece } from '../src/room';
 import type { Thermal } from '../src/thermal';
+import type { Downdraft } from '../src/movers';
 import { KIT_ART } from '../src/kitArt';
 
 export {
@@ -553,6 +554,15 @@ export const HEART_THERMAL: Thermal = {
   top: Math.ceil((Math.max(...Object.values(SPAWNS).map((at) => Math.hypot(at.x - HALL_HEART.x, at.y - HALL_HEART.y))) / GLIDE_SLOPE + 40) / 10) * 10,
 };
 
+/**
+ * The Great Hollow's knot hole (OP-287, src/movers.ts), behind the page's `movers` flag: where the hatch
+ * lies in the floor is a knot hole in the roots with air sinking into it. An owl that steps onto it, or
+ * comes down over it from a glide (the heart's thermal reaches it), dives through to the arcade. The
+ * doorway stays in the room's data, and without the flag it is the hatch it was. A diver comes down in
+ * the arcade at a spot of its own (`from-dive`, rooms/index.ts), at the start of the arcade's glide lane.
+ */
+export const HALL_KNOT_HOLE: Downdraft = { id: 'knot-hole', door: 'down', pos: wayAt('down', HATCH_IN), r: 130, top: 640, lands: 'from-dive', hides: ['root-hatch'] };
+
 export const HALL_ROOM: RoomDef = {
   id: HALL_ID,
   size: { w: HALL_W, h: HALL_H },
@@ -567,6 +577,7 @@ export const HALL_ROOM: RoomDef = {
   pieces: [...PIECES, ...ROOT_PIECES],
   perches: [...ROOT_PERCHES],
   thermals: [HEART_THERMAL],
+  movers: { downdrafts: [HALL_KNOT_HOLE] },
   edges: [...HALL_EDGES],
   bowl: HALL_BOWL,
   // A Realm Vote idol in each Commons of a realm that has one, each over its own spot (RoomDef.idols).
