@@ -208,3 +208,29 @@ describe('emotes on the page (OP-210)', () => {
     expect(socket.sent.slice(before).filter((t) => (JSON.parse(t) as { t: string }).t === 'emote')).toHaveLength(0);
   });
 });
+
+describe('a press while the room is out of reach (OP-406, OP-407)', () => {
+  it('is answered at once as offline once the socket has dropped, not after the reply time in silence', async () => {
+    const park = new EdgeTransport('https://park.example');
+    const conn = await park.join('grove', SELF, listening());
+    // The socket closes as it opens, as on a network that lets pages through and not sockets.
+    FakeSocket.made[0]!.shut(1006);
+    let answer: unknown = null;
+    void conn.acts!.cast().then((a) => (answer = a));
+    await vi.advanceTimersByTimeAsync(50);
+    expect(answer).toEqual({ ok: false, reason: 'offline' });
+  });
+
+  it('still waits for the welcome while the socket is opening again (so the test above is not vacuous)', async () => {
+    const park = new EdgeTransport('https://park.example');
+    const conn = await park.join('grove', SELF, listening());
+    FakeSocket.made[0]!.shut(1006);
+    await vi.advanceTimersByTimeAsync(10_000);
+    const again = FakeSocket.made.at(-1)!;
+    again.open();
+    let answer: unknown = null;
+    void conn.acts!.cast().then((a) => (answer = a));
+    await vi.advanceTimersByTimeAsync(50);
+    expect(answer).toBeNull();
+  });
+});
