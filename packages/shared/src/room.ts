@@ -5,6 +5,7 @@ import type { Vec2 } from './protocol';
 import type { Updraft } from './updraft';
 import type { Thermal } from './thermal';
 import type { WindCurrent } from './wind';
+import type { Movers } from './movers';
 import type { BrushStone } from './brush';
 import type { NeonSign } from './circuit';
 import type { EdgePlacement } from './edges';
@@ -199,6 +200,12 @@ export interface RoomDef {
   thermals?: Thermal[];
   /** In a room seen from the side: sideways currents that carry a gliding owl across a gap (wind.ts, OP-275). */
   winds?: WindCurrent[];
+  /**
+   * In a room seen from above: its movers (movers.ts, OP-287), each beside the doorway it stands for: a
+   * downdraft over a knot hole, a glide lane, a knot-hole tunnel. A page shows and plays them only behind
+   * its `movers` flag; without it the room is as its doorways say.
+   */
+  movers?: Movers;
   /**
    * In a room seen from the side: brush stones (brush.ts, OP-235), ledges that paint fading bridges and
    * treads of ink when an owl lands on one. Every stroke they can paint is also one of the room's perches.

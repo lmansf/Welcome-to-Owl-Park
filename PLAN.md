@@ -41,6 +41,10 @@
   below. OP-368 (the second click at the turnstiles) is in the gate's code, which his rules keep
   his, so it is left for his word; so is the turnstiles' ticket card, which OP-369 measured and
   left (`ui/tickets.ts`).
+- The movers (OP-287), on the owner's hand-off of Nov 14 for the Dec 1 build: a dive, a glide lane
+  and a knot-hole tunnel in the shared flight rules, behind `?movers=1`. Under "After the pass"
+  below, with its milestones. A pull request behind the flag by Nov 21; on for every visitor on
+  Nov 25 only if QA passes, a change of its own.
 - Still the owner's to say: OP-335 and OP-341 (each needs a change under `.github/`, which his
   rules keep his unless he says so of that change); the "at the park" quest step (naming the
   place changes a logged step's words); OP-357 (the art tool's own tests are not part of CI and
@@ -672,6 +676,94 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   into the light there); and his own test, the audit's human target (4 of 5 newcomers on each
   kind of device reach a first meaningful action within 90 s without coaching).
 
+### OP-287: owls move like owls (the movers), behind `?movers=1`
+
+- The owner's hand-off (Nov 14): three movers in the shared flight rules, a downdraft for dives, a
+  glide lane for long crossings and a knot-hole tunnel that carries an owl between rooms. The hall
+  hatch and the cavern stair first, then the ladders and doors in the courses. A leaf pile or a
+  feather along each path. All of it behind `?movers=1`, with labelled size boxes for the three
+  new pieces so the artists can swap them in. The kid bar holds and the kid-sim bots stay green.
+  A pull request behind the flag by Nov 21; it goes on for everyone on Nov 25 only if QA passes,
+  and otherwise stays behind the flag past Dec 1.
+- Why it beats what is there: a hatch, a stair and a door are things people use. An owl drops
+  through a hole, rides air and squeezes through a knot. The thermal (OP-340) showed the owner
+  what that feels like, and his ask on Nov 6 was more of it and fewer human objects.
+- How it goes in, read from the code first. The room server knows no page's flag and takes its
+  room data from the shared package, and a pull request labelled flag-hidden may not edit shared
+  files or the room server. So this goes in as the thermal did: the shared rules and room data
+  through the ordinary gate, there for every page and played by none without the flag, and the
+  page's side behind `?movers=1`. A doorway a mover stands for stays in the room's data, so
+  without the flag its sign, its glint, the trail and every test are as they were.
+- The three rules (`packages/shared/src/movers.ts`, new):
+  - A downdraft: sinking air over a knot hole in the floor, a circle on the room's plan with a
+    top. An owl in the air inside it is taken down as a dive (falling at 900 px a second, wings
+    folded) and pulled in over the hole; down inside it, it goes through the doorway the
+    downdraft stands for. A step onto the hole from the floor is the same dive. The room server
+    needs nothing new: a dive is a fall, which it takes anywhere.
+  - A glide lane: a line over the floor with a height and a reach. A held glide beside it is
+    held level at that height (the lifted state a thermal and a wind use) and carried to the end
+    the owl is heading for, by the owl's own walk at the walk's pace, as a wind current carries
+    an owl in a room seen from the side. At that end the lane sets the owl down. Jump let go
+    ends the ride where the owl is. A push of the owl's own steers it, still held level. The
+    room server holds a lifted owl at a lane's height only beside that lane: one clause beside
+    the thermal's (`Room.ts`).
+  - A knot-hole tunnel: a doorway taken as a tunnel. The owl goes in at the mouth and comes out
+    of the mouth at the other end with a hop. The room server needs nothing new: a change of
+    room is a new hello.
+  - `moverProblems` holds every room's movers to sense in the shared tests: a downdraft on a
+    doorway that leads somewhere, a lane over floor all its length at a height a held jump from
+    the floor is caught at, a tunnel's mouth by its doorway.
+- Milestone 1, the hall hatch and the cavern stair (this pull request):
+  - The Great Hollow's hatch is a knot hole in the roots (`HALL_KNOT_HOLE`): a step onto it, or
+    a glide from the heart's thermal that comes over it, dives to the arcade. The owl comes in
+    380 px over where it lands and drops, about half a second, seen as the room comes up.
+  - The arcade's doorway back up, the root stair folded into the room (OP-306), is a tunnel
+    (`ARCADE_TUNNEL`): in at the mouth, up out of the Great Hollow's floor with a hop.
+  - A glide lane runs the arcade's length past its three cabinets (`ARCADE_LANE`), from where an
+    owl that dived in comes down, so a dive held on into a glide is carried straight on. It is
+    the room's long crossing: 4,000 px, a quarter of a minute's walk between its cabinets.
+    Divers come down at a spot of their own on the lane's line (`from-dive`, the downdraft's
+    `lands`), not at the doorway's.
+  - Something to do along each: the leaf pile by the knot hole, the one by the tunnel's mouth,
+    three along the lane and one of the room's things within three seconds of any point of it.
+    All were there already, so nothing new shows without the flag.
+  - The three new pieces are in the art list with their sizes (`mover-knot-hole-mouth` 240x120,
+    `mover-downdraft-column` 260x420, `mover-glide-lane-streamers` 400x90) and drawn as boxes
+    with their names (`moversView.ts`). A file delivered under a key takes its box's place.
+  - One line of new words, a draft for the owner, shown only with the flag: "A glide lane runs
+    here. Jump and keep holding to ride it along." It is the thermal's line, for a lane.
+  - Found while building, both by the browser tests. Jump let go in the middle of a ride dropped
+    the owl out of the air and then walked it on to the lane's end, because the carry's walk and
+    its goal outlived the ride. And at the edge of the downdraft's column an owl hovered and
+    sank slowly outside it: its place is reckoned a frame ahead of where it is drawn, so asking
+    afresh each step let it go and took it again. A downdraft now keeps an owl it has taken
+    until it is down. And one only the room server showed: it sets an arrival down up to 60 px
+    off its spawn, which from the doorway's own spawn could be outside the lane's reach, so a
+    diver's held glide was sometimes carried on and sometimes not. Hence the spot of its own.
+  - Tests: the rules and every room's movers (`movers.test.ts` in the shared package); the room
+    server's hold of a lane's rider, a dive taken as a fall, and the arcade's own lane
+    (`Room.test.ts`); the page's side (`game/movers.test.ts`); and in the browser
+    (`e2e/movers.spec.ts`, a computer and a phone): without the flag nothing is drawn or
+    played; the dive; the lane end to end, set down by the lane, back, and let go in the
+    middle; the tunnel; and the glide over the knot hole. Through the room server, another owl
+    with no flag sees a rider carried along at the lane's height (`e2e/edge.spec.ts`).
+  - Done when: with the flag, hall to arcade to hall is a dive, a ride and a tunnel on a
+    computer and a phone; without it nothing has changed; the gate passes.
+- Milestone 2, the courses: their doorways between rooms are hatches, paper doors and rooftop
+  doors today (the canopy's `down` and `hatch-up`, the brush course's doors and moon gates, the
+  circuit's rooftop doors). Each becomes a tunnel or a dive, in rooms seen from the side, where
+  a downdraft is a band across the room as an updraft is and a lane is a wind current. The kid
+  sim plays those rooms, so it has to learn each mover before a course route may need one.
+- Milestone 3, the lane's pace: at a walk's pace the lane saves no time, only the walking. A
+  pace of its own needs a third walk pace on the wire and in the room server (a walk today is
+  260 px a second, or 900 for a course's dash), so that the room and every other page carry the
+  rider at the pace its own page does. Its own pull request.
+- Should move: with the flag on for everyone, the share of arrivals in the Great Hollow that
+  reach the arcade, and arcade visits that reach a second cabinet. Until then, the QA walk.
+- For the owner: the lane's line of words; how each of the three pieces should look; whether
+  the hall wants a lane of its own once the guardian is on; and the ticket's wider list (the
+  hall's planks, the grove's ladder, nest doors), which is outside this build unless he says so.
+
 ## Log
 
 - 2026-11-11: plan written after the walk. Five walkers at once used up the account's usage limit
@@ -1141,3 +1233,18 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   longer than a sixtieth of a second while it settles), so a timer of the room's, such as the
   trail's 1.2 s, takes about six seconds here and on a slow runner. A real device at sixty
   frames a second does not do this. Tests wait on the thing itself, not the seconds.
+- 2026-11-14: OP-370 merged through the gate (PR 244, 84f828b) and OP-363 after it (PR 256,
+  cf7cb1f); both live (deploy runs 329 and 330 on their merge commits).
+- 2026-11-14: the movers (OP-287) begun on the owner's hand-off. Two passes with several readers
+  at once were tried for the first map of the code and a review of OP-363: the first gave three
+  reports of nine before the account's usage limit stopped it, the second none, and the session
+  stood still for four hours until the limit reset. The three reports (the flight rules, what
+  the room server takes, the page's hooks) were enough to design from. Kept for next time: a
+  wide fan-out spends the same allowance the session itself runs on, so keep it small and read
+  the rest directly.
+- 2026-11-14: the movers' first milestone built (OP-287; under "After the pass"). Three faults
+  were caught by its own browser tests before it went up, the third only through the room
+  server, which is why the room-server project has a test of the lane too. Kept for next time:
+  a dev server that has been up through a change to the shared room data can go on serving the
+  rooms as they were, a warm-up load or not, so restart it before a browser run that depends on
+  the change (a run here failed on an arrival spot the fresh server placed rightly).

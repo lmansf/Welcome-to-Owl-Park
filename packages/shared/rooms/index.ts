@@ -17,6 +17,7 @@ import { HALL_ANCHORS, HALL_ID, HALL_ROOM, fromRealm } from './hollowHall';
 import { growToPlaza } from './plaza';
 import { GLIDE_SLOPE } from '../src/flight';
 import type { Thermal } from '../src/thermal';
+import type { GlideLane, KnotTunnel } from '../src/movers';
 import { floorPerches, floorPieces } from '../src/plazaFloor';
 import type { CourseDef } from '../src/course';
 import { realmStart, realmStartAnchors } from '../src/realmStart';
@@ -24,7 +25,7 @@ import { realmStart, realmStartAnchors } from '../src/realmStart';
 export { STREET_DOORS, STREET_ROOM } from '../src/homes';
 export { PARTY_ROOM } from './party';
 export { NEW_MAP } from '../src/newMap';
-export { HALL_MIDDLE, HALL_ROOM, ROOT_RUNS, RUN_Y, rootId, type HallLevel, type RootRun } from './hollowHall';
+export { HALL_KNOT_HOLE, HALL_MIDDLE, HALL_ROOM, ROOT_RUNS, RUN_Y, rootId, type HallLevel, type RootRun } from './hollowHall';
 
 /**
  * Room registry shared by the browser client and the room server, so both clamp walks
@@ -1641,6 +1642,25 @@ ROOMS['arcade'] = growToPlaza(ROOMS['arcade']!, {
   corner: 'edge-arcade-corner-front',
   frontBumps: ['edge-arcade-clutter-a', 'edge-arcade-clutter-b', 'edge-arcade-clutter-a', 'edge-arcade-clutter-b', 'edge-arcade-clutter-a', 'edge-arcade-clutter-b', 'edge-arcade-clutter-a'],
 });
+/**
+ * The arcade's movers (OP-287, src/movers.ts), behind the page's `movers` flag. The open doorway at its
+ * west end, the root stair folded into the room (OP-306), is a knot-hole tunnel up through the roots to
+ * the Great Hollow. And a glide lane runs the length of the room in front of the cabinets, from where an
+ * owl comes in to the far end and back: a held glide near it is caught and carried along, so the long
+ * walk between the three cabinets is a ride. It starts where an owl that dived in comes down (`from-dive`),
+ * so a dive held on into a glide is carried straight on. The tunnel's mouth stands at the doorway's inner edge, so
+ * the whole of it is in the room.
+ */
+export const ARCADE_TUNNEL: KnotTunnel = { id: 'roots-up', door: 'to-market', mouth: { x: 120, y: 750 } };
+export const ARCADE_LANE: GlideLane = { id: 'cabinet-row', a: { x: 300, y: 880 }, b: { x: 4300, y: 880 }, z: 150, r: 80 };
+ROOMS['arcade'] = {
+  ...ROOMS['arcade']!,
+  // Where an owl that dived down the Great Hollow's knot hole comes down (HALL_KNOT_HOLE.lands): on the
+  // lane's line at its west end. The room server sets an arrival down up to 60 px off its spawn, which
+  // from the doorway's own spawn can be outside the lane's reach; from here it never is.
+  spawns: { ...ROOMS['arcade']!.spawns, 'from-dive': { ...ARCADE_LANE.a } },
+  movers: { tunnels: [ARCADE_TUNNEL], lanes: [ARCADE_LANE] },
+};
 // The lane under the nests: its west bank, the mound where its two screens join and its east bank,
 // which closed the lane's front, are mossy mounds in the plaza now, hopped up on.
 ROOMS['homes'] = growToPlaza(ROOMS['homes']!, {
