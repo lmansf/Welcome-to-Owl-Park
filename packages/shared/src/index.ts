@@ -68,3 +68,4 @@ export * from './raster';
 export * from './puzzleQuests';
 export * from './escape';
 export * from './party';
+export * from './voteShares';

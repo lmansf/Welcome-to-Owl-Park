@@ -2750,3 +2750,25 @@ describe('a newcomer at a full room as the line starts by itself (OP-322)', () =
     }
   });
 });
+
+describe('the Realm Vote’s shares in the Great Hollow (OP-288)', () => {
+  const shares = (obj: Obj, body: unknown) => obj.fetch(new Request('https://park/shares', { method: 'POST', body: JSON.stringify(body) }));
+
+  it('tells every owl in the hall the new shares, and only the hall', async () => {
+    const obj = roomObject();
+    const inHall = await join(obj, 'm3-hall', 'v_hallowl01');
+    const inHub = await join(obj, 'hub', 'v_hubowl001');
+    expect((await shares(obj, { month: '2026-11', shares: { grove: 50, market: 25, glass: 25 } })).status).toBe(200);
+    expect(inHall.of('shares')).toEqual([{ t: 'shares', month: '2026-11', shares: { grove: 50, market: 25, glass: 25 } }]);
+    expect(inHub.of('shares')).toEqual([]);
+  });
+
+  it('passes on percentages only: counts, unknown realms or shares that do not make 100 are refused', async () => {
+    const obj = roomObject();
+    const inHall = await join(obj, 'm3-hall', 'v_hallowl01');
+    for (const bad of [{ month: '2026-11', shares: { grove: 3, market: 1, glass: 0 } }, { month: '2026-11', shares: { grove: 100, moon: 0 } }, { shares: { grove: 100 } }, null]) {
+      expect((await shares(obj, bad)).status, JSON.stringify(bad)).toBe(400);
+    }
+    expect(inHall.of('shares')).toEqual([]);
+  });
+});

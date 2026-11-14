@@ -4,6 +4,8 @@ import {
   HEARTBEAT_FRAME,
   HEARTBEAT_INTERVAL_MS,
   STUMP_ROOM,
+  VOTABLE_REALMS,
+  isVoteShares,
   isPartyRoom,
   parseServerFrame,
   positionAlongWalk,
@@ -459,6 +461,18 @@ export class EdgeTransport implements ParkTransport {
     });
   }
 
+  /** This month's Realm Vote shares (OP-288), as anyone may read them: percentages only. Null when the park cannot say. */
+  async voteShares(): Promise<{ month: string; shares: Record<string, number> } | null> {
+    try {
+      const res = await fetch(`${this.base}/api/vote/shares`);
+      if (!res.ok) return null;
+      const body = (await res.json()) as { month?: unknown; shares?: unknown };
+      return typeof body.month === 'string' && isVoteShares(body.shares, VOTABLE_REALMS) ? { month: body.month, shares: body.shares } : null;
+    } catch {
+      return null;
+    }
+  }
+
   /** Feedback for the park's keepers, sent with this visitor's pass. */
   feedback(draft: FeedbackDraft): Promise<Response> {
     return this.api('/api/feedback', { method: 'POST', body: JSON.stringify(draft) });
@@ -765,6 +779,9 @@ export class EdgeTransport implements ParkTransport {
           break;
         case 'realms':
           handlers.onRealms?.(f.realms);
+          break;
+        case 'shares':
+          handlers.onShares?.(f.month, f.shares);
           break;
         case 'stump':
           // The Old Stump's seats (OP-314): an answer and a push alike; times are none.

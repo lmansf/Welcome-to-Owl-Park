@@ -1099,7 +1099,7 @@ Vote, and the nightly restart.
 | `/api/store/webhook` | `store.ts` | the store's signature |
 | `/api/tickets`, `/api/tickets/*` | `tickets.ts` | a pass |
 | `/api/collection`, `/api/shop`, `/api/shop/buy`, `/api/shop/gift`, `/api/nest`, `/api/nest/gift` | `collection.ts` | a pass |
-| `/api/vote*` | `vote.ts` | a pass; `/api/vote/tally` and `/api/vote/close` the admin key (the tally opens with `VOTE_TALLY_PUBLIC`) |
+| `/api/vote*` | `vote.ts` | a pass; `/api/vote/tally` and `/api/vote/close` the admin key (the tally opens with `VOTE_TALLY_PUBLIC`); `/api/vote/shares` none (whole percents only, for the vote desk, OP-288) |
 | `/api/health`, `/api/counts`, `/ws/<room>` | `rooms.ts` | the socket a pass; the others nothing |
 
 ### The front door (OP-140, OP-141, OP-144) [BUILT]
@@ -1144,7 +1144,7 @@ minute, and the first call over in a window is logged as `rate_limited` (`docs/P
 | Limit | Counts | A minute | Keyed by |
 | --- | --- | --- | --- |
 | `address` | every call, a socket's opening included | 600 | the client's address |
-| `public` | calls that need no pass (`isPublicCall`: `/api/pass`, `/api/notice`, `/api/counts`, `/api/health`, `/api/csp-report`, `/api/vote/tally`, `/api/admin/*`, `/api/masks/*`, `/api/account/*`), made without a pass | 300 | the address |
+| `public` | calls that need no pass (`isPublicCall`: `/api/pass`, `/api/notice`, `/api/counts`, `/api/health`, `/api/csp-report`, `/api/vote/tally`, `/api/vote/shares`, `/api/admin/*`, `/api/masks/*`, `/api/account/*`), made without a pass | 300 | the address |
 | `refused` | calls that need a pass and came with none the Worker takes | 60 | the address |
 | `visitor` | calls with a pass | 120 | the owl's collector id (or the pass's id before it has one) |
 | `ticket` | the calls that move tickets or send mail (`isTicketCall`: `/api/tickets/claim`, `take`, `share`, `scan`, `pass`, `checkout`, and `/api/account/*`), on top of the others | 10 | the owl (or the address) |
