@@ -178,6 +178,36 @@ export const STORY_QUESTS: readonly QuestDef[] = [
     offer: 'The wind through the moon gate keeps blowing leaves onto my paving stones. Flop into a pile for me, then come back and give me a hoot.',
     thanks: 'The stones are clear and the ink can dry. Here, for your trouble.',
   },
+  // The front entrance's first quest (OP-281): a leaf pile on the Treetop Commons' plaza, a look down the
+  // nests' street (where an owl's own nest is), and a hoot for Maple: short enough for a first visit,
+  // and its thanks points the way in through the turnstiles.
+  {
+    id: 'story-maple-first',
+    title: 'Hello at the gate',
+    giver: 'maple',
+    type: 'mixed',
+    difficulty: 'easy',
+    length: 'medium',
+    cadence: 'story',
+    steps: [flop(1, 'lobby'), visit('homes'), emote('hoot', { npc: 'maple' })],
+    reward: { feathers: 30, item: null },
+    offer: 'Hello, new feathers! The wind blows leaves all over this plaza. Flop into one pile for me, then take a look down the nests’ street, where your own nest is. Come back and give me a hoot.',
+    thanks: 'A proper hoot! Now walk through the turnstiles into the Great Hollow. Quill, in the ink Commons, has a job for you.',
+  },
+  // Neon Roost, the arcade (OP-281): Flicker sends an owl down to the end of the neon street to find it.
+  {
+    id: 'story-flicker-arcade',
+    title: 'The blinking door',
+    giver: 'flicker',
+    type: 'mixed',
+    difficulty: 'easy',
+    length: 'medium',
+    cadence: 'story',
+    steps: [visit('arcade'), emote('hoot', { npc: 'flicker' })],
+    reward: { feathers: 30, item: null },
+    offer: 'There is a door at the end of the street that blinks all night. Neon Roost, the arcade! Go and find it, then come back and give me a hoot.',
+    thanks: 'You found it! I fixed half those cabinets myself. Have a go on one any time.',
+  },
   // The Great Hollow's Commons (OP-281, OP-258): each Commons' quest owl asks for a leaf pile or the
   // moonbeam on the hollow's floor and a look through its Commons' door, then a hoot back, so every
   // Commons has something to do and points the way on. The ink Commons' first: before these, all it had

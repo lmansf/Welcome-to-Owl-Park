@@ -307,7 +307,7 @@ const DOORS: DoorDef[] = [
       rect: { x: at.x - 90, y: at.y - 40, w: 180, h: 80 },
       to: { room: 'arcade', spawn: 'from-cavern' },
       marker: at,
-      label: 'Down to the arcade',
+      label: 'Down to Neon Roost, the arcade',
       // Over the hatch, not under it: the hatch's art stands over the floor's edge.
       labelAt: wayAt('down', signInset('down')),
     } satisfies DoorDef;
