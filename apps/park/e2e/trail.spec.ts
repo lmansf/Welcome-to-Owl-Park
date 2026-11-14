@@ -35,9 +35,10 @@ test.describe('the feather trail (OP-307)', () => {
     await page.keyboard.up('ArrowUp');
     await page.waitForFunction(() => window.owlPark.state()?.connected === true);
 
-    // No doorway for the two ways with nothing behind them, and no closed sign in the room.
+    // No doorway for the one way with nothing behind it, and no closed sign in the room; the ink
+    // Commons' way leads to the ink garden (OP-402).
     const hall = await state(page);
-    expect(hall.doors.map((d) => d.id)).not.toContain('to-ink');
+    expect(hall.doors.map((d) => d.id)).toContain('to-ink');
     expect(hall.doors.map((d) => d.id)).not.toContain('course-glass');
 
     // The feathers come out down the hall to its own roots, a thing to do before any doorway (OP-347):
