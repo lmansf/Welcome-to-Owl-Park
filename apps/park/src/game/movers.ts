@@ -1,4 +1,4 @@
-import { AIRBORNE, DIVE_ARRIVAL, distance, hiddenPieces, type Air, type Flaps, type GlideLane, type RoomDef, type Vec2 } from '@owl-park/shared';
+import { distance, hiddenPieces, type GlideLane, type RoomDef, type Vec2 } from '@owl-park/shared';
 
 /**
  * The movers as a page plays them (OP-287, shared movers.ts): a dive down a knot hole, a glide lane,
@@ -31,24 +31,22 @@ export const MOVER_WORDS = {
   lane: 'A glide lane runs here. Jump and keep holding to ride it along.',
 } as const;
 
-/** How fast an owl comes up out of a tunnel's far mouth (px/s up): a hop, about half a jump's height. */
-export const TUNNEL_HOP = 620;
 /** How long an owl takes to go into a mouth before the room changes (ms): seen, and no wait. */
 export const INTO_MOUTH_MS = 260;
-
-/** How an owl came into a room by a mover of the room it left: falling from a dive, or up out of a tunnel. */
-export type CameBy = 'dive' | 'tunnel';
+/** How far an owl sinks into a hole under its feet as it dives, in a room seen from the side (room px). */
+export const INTO_HOLE_PX = 46;
+/**
+ * How long a room takes to fade in for an owl that came into it by a mover (ms), where any other
+ * arrival's takes 350: the owl is in the air as the room comes up, and the hop out of a tunnel is over
+ * in 370 ms, so at the usual pace only its last moment was seen.
+ */
+export const MOVER_FADE_IN_MS = 180;
 
 /** The room as a page with the movers on draws it: without the set pieces its movers stand in place of. */
 export function roomWithMovers(room: RoomDef): RoomDef {
   const hidden = new Set(hiddenPieces(room.movers));
   if (!hidden.size || !room.pieces) return room;
   return { ...room, pieces: room.pieces.filter((p) => !hidden.has(p.id)) };
-}
-
-/** The air an owl comes into a room with, by the mover it came by: over where it lands and falling, or hopping up out of the mouth. */
-export function arrivalAir(came: CameBy, flaps: Flaps): Air {
-  return came === 'dive' ? { z: DIVE_ARRIVAL.z, vz: DIVE_ARRIVAL.vz, s: AIRBORNE, f: flaps } : { z: 0, vz: TUNNEL_HOP, s: AIRBORNE, f: flaps };
 }
 
 /** Where along a lane its stretches of streamers stand: end to end, each `every` px long, the last one cut to fit. */

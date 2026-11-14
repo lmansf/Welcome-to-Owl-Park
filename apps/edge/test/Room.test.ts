@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { AIRBORNE, DIVE_ARRIVAL, DIVE_SPEED, LIFTED, UPDRAFT_RISE, dive, AIR_DASH_COOLDOWN_MS, AIR_DASH_DISTANCE, AIR_DASH_MS, AIR_DASH_SPEED, DASH_SLACK_PX, CLOSE, EDGE_PROTOCOL_VERSION, EMOTE_EVERY_MS, GROUNDED, ON_GROUND, STREET_DOORS, STREET_ROOM, WALK_SPEED, arrivalPoint, distance, isWalkable, nestDoorIndex, resolveTarget, type Air, type ClientHello, type RoomDef, type ServerFrame, type Vec2, segmentTouchesRect, walkCrossesExit } from '@owl-park/shared';
+import { AIRBORNE, DIVE_ARRIVAL, DIVE_SPEED, LIFTED, UPDRAFT_RISE, arrivalAir, dive, AIR_DASH_COOLDOWN_MS, AIR_DASH_DISTANCE, AIR_DASH_MS, AIR_DASH_SPEED, DASH_SLACK_PX, CLOSE, EDGE_PROTOCOL_VERSION, EMOTE_EVERY_MS, GROUNDED, ON_GROUND, STREET_DOORS, STREET_ROOM, WALK_SPEED, arrivalPoint, distance, isWalkable, nestDoorIndex, resolveTarget, type Air, type ClientHello, type RoomDef, type ServerFrame, type Vec2, segmentTouchesRect, walkCrossesExit } from '@owl-park/shared';
 import { FIRST_LOOK_SPAWN, ROOMS, roomFor } from '@owl-park/shared/rooms';
 import { Room, LIMITS, type Peer, type PositionRejection, type VisitorState } from '../src/Room';
 
@@ -1235,6 +1235,26 @@ describe('Room: the movers of a room seen from above (OP-287)', () => {
     expect(distance(room.positionOf('a')!, { x: 300, y: 1250 })).toBeLessThan(40);
     expect(room.air('a', held)).toBe(false);
     expect(rejected).toEqual(['lift']);
+  });
+
+  it('takes an owl that comes into a course’s room by a mover: falling in from the storey above, and hopping out of a tunnel up on a ledge', () => {
+    // The Updraft Canopy's trunk: the storey above's way down is dived into, and comes in here falling.
+    const storey = ROOMS['canopy-2a']!;
+    const room = new Room(storey, { now: () => now, random: () => 0.5, cap: 5, rejected: (_id, why) => rejected.push(why) });
+    const a = new FakePeer();
+    const b = new FakePeer();
+    room.join(a, 'a', hello({ spawn: 'from-above' }));
+    room.join(b, 'b', hello());
+    const falling = arrivalAir('dive');
+    expect(room.air('a', falling)).toBe(true);
+    expect(b.last('air')).toMatchObject({ id: 'a', air: falling });
+    // The ink course's river: out of the tunnel behind the waterfall, onto its ledge 540 up.
+    const river = ROOMS['brush-2']!;
+    const ledge = river.spawnTops!['from-falls']!;
+    const other = new Room(river, { now: () => now, random: () => 0.5, cap: 5, rejected: (_id, why) => rejected.push(why) });
+    other.join(new FakePeer(), 'c', hello({ spawn: 'from-falls' }));
+    expect(other.air('c', arrivalAir('tunnel', 0, ledge))).toBe(true);
+    expect(rejected).toEqual([]);
   });
 });
 

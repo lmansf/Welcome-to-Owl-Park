@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { frames, openPark, settleCamera, state, toScreen } from './helpers';
+import { frames, openPark, settleCamera, state, toScreen, walkAndStop } from './helpers';
 
 /** Give a collector a variant before the park loads (as if earned earlier), stored the way the local mode keeps it. */
 async function seed(page: Page, collector: string, variant: string): Promise<void> {
@@ -309,11 +309,18 @@ test.describe('puzzle quests (this device, OP-255)', () => {
     test.slow(); // walks across the hub, drawn with software WebGL on CI runners
     const quest = 'puzzle-moon-gate';
     await openPark(page, { collector: 'e2e-puzzle', tz: 'UTC' });
+    const cameIn = (await state(page)).pos;
     expect(await page.evaluate(() => window.owlPark.talk('pip'))).toBe(true);
     const dialogue = page.locator('.dialogue[data-npc="pip"]');
     await expect(dialogue).toBeVisible({ timeout: 15_000 });
     await dialogue.locator(`[data-offer="${quest}"]`).getByRole('button', { name: 'Take it on' }).click();
     await expect(page.locator('.notice').filter({ hasText: /^New quest:/ })).toBeVisible();
+
+    // A run deals its pieces at random over the room's hiding spots, and a piece dealt where the owl is standing is worked
+    // as the run starts: the key is taken, or the dial's pad is up, before anyone has walked. One of this room's spots is
+    // a step from where an owl stands to talk to Pip. So the run starts from where the owl came in, clear of every spot,
+    // and whatever the deal its pieces are found by walking to them.
+    await walkAndStop(page, cameIn.x, cameIn.y);
 
     // The Quests tab shows the puzzle with no run yet; Start a run deals fresh clues and codes.
     await page.keyboard.press('KeyJ');
@@ -328,7 +335,9 @@ test.describe('puzzle quests (this device, OP-255)', () => {
 
     // This room holds the root door's key and the moth dial; a piece up on the bench needs a jump, so walk to those on the floor.
     const view = await page.evaluate((q) => window.owlPark.puzzle(q), quest);
-    const key = view!.locks.find((l) => l.id === 'root-door')!.key!;
+    const root = view!.locks.find((l) => l.id === 'root-door')!;
+    expect(root.hasKey, 'no piece is dealt where the owl stood as the run started').toBe(false);
+    const key = root.key!;
     const dial = view!.locks.find((l) => l.id === 'moth-dial')!.post;
     let worked = 0;
     if (!key.top) {

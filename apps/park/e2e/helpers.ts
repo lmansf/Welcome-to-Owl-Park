@@ -67,6 +67,8 @@ export interface ParkState {
   movers: {
     pieces: Array<{ key: string; x: number; y: number; w: number; h: number; art: boolean }>;
     diving: string | null;
+    /** The last dive a downdraft took the owl on, as its flight stepped it: which, from how high (room px), and how long the fall was (ms). */
+    dove: { id: string; z: number; ms: number } | null;
     laneRides: number;
     laneTo: { x: number; y: number } | null;
     cameBy: 'dive' | 'tunnel' | null;

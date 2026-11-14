@@ -7,10 +7,13 @@
  *  - every open doorway, leaf pile, hiding spot and course piece (bench, part, lost feather, shrine);
  *  - from every spawn;
  *  - stuck spots: a surface a kid can get to with no way from it to any doorway (and, in a course, no
- *    pit to fall back to a bench by).
+ *    pit to fall back to a bench by);
+ *  - every way in by a mover (arrivals.ts): where an owl that falls or hops into the room can come down
+ *    counts as reached, and one that presses nothing has to come down safe.
  */
 import { COURSE_REACH, INTERACTABLES, KIND_RULES, PERCH_SLACK, type CourseDef, type RoomDef } from '@owl-park/shared';
 import { COURSES, ROOMS } from '@owl-park/shared/rooms';
+import { moverWaysIn, playArrival, type ArrivalReport } from './arrivals';
 import { actionsToward, canAim, type Action } from './kid';
 import { botRoom } from './owl';
 import { routeFrom, solve, type Goal, type Hop } from './route';
@@ -50,6 +53,8 @@ export interface RoomReport {
   stuck: Array<{ surface: string; x0: number; x1: number; top: number }>;
   /** Spawns that stand on nothing. */
   floating: string[];
+  /** The ways in by a mover (arrivals.ts): where each can be brought down, and whether pressing nothing is safe. */
+  arrivals: ArrivalReport[];
   ms: number;
 }
 
@@ -210,8 +215,11 @@ export function playtestRoom(id: string): RoomReport {
     reports.push({ id: t.id, kind: t.kind, required: t.required, reachable: best !== null, tries: best ? ROUND(best.tries) : null, from: best?.start ?? null, weakest, hops });
   }
 
+  // Come in by a mover (OP-287): in the air before it has stood anywhere, so where a kid can bring that
+  // down is reached too, whichever way through the course it was going.
+  const arrivals = moverWaysIn(room).map((w) => playArrival(br, surfaces, w));
   // Stuck: reached from a way in, with no way on to any doorway and no fall back to a bench.
-  const reached = new Set<string>(startOn.values());
+  const reached = new Set<string>([...startOn.values(), ...arrivals.flatMap((a) => a.lands)]);
   const queue = [...reached];
   while (queue.length) {
     const s = queue.pop()!;
@@ -231,7 +239,7 @@ export function playtestRoom(id: string): RoomReport {
       }
     }
   }
-  return { room: id, course: c?.id ?? null, act: c?.act ?? null, surfaces: surfaces.length, starts, targets: reports, stuck, floating, ms: Date.now() - t0 };
+  return { room: id, course: c?.id ?? null, act: c?.act ?? null, surfaces: surfaces.length, starts, targets: reports, stuck, floating, arrivals, ms: Date.now() - t0 };
 }
 
 /** The rooms the bots playtest: every room seen from the side (the tree, the new map, the courses' acts). */

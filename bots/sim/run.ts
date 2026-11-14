@@ -64,6 +64,7 @@ export function findings(rooms: readonly RoomReport[], courses: readonly CourseR
   const out: Finding[] = [];
   for (const r of rooms) {
     for (const s of r.floating) out.push({ key: `floating:${r.room}:${s}`, what: `${r.room}: spawn ${s} stands on nothing` });
+    for (const a of r.arrivals ?? []) if (a.unsafe) out.push({ key: `arrival:${r.room}:${a.spawn}:${a.came}`, what: `${r.room}: an owl that comes in at ${a.spawn} by a ${a.came} and presses nothing does not come down safe` });
     for (const s of r.stuck) out.push({ key: `stuck:${r.room}:${s.surface}`, what: `${r.room}: an owl on ${s.surface} (x ${s.x0} to ${s.x1}, ${Math.round(s.top)} up) can't get to any doorway` });
     for (const t of r.targets) {
       if (t.reachable) continue;
