@@ -36,10 +36,11 @@
 - From the owner's audit of Nov 12 (tickets OP-363 to OP-395, filed by another session), this
   session takes the ones in its remit, one pull request at a time. OP-365 (the quiz's size boxes,
   his yes on the ticket) and OP-369 (one safe area along the top of the screen) are merged and
-  live (PR 242 and PR 243, Nov 13). OP-370 (the Great Hollow at arrival) is built and in its pull
-  request. All three are under "After the pass" below. OP-368 (the second click at the
-  turnstiles) is in the gate's code, which his rules keep his, so it is left for his word; so is
-  the turnstiles' ticket card, which OP-369 measured and left (`ui/tickets.ts`).
+  live (PR 242 and PR 243, Nov 13). OP-370 (the Great Hollow at arrival, PR 244) and OP-363 (a
+  first flight before the turnstiles) followed on Nov 14. All four are under "After the pass"
+  below. OP-368 (the second click at the turnstiles) is in the gate's code, which his rules keep
+  his, so it is left for his word; so is the turnstiles' ticket card, which OP-369 measured and
+  left (`ui/tickets.ts`).
 - Still the owner's to say: OP-335 and OP-341 (each needs a change under `.github/`, which his
   rules keep his unless he says so of that change); the "at the park" quest step (naming the
   place changes a logged step's words); OP-357 (the art tool's own tests are not part of CI and
@@ -609,6 +610,68 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
 - For the owner's own test: with a fresh browser, come through the turnstiles and say out loud,
   within five seconds of the camera coming to rest, where the arcade is and where a course is.
 
+### OP-363: a first flight before the turnstiles
+
+- What the audit asks (Nov 12, its first fix): a free first activity one tap from home, so a
+  guest is gliding or playing an arcade round inside 90 seconds, with no quiz and no ticket card
+  on the way.
+- Measured on main first, through the room server set as the live park is (the gate taking
+  tickets, every new owl on the new map): a new guest who presses the free button and knows
+  exactly where to go, every walk asked for at once and nothing read, is at the Great Hollow's
+  first-flight roots in 22 s on a phone and 26 s on a computer. That is 6 presses, four rooms
+  (the nest, the nests' street, the Treetop Commons, the Great Hollow) and one ticket question at
+  the turnstiles. So the route was never long. It was four rooms to find a way out of, and
+  nothing to play until the fourth.
+- The two things the ticket left to settle, and the default taken on each:
+  - First flight or an arcade round: the first flight, as the ticket says. It teaches the moves
+    the courses need.
+  - Skip the turnstiles or walk the owl through them: neither. The gate is the owner's by his
+    rules, and the park's own line is that the way in is through the front gate. So the gate
+    stays as it is and the first flight comes to the guest: warm rising air in the Treetop
+    Commons' moonbeam, before the turnstiles, the same thing the Great Hollow has at its heart
+    (OP-340), with the words that one already has.
+- The change:
+  - Room data (`packages/shared/rooms/index.ts`): `COMMONS_THERMAL`, a column over the plaza's
+    moonbeam whose top is worked out from the data so that a glide from it reaches the front of
+    the turnstiles, and a spawn of its own, `FIRST_LOOK_SPAWN`, beside the column and outside it
+    on the turnstiles' side, a short walk away so the trail has room to lead in. The room server
+    takes a lifted owl only inside a room's own thermal, and learns of this one from the same
+    data: no change to its rules.
+  - The way in (`apps/park/src/main.ts`): the home screen's free button (Play free now, OP-364)
+    lands a new owl at that spawn and does not wait for its nest, which is asked for all the
+    same. Every other way in is as it was: Play, and an owl made in the quiz or the builder,
+    start in the owl's own nest (OP-105). The tree as it was (map 2) has no Commons of its own,
+    so an owl sent there starts as before.
+  - The trail (`featherTrail.ts`): the Commons has a game of its own for the trail to lead to
+    first, the rising air (`play-rise`), then the turnstiles and the nests.
+  - The first ride (`game/firstRise.ts`, new and pure; `RoomScene.ts`): an owl that is lifted
+    and carried to half the column's height or more has ridden it. As it lands the park says so
+    ("That is flying!", the first words of the Great Hollow's own line: no new words), the mark
+    is kept on the device as the trail keeps its doorways, and the trail leads on. Only a room
+    seen from above that has rising air and no flight of its own off roots marks one (the Great
+    Hollow keeps its own, OP-347).
+  - What shows past the plaza's edges while the ride draws the camera back past them is the
+    night sky the plaza's painting ends in, not the dark wood that stands round the oval.
+- Tests: `firstRise.test.ts` (the rule; the column in the moonbeam; its top reaches the
+  turnstiles; the spawn outside it, on the floor, with room for three feathers; the trail leads
+  to the rising air and then the turnstiles); a room-server test on the Commons' own data (an
+  owl led into the light is taken lifted to the column's top; beside it, not); in
+  `e2e/home.spec.ts` on a computer and a phone, the free button lands beside the moonbeam and
+  Play afterwards is the nest, and a whole first flight (the trail's glint and feathers, the
+  walk in, the tip, lifted, down, "That is flying!", no quiz and no ticket question on the way,
+  the trail leading on to the turnstiles) with the seconds from the press to carried up noted on
+  the test and held under 90; in `e2e/edge.spec.ts`, through the room server, a new guest whose
+  nest never answers is beside the moonbeam all the same and a second owl sees it carried up.
+  The two room-server tests of Play's wait on a slow nest now press Play for an owl made on an
+  earlier visit (they had used the free button only to make one).
+- Should move: of new guests, the share that complete one first glide (OP-394's activation),
+  and visits that never reach play. Visits are few: read owl by owl.
+- Left for the owner: the turnstiles' ticket question before the park (OP-368 and the ticket's
+  point 3 as it applies past the gate); whether an owl made in the quiz should land here too on
+  its first Play (it passes through the Commons on its way from its nest, and the trail leads it
+  into the light there); and his own test, the audit's human target (4 of 5 newcomers on each
+  kind of device reach a first meaningful action within 90 s without coaching).
+
 ## Log
 
 - 2026-11-11: plan written after the walk. Five walkers at once used up the account's usage limit
@@ -1067,3 +1130,14 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   for next time: in this device's own mode an owl walks the new map from the home screen only on
   a keeper's tab (`?keeper=1&newmap=1`); a plain tab walks the park as it was, so a capture that
   means to show a visitor's arrival has to say so in its address or go through the room server.
+- 2026-11-14: twelve merges from other sessions landed on main while OP-370's pull request
+  waited (the home screen's free button first, OP-364; the quiz and builder straight into the
+  park, OP-367; quest owls in the Commons, OP-281; the ink garden, OP-402; new painted art,
+  OP-404). Main was merged into the pull request's branch and every check run again before it
+  went in, so the checks that passed it were on today's park and not yesterday's.
+- 2026-11-14: OP-363 built (a first flight before the turnstiles; under "After the pass"). Kept
+  for next time: on this machine's software renderer the game's own clock runs at about a fifth
+  of real time for its first 120 frames after the home screen closes (the engine trusts no frame
+  longer than a sixtieth of a second while it settles), so a timer of the room's, such as the
+  trail's 1.2 s, takes about six seconds here and on a slow runner. A real device at sixty
+  frames a second does not do this. Tests wait on the thing itself, not the seconds.

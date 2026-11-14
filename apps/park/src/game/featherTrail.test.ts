@@ -135,9 +135,11 @@ describe('the trail leads to a room’s own games first (OP-338)', () => {
   const spot = (room: string, id: string) => PLAY_SPOTS[room]!.find((s) => s.id === id)!;
 
   it('knows each room’s games by the floor an owl plays them from', () => {
-    expect(Object.keys(PLAY_SPOTS).sort()).toEqual(['grove', 'hub', 'm3-hall', 'market']);
+    expect(Object.keys(PLAY_SPOTS).sort()).toEqual(['grove', 'hub', 'lobby', 'm3-hall', 'market']);
     // The Great Hollow's roots (OP-347): the floor before each inner run's first root, one find between the two.
     expect(PLAY_SPOTS['m3-hall']!.map((s) => s.id)).toEqual(['play-roots', 'play-roots']);
+    // The Treetop Commons' rising air (OP-363): a first flight before the turnstiles.
+    expect(PLAY_SPOTS['lobby']!.map((s) => s.id)).toEqual(['play-rise']);
     expect(PLAY_SPOTS['hub']!.map((s) => s.id)).toEqual(['play-lanterns', 'play-quiz']);
     expect(PLAY_SPOTS['grove']!.map((s) => s.id)).toEqual(['play-fishing']);
     expect(PLAY_SPOTS['market']!.map((s) => s.id)).toEqual(['play-copy']);

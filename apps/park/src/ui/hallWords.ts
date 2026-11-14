@@ -16,3 +16,12 @@ export const HALL_WORDS = {
   /** When the first glide off a root lands. */
   flown: 'That is flying! Every doorway round the hollow leads somewhere to play.',
 } as const;
+
+/**
+ * What the Treetop Commons says when an owl's first ride on its rising air lands (OP-363). The first
+ * words of the Great Hollow's own line and nothing new: the welcome card already says where the park
+ * is, and the feather trail leads on to the turnstiles. A draft for the owner's approval like the rest.
+ */
+export const COMMONS_WORDS = {
+  flown: 'That is flying!',
+} as const;

@@ -14,6 +14,16 @@ async function visitor(browser: Browser, params: Record<string, string> = {}, vi
   return page;
 }
 
+/**
+ * A page for an owl made on this device on an earlier visit: the home screen has Play for it, which goes
+ * to its own nest (the free way in for a new owl does not: it lands in the Treetop Commons, OP-363).
+ */
+async function returningOwl(browser: Browser): Promise<Page> {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await ctx.addInitScript((owl) => localStorage.setItem('owl-park:look', JSON.stringify(owl)), { body: '#3E6B48', belly: '#F6F1E3', accent: '#C9A227' });
+  return ctx.newPage();
+}
+
 /** An owl's walking pace (room px a second, shared/walk.ts WALK_SPEED). */
 const WALK_PX_S = 260;
 
@@ -507,7 +517,7 @@ test.describe('room server', () => {
   }
 
   test('Play answers the first press: it says Opening the park while the nest is slow, takes no second press, and asks the line once', async ({ browser }) => {
-    const a = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
+    const a = await returningOwl(browser);
     // A slow park: the owl's nest takes three seconds to answer, as it can on a phone far away.
     await a.route('**/api/nest', async (route) => {
       await new Promise((r) => setTimeout(r, 3_000));
@@ -519,8 +529,7 @@ test.describe('room server', () => {
     });
     await a.goto('/?transport=edge');
     const play = a.locator('[data-home-btn="play"]');
-    // Look around free makes the owl and presses Play for it.
-    await a.locator('[data-home-btn="guest"]').click({ timeout: 20_000 });
+    await play.click({ timeout: 20_000 });
     await expect(play).toHaveText('Opening the park…');
     await expect(play).toHaveAttribute('aria-busy', 'true');
     // Pressed again and again while the park answers, as the visitor did: nothing more is asked of the park.
@@ -539,14 +548,39 @@ test.describe('room server', () => {
   });
 
   test('Play never hangs on a nest that does not answer: after a few seconds the owl goes to the lobby instead', async ({ browser }) => {
-    const a = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
+    const a = await returningOwl(browser);
     // The nest never answers.
     await a.route('**/api/nest', () => new Promise<void>(() => undefined));
     await a.goto('/?transport=edge');
-    await a.locator('[data-home-btn="guest"]').click({ timeout: 20_000 });
+    await a.locator('[data-home-btn="play"]').click({ timeout: 20_000 });
     await expect(a.locator('[data-home-btn="play"]')).toHaveText('Opening the park…');
     await expect.poll(async () => (await state(a)).room, { timeout: 25_000 }).toBe('lobby');
     await a.context().close();
+  });
+
+  test('Play free now waits on no nest: a new owl is beside the Treetop Commons’ rising air at once, and the room server takes its first flight (OP-363)', async ({ browser }) => {
+    test.slow(); // live parks drawn with software WebGL on CI runners, and a rise to the column's top
+    // An owl already in the Commons, to see the newcomer as the room server tells it.
+    const b = await visitor(browser, { room: 'lobby' });
+    const a = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
+    // Its nest never answers: the free way in does not wait for it, and lands beside the moonbeam all the same
+    // (an owl that waited and gave up would stand at the Commons' own way in, far across the plaza).
+    await a.route('**/api/nest', () => new Promise<void>(() => undefined));
+    await a.goto('/?transport=edge');
+    await a.locator('[data-home-btn="guest"]').click({ timeout: 20_000 });
+    await expect.poll(async () => (await state(a)).room, { timeout: 25_000 }).toBe('lobby');
+    const beam = (await state(a)).objects.find((o) => o.id === 'lobby-moonbeam')!;
+    expect(dist((await state(a)).pos, beam)).toBeLessThan(450);
+    await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(1);
+    // Into the light and up: the other owl sees it carried far over a jump's reach, so the room server took it lifted.
+    await a.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), { x: beam.x, y: beam.y });
+    await expect.poll(async () => { const s = await state(a); return !s.walking && dist(s.pos, beam) < 30; }, { timeout: 30_000 }).toBe(true);
+    await a.keyboard.down('Space');
+    await expect.poll(async () => (await state(a)).air.s, { timeout: 15_000 }).toBe(3);
+    await expect.poll(async () => (await state(b)).peers[0]?.height ?? 0, { timeout: 20_000 }).toBeGreaterThan(200);
+    await a.keyboard.up('Space');
+    await expect.poll(async () => (await state(a)).firstRise, { timeout: 40_000 }).toBe(true);
+    for (const page of [a, b]) await page.context().close();
   });
 
   test('quests live on the server: talk, take on and progress are checked there', async ({ browser }) => {

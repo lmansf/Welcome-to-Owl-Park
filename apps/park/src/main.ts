@@ -14,6 +14,7 @@ import { mirrorKey } from './game/nestPlan';
 import { NEST_SPAWN, RESTARTED_KEY, RoomScene, SETUP_KEY, TICKET_ENDED_KEY, type RoomStart } from './game/RoomScene';
 import { startWalking, walkingMap } from './game/walkingMap';
 import { TREE_ARRIVAL } from './rooms';
+import { FIRST_LOOK_SPAWN } from '@owl-park/shared/rooms';
 import { forgetOwl, holdsOwl, loadLook, loadPlayerId, saveLook } from './identity';
 import { OPEN_ENTRY, createTransport, type ScanReply, type WalletEntry } from './net';
 import { closeFeedbackCard, feedbackRewards, sendFeedbackNote } from './net/feedback';
@@ -411,6 +412,14 @@ function answerWithin<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
   });
   return Promise.race([p, late]).finally(() => clearTimeout(timer));
 }
+/**
+ * The home screen's free way in (Play free now) was pressed and the owl is not in yet (OP-363): it starts in the Treetop Commons,
+ * beside the rising air in its moonbeam, where it can fly before anything asks about a ticket. Before,
+ * it started in its nest, two rooms from the Commons and four from the first thing to play. Its nest
+ * is still its home, down the lane. An owl that made itself in the quiz or the builder, and every owl
+ * on a later visit, starts in its nest as before.
+ */
+let cameToLook = false;
 async function playStart(): Promise<RoomStart> {
   if (backFromCheckout) {
     // Back from checkout in this page (OP-190): in front of the turnstiles, and through them with the ticket.
@@ -425,6 +434,13 @@ async function playStart(): Promise<RoomStart> {
   const entry = newMapTab() ? 3 : transport.entryMap ? await transport.entryMap().catch(() => 1 as const) : 1;
   const map = entry === 2 && !cfg.oldMap ? 3 : entry;
   startWalking(map);
+  if (cameToLook) {
+    cameToLook = false;
+    // Its nest is asked for all the same, so it is there when the owl goes home; the owl does not wait on it.
+    void collection.service.homeNest().catch(() => null);
+    // The tree as it was has no Commons of its own: an owl sent there starts as before.
+    if (map !== 2) return { room: LOBBY_ROOM, spawn: FIRST_LOOK_SPAWN };
+  }
   // A nest that has not answered in NEST_WAIT_MS counts as none: Play never hangs on the home screen.
   const nest = await answerWithin(collection.service.homeNest(), NEST_WAIT_MS, null).catch(() => null);
   const room = nest ? nestRoomId(nest) : null;
@@ -633,10 +649,12 @@ const home = createHomeScreen(document.getElementById('hud') as HTMLElement, {
       opener,
     );
   },
-  // Look around free (the second site audit, D2.1): what Skip makes, with no quiz and no builder, then
-  // Play. Every visit starts in the owl's own nest, and the turnstiles offer Enter as a guest.
+  // Play free now (the second site audit's Look around free, D2.1; put first by OP-364): what Skip makes, with no quiz and no builder, then
+  // Play. It starts in the Treetop Commons beside its rising air (OP-363: a first flight before the
+  // turnstiles, which offer Enter as a guest); every other visit starts in the owl's own nest.
   lookAround: () => {
     if (!atHome || loggedIn) return;
+    cameToLook = true;
     loggedIn = true;
     startCollection();
     void refreshWallet();

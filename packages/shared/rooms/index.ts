@@ -15,6 +15,8 @@ import { BRUSH_COURSE, BRUSH_ROOMS } from './brushstrokeBridges';
 import { CIRCUIT_COURSE, CIRCUIT_ROOMS } from './neonCourse';
 import { HALL_ANCHORS, HALL_ID, HALL_ROOM, fromRealm } from './hollowHall';
 import { growToPlaza } from './plaza';
+import { GLIDE_SLOPE } from '../src/flight';
+import type { Thermal } from '../src/thermal';
 import { floorPerches, floorPieces } from '../src/plazaFloor';
 import type { CourseDef } from '../src/course';
 import { realmStart, realmStartAnchors } from '../src/realmStart';
@@ -1600,6 +1602,33 @@ ROOMS['lobby'] = growToPlaza(ROOMS['lobby']!, {
   corner: 'edge-commons-corner-front',
   frontBumps: ['edge-commons-planters-a', 'edge-commons-planters-b', 'edge-commons-planters-a', 'edge-commons-planters-b', 'edge-commons-planters-a'],
 });
+/**
+ * The Treetop Commons' rising air (OP-363, src/thermal.ts): warm air rises in the plaza's moonbeam, as it
+ * does at the Great Hollow's heart (OP-340). The owner's audit of Nov 12 asks that a new guest can be
+ * gliding inside ninety seconds with nothing asking about a ticket first; before this the first thing to
+ * play stood four rooms in, past the turnstiles' question. The turnstiles stay where they are and ask
+ * what they ask. The first flight comes out to the guest instead: Jump held in the light carries an owl
+ * up over the whole Commons, and a held glide from the top (one down for three along, flight.ts) sets
+ * it down before the turnstiles, which is as high as the top needs to be.
+ */
+export const COMMONS_THERMAL: Thermal = (() => {
+  const pos = { ...LOBBY_PLAZA.rings[0] };
+  const gate = ROOMS['lobby']!.doors.find((d) => d.id === 'gate')!;
+  const before = { x: gate.rect.x + gate.rect.w / 2, y: gate.rect.y + gate.rect.h + 60 };
+  return { id: 'commons', pos, r: 160, top: Math.ceil((Math.hypot(before.x - pos.x, before.y - pos.y) / GLIDE_SLOPE + 40) / 10) * 10 };
+})();
+/**
+ * Where an owl that came to look around lands (OP-363): on the plaza beside the rising air and outside
+ * it, the moonbeam a few steps off (far enough that the feather trail has room to lead into it) and the
+ * turnstiles on ahead, so the first thing it does is its own to choose. Its nest is still its home, down
+ * the lane (the audit: an optional first stop, not on the way).
+ */
+export const FIRST_LOOK_SPAWN = 'first-look';
+ROOMS['lobby'] = {
+  ...ROOMS['lobby']!,
+  thermals: [COMMONS_THERMAL],
+  spawns: { ...ROOMS['lobby']!.spawns, [FIRST_LOOK_SPAWN]: { x: COMMONS_THERMAL.pos.x + 350, y: COMMONS_THERMAL.pos.y - 140 } },
+};
 ROOMS['arcade'] = growToPlaza(ROOMS['arcade']!, {
   ...ARCADE_PLAZA,
   rings: [...ARCADE_PLAZA.rings],

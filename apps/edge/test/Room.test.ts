@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { AIRBORNE, LIFTED, UPDRAFT_RISE, AIR_DASH_COOLDOWN_MS, AIR_DASH_DISTANCE, AIR_DASH_MS, AIR_DASH_SPEED, DASH_SLACK_PX, CLOSE, EDGE_PROTOCOL_VERSION, EMOTE_EVERY_MS, GROUNDED, ON_GROUND, STREET_DOORS, STREET_ROOM, WALK_SPEED, arrivalPoint, distance, isWalkable, nestDoorIndex, resolveTarget, type Air, type ClientHello, type RoomDef, type ServerFrame, type Vec2, segmentTouchesRect, walkCrossesExit } from '@owl-park/shared';
-import { ROOMS, roomFor } from '@owl-park/shared/rooms';
+import { FIRST_LOOK_SPAWN, ROOMS, roomFor } from '@owl-park/shared/rooms';
 import { Room, LIMITS, type Peer, type PositionRejection, type VisitorState } from '../src/Room';
 
 const def: RoomDef = {
@@ -1142,6 +1142,27 @@ describe('Room: a thermal, in a room seen from above (OP-340)', () => {
     room.join(new FakePeer(), 'a', hello());
     expect(room.air('a', { z: 120, vz: UPDRAFT_RISE, s: LIFTED, f: 0, h: 900 })).toBe(false);
     expect(rejected).toEqual(['lift']);
+  });
+
+  it('the Treetop Commons has rising air of its own in its moonbeam, and the free way in lands an owl beside it (OP-363)', () => {
+    const lobby = ROOMS['lobby']!;
+    const warm = lobby.thermals![0]!;
+    const room = new Room(lobby, { now: () => now, random: () => 0.5, cap: 5, rejected: (_id, why) => rejected.push(why) });
+    room.join(new FakePeer(), 'a', hello({ spawn: FIRST_LOOK_SPAWN }));
+    // Where it lands: on the Commons' floor, beside the column and not in it, so nothing lifts it yet.
+    const landed = room.positionOf('a')!;
+    expect(distance(landed, lobby.spawns[FIRST_LOOK_SPAWN]!)).toBeLessThan(120);
+    expect(distance(landed, warm.pos)).toBeGreaterThan(warm.r);
+    expect(room.air('a', { z: 120, vz: UPDRAFT_RISE, s: LIFTED, f: 0, h: warm.top })).toBe(false);
+    expect(rejected).toEqual(['lift']);
+    // Into the light, as the feather trail leads: there the room takes it lifted, up to the column's top.
+    room.move('a', { t: 'move', to: { ...warm.pos }, seq: 1 });
+    now += 10_000;
+    expect(distance(room.positionOf('a')!, warm.pos)).toBeLessThan(warm.r / 2);
+    expect(room.air('a', { z: 120, vz: UPDRAFT_RISE, s: LIFTED, f: 0, h: warm.top })).toBe(true);
+    expect(room.air('a', { z: warm.top, vz: UPDRAFT_RISE, s: LIFTED, f: 0, h: warm.top })).toBe(true);
+    // And a glide down from there, toward the turnstiles.
+    expect(room.air('a', { z: warm.top - 20, vz: -80, s: 2, f: 0 })).toBe(true);
   });
 });
 

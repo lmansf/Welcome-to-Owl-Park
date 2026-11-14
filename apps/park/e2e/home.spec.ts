@@ -1,12 +1,13 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { dist, settleCamera, state, toScreen, travelTo } from './helpers';
+import { dist, GATE_ASK, settleCamera, state, toScreen, travelTo } from './helpers';
 
 /**
  * The home screen (OP-065), on this device (local mode): a first visit logs in (the owl is made and
  * the owl builder opens on it), a return visit is logged in at once, the home screen's Settings are
  * the park's, and the Menu's Home screen comes back to it. Play is the one way in, and it lands the
- * owl in its own nest, before its mirror, every time (OP-105).
+ * owl in its own nest, before its mirror, every time (OP-105). Play free now, a new owl's first way in,
+ * lands it in the Treetop Commons beside the rising air in its moonbeam, for a first flight (OP-363).
  */
 const home = (page: Page) => page.evaluate(() => window.owlPark.home());
 const button = (page: Page, id: 'login' | 'guest' | 'play' | 'settings') => page.locator(`[data-home-btn="${id}"]`);
@@ -40,6 +41,39 @@ async function inOwnNest(page: Page): Promise<void> {
 async function play(page: Page): Promise<void> {
   await button(page, 'play').click();
   await inOwnNest(page);
+}
+
+/**
+ * In the Treetop Commons, beside its moonbeam, where Play free now lands a new owl (OP-363): outside the
+ * moonbeam's warm air and a short walk from it, so the feather trail has room to lead in. Says where the
+ * moonbeam is.
+ */
+async function besideTheMoonbeam(page: Page): Promise<{ x: number; y: number }> {
+  await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe('lobby');
+  const s = await state(page);
+  const beam = s.objects.find((o) => o.id === 'lobby-moonbeam');
+  if (!beam) throw new Error('no moonbeam in the Treetop Commons');
+  const far = dist(s.pos, beam);
+  expect(far).toBeGreaterThan(160);
+  expect(far).toBeLessThan(450);
+  return { x: beam.x, y: beam.y };
+}
+
+/** Every notice the park has shown since `watchNotices`, in the order they came (a notice is gone again in a few seconds). */
+const noticesSeen = (page: Page) => page.evaluate(() => (window as unknown as { noticesSeen: string[] }).noticesSeen);
+async function watchNotices(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const seen: string[] = [];
+    (window as unknown as { noticesSeen: string[] }).noticesSeen = seen;
+    const look = () => {
+      for (const el of document.querySelectorAll('#hud [data-toasts] > *')) {
+        const words = (el.textContent ?? '').trim();
+        if (words && !seen.includes(words)) seen.push(words);
+      }
+    };
+    new MutationObserver(look).observe(document.getElementById('hud')!, { childList: true, subtree: true, characterData: true });
+    look();
+  });
 }
 
 /** The "To the park" sign standing in this room, wholly on screen (its middle in CSS pixels); null if none is. */
@@ -132,7 +166,7 @@ test.describe('the home screen (OP-065)', () => {
     expect(await shownButtons(page)).toEqual(['Play free now', 'Make your owl', 'Settings']);
   });
 
-  test('Play free now: the first control and the focus on a first visit; a ready-made owl, with no quiz and no builder, straight into its own nest (OP-364)', async ({ page, isMobile }) => {
+  test('Play free now: the first control and the focus on a first visit; a ready-made owl, with no quiz and no builder, straight to the rising air in the Treetop Commons (OP-364, OP-363)', async ({ page, isMobile }) => {
     await openHome(page);
     // Free play leads (OP-364): the first button on the screen, focused, with the first thing to do named under it.
     const first = page.locator('[data-home] button:visible').first();
@@ -149,7 +183,9 @@ test.describe('the home screen (OP-065)', () => {
     if (isMobile) await button(page, 'guest').tap();
     else await button(page, 'guest').click();
     await expect(page.getByRole('dialog', { name: 'Which owl are you?' })).toBeHidden();
-    await inOwnNest(page);
+    // Not into a nest, two rooms and a ticket question from anything to play: into the Treetop Commons,
+    // beside the rising air in its moonbeam (OP-363).
+    await besideTheMoonbeam(page);
     expect(await page.evaluate(() => localStorage.getItem('owl-park:look'))).not.toBeNull();
     // Logged in now: the home screen comes back with Play, and no free button.
     await page.locator('[data-menu-btn]').click();
@@ -159,6 +195,46 @@ test.describe('the home screen (OP-065)', () => {
     await page.waitForFunction(() => window.owlPark.home().shown, null, { timeout: 20_000 });
     expect(await shownButtons(page)).toEqual(['Play', 'Settings']);
     await expect(page.locator('[data-home-safe]')).toBeHidden();
+    // Play, from now on, is the owl's own nest as for every owl (OP-105): its home is a doorway from the Commons.
+    await play(page);
+  });
+
+  test('a new owl flies within a minute and a half of Play free now: the feather trail leads into the moonbeam, a held Jump rides its warm air up over the Commons, and nothing asks about a quiz or a ticket on the way (OP-363)', async ({ page, isMobile }) => {
+    test.slow(); // a walk, a rise and a glide down, on a runner a third as fast
+    await openHome(page);
+    await watchNotices(page);
+    const pressed = Date.now();
+    if (isMobile) await button(page, 'guest').tap();
+    else await button(page, 'guest').click();
+    const beam = await besideTheMoonbeam(page);
+    // The trail: a glint over the moonbeam's rising air, and feathers from the owl toward it.
+    await expect.poll(async () => (await state(page)).trail?.glints ?? [], { timeout: 30_000 }).toContain('play-rise');
+    await expect.poll(async () => (await state(page)).trail?.feathers.length ?? 0, { timeout: 30_000 }).toBeGreaterThanOrEqual(3);
+    const laid = (await state(page)).trail?.feathers ?? [];
+    expect(dist(laid.at(-1)!, beam)).toBeLessThan(dist(laid[0]!, beam));
+    // Along it into the light, where what the warm air is for is said, once.
+    await page.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), beam);
+    await expect.poll(async () => { const s = await state(page); return !s.walking && dist(s.pos, beam) < 30; }, { timeout: 30_000 }).toBe(true);
+    await expect.poll(async () => (await noticesSeen(page)).join(' | '), { timeout: 15_000 }).toContain('Warm air rises here');
+    // Jump, held: lifted (3), and carried far over what a jump and its flaps reach.
+    await page.keyboard.down('Space');
+    await expect.poll(async () => (await state(page)).air.s, { timeout: 15_000 }).toBe(3);
+    const flying = Date.now() - pressed;
+    await expect.poll(async () => (await state(page)).air.z, { timeout: 20_000 }).toBeGreaterThan(200);
+    await page.keyboard.up('Space');
+    // Down again: its first flight, and the park says so.
+    await expect.poll(async () => (await state(page)).firstRise, { timeout: 40_000 }).toBe(true);
+    await expect.poll(async () => await noticesSeen(page), { timeout: 10_000 }).toContain('That is flying!');
+    // All of it in the Commons, and nothing on the way asked which owl it is or about a ticket.
+    expect((await state(page)).room).toBe('lobby');
+    await expect(page.getByRole('dialog', { name: 'Which owl are you?' })).toBeHidden();
+    await expect(page.locator(GATE_ASK)).toBeHidden();
+    // The rising air is found, so the trail leads on from here: to the turnstiles, and the owl's own nest.
+    await expect.poll(async () => (await state(page)).trail?.glints ?? [], { timeout: 20_000 }).not.toContain('play-rise');
+    await expect.poll(async () => (await state(page)).trail?.glints ?? [], { timeout: 20_000 }).toContain('gate');
+    // The ticket's measure: in the air inside a minute and a half of the press (here it is seconds).
+    test.info().annotations.push({ type: 'first flight', description: `${(flying / 1000).toFixed(1)} s from Play free now to carried up` });
+    expect(flying).toBeLessThan(90_000);
   });
 
   test('a return visit is logged in at once, with the owl as it was, and Play takes the focus', async ({ page }) => {

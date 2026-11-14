@@ -5,6 +5,7 @@ import {
   FISHING_ROOM,
   FISHING_SPOT,
   LANTERN_FLOOR,
+  LOBBY_ROOM,
   LANTERN_ROOM,
   QUIZ_ROOM,
   QUIZ_ZONES,
@@ -15,7 +16,7 @@ import {
   type RoomDef,
   type Vec2,
 } from '@owl-park/shared';
-import { HALL_ROOM } from '@owl-park/shared/rooms';
+import { COMMONS_THERMAL, HALL_ROOM } from '@owl-park/shared/rooms';
 import { rootSpots } from './hallTips';
 
 /**
@@ -160,6 +161,10 @@ const QUIZ_FLOOR: Rect = (() => {
 /** The Great Hollow's roots as a place to play (OP-347, hallTips.ts): both inner runs are the one find, so the trail leads on from whichever an owl comes to. */
 export const ROOTS_SPOT = 'play-roots';
 
+/** The Treetop Commons' rising air as a place to play (OP-363, firstRise.ts): the square that fits inside its column, where Jump held rides it up. */
+export const RISE_SPOT = 'play-rise';
+const RISE_HALF = Math.floor(COMMONS_THERMAL.r / Math.SQRT2);
+
 export const PLAY_SPOTS: Readonly<Record<string, readonly PlaySpot[]>> = (() => {
   const all: Array<[string, PlaySpot]> = [
     [LANTERN_ROOM, { id: 'play-lanterns', rect: LANTERN_FLOOR }],
@@ -169,6 +174,8 @@ export const PLAY_SPOTS: Readonly<Record<string, readonly PlaySpot[]>> = (() => 
     [COPY_ROOM, { id: 'play-copy', rect: COPY_SPOT }],
     // The Great Hollow's roots (OP-347): the floor before each inner run's first root, one find between them.
     ...rootSpots(HALL_ROOM).map((rect): [string, PlaySpot] => [HALL_ROOM.id, { id: ROOTS_SPOT, rect }]),
+    // The Treetop Commons' moonbeam (OP-363): a first flight before the turnstiles.
+    [LOBBY_ROOM, { id: RISE_SPOT, rect: { x: COMMONS_THERMAL.pos.x - RISE_HALF, y: COMMONS_THERMAL.pos.y - RISE_HALF, w: RISE_HALF * 2, h: RISE_HALF * 2 } }],
   ];
   const by: Record<string, PlaySpot[]> = {};
   for (const [room, spot] of all) (by[room] ??= []).push(spot);
