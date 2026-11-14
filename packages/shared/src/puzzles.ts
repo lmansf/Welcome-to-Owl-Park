@@ -80,7 +80,8 @@ export const PUZZLES: readonly PuzzleDef[] = [
     locks: [
       { id: 'root-door', name: 'The root door', kind: 'key', room: 'grove', hideRoom: 'hub', length: 1, requires: [] },
       { id: 'moth-dial', name: 'The moth dial', kind: 'code', room: 'hub', hideRoom: 'market', length: 3, requires: [] },
-      { id: 'moon-gate', name: 'The moon gate', kind: 'code', room: 'hub', hideRoom: 'grove', length: 3, requires: ['root-door', 'moth-dial'] },
+      // Its last lock stands in the ink garden, by the round moon gate painted in its wall (OP-402).
+      { id: 'moon-gate', name: 'The moon gate', kind: 'code', room: 'ink', hideRoom: 'grove', length: 3, requires: ['root-door', 'moth-dial'] },
     ],
   },
 ];

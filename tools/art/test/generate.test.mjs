@@ -1053,7 +1053,7 @@ test('the art kit (OP-229): kit.json, the jobs, the loader table and the assets 
     }
   }
   // Landmarks: one prop each on a square canvas of its own, cut to kit-landmark-<name>.
-  assert.equal(Object.keys(K.KIT_LANDMARKS).length, 20);
+  assert.equal(Object.keys(K.KIT_LANDMARKS).length, 21);
   for (const [name, piece] of Object.entries(K.KIT_LANDMARKS)) {
     const key = `kit-sheet-landmark-${name}`;
     assert.ok(K.KIT_AREAS[piece.area], `${key}: lit as its area`);

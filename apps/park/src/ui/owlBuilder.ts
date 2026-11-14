@@ -11,6 +11,7 @@ import {
   selectableSpecies,
   variantId,
   variantName,
+  WHICH_OWL_WORDS,
   type EquipSlot,
   type ItemDef,
   type OwlLook,
@@ -47,8 +48,12 @@ export interface OwlBuilderActions {
 }
 
 export interface OwlBuilder {
-  /** `fromMenu` adds the way back to the Menu; `mirror`: opened at a nest's mirror (OP-077), the room showing round the owl. */
-  open(fromMenu: boolean, tab?: BuilderTab, opener?: HTMLElement | null, mirror?: boolean): void;
+  /**
+   * `fromMenu` adds the way back to the Menu; `mirror`: opened at a nest's mirror (OP-077), the room showing round the owl.
+   * `play`: a new owl's first run from the home screen (OP-367): the header's button says Play as this owl and,
+   * pressed, closes the builder and goes straight into the park. Escape or Close still only close it.
+   */
+  open(fromMenu: boolean, tab?: BuilderTab, opener?: HTMLElement | null, mirror?: boolean, play?: (() => void) | null): void;
   close(): void;
   isOpen(): boolean;
   /** Called after it closes, whichever way. */
@@ -140,6 +145,10 @@ export function createOwlBuilder(root: HTMLElement, state: CollectionState, acti
   let look: OwlLook = { ...initialLook };
   let tab: BuilderTab = 'kind';
   let fromMenu = false;
+  /** Into the park from here, on a first run (OP-367); null otherwise. */
+  let onPlay: (() => void) | null = null;
+  /** The Play as this owl button was pressed: the close that follows goes into the park. */
+  let playing = false;
   /** The colourway picked per item (a dot tapped), and the variant shown in the detail line. */
   const pick = new Map<string, number>();
   let selected: string | null = null;
@@ -183,10 +192,15 @@ export function createOwlBuilder(root: HTMLElement, state: CollectionState, acti
     const h = modalHeader('Your owl', {
       sub: inv ? `${state.count} of ${state.total} collected · ${inv.feathers} feathers` : 'Loading your collection…',
       onBack: fromMenu ? back : null,
-      onClose: () => modal.close(),
-      closeLabel: 'Done: close your owl',
+      onClose: () => {
+        playing = onPlay !== null;
+        modal.close();
+      },
+      closeLabel: onPlay ? WHICH_OWL_WORDS.play : 'Done: close your owl',
     });
-    h.querySelector<HTMLButtonElement>('[data-close]')!.textContent = 'Done';
+    const done = h.querySelector<HTMLButtonElement>('[data-close]')!;
+    done.textContent = onPlay ? WHICH_OWL_WORDS.play : 'Done';
+    if (onPlay) done.dataset['builderPlay'] = '';
     box.querySelector(':scope > header')?.remove();
     box.prepend(h);
   };
@@ -365,12 +379,21 @@ export function createOwlBuilder(root: HTMLElement, state: CollectionState, acti
   const watcher = typeof ResizeObserver === 'function' ? new ResizeObserver(frame) : null;
   watcher?.observe(stage);
   window.addEventListener('resize', frame);
-  modal.onClose(() => actions.preview(null, atMirror));
+  modal.onClose(() => {
+    actions.preview(null, atMirror);
+    const go = playing ? onPlay : null;
+    playing = false;
+    onPlay = null;
+    // After every other close callback (the HUD uncovers itself first).
+    if (go) queueMicrotask(go);
+  });
   state.onChange(render);
 
   return {
-    open(menu, t, opener, mirror = false) {
+    open(menu, t, opener, mirror = false, play = null) {
       fromMenu = menu;
+      onPlay = play;
+      playing = false;
       atMirror = mirror;
       box.classList.toggle('at-mirror', mirror);
       if (t) tab = t;

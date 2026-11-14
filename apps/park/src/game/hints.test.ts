@@ -100,10 +100,10 @@ describe('hints seen from above (the Great Hollow, a huge oval of doorways)', ()
   it('points at the nearest two doorways off each side, not at every doorway round the room', () => {
     expect(doorways.filter((t) => t.x > phone.x + phone.w).length).toBeGreaterThan(4);
     const near = nearestOffSides(doorways, phone);
-    // East of it, the hatch down and the knothole up; west, the ink-wash course's gate (the glass
-    // course's gate and the ink-wash realm's doorway are shut, so they have no chip).
+    // East of it, the hatch down and the knothole up; west, the ink garden's doorway and the ink-wash
+    // course's gate (the glass course's gate is shut, so it has no chip).
     expect(near.filter((t) => t.x > phone.x + phone.w).map((t) => t.id)).toEqual(['up', 'down']);
-    expect(near.filter((t) => t.x < phone.x).map((t) => t.id)).toEqual(['course-ink']);
+    expect(near.filter((t) => t.x < phone.x).map((t) => t.id)).toEqual(['to-ink', 'course-ink']);
   });
 
   it('always keeps a doorway it is told to keep, however far', () => {

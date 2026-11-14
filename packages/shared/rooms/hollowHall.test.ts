@@ -134,7 +134,7 @@ describe('the Great Hollow (Nov 7; an oval, Nov 8)', () => {
       }
     }
     expect(HALL_GROWN).toBe(GROWN_WAYS);
-    expect([...HALL_GROWN]).toEqual(['to-ink', 'course-glass']);
+    expect([...HALL_GROWN]).toEqual(['course-glass']);
     // No blockade and no closed sign anywhere in the room (OP-286): every doorway leads somewhere, or is an idol's vote spot.
     expect(hall.doors.filter((d) => d.closedSign)).toEqual([]);
     for (const d of hall.doors) expect(d.to !== undefined || d.id.startsWith('idol-'), d.id).toBe(true);

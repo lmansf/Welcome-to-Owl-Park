@@ -151,11 +151,11 @@ export const wayAt = (id: HallWay, inset = 0): Vec2 => rimAt(wayS(id), inset);
 
 /**
  * The ways with nothing behind them yet (OP-337; OP-286, the owner's "arches with nothing behind them
- * come down"): the ink-wash realm has no room and the glass realm no course. No doorway, blockade or
+ * come down"): the glass realm has no course (the ink-wash realm's room, the ink garden, opened it way in, OP-402). No doorway, blockade or
  * closed sign stands at one: the tree has grown over it (rooms/hollowHall.ts, HALL_GROWN, which a test
  * holds to what each Commons leads to). A way opens by coming off this list and its Commons gaining the room.
  */
-export const GROWN_WAYS: readonly HallWay[] = ['to-ink', 'course-glass'];
+export const GROWN_WAYS: readonly HallWay[] = ['course-glass'];
 
 /** Each Commons' middle round the rim: between its realm's doorway and its course's gate, where its idol stands. */
 export const commonsS = (level: HallLevel): number => (wayS(`to-${level}` as HallWay) + wayS(`course-${level}` as HallWay)) / 2;
@@ -193,6 +193,20 @@ export const voteAt = (level: HallLevel): Vec2 => rimAt(commonsS(level), sized(3
 
 /** Each Commons' plaza: out from its idol toward the middle, where its moonbeam falls. */
 export const plazaAt = (level: HallLevel): Vec2 => ringAt(commonsS(level), 0.62);
+
+/**
+ * Where each Commons' quest owl stands (OP-281, OP-258): out on its floor to one side of its plaza, a
+ * few steps from its leaf piles and moonbeam but never on them, clear of its doorways' signs and
+ * landings and of its idol's vote stone. The two Commons at the front stand toward the root runs, the
+ * two at the back toward the knothole, mirrored across the hollow.
+ */
+const QUEST_OWL_SPOT: Readonly<Record<HallLevel, { along: number; ring: number }>> = {
+  ink: { along: 400, ring: 0.66 },
+  market: { along: -400, ring: 0.66 },
+  glass: { along: 400, ring: 0.5 },
+  grove: { along: -400, ring: 0.5 },
+};
+export const questOwlAt = (level: HallLevel): Vec2 => ringAt(commonsS(level) + QUEST_OWL_SPOT[level].along, QUEST_OWL_SPOT[level].ring);
 /** The hollow's heart: the middle of the floor, where the light falls brightest. */
 export const HALL_HEART: Vec2 = { x: HALL_CX, y: HALL_CY - sized(340) };
 

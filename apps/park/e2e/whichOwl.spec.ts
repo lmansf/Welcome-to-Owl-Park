@@ -4,8 +4,8 @@ import { state } from './helpers';
 
 /**
  * Which owl are you (OP-076, OP-325 to OP-331), on this device (local mode), on a phone and a computer:
- * Make your owl opens the quiz, three lines of welcome, eight cards about owl life (a quick either/or,
- * six cards, a quick either/or), the color card, a short pause, and the reveal with the owl drawn big; Keep it goes into the owl's own nest, Make it yours opens the builder, Not me?
+ * Make your owl opens the quiz, one screen of welcome (OP-367), eight cards about owl life (a quick either/or,
+ * six cards, a quick either/or), the color card, a short pause, and the reveal with the owl drawn big; Play as this owl goes into the owl's own nest, Make it yours opens the builder (which ends on Play as this owl too), Not me?
  * Try again draws a fresh set. Retake the quiz (the Menu's Settings tab) changes the kind and
  * colours of the owl that already is, and nothing changes unless Keep it takes it on.
  */
@@ -105,7 +105,9 @@ async function answerCards(page: Page, pick: number, isMobile: boolean): Promise
           const r = a.getBoundingClientRect();
           return Math.min(r.width, r.height);
         }),
-        boxes: el.querySelectorAll('.wo-pic, [data-wo-art]').length,
+        // A dashed box with its size on it, never shown to a visitor (OP-365), and the painted pictures (OP-404).
+        boxes: el.querySelectorAll('.wo-pic:not(.wo-painted)').length,
+        pictures: [...el.querySelectorAll<HTMLImageElement>('img.wo-painted')].map((img) => img.currentSrc || img.src),
         text: (el as HTMLElement).innerText,
         // The answers the feedback button lies over (OP-369): none.
         under: answers.filter((a) => {
@@ -126,10 +128,13 @@ async function answerCards(page: Page, pick: number, isMobile: boolean): Promise
       expect(count).toBeGreaterThanOrEqual(2);
       expect(count).toBeLessThanOrEqual(4);
     }
-    // Every answer is a big enough target for a thumb, and a card of words: no picture slot, and no box
-    // with its size written on it, which a visitor read as a park not finished (OP-365).
+    // Every answer is a big enough target for a thumb with its painted picture (OP-404), and no box with
+    // its size written on it, which a visitor read as a park not finished (OP-365).
     for (const size of seen.sizes) expect(size).toBeGreaterThanOrEqual(44);
     expect(seen.boxes).toBe(0);
+    expect(seen.pictures, `card ${id}: a painted picture on every answer`).toHaveLength(count);
+    for (const src of seen.pictures) expect(src).toMatch(/\/art\/quiz-[a-z-]+(%402x)?\.png/);
+    await expect.poll(() => page.locator('[data-wo-card] img.wo-painted').evaluateAll((imgs) => imgs.every((i) => (i as HTMLImageElement).complete && (i as HTMLImageElement).naturalWidth > 0))).toBe(true);
     expect(seen.text).not.toMatch(/\d+\s*[×x]\s*\d+/);
     // The feedback button, on screen through the quiz, lies over no answer: on a phone it sat on the first (OP-369).
     expect(seen.under, `the feedback button over an answer of card ${id}`).toBe(0);
@@ -140,25 +145,24 @@ async function answerCards(page: Page, pick: number, isMobile: boolean): Promise
   return ids;
 }
 
-/** Make your owl, the three lines of welcome, and the eight cards. */
+/** Make your owl, the one screen of welcome, and the eight cards. */
 async function startQuiz(page: Page, isMobile: boolean, pick = 0): Promise<string[]> {
   await tap(page, '[data-home-btn="login"]', isMobile);
   await expect(quiz(page)).toBeVisible();
   await expect(page.locator('[data-wo-skip]')).toBeVisible();
-  // A plain, friendly welcome (OP-327).
-  await expect(page.locator('[data-wo-intro="0"]')).toHaveText('Welcome to Owl Park!');
-  for (let i = 0; i < 3; i++) {
-    await expect(page.locator(`[data-wo-intro="${i}"]`)).toBeVisible();
-    await expect(page.locator(`[data-wo-intro="${i}"]`)).not.toContainText('little one');
-    await tap(page, '[data-wo-next]', isMobile);
-  }
+  // A plain, friendly welcome (OP-327), on one screen (OP-367): its one press is the first question.
+  await expect(page.locator('[data-wo-intro="0"]')).toContainText('Welcome to Owl Park!');
+  await expect(page.locator('[data-wo-intro="0"]')).not.toContainText('little one');
+  await tap(page, '[data-wo-next]', isMobile);
+  await expect(page.locator('[data-wo-intro]')).toHaveCount(0);
+  await expect(page.locator('.which-owl .wo-count')).toHaveText('1 of 8');
   return answerCards(page, pick, isMobile);
 }
 
 test.describe('which owl are you (OP-076)', () => {
   // Each run is about a dozen screens of taps over the running park: about 45 s on a CI runner.
   test.beforeEach(() => test.slow());
-  test('a first run: the quiz asks, the owl is revealed in its colors, and Keep it goes into its nest', async ({ page, isMobile }) => {
+  test('a first run: the quiz asks, the owl is revealed in its colors, and Play as this owl goes into its nest in one press', async ({ page, isMobile }) => {
     await openHome(page);
     const ids = await startQuiz(page, isMobile);
     expect(new Set(ids).size).toBe(8);
@@ -181,9 +185,11 @@ test.describe('which owl are you (OP-076)', () => {
     expect(await page.evaluate(() => window.owlPark.game.scene.isActive('builder'))).toBe(true);
     await expectOwlShown(page);
     await expect(page.locator('[data-wo-keep]')).toBeFocused();
+    // A first run's one primary button says where it goes (OP-367).
+    await expect(page.locator('[data-wo-keep]')).toHaveText('Play as this owl');
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-which-owl-reveal.png` });
 
-    // Keep it: into the owl's own nest, as the owl the quiz found.
+    // Play as this owl: into the owl's own nest, as the owl the quiz found, with no Play step on the home screen.
     await tap(page, '[data-wo-keep]', isMobile);
     await expect(quiz(page)).toBeHidden();
     await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toMatch(/^nest-/);
@@ -211,16 +217,36 @@ test.describe('which owl are you (OP-076)', () => {
     const builder = page.getByRole('dialog', { name: 'Your owl' });
     await expect(builder).toBeVisible();
     expect(await storedLook(page)).toMatchObject({ body: '#7A5C99', species });
+    // The builder ends on Play as this owl (OP-367); Escape only closes it, back to the home screen's Play.
+    await expect(builder.locator('[data-builder-play]')).toHaveText('Play as this owl');
     await page.keyboard.press('Escape');
     await expect(builder).toBeHidden();
     await expect(page.locator('[data-home-btn="play"]')).toBeVisible();
+  });
+
+  test('Skip, then the builder: Play as this owl goes straight into the owl\'s nest, in one press (OP-367)', async ({ page, isMobile }) => {
+    await openHome(page);
+    await tap(page, '[data-home-btn="login"]', isMobile);
+    await tap(page, '[data-wo-skip]', isMobile);
+    const builder = page.getByRole('dialog', { name: 'Your owl' });
+    await expect(builder).toBeVisible();
+    await builder.locator('[data-tab="colours"]').click();
+    await builder.locator('[data-part="body"][data-colour="#3E6B48"]').click();
+    const playBtn = builder.locator('[data-builder-play]');
+    await expect(playBtn).toHaveText('Play as this owl');
+    await expect(playBtn).toHaveAccessibleName('Play as this owl');
+    await tap(page, '[data-builder-play]', isMobile);
+    await expect(builder).toBeHidden();
+    // No second press on the home screen's Play: the owl is in its own nest, in the colors it picked.
+    await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toMatch(/^nest-/);
+    expect((await state(page)).look.body).toBe('#3E6B48');
   });
 
   test('on a painter’s tab every answer keeps its box, with the size to paint it at and its art key (OP-365)', async ({ page, isMobile }) => {
     await openHome(page, '&paint=1');
     await tap(page, '[data-home-btn="login"]', isMobile);
     await expect(quiz(page)).toBeVisible();
-    for (let i = 0; i < 3; i++) await tap(page, '[data-wo-next]', isMobile);
+    await tap(page, '[data-wo-next]', isMobile);
     await expect(page.locator('.which-owl .wo-count')).toHaveText('1 of 8');
     const seen = await page.locator('[data-wo-card]').evaluate((el) => ({
       answers: el.querySelectorAll('[data-wo-answer]').length,
@@ -257,7 +283,7 @@ test.describe('which owl are you (OP-076)', () => {
       await expect(quiz(page)).toBeVisible();
       // A retake has no Skip: Close is in the corner.
       await expect(page.locator('[data-wo-skip]')).toHaveCount(0);
-      for (let i = 0; i < 3; i++) await tap(page, '[data-wo-next]', isMobile);
+      await tap(page, '[data-wo-next]', isMobile);
       await answerCards(page, 0, isMobile);
     };
 
@@ -265,6 +291,8 @@ test.describe('which owl are you (OP-076)', () => {
     await tap(page, '[data-wo-colours="dusk"]', isMobile);
     const species = (await page.locator('[data-wo-result]').getAttribute('data-wo-result'))!;
     await expectOwlShown(page);
+    // A retake is already in the park: its button stays Keep it.
+    await expect(page.locator('[data-wo-keep]')).toHaveText('Keep it');
     await tap(page, '[data-wo-keep]', isMobile);
     await expect(quiz(page)).toBeHidden();
     await expect.poll(async () => (await state(page)).look.body).toBe('#2F3E5C');

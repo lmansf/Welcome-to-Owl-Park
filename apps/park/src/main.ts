@@ -626,7 +626,8 @@ const home = createHomeScreen(document.getElementById('hud') as HTMLElement, {
           home.show(loggedIn);
           if (loggedIn) drawOwl(home.frame(), false);
           if (end.kind === 'keep') startPlay();
-          else if (end.kind === 'make' || end.kind === 'skip') hud.openOwl(opener);
+          // The builder ends on Play as this owl (OP-367): straight in, with no separate Play step here.
+          else if (end.kind === 'make' || end.kind === 'skip') hud.openOwl(opener, () => startPlay());
         },
       },
       opener,

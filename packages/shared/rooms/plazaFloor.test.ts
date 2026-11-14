@@ -10,7 +10,7 @@ import { FLOOR_INTERACTABLES, FLOOR_PERCH_ART, FLOOR_THING_ART, PLAZA_CLUSTERS, 
 import { ROOM_H } from '../src/room';
 import { perchTiers } from '../src/routes';
 import { wayAround } from '../src/wayAround';
-import { ARCADE_PLAZA, GLASS_PLAZA, GROVE_PLAZA, HOMES_PLAZA, HUB_PLAZA, LOBBY_PLAZA, MARKET_PLAZA, getRoom } from './index';
+import { ARCADE_PLAZA, GLASS_PLAZA, GROVE_PLAZA, HOMES_PLAZA, HUB_PLAZA, INK_PLAZA, LOBBY_PLAZA, MARKET_PLAZA, getRoom } from './index';
 
 const PLAZAS = [
   { id: 'lobby', plaza: LOBBY_PLAZA },
@@ -18,6 +18,7 @@ const PLAZAS = [
   { id: 'homes', plaza: HOMES_PLAZA },
   { id: 'market', plaza: MARKET_PLAZA },
   { id: 'glass', plaza: GLASS_PLAZA },
+  { id: 'ink', plaza: INK_PLAZA },
   { id: 'grove', plaza: GROVE_PLAZA },
   { id: 'hub', plaza: HUB_PLAZA },
 ];

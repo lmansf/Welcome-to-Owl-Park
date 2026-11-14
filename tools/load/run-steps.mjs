@@ -6,10 +6,12 @@
  * machine's cores, and adds their measurements together. Between steps it waits for the copy to see
  * the last step's owls leave.
  *
- *   node tools/load/run-steps.mjs --url http://localhost:8787 [--seconds 60] [--quick] [--only 3,5]
+ *   node tools/load/run-steps.mjs --url http://localhost:8787 [--seconds 60] [--quick] [--only 3,5] [--plan tree]
  *
  * --quick runs every step with a tenth of the owls for 10 seconds: a check that the steps work.
  * --only runs the steps with those numbers (1 is the first).
+ * --plan tree runs the new map's steps instead (TREE_STEPS): its Great Hollow alone, then the owls spread
+ * over the new map's rooms as a busy night might have them, each a ramp, to find where it slows and breaks.
  */
 import { spawn } from 'node:child_process';
 import { appendFileSync, mkdtempSync, readFileSync } from 'node:fs';
@@ -36,6 +38,59 @@ const STEPS = [
   { name: 'four rooms at the most each can take, busy', rooms: { lobby: 120, hub: 120, grove: 120, market: 120 }, tap: BUSY },
 ];
 
+/**
+ * The new map (packages/shared/src/newMap.ts). The Great Hollow is its gathering place, so it takes half
+ * of a spread; the lobby (where every owl arrives) and the ground room the next share; the three stair
+ * rooms the rest. The copy sets the Hollow's and the ground room's caps to 120 (throwaway-config.mjs);
+ * the park as deployed caps the Hollow at 40 (apps/edge/src/rooms.ts, ROOM_CAPS unset).
+ */
+const SPREAD = [
+  ['m3-hall', 0.5],
+  ['lobby', 0.15],
+  ['m3-ground', 0.15],
+  ['m3-stair-1', 0.07],
+  ['m3-stair-2', 0.07],
+  ['m3-stair-3', 0.06],
+];
+/** Past 240 owls the Hollow holds the most a room takes (120) and the rest go to the other rooms in turn. */
+const SPREAD_PAST_HOLLOW = [
+  ['m3-hall', 0],
+  ['lobby', 0.3],
+  ['m3-ground', 0.3],
+  ['m3-stair-1', 0.14],
+  ['m3-stair-2', 0.14],
+  ['m3-stair-3', 0.12],
+];
+function spread(total) {
+  if (total > 240) {
+    const rest = total - 120;
+    const rooms = { 'm3-hall': 120 };
+    let left = rest;
+    for (const [i, [room, share]] of SPREAD_PAST_HOLLOW.entries()) {
+      if (i === 0) continue;
+      const n = i === SPREAD_PAST_HOLLOW.length - 1 ? left : Math.round(rest * share);
+      rooms[room] = n;
+      left -= n;
+    }
+    return rooms;
+  }
+  const rooms = {};
+  let left = total;
+  for (const [i, [room, share]] of SPREAD.entries()) {
+    const n = i === SPREAD.length - 1 ? left : Math.max(1, Math.round(total * share));
+    rooms[room] = n;
+    left -= n;
+  }
+  return rooms;
+}
+const TREE_STEPS = [
+  ...[40, 60, 80, 100, 120].map((n) => ({ name: `Great Hollow ${n}, busy`, rooms: { 'm3-hall': n }, tap: BUSY })),
+  ...[60, 80, 100, 120, 160].map((n) => ({ name: `new map spread ${n}, busy`, rooms: spread(n), tap: BUSY })),
+  { name: 'new map spread 200, calm', rooms: spread(200), tap: CALM },
+  // Past what the first ramp found (2026-11-13: 160 walking held): where the one object slows and breaks.
+  ...[240, 300, 400].map((n) => ({ name: `new map spread ${n}, busy`, rooms: spread(n), tap: BUSY })),
+];
+
 const arg = (name) => {
   const i = process.argv.indexOf(name);
   return i > 0 ? process.argv[i + 1] : undefined;
@@ -44,6 +99,12 @@ const url = arg('--url');
 const quick = process.argv.includes('--quick');
 const only = arg('--only')?.split(',').map(Number);
 const seconds = quick ? 10 : Number(arg('--seconds') ?? 60);
+const plan = arg('--plan') ?? 'steps';
+if (plan !== 'steps' && plan !== 'tree') {
+  console.error('--plan is steps (the default) or tree');
+  process.exit(2);
+}
+const PLAN = plan === 'tree' ? TREE_STEPS : STEPS;
 if (!url || !(seconds > 0)) {
   console.error('usage: run-steps.mjs --url <address> [--seconds 60] [--quick]');
   process.exit(2);
@@ -125,7 +186,7 @@ async function step(s, n) {
 }
 
 const rows = [];
-for (const [n, s] of STEPS.entries()) {
+for (const [n, s] of PLAN.entries()) {
   if (only && !only.includes(n + 1)) continue;
   if (rows.length > 0) await sleep(quick ? 2_000 : PAUSE_MS);
   const r = await step(s, n);
@@ -136,7 +197,7 @@ for (const [n, s] of STEPS.entries()) {
 }
 
 const table = [
-  `Load test (${quick ? 'quick check' : `${seconds} s a step`}). Echo: the time from a bot's move to the server's answer, in ms. Already there: owls the server still counted in the room when the step began. Runner lag: how late the bots' own timers ran (the runner's load, not the server's).`,
+  `Load test${plan === 'tree' ? ', the new map' : ''} (${quick ? 'quick check' : `${seconds} s a step`}). Echo: the time from a bot's move to the server's answer, in ms. Already there: owls the server still counted in the room when the step began. Runner lag: how late the bots' own timers ran (the runner's load, not the server's).`,
   '',
   '| Step | Owls | A move | Welcomed | Already there | Echo p50 | p95 | p99 | max | Unanswered moves | Frames per owl a second | Closed during the run | Runner lag p99 | Other |',
   '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',

@@ -237,6 +237,8 @@ export const ART: Record<string, ArtSpec> = {
   'robot-owl': { w: 900, h: 900, kind: 'piece' },
   // The stained-glass realm's idol, on the plinth of its west screen.
   'glass-idol': { w: 520, h: 416, kind: 'piece' },
+  // The ink garden's idol (OP-402), a snowy owl on the plinth of its first screen.
+  'ink-idol': { w: 520, h: 416, kind: 'piece' },
   // Nest furniture (`decor-<id>`), drawn with its bottom centre on its spot in a nest. The wall
   // pieces are the clock, the framed leaf, the window box, the lanterns and the feather mobile.
   'decor-rug': { w: 240, h: 100, kind: 'piece' },
@@ -663,6 +665,8 @@ export const ART: Record<string, ArtSpec> = {
   'kit-landmark-heron-ink': { w: 200, h: 280, kind: 'piece' },
   'kit-landmark-scroll-tower': { w: 240, h: 400, kind: 'piece' },
   'kit-landmark-pavilion-summit': { w: 400, h: 400, kind: 'piece' },
+  // The Great Hollow's way into the ink garden (OP-402).
+  'kit-landmark-door-ink': { w: 240, h: 320, kind: 'piece' },
   'kit-cut-plank-cap-left': { w: 160, h: 120, kind: 'piece' },
   'kit-cut-plank-cap-right': { w: 160, h: 120, kind: 'piece' },
   'kit-cut-plank-mid-320': { w: 320, h: 120, kind: 'piece' },

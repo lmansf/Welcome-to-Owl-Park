@@ -2709,6 +2709,7 @@
       "h": 400,
       "desc": "an owl idol of grey stone brushed in ink washes standing tall and still, its wings folded, a small red seal mark on its chest"
     },
+    "door-ink": {"area": "high", "w": 240, "h": 320, "desc": "a tall round-topped doorway for the ink-wash realm set into a slab of grey stone brushed in soft ink washes, framed by two posts of dark bamboo under a small curved tiled eave, open onto soft paper-cream mist inside, a small blank red seal mark on one post and a round paper lantern glowing warm gold hanging beside it"},
     "crane-paper": {
       "area": "ink",
       "w": 240,

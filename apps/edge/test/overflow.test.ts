@@ -239,6 +239,24 @@ describe('the overflow object (OP-075)', () => {
     expect((await join('c_cccccccc')).body).toEqual({ state: 'go' });
   });
 
+  it('counts the park at once when a room turns a newcomer away as full, and says whether the line takes it (OP-322)', async () => {
+    // Off: the line takes nobody, and the rooms are not asked.
+    rooms.counts.set('park', { hub: 3 });
+    expect((await post<{ line: boolean }>('/full', {})).body).toEqual({ line: false });
+    expect(rooms.asked).toEqual([]);
+    // On by itself at 3: counted at 2, then the park fills within the count's few seconds.
+    rooms.counts.set('park', { hub: 2 });
+    await post('/settings', { line: { mode: 'auto', threshold: 3, holdMin: 3 } });
+    expect((await st()).active).toBe(false);
+    rooms.counts.set('park', { hub: 3 });
+    at(T0 + 1_000);
+    expect((await st()).active).toBe(false);
+    const asked = rooms.asked.length;
+    expect((await post<{ line: boolean }>('/full', {})).body).toEqual({ line: true });
+    expect(rooms.asked.length).toBe(asked + 1);
+    expect((await join('c_aaaaaaaa')).body).toMatchObject({ state: 'waiting', place: 1 });
+  });
+
   it('tells the line (OP-134): a number taken, a turn taken with how long it waited, the depth every ten seconds, and the realms switch', async () => {
     const cap = captureLogs();
     try {

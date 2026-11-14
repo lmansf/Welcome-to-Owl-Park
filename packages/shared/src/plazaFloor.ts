@@ -171,6 +171,27 @@ export const PLAZA_CLUSTERS: readonly FloorCluster[] = [
     story: 'A chip of coloured glass, fallen from the windows high above, glints in the middle of the street.',
     things: [{ kind: 'shiny', x: 800, y: 1560 }],
   },
+  // The ink garden (OP-402): either side of its ring, and at its front.
+  {
+    id: 'ink-pond',
+    room: 'ink',
+    story: 'A bird bath at the edge of a still pond, its water as grey as fresh ink.',
+    decor: [{ key: 'kit-ink-pond-edge', x: 1000, y: 1260 }],
+    things: [{ kind: 'bird-bath', x: 760, y: 1270 }],
+  },
+  {
+    id: 'ink-heron',
+    room: 'ink',
+    story: 'A telescope beside the ink heron, pointed at the misty hills painted on the far wall.',
+    decor: [{ key: 'kit-landmark-heron-ink', x: 2880, y: 1250 }],
+    things: [{ kind: 'telescope', x: 2700, y: 1260 }],
+  },
+  {
+    id: 'ink-drop',
+    room: 'ink',
+    story: 'A drop of fresh ink, still wet from the brush, glints on the paving stones.',
+    things: [{ kind: 'shiny', x: 2120, y: 1260 }],
+  },
   // The grove's clearing, in the gaps between its three rings and at its east end.
   {
     id: 'grove-stump',

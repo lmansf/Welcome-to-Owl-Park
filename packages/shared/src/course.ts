@@ -49,6 +49,13 @@ export interface CoursePiece extends Raised {
   at: Vec2;
 }
 
+/** A spot a course glints over until its run has the part `until` (RoomCourse.leads, OP-378). */
+export interface CourseLead extends Raised {
+  id: string;
+  at: Vec2;
+  until: string;
+}
+
 /**
  * A shortcut: `gate` is the way it closes while shut (a stretch of floor no owl walks across), and
  * `opener` the stretch on its far side where an owl, reaching it, opens it for good.
@@ -71,6 +78,12 @@ export interface RoomCourse {
   parts?: CoursePiece[];
   feathers?: CoursePiece[];
   shortcuts?: CourseShortcut[];
+  /**
+   * Where a newcomer is led first (OP-378): a glint over each of these spots, the same four-pointed
+   * sparkle the feather trail puts on a doorway not tried yet, until the run has the part `until`. One
+   * signal for the first landing and the first breaker, so the first screen says where to go.
+   */
+  leads?: CourseLead[];
   /** The finish shrine, in the last act. */
   shrine?: CoursePiece;
   /**
@@ -153,6 +166,11 @@ export function piecesIn(room: Pick<RoomDef, 'course'> | undefined, kind: PieceK
 /** A piece of a room by kind and id. */
 export function pieceIn(room: Pick<RoomDef, 'course'> | undefined, kind: PieceKind, id: string): CoursePiece | undefined {
   return piecesIn(room, kind).find((p) => p.id === id);
+}
+
+/** The spots a room's course still glints over (OP-378): each lead whose part the run has not got yet (no run: all of them). */
+export function leadsOpen(room: Pick<RoomDef, 'course'> | undefined, runParts: readonly string[] | null | undefined): CourseLead[] {
+  return (room?.course?.leads ?? []).filter((l) => !runParts?.includes(l.until));
 }
 
 /** A shortcut of a room by id. */

@@ -49,6 +49,8 @@ function ledge(id: string, x: number, w: number, top: number, look: Omit<KitLedg
  * street. Like every ledge of a room seen from the side it is jumped up through, not a wall.
  */
 const roof = (top: number, street = false) => ({ cap: 'kit-neon-rooftop-ledge', mid: 'kit-tex-neon-lit-wall', depth: top + (street ? STREET_SUNK : 0) });
+/** Where the first breaker stands, on the air unit by the start (OP-378). */
+export const FIRST_BREAKER_X = 420;
 /** A footbridge strung between towers, over the street. */
 const FOOTBRIDGE = { cap: 'kit-neon-sky-bridge-mid' };
 /** A billboard on its legs: stood on along its top. */
@@ -231,7 +233,11 @@ export const CIRCUIT_ROOMS: Record<string, RoomDef> = inRealmKit('neon', withCou
       act: 1,
       pits: [floor(1400, 2700)],
       benches: [piece('bench-1', 1150, 420)],
-      parts: [piece('breaker-1', 3800, 540)],
+      // The first breaker on the air unit by the start (OP-378): the first move is one hop up over the
+      // deck, where a miss lands back on the deck, and it earns a breaker before anything can be fallen
+      // into. The first sign, the high roof and the street come after a first success.
+      parts: [piece('breaker-1', FIRST_BREAKER_X, 120)],
+      leads: [{ id: 'lead-1', at: { x: FIRST_BREAKER_X, y: G }, top: 120, until: 'breaker-1' }],
       feathers: [piece('feather-1', 2020, 300), piece('feather-2', 4300, 400)],
     },
   }),

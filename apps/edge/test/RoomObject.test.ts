@@ -76,7 +76,7 @@ vi.mock('cloudflare:workers', () => ({
 }));
 vi.stubGlobal('WebSocketRequestResponsePair', class {});
 vi.stubGlobal('WebSocket', { READY_STATE_OPEN: 1 });
-const { INPUT_MARK_EVERY_MS, NO_INPUT_CLOSE_MS, RESTART_CLOSE_MS, RoomObject, isInput, quietFor, sightingOf, spectatorSocket } = await import('../src/RoomObject');
+const { INPUT_MARK_EVERY_MS, NO_INPUT_CLOSE_MS, RESTART_CLOSE_MS, RoomObject, STANDING_KEEP_MS, isInput, quietFor, sightingOf, spectatorSocket } = await import('../src/RoomObject');
 const { LIMITS, Room } = await import('../src/Room');
 
 /** 2026-10-19 12:00 Eastern (16:00 UTC), a Monday. */
@@ -848,6 +848,12 @@ class KeepingState extends FakeState {
 
 describe('an owl back from a dropped connection (OP-138)', () => {
   /** A page's hello from where its owl stands now. */
+  /** The room server stopped at once (killed, or a deploy): its sockets gone with it, nothing told; its storage stays. */
+  const killed = () => {
+    const kept = (state as KeepingState).kept;
+    state = new KeepingState();
+    for (const [k, v] of kept) (state as KeepingState).kept.set(k, v);
+  };
   const helloAt = (obj: Obj, ws: FakeSocket, pos: Vec2) => send(obj, ws, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK, pos });
   const lost = async (obj: Obj, ws: FakeSocket) => {
     ws.close(1006, 'network gone');
@@ -882,8 +888,9 @@ describe('an owl back from a dropped connection (OP-138)', () => {
     await send(obj, a, { t: 'move', to: { x: 3400, y: 780 }, seq: 1 });
     clock += 6_000;
     await lost(obj, a);
-    // Its connection dropped (no goodbye), so one back soon has reconnected (OP-134).
-    expect((state as KeepingState).kept.get('leavers')).toEqual({ hub: { v_a: { pos: { x: 3400, y: 780 }, leftAt: clock, dropped: true } } });
+    // Its connection dropped (no goodbye), so one back soon has reconnected (OP-134). The owl still in
+    // the room is written down where it stands, as if it had just dropped too (OP-321).
+    expect((state as KeepingState).kept.get('leavers')).toEqual({ hub: { v_a: { pos: { x: 3400, y: 780 }, leftAt: clock, dropped: true }, v_b: { pos: expect.any(Object), leftAt: clock, dropped: true } } });
     // The object sleeps with the other owl's socket open, and wakes on the same storage.
     clock += 2_000;
     const woken = roomObject();
@@ -900,6 +907,68 @@ describe('an owl back from a dropped connection (OP-138)', () => {
     const late = connect('hub', 'v_a');
     await helloAt(roomObject(), late, { x: 3300, y: 780 });
     expect(late.last('welcome')?.you.pos).not.toEqual({ x: 3300, y: 780 });
+  });
+
+  it('resumes where its owl stood after the room server stops without a goodbye, as the moves since were written down (OP-321)', async () => {
+    state = new KeepingState();
+    const obj = roomObject();
+    const a = connect('hub', 'v_a');
+    await helloAt(obj, a, { x: 2400, y: 730 });
+    await send(obj, a, { t: 'move', to: { x: 3400, y: 780 }, seq: 1 });
+    // Walked over and standing there; a frame a while on writes down where it stands.
+    clock += STANDING_KEEP_MS + 1_000;
+    await send(obj, a, { t: 'rest', asleep: false });
+    expect((state as KeepingState).kept.get('leavers')).toEqual({ hub: { v_a: { pos: { x: 3400, y: 780 }, leftAt: clock, dropped: true } } });
+    // The room server stops: no close, no goodbye. It comes back on the same storage a few seconds on.
+    clock += 4_000;
+    killed();
+    const back = roomObject();
+    await settle(); // the constructor reads its storage
+    const page = connect('hub', 'v_a');
+    await helloAt(back, page, { x: 3400, y: 780 });
+    expect(page.last('welcome')?.you.pos).toEqual({ x: 3400, y: 780 });
+  });
+
+  it('writes down where an owl stands as it comes in, so one that came in just before the room server stopped is let back where it walked (OP-321)', async () => {
+    state = new KeepingState();
+    const obj = roomObject();
+    const first = connect('hub', 'v_first');
+    await helloAt(obj, first, { x: 2400, y: 730 });
+    // Another owl comes in a moment later, well inside STANDING_KEEP_MS, and walks off; no frame after.
+    clock += 2_000;
+    const b = connect('hub', 'v_b');
+    await helloAt(obj, b, { x: 2400, y: 730 });
+    await send(obj, b, { t: 'move', to: { x: 3400, y: 780 }, seq: 1 });
+    clock += 8_000;
+    // The room server stops without a goodbye and comes back on the same storage.
+    clock += 4_000;
+    killed();
+    const back = roomObject();
+    await settle();
+    const page = connect('hub', 'v_b');
+    await helloAt(back, page, { x: 3400, y: 780 });
+    expect(page.last('welcome')?.you.pos).toEqual({ x: 3400, y: 780 });
+  });
+
+  it('writes down where the owls stand at most every STANDING_KEEP_MS while frames come in (OP-321)', async () => {
+    state = new KeepingState();
+    const obj = roomObject();
+    const a = connect('hub', 'v_a');
+    await helloAt(obj, a, { x: 2400, y: 730 });
+    const puts: unknown[] = [];
+    const put = (state as KeepingState).storage.put;
+    (state as KeepingState).storage.put = async (key: string, value: unknown) => {
+      if (key === 'leavers') puts.push(value);
+      await put(key, value);
+    };
+    for (let i = 0; i < 10; i++) {
+      clock += 1_000;
+      await send(obj, a, { t: 'rest', asleep: false });
+    }
+    expect(puts.length).toBe(0);
+    clock += STANDING_KEEP_MS;
+    await send(obj, a, { t: 'rest', asleep: false });
+    expect(puts.length).toBeGreaterThanOrEqual(1);
   });
 });
 
@@ -2625,5 +2694,59 @@ describe('the sealed hollow in the room object (OP-310)', () => {
     await ask(obj, a2, { a: 'start' });
     await clear(obj, again, a2, b2);
     expect(a2.last('escape')!.paid).toEqual({ feathers: 0, total: ESCAPE_FEATHERS, why: 'paid-today' });
+  });
+});
+
+describe('a newcomer at a full room as the line starts by itself (OP-322)', () => {
+  /** A room object whose overflow object answers a full room's ask with `line`, and keeps what it was asked. */
+  function withLine(line: boolean | 'down', caps: Record<string, number>) {
+    const asked: string[] = [];
+    const fetch = async (url: string) => {
+      asked.push(new URL(url).pathname);
+      if (new URL(url).pathname === '/full') {
+        if (line === 'down') throw new Error('unreachable');
+        return Response.json({ line });
+      }
+      return Response.json({ words: null });
+    };
+    const env = { GATE: 'open', COLLECTIONS: { getByName: () => collections }, ROOM_CAPS: JSON.stringify(caps), OVERFLOW: { idFromName: () => 'park', get: () => ({ fetch }) } } as unknown as Env;
+    return { obj: new RoomObject(state as unknown as DurableObjectState, env), asked };
+  }
+  /** A socket whose owl the Worker called a newcomer: no entry, so not inside lately and not through the line. */
+  function newcomer(room: string, id: string): FakeSocket {
+    const ws = connect(room, id);
+    ws.serializeAttachment({ ...(ws.deserializeAttachment() as object), newcomer: true });
+    return ws;
+  }
+
+  it('sends a newcomer to the line (4012), not "room full", when the line takes arrivals', async () => {
+    const { obj, asked } = withLine(true, { hub: 1 });
+    await join(obj, 'hub', 'v_a');
+    const ws = newcomer('hub', 'v_new');
+    await hello(obj, ws);
+    expect(ws.closed?.code).toBe(CLOSE.QUEUED);
+    expect(ws.last('full')).toBeUndefined();
+    expect(ws.last('welcome')).toBeUndefined();
+    expect(asked).toContain('/full');
+  });
+
+  it('still says the room is full to an owl that came with an entry, without asking the line', async () => {
+    const { obj, asked } = withLine(true, { hub: 1 });
+    await join(obj, 'hub', 'v_a');
+    const inside = await join(obj, 'hub', 'v_inside');
+    expect(inside.last('full')).toEqual({ t: 'full', room: 'hub', cap: 1 });
+    expect(inside.closed?.code).toBe(CLOSE.ROOM_FULL);
+    expect(asked).not.toContain('/full');
+  });
+
+  it('says the room is full when the line takes nobody, or does not answer', async () => {
+    for (const line of [false, 'down'] as const) {
+      const { obj } = withLine(line, { hub: 1 });
+      await join(obj, 'hub', `v_a_${line}`);
+      const ws = newcomer('hub', `v_new_${line}`);
+      await hello(obj, ws);
+      expect(ws.closed?.code, String(line)).toBe(CLOSE.ROOM_FULL);
+      expect(ws.last('full'), String(line)).toEqual({ t: 'full', room: 'hub', cap: 1 });
+    }
   });
 });

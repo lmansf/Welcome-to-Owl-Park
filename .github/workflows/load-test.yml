@@ -11,9 +11,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: The load test's steps, or the busy-night rehearsal (copies of a room and the line, OP-075; one object per room)
+        description: The load test's steps, the new map's steps (tree), or the busy-night rehearsal (copies of a room and the line, OP-075; one object per room)
         type: choice
-        options: [steps, capacity]
+        options: [steps, tree, capacity]
         default: steps
       sharding:
         description: One object for the whole park (single, as the park has it) or one per room
@@ -106,7 +106,7 @@ jobs:
           exit 1
       - name: Load it, step by step
         if: env.LOAD_MODE != 'capacity'
-        run: node tools/load/run-steps.mjs --url "$LOAD_URL" --seconds 60 ${LOAD_ONLY:+--only "$LOAD_ONLY"}
+        run: node tools/load/run-steps.mjs --url "$LOAD_URL" --seconds 60 ${LOAD_ONLY:+--only "$LOAD_ONLY"} ${LOAD_MODE:+--plan "$LOAD_MODE"}
       - name: Rehearse a busy night (copies of the hub, then the line)
         if: env.LOAD_MODE == 'capacity'
         run: node tools/load/capacity-dry-run.mjs --url "$LOAD_URL" --cap 30

@@ -110,7 +110,7 @@ describe('the collection log (OP-107)', () => {
 
   it('knows what kind of place every room is (OP-113)', () => {
     expect(Object.keys(ROOMS).filter((id) => !Object.hasOwn(ROOM_KINDS, id))).toEqual([]);
-    expect(['grove', 'market', 'arcade', 'glass'].map(realmKind)).toEqual(['realm', 'realm', 'realm', 'realm']);
+    expect(['grove', 'market', 'arcade', 'glass', 'ink'].map(realmKind)).toEqual(['realm', 'realm', 'realm', 'realm', 'realm']);
     expect(['lobby', 'hub', 'homes'].map(realmKind)).toEqual(['hub', 'hub', 'hub']);
     expect(realmKind(logRoom('nest-abc123def4')!)).toBe('nest');
   });

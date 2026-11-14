@@ -17,8 +17,10 @@ describe('door signs', () => {
     expect(ids).toContain('to-party');
     expect(ids).toContain('up');
     expect(ids).toContain('down');
+    // The ink-wash realm's way opened on its room, the ink garden (OP-402), and has its sign.
+    expect(ids).toContain('to-ink');
     // A way with nothing behind it yet is no doorway at all (OP-337): no sign, no blockade.
-    expect(ids).not.toContain('to-ink');
+    expect(ids).not.toContain('course-glass');
   });
 
   it('sign the Party Grove’s ways on the new map, back into the Great Hollow first, and nothing on today’s park', () => {

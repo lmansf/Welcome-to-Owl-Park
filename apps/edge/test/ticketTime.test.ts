@@ -149,3 +149,20 @@ describe('ticket time on a room socket (OP-237)', () => {
     expect(untilOf(park.sockets.at(-1))).toBeNull();
   });
 });
+
+describe('a newcomer on a room socket (OP-322)', () => {
+  it('tells the room an owl is a newcomer when it brings no entry, and not when it brings one, whatever the page sent', async () => {
+    const e = park.env({ GATE: 'open' });
+    const pass = await guestPass(e);
+    await socket(e, 'hub', pass);
+    expect(park.sockets.at(-1)?.get('X-Newcomer')).toBe('1');
+    // The entry the Worker gave that socket, brought to the next room, as a page does.
+    const given = park.sockets.at(-1)?.get('X-Entry') ?? '';
+    expect(given).not.toBe('');
+    await call(e, `/ws/lobby?pass=${encodeURIComponent(pass)}&entry=${encodeURIComponent(given)}`, { headers: { Upgrade: 'websocket', Origin: 'https://park.example', 'X-Newcomer': '1' } });
+    expect(park.sockets.at(-1)?.get('X-Newcomer')).toBeNull();
+    // A made-up entry is no entry.
+    await call(e, `/ws/lobby?pass=${encodeURIComponent(pass)}&entry=nonsense`, { headers: { Upgrade: 'websocket', Origin: 'https://park.example' } });
+    expect(park.sockets.at(-1)?.get('X-Newcomer')).toBe('1');
+  });
+});

@@ -163,6 +163,79 @@ export const STORY_QUESTS: readonly QuestDef[] = [
     offer: 'The wind off the climb keeps blowing leaves against the trading nest. Flop into the pile for me, then come back and give me a hoot.',
     thanks: 'The panes are clear again and the light is back. Here, for your trouble.',
   },
+  {
+    // The ink garden (OP-402): a job from its quest owl just in from the doorway, the leaves the wind
+    // blows in through the moon gate, and a hoot back, so the garden has something to do from the start.
+    id: 'story-sumi-garden',
+    title: 'Leaves in the garden',
+    giver: 'sumi',
+    type: 'mixed',
+    difficulty: 'easy',
+    length: 'medium',
+    cadence: 'story',
+    steps: [flop(1, 'ink'), emote('hoot', { npc: 'sumi' })],
+    reward: { feathers: 40, item: null },
+    offer: 'The wind through the moon gate keeps blowing leaves onto my paving stones. Flop into a pile for me, then come back and give me a hoot.',
+    thanks: 'The stones are clear and the ink can dry. Here, for your trouble.',
+  },
+  // The Great Hollow's Commons (OP-281, OP-258): each Commons' quest owl asks for a leaf pile or the
+  // moonbeam on the hollow's floor and a look through its Commons' door, then a hoot back, so every
+  // Commons has something to do and points the way on. The ink Commons' first: before these, all it had
+  // was its leaf piles.
+  {
+    id: 'story-quill-bridges',
+    title: 'Fresh ink',
+    giver: 'quill',
+    type: 'mixed',
+    difficulty: 'easy',
+    length: 'medium',
+    cadence: 'story',
+    steps: [flop(1, 'm3-hall'), visit('brush-1'), emote('hoot', { npc: 'quill' })],
+    reward: { feathers: 40, item: null },
+    offer: 'Leaves keep landing on my wet paint. Flop into a pile here in the hollow, then go through the painted gate and see Brushstroke Bridges. Come back and give me a hoot.',
+    thanks: 'You found the bridges! The ink held, and so did you. Here, for your trouble.',
+  },
+  {
+    id: 'story-fern-canopy',
+    title: 'Up with the warm air',
+    giver: 'fern',
+    type: 'mixed',
+    difficulty: 'easy',
+    length: 'medium',
+    cadence: 'story',
+    steps: [flop(1, 'm3-hall'), visit('canopy-1'), emote('hoot', { npc: 'fern' })],
+    reward: { feathers: 40, item: null },
+    offer: 'The leaves from the clearing end up in here. Flop into one pile in the hollow, then step through the course gate to Updraft Canopy. Come back and hoot for me.',
+    thanks: 'The canopy is something, is it not? Here, for your trouble.',
+  },
+  {
+    id: 'story-volt-circuit',
+    title: 'Lights on',
+    giver: 'volt',
+    type: 'mixed',
+    difficulty: 'easy',
+    length: 'medium',
+    cadence: 'story',
+    steps: [{ goal: { kind: 'interact', what: 'moonbeam', count: 1, room: 'm3-hall' } }, visit('circuit-1'), emote('hoot', { npc: 'volt' })],
+    reward: { feathers: 40, item: null },
+    offer: 'Before you go out where it is dark, soak up some light. Bask in a moonbeam here in the hollow, then go through the course gate to Blackout Circuit. Come back and hoot for me.',
+    thanks: 'You went into the dark and came back shining. Here, for your trouble.',
+  },
+  {
+    id: 'story-lumen-glass',
+    title: 'Every colour at once',
+    giver: 'lumen',
+    type: 'mixed',
+    difficulty: 'easy',
+    length: 'medium',
+    cadence: 'story',
+    // The glass realm has a quest owl of its own at its start and may be gated (realmStart.test.ts), so
+    // Lumen's errand stays in the hollow, by the realm's door.
+    steps: [flop(1, 'm3-hall'), { goal: { kind: 'interact', what: 'moonbeam', count: 1, room: 'm3-hall' } }, emote('hoot', { npc: 'lumen' })],
+    reward: { feathers: 40, item: null },
+    offer: 'Leaves blow up against the glass door all day. Flop into one pile in the hollow, then bask in a moonbeam to see the colours, and come back and hoot for me.',
+    thanks: 'Now you have the light in your feathers. The glass door in this Commons opens whenever you like.',
+  },
 ];
 
 // ---------- templates (expanded in bulk) ----------

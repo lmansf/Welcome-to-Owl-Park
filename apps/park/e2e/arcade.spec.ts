@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { CABINET, alongTheHall, clearLevel, flyThrough, knockByKeys, knockByStick, loseLives, missTheRest, paintedAsShipped, playAt, run, untilOver, type Game } from './arcadePlay';
-import { doAction, frames, openPark, state, walkToDoor } from './helpers';
+import { actionButton, doAction, frames, openPark, state, walkAndStop, walkToDoor } from './helpers';
 
 async function inRoom(page: Page, room: string): Promise<void> {
   await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe(room);
@@ -51,6 +51,21 @@ const traffic = (page: Page) =>
 test.describe.configure({ timeout: 240_000 });
 
 test.describe('the arcade (this device)', () => {
+  test("every cabinet offers its Play to an owl walked up against its front, in from the Great Hollow's hatch (OP-323)", async ({ page, isMobile }) => {
+    await openPark(page, { room: 'arcade', spawn: 'from-cavern', tz: 'UTC' });
+    await inRoom(page, 'arcade');
+    const names = { crossing: 'Hoot & Hop', flight: 'Moon Flap', sling: 'Talon Toss' } as const;
+    for (const game of ['crossing', 'flight', 'sling'] as const) {
+      // Along the hall at the height the owl came in at, then up into the cabinet: the walk stops at its front.
+      await alongTheHall(page, CABINET[game].x, 810);
+      const at = await walkAndStop(page, CABINET[game].x, 700);
+      expect(at.y, `${game}: stopped at the cabinet's front`).toBeLessThan(810);
+      await expect.poll(async () => (await state(page)).actions, { timeout: 5_000 }).toContain(`cabinet-${game}`);
+      await expect(actionButton(page, `cabinet-${game}`)).toBeVisible();
+      if (!isMobile) await expect(page.locator(`[data-action="cabinet-${game}"]`)).toContainText(`Play ${names[game]}`);
+    }
+  });
+
   test('Hoot & Hop: up the street by the keys, a level cleared, three lives lost at last, paid and on the score wall (OP-137)', async ({ page }) => {
     const before = await intoArcade(page, `e2e-hop-${test.info().project.name}`);
     await playAt(page, 'crossing');

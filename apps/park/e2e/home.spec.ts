@@ -61,10 +61,10 @@ test.describe('the home screen (OP-065)', () => {
     await openHome(page);
     await expect(page.locator('[data-home] h1')).toHaveText('Owl Park A cozy park you visit in your browser');
     await expect(button(page, 'login')).toHaveText('Make your owl');
-    await expect(button(page, 'guest')).toHaveText('Look around free');
+    await expect(button(page, 'guest')).toHaveText('Play free now');
     await expect(button(page, 'settings')).toBeVisible();
     await expect(button(page, 'play')).toBeHidden();
-    expect(await shownButtons(page)).toEqual(['Make your owl', 'Look around free', 'Settings']);
+    expect(await shownButtons(page)).toEqual(['Play free now', 'Make your owl', 'Settings']);
     // Nothing of the park shows: no Menu, no bar, no thumbstick.
     await expect(page.locator('[data-menu-btn]')).toBeHidden();
     await expect(page.locator('#hud .bar')).toBeHidden();
@@ -129,11 +129,23 @@ test.describe('the home screen (OP-065)', () => {
       await expect(button).toBeFocused();
     }
     // The screens are words only: the home screen's buttons are as they were.
-    expect(await shownButtons(page)).toEqual(['Make your owl', 'Look around free', 'Settings']);
+    expect(await shownButtons(page)).toEqual(['Play free now', 'Make your owl', 'Settings']);
   });
 
-  test('Look around free: a ready-made owl, with no quiz and no builder, straight into its own nest (the second site audit)', async ({ page, isMobile }) => {
+  test('Play free now: the first control and the focus on a first visit; a ready-made owl, with no quiz and no builder, straight into its own nest (OP-364)', async ({ page, isMobile }) => {
     await openHome(page);
+    // Free play leads (OP-364): the first button on the screen, focused, with the first thing to do named under it.
+    const first = page.locator('[data-home] button:visible').first();
+    await expect(first).toHaveAttribute('data-home-btn', 'guest');
+    await expect(first).toHaveText('Play free now');
+    await expect(button(page, 'guest')).toBeFocused();
+    await expect(page.locator('[data-home-free-line]')).toHaveText('Straight in with a ready-made owl: the feather trail leads to your first glide.');
+    // Make your owl is still there, second and smaller.
+    const [free, make] = [(await button(page, 'guest').boundingBox())!, (await button(page, 'login').boundingBox())!];
+    expect(make.y).toBeGreaterThan(free.y + free.height);
+    expect(make.height).toBeLessThanOrEqual(free.height);
+    // For families, one line: no typed chat.
+    await expect(page.locator('[data-home-safe]')).toHaveText('Owls talk with set phrases only: there is no typed chat.');
     if (isMobile) await button(page, 'guest').tap();
     else await button(page, 'guest').click();
     await expect(page.getByRole('dialog', { name: 'Which owl are you?' })).toBeHidden();
@@ -146,6 +158,7 @@ test.describe('the home screen (OP-065)', () => {
     await menu.locator('[data-screen="title"]').click();
     await page.waitForFunction(() => window.owlPark.home().shown, null, { timeout: 20_000 });
     expect(await shownButtons(page)).toEqual(['Play', 'Settings']);
+    await expect(page.locator('[data-home-safe]')).toBeHidden();
   });
 
   test('a return visit is logged in at once, with the owl as it was, and Play takes the focus', async ({ page }) => {
