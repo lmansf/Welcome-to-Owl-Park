@@ -9,9 +9,16 @@
  * updraft is the mast's, in the last act.
  *
  * By room id; a room listed here takes these on top of any updrafts it has of its own.
+ *
+ * And the courses' movers (OP-287, movers.ts): every doorway of a course that leads on is a knot-hole
+ * tunnel, in at its mouth and out of the mouth at the other end with a hop, and those that go straight
+ * down (COURSE_DROPS) are dived into. They are played only on a page with the `movers` flag; without it
+ * each doorway is as it was. The doorways' own art is the realm's `knot-hole` slot already (kitSlots.ts),
+ * so nothing new is drawn for them.
  */
 import { kitSlotKey } from '../src/kitArt';
 import type { KitRealm } from '../src/kitCatalog';
+import { doorwayTunnels } from '../src/movers';
 import type { RoomDef } from '../src/room';
 import type { Updraft } from '../src/updraft';
 import type { WindCurrent } from '../src/wind';
@@ -49,9 +56,25 @@ export const COURSE_AIR: Readonly<Record<string, { updrafts?: Updraft[]; winds?:
 };
 
 /**
+ * The courses' doorways that go straight down (OP-287), by room: a hole in the floor the owl dives
+ * into, coming into the room below falling. Inside the Updraft Canopy's trunk each storey's way back
+ * down is one, and each course's way home from its finish drops to the Great Hollow. Every other
+ * doorway of a course is a tunnel through the wood, the paper or the wall.
+ */
+export const COURSE_DROPS: Readonly<Record<string, readonly string[]>> = {
+  'canopy-2b': ['down'],
+  'canopy-2c': ['down'],
+  'canopy-3': ['down'],
+  'canopy-hut': ['out'],
+  'brush-3b': ['home'],
+  'circuit-3': ['home'],
+};
+
+/**
  * A realm's course rooms with their course air added: each listed room's updrafts after its own, and
  * its wind currents; every column and current of the rooms named for the realm's `updraft` and
- * `wind-current` slots, so the realm's art for them is drawn there once it comes (kitSlots.ts).
+ * `wind-current` slots, so the realm's art for them is drawn there once it comes (kitSlots.ts). And
+ * each room's doorways as its movers (doorwayTunnels).
  */
 export function withCourseAir(realm: KitRealm, rooms: Record<string, RoomDef>): Record<string, RoomDef> {
   const lift = kitSlotKey(realm, 'updraft');
@@ -61,7 +84,8 @@ export function withCourseAir(realm: KitRealm, rooms: Record<string, RoomDef>): 
       const air = COURSE_AIR[id] ?? {};
       const updrafts = [...(r.updrafts ?? []), ...(air.updrafts ?? [])].map((u) => ({ ...u, art: lift }));
       const winds = [...(r.winds ?? []), ...(air.winds ?? [])].map((w) => ({ ...w, art: gust }));
-      return [id, { ...r, ...(updrafts.length ? { updrafts } : {}), ...(winds.length ? { winds } : {}) }];
+      const tunnels = doorwayTunnels(r.doors, COURSE_DROPS[id]);
+      return [id, { ...r, ...(updrafts.length ? { updrafts } : {}), ...(winds.length ? { winds } : {}), ...(tunnels.length ? { movers: { ...r.movers, tunnels } } : {}) }];
     }),
   );
 }

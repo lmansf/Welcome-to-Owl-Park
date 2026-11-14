@@ -119,6 +119,7 @@ import {
   thermalAt,
   thermalTop,
   DIVE_SPEED,
+  arrivalAir,
   dive,
   downdraftAt,
   downdraftFor,
@@ -127,6 +128,7 @@ import {
   laneEnd,
   laneOff,
   tunnelFor,
+  type CameBy,
   type Downdraft,
   type GlideLane,
   type KnotTunnel,
@@ -208,7 +210,7 @@ import { CALLS, GUARDIAN_ROOM, GUARDIAN_VIEW, guardianShade, lookShowing, mustSh
 import { GuardianView, type GuardianState } from './guardianView';
 import { FIRST_FLIGHT_MARK, glidedOff, hallTipFor, hallTips } from './hallTips';
 import { FIRST_RISE_MARK, marksFirstRise, rodeUp } from './firstRise';
-import { INTO_MOUTH_MS, MOVER_WORDS, arrivalAir, headingOf, roomWithMovers, type CameBy } from './movers';
+import { INTO_HOLE_PX, INTO_MOUTH_MS, MOVER_FADE_IN_MS, MOVER_WORDS, headingOf, roomWithMovers } from './movers';
 import { MoversView, type MoverPiece } from './moversView';
 import { COMMONS_WORDS, HALL_WORDS } from '../ui/hallWords';
 import { FeatherTrail } from './featherTrailView';
@@ -900,15 +902,15 @@ export class RoomScene extends Phaser.Scene {
     // A spawn up on a perch (a landing of the hollow hall): the owl comes in standing on it, and its
     // height is told to the room after the welcome (retellAir).
     const arriveTop = spawnTop(this.room, this.registry.get('spawnName') as string | undefined);
-    if (arriveTop > 0) this.flier = { ...this.flier, air: { ...this.flier.air, z: arriveTop } };
-    else if (this.cameBy && !this.sideView()) {
+    if (this.cameBy) {
       // Come by a mover of the room it left (OP-287): falling in from a dive, or hopping up out of a tunnel's
-      // mouth. A flight of its own, begun here: nothing of the last room's flight is carried into it.
-      this.flier = { ...this.flier, air: arrivalAir(this.cameBy, 0) };
+      // mouth, over where it comes in (the floor, or the perch its spawn stands on). A flight of its own,
+      // begun here: nothing of the last room's flight is carried into it.
+      this.flier = { ...this.flier, air: arrivalAir(this.cameBy, 0, arriveTop) };
       this.flown = { n: this.flown.n + 1, peak: this.flier.air.z, glided: false, lifted: false, ms: 0 };
       this.flownFrom = Date.now();
-      this.flownOff = { pos: { x: spawn.x, y: spawn.y }, z: 0 };
-    }
+      this.flownOff = { pos: { x: spawn.x, y: spawn.y }, z: arriveTop };
+    } else if (arriveTop > 0) this.flier = { ...this.flier, air: { ...this.flier.air, z: arriveTop } };
     const joining = this.join(spawn);
     // Gone before the room was built (the page went on to another scene): the room is left too.
     const leaveEarly = () => void joining.conn.then((conn) => conn.leave());
@@ -1370,7 +1372,9 @@ export class RoomScene extends Phaser.Scene {
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());
     this.hud.setRoomDark(false);
-    this.cameras.main.fadeIn(ROOM_FADE_IN_MS, 12, 30, 54);
+    // An owl that came by a mover (OP-287) is in the air as the room comes up, and a hop is over in a third of
+    // a second: the room comes up in about half its time, so the hop and the fall are seen and not only their end.
+    this.cameras.main.fadeIn(this.cameBy ? MOVER_FADE_IN_MS : ROOM_FADE_IN_MS, 12, 30, 54);
     this.built = true;
     this.startOpening(this.registry.get('spawnName') as string | undefined);
     // The guardian sees the visitor's own owl come in (OP-359), counted from when the room has faded in: by the
@@ -3389,13 +3393,16 @@ export class RoomScene extends Phaser.Scene {
     if (distance(got, to) >= 3) this.laneTo = { x: got.x, y: got.y };
   }
 
-  /** Through a knot hole the owl came down in, or stepped onto (OP-287): into its mouth, and falling into the room below. */
-  private diveThrough(d: Downdraft): void {
+  /**
+   * Through a knot hole the owl came down in, or stepped onto, or (a tunnel that goes straight down) took
+   * where it stood (OP-287): into its mouth, and falling into the room below.
+   */
+  private diveThrough(d: Pick<Downdraft, 'door' | 'pos' | 'lands'>): void {
     const door = this.room.doors.find((x) => x.id === d.door);
     const to = door ? this.doorTo(door) : undefined;
     if (!door || !to || this.leaving || this.realmClosed(to.room)) return;
     triedDoors().add(this.room.id, door.id);
-    this.intoMouth(d.pos);
+    this.intoMouth(d.pos, true);
     // Down at the downdraft's own landing spot where it has one (under a glide lane), else at the doorway's.
     void this.goTo(to.room, d.lands ?? to.spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined }, LEAVE_FADE_MS, undefined, undefined, 'dive');
   }
@@ -3407,11 +3414,16 @@ export class RoomScene extends Phaser.Scene {
     void this.goTo(to.room, to.spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined }, LEAVE_FADE_MS, laneThrough(this.room, door, cameIn), undefined, 'tunnel');
   }
 
-  /** The owl goes into a mouth as its room fades: smaller and dimmer, toward the mouth. In calm motion it only fades with the room. */
-  private intoMouth(at: Vec2): void {
+  /**
+   * The owl goes into a mouth as its room fades: smaller and dimmer, toward the mouth, and `down` into a
+   * hole in what it stands on (in a room seen from the side the hole is under its feet, so it sinks).
+   * In calm motion it only fades with the room.
+   */
+  private intoMouth(at: Vec2, down = false): void {
     if (this.calm()) return;
     const pose = this.me.pose;
-    this.tweens.add({ targets: pose, x: pose.x + (at.x - this.me.pos.x), y: pose.y + (at.y - this.me.pos.y), scaleX: pose.scaleX * 0.35, scaleY: pose.scaleY * 0.35, alpha: 0.25, duration: INTO_MOUTH_MS, ease: 'Sine.easeIn' });
+    const sink = down && this.sideView() ? INTO_HOLE_PX : 0;
+    this.tweens.add({ targets: pose, x: pose.x + (at.x - this.me.pos.x), y: pose.y + (at.y - this.me.pos.y) + sink, scaleX: pose.scaleX * 0.35, scaleY: pose.scaleY * 0.35, alpha: 0.25, duration: INTO_MOUTH_MS, ease: 'Sine.easeIn' });
   }
 
   /**
@@ -3844,6 +3856,7 @@ export class RoomScene extends Phaser.Scene {
             return this.diveThrough(sinks);
           }
           const tunnel = tunnelFor(this.room.movers, door.id);
+          if (tunnel?.drop) return this.diveThrough({ door: door.id, pos: tunnel.mouth });
           if (tunnel) return this.tunnelThrough(tunnel, door, to, cameIn);
         }
         triedDoors().add(this.room.id, door.id);

@@ -44,12 +44,25 @@ never lets go early. `sim/newcomer.test.ts` holds the ink course's first screen 
 across, however it is held or flapped, is a fall. A course's first screen laid for newcomers passes
 both bots; its later screens are the kid bot's.
 
+## The ways in by a mover
+
+With the movers (OP-287, `packages/shared/src/movers.ts`) an owl can come into a room in the air: falling
+in from a dive, or hopping up out of a tunnel's far mouth. It has stood nowhere yet, so a kid can steer
+and spread its wings on the way down. `sim/arrivals.ts` finds every such way in from the rooms' own
+`movers` and plays each one with each way held and Jump never held, held at once, or held after a drop,
+from the spawn and from as far to either side as the room server may set an arrival down. Where those
+come down counts as reached in the stuck check, whichever way through a course the owl was going. The
+first run of it found the hop out of the tunnel behind the ink course's waterfall rising into the water
+over its ledge.
+
 ## What fails the check
 
 - a stuck spot: a ledge or stretch of floor a kid can get to with no way from it to any doorway (and,
   in a course, no pit to fall back to a bench by);
 - a doorway, leaf pile, hiding spot or course piece no route reaches from any way in;
 - a spawn that stands on nothing;
+- a way into a room by a mover (a dive from the room above, the hop out of a tunnel) that, with nothing
+  pressed, comes down in a pit or the thorns, or nowhere an owl can stand (`sim/arrivals.ts`);
 - a hop a course needs that lands under the kid bar;
 - a room that won't open in the browser, or a doorway a walk to it doesn't go through.
 
@@ -67,7 +80,8 @@ doorway or a course, and the next run plays it.
 ## Turning a miss into a lasting check
 
 Every finding has a key that stays the same from run to run (`stuck:brush-1:c1`,
-`unreachable:canopy-3:hut`, `bar:circuit:circuit-1:floor0>bridge1`, `walk:l1:to-market`). The check
+`unreachable:canopy-3:hut`, `bar:circuit:circuit-1:floor0>bridge1`, `arrival:brush-2:from-falls:tunnel`,
+`walk:l1:to-market`). The check
 fails on any key that `baseline.json` doesn't list, so a miss the bots catch fails every pull request
 until it is fixed, and once fixed it can't come back unnoticed.
 

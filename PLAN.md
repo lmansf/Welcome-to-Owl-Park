@@ -749,11 +749,48 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
     with no flag sees a rider carried along at the lane's height (`e2e/edge.spec.ts`).
   - Done when: with the flag, hall to arcade to hall is a dive, a ride and a tunnel on a
     computer and a phone; without it nothing has changed; the gate passes.
-- Milestone 2, the courses: their doorways between rooms are hatches, paper doors and rooftop
-  doors today (the canopy's `down` and `hatch-up`, the brush course's doors and moon gates, the
-  circuit's rooftop doors). Each becomes a tunnel or a dive, in rooms seen from the side, where
-  a downdraft is a band across the room as an updraft is and a lane is a wind current. The kid
-  sim plays those rooms, so it has to learn each mover before a course route may need one.
+- Milestone 2, the courses (built): the hand-off's "then the ladders and doors in the courses".
+  - What was there, read first. The courses have no ladder (the park's one ladder is painted
+    into the treehouse clearing, a room seen from above, and is on the ticket's wider list).
+    Their doorways are hatches, a hut door, paper doors and rooftop doors, and every one of them
+    is already drawn in its realm's `knot-hole` art slot (`kitSlots.ts`): the artist's knot hole
+    takes every door's place by name when it is delivered. So the courses need no new box.
+    What they lacked is the going: a doorway was a fade and a cut.
+  - What it is now, with the flag. Every doorway of a course that leads on is a knot-hole
+    tunnel: the owl goes in at the mouth and comes out of the far mouth with a hop. The ways
+    straight down are dived into, and the owl comes into the room below falling: the three
+    hatches inside the Updraft Canopy's trunk, and each course's way home from its finish, which
+    drops into the Great Hollow by the course's arch. A dive is never the way forward.
+  - One place for all of it: `withCourseAir` (`rooms/courseAir.ts`) gives each course room its
+    doorways as tunnels (`doorwayTunnels`), and `COURSE_DROPS` names the six that go straight
+    down. A doorway added to a course is a tunnel with nothing more to write.
+  - A doorway is still taken where the owl stands in it, with up or Go in (OP-212). No column
+    stands over a hole in a course and no air pulls an owl in: there, a jump near a hole would
+    cost a kid a storey of climbing. So a course's dive is a tunnel that goes straight down
+    (`KnotTunnel.drop`), not a downdraft.
+  - The way in is a flight with no flap (`arrivalAir`, now the shared rule the page and the
+    bots both use): a fall, or a hop and a glide at most, never a climb.
+  - The kid sim knows them (`bots/sim/arrivals.ts`): every way into a room by a mover is played
+    with each way held and Jump never held, held at once, or held after a drop, from the spawn
+    and from as far off it as the room server may set an arrival down. Where those come down
+    counts as reached in the stuck check, and an owl that presses nothing has to come down safe.
+  - Found by that check before any browser saw it: the hop out of the tunnel behind the ink
+    course's waterfall rose into the falling water 60 px over its ledge, a fall on arrival. The
+    hop is now a third of a jump (44 px, `TUNNEL_HOP` 480) where it was a half, and the bots'
+    test holds every course room's arrivals clear.
+  - Something to do by each doorway, measured and held by a test: a bell, a bench, a feather, a
+    column, a stone or a sign within four seconds' walk of every one, and within three of all
+    but two (the den under the roots, whose one feather is the room's point, and the ink
+    mountain's fold). Nothing was added: an added feather or leaf pile would change the courses
+    for every visitor, flag or no flag.
+  - Tests: the shared rules and every course room's movers (`movers.test.ts`); the room server
+    taking an arrival in the air in a course room (`Room.test.ts`); the bots' arrivals
+    (`arrivals.test.ts`); and in the browser, a computer and a phone (`e2e/movers.spec.ts`):
+    without the flag a hatch is a doorway as ever; the dive between storeys; the tunnel into the
+    trunk; the hop under the waterfall; the dive home. Through the room server, another owl with
+    no flag sees a diver come in up in the air and land (`e2e/edge.spec.ts`).
+  - Done when: with the flag, a course is climbed by tunnels and left by a dive on a computer
+    and a phone; without it nothing has changed; the kid sim is green; the gate passes.
 - Milestone 3, the lane's pace: at a walk's pace the lane saves no time, only the walking. A
   pace of its own needs a third walk pace on the wire and in the room server (a walk today is
   260 px a second, or 900 for a course's dash), so that the room and every other page carry the
@@ -761,8 +798,10 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
 - Should move: with the flag on for everyone, the share of arrivals in the Great Hollow that
   reach the arcade, and arcade visits that reach a second cabinet. Until then, the QA walk.
 - For the owner: the lane's line of words; how each of the three pieces should look; whether
-  the hall wants a lane of its own once the guardian is on; and the ticket's wider list (the
-  hall's planks, the grove's ladder, nest doors), which is outside this build unless he says so.
+  the hall wants a lane of its own once the guardian is on; whether each course's way home
+  should be a dive (it is, with the flag) or a tunnel like the rest; and the ticket's wider
+  list (the hall's planks, the grove's ladder, nest doors), which is outside this build unless
+  he says so.
 
 ## Log
 
@@ -1248,3 +1287,9 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   a dev server that has been up through a change to the shared room data can go on serving the
   rooms as they were, a warm-up load or not, so restart it before a browser run that depends on
   the change (a run here failed on an arrival spot the fresh server placed rightly).
+- 2026-11-14: the movers' second milestone built (OP-287). The plan had a downdraft as a band
+  across a course room, as an updraft is. Read against the rooms, that was wrong: every storey's
+  way down stands a step from where an owl comes up into it, so sinking air there would take a
+  kid back down a storey for a jump. A course's dive is a tunnel that goes straight down, taken
+  where the owl stands. And the courses needed no new art box: their doorways are the realm's
+  knot-hole slot already.

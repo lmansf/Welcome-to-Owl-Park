@@ -148,11 +148,11 @@ test.describe('the movers, behind their flag (OP-287)', () => {
     const hall = await state(page);
     expect(hall.movers?.cameBy).toBe('tunnel');
     expect(dist(hall.pos, FROM_UNDER)).toBeLessThan(80);
-    // Out of the mouth with a hop: off the floor a moment, lower than a jump.
+    // Out of the mouth with a hop: off the floor a moment, a third of a jump at most.
     const hop = (await flightSeen(page)).filter((f) => f.room === 'm3-hall');
     const top = Math.max(...hop.map((f) => f.z));
-    expect(top).toBeGreaterThan(25);
-    expect(top).toBeLessThan(120);
+    expect(top).toBeGreaterThan(15);
+    expect(top).toBeLessThan(60);
     // It stands clear of the knot hole it came up by: no dive back down until it steps in.
     await page.waitForTimeout(800);
     expect((await state(page)).room).toBe('m3-hall');
@@ -181,5 +181,103 @@ test.describe('the movers, behind their flag (OP-287)', () => {
     expect(dived.every((f) => f.s === 1 || f.s === 0)).toBe(true);
     expect(Math.min(...dived.map((f) => f.vz))).toBeLessThanOrEqual(-800);
     await expect.poll(async () => (await state(page)).movers?.cameBy, { timeout: 10_000 }).toBe('dive');
+  });
+});
+
+/**
+ * The courses' doorways (OP-287, milestone 2), seen from the side: with the flag each is a knot-hole
+ * tunnel, in at the mouth and out of the far mouth with a hop, and the ways straight down (the trunk's
+ * hatches, each course's way home) are dived into. A doorway is still taken where the owl stands in it.
+ */
+test.describe('the courses’ doorways as movers, behind the flag (OP-287)', () => {
+  /** Where an owl comes into each room (the rooms' spawns). */
+  const TRUNK_FOOT = { x: 140, y: 770 }; // canopy-2a's from-below
+  const UNDER_HATCH = { x: 1400, y: 770 }; // canopy-2a's from-above
+  const FALLS_LEDGE = { x: 4300, top: 540 }; // brush-2's from-falls, between the water under it and over it
+
+  test('without the flag a storey’s hatch is a doorway as ever: the owl stands on the floor below, never in the air', async ({ page }) => {
+    await openPark(page, { room: 'canopy-2b', spawn: 'from-below', ...PLAIN });
+    expect((await state(page)).movers).toBeNull();
+    await watchFlight(page);
+    await walkToDoor(page, 'down');
+    await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe('canopy-2a');
+    await page.waitForFunction(() => window.owlPark.state()?.connected === true);
+    const below = await state(page);
+    expect(below.movers).toBeNull();
+    // By its spawn, as far to a side of it as it stood in the doorway it took (an arrival's lane).
+    expect(dist(below.pos, UNDER_HATCH)).toBeLessThan(40);
+    expect((await flightSeen(page)).filter((f) => f.room === 'canopy-2a').every((f) => f.z === 0 && f.s === 0)).toBe(true);
+  });
+
+  test('a storey’s way down is dived into: the owl comes into the storey below falling, lands on its floor, and nothing new is drawn', async ({ page }) => {
+    await openPark(page, { room: 'canopy-2b', spawn: 'from-below', ...MOVERS });
+    // A room seen from the side draws no mover's box: its doorways' own art is the realm's knot-hole slot.
+    expect((await state(page)).movers).toMatchObject({ pieces: [], cameBy: null });
+    await watchFlight(page);
+    await walkToDoor(page, 'down');
+    await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe('canopy-2a');
+    await expect.poll(async () => (await state(page)).air.s, { timeout: 10_000 }).toBe(0);
+    const below = await state(page);
+    expect(below.movers?.cameBy).toBe('dive');
+    expect(below.air.z).toBe(0);
+    expect(dist(below.pos, UNDER_HATCH)).toBeLessThan(6);
+    const fell = (await flightSeen(page)).filter((f) => f.room === 'canopy-2a');
+    expect(Math.max(...fell.map((f) => f.z))).toBeGreaterThan(200);
+    expect(fell.some((f) => f.s === 1 && f.vz < 0)).toBe(true);
+    await page.screenshot({ path: 'e2e-screenshots/movers-trunk-dive.png' });
+  });
+
+  test('the way into the trunk is a tunnel: in at the mouth, and out of the far mouth with a hop', async ({ page }) => {
+    await openPark(page, { room: 'canopy-1', spawn: 'from-trunk', ...MOVERS });
+    await watchFlight(page);
+    await walkToDoor(page, 'to-trunk');
+    await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe('canopy-2a');
+    await expect.poll(async () => (await state(page)).air.s, { timeout: 10_000 }).toBe(0);
+    const trunk = await state(page);
+    expect(trunk.movers?.cameBy).toBe('tunnel');
+    expect(dist(trunk.pos, TRUNK_FOOT)).toBeLessThan(40);
+    const hop = (await flightSeen(page)).filter((f) => f.room === 'canopy-2a');
+    const top = Math.max(...hop.map((f) => f.z));
+    expect(top).toBeGreaterThan(15);
+    expect(top).toBeLessThan(60);
+    // It does not go straight back out: the way back waits for a push of its own.
+    await page.waitForTimeout(800);
+    expect((await state(page)).room).toBe('canopy-2a');
+  });
+
+  test('the hop out of the tunnel behind the waterfall stays under the water over its ledge: the owl stands on the ledge, no fall', async ({ page }) => {
+    await openPark(page, { room: 'brush-falls', spawn: 'from-falls', ...MOVERS });
+    await watchFlight(page);
+    await walkToDoor(page, 'out');
+    await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe('brush-2');
+    await expect.poll(async () => (await state(page)).air.s, { timeout: 10_000 }).toBe(0);
+    const river = await state(page);
+    expect(river.movers?.cameBy).toBe('tunnel');
+    // On the ledge it came out on, where a fall would have put it back at a bench far to the west.
+    expect(river.air.z).toBe(FALLS_LEDGE.top);
+    expect(Math.abs(river.pos.x - FALLS_LEDGE.x)).toBeLessThan(40);
+    const hop = (await flightSeen(page)).filter((f) => f.room === 'brush-2');
+    expect(Math.max(...hop.map((f) => f.z))).toBeLessThan(FALLS_LEDGE.top + 60);
+    expect(Math.min(...hop.map((f) => f.z))).toBeGreaterThanOrEqual(FALLS_LEDGE.top);
+    await page.waitForTimeout(600);
+    expect((await state(page)).air.z).toBe(FALLS_LEDGE.top);
+  });
+
+  test('a course’s way home is dived into: out of the lookout hut and down into the Great Hollow, falling in by the course’s arch', async ({ page }) => {
+    await openPark(page, { room: 'canopy-hut', spawn: 'from-deck', ...MOVERS });
+    await watchFlight(page);
+    await walkToDoor(page, 'out');
+    await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe('m3-hall');
+    await expect.poll(async () => (await state(page)).air.s, { timeout: 10_000 }).toBe(0);
+    const hall = await state(page);
+    expect(hall.movers?.cameBy).toBe('dive');
+    const fell = (await flightSeen(page)).filter((f) => f.room === 'm3-hall');
+    expect(Math.max(...fell.map((f) => f.z))).toBeGreaterThan(200);
+    // Down by the Updraft Canopy's gate, and it stays in the Great Hollow.
+    const gate = hall.doors.find((d) => d.id === 'course-grove')!;
+    expect(dist(hall.pos, gate)).toBeLessThan(400);
+    await page.waitForTimeout(800);
+    expect((await state(page)).room).toBe('m3-hall');
+    await page.screenshot({ path: 'e2e-screenshots/movers-home-dive.png' });
   });
 });

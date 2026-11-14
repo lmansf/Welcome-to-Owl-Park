@@ -6,7 +6,10 @@ import {
   DIVE_SPEED,
   LANE_CATCH_ABOVE,
   LANE_CATCH_BELOW,
+  TUNNEL_HOP,
+  arrivalAir,
   dive,
+  doorwayTunnels,
   downdraftAt,
   downdraftFor,
   hiddenPieces,
@@ -23,7 +26,8 @@ import {
   type MoverRoom,
 } from './movers';
 import { HEART_THERMAL } from '../rooms/hollowHall';
-import { ARCADE_LANE, ARCADE_TUNNEL, HALL_KNOT_HOLE, ROOMS } from '../rooms/index';
+import { ARCADE_LANE, ARCADE_TUNNEL, COURSES, HALL_KNOT_HOLE, ROOMS } from '../rooms/index';
+import { COURSE_DROPS } from '../rooms/courseAir';
 import { distance, distanceToRect, isWalkable, pointInRect } from './geometry';
 import { highestTop } from './perches';
 import { GLIDE_SLOPE } from './flight';
@@ -161,8 +165,10 @@ describe('the park’s movers (OP-287)', () => {
     for (const room of Object.values(ROOMS)) expect(moverProblems(room), room.id).toEqual([]);
   });
 
-  it('only rooms seen from above have them, so far: the Great Hollow and the arcade', () => {
-    expect(Object.values(ROOMS).filter((r) => r.movers).map((r) => r.id).sort()).toEqual(['arcade', 'm3-hall']);
+  it('the Great Hollow and the arcade have them, seen from above, and every room of the three courses, seen from the side; no other room', () => {
+    const courseRooms = Object.values(COURSES).filter((c) => !c.keeper).flatMap((c) => [...c.acts, ...(c.rooms ?? [])]);
+    expect(courseRooms.length).toBe(15);
+    expect(Object.values(ROOMS).filter((r) => r.movers).map((r) => r.id).sort()).toEqual(['arcade', 'm3-hall', ...courseRooms].sort());
   });
 
   it('the Great Hollow’s hatch is a knot hole: on the doorway down to the arcade, in place of the hatch’s art, within a glide of the heart’s thermal', () => {
@@ -227,5 +233,134 @@ describe('the park’s movers (OP-287)', () => {
     // The lane: piles beside its line, and one of the room's things near every stretch of it.
     expect(piles('arcade').filter((i) => laneOff(ARCADE_LANE, i.pos) <= 150).length).toBeGreaterThanOrEqual(3);
     for (let x = ARCADE_LANE.a.x; x <= ARCADE_LANE.b.x; x += 100) expect(nearest({ x, y: ARCADE_LANE.a.y }, things('arcade')), `x ${x}`).toBeLessThan(threeSeconds);
+  });
+});
+
+describe('an owl’s way into a room by a mover (OP-287)', () => {
+  it('one that dived comes in over where it lands and drops; one out of a tunnel hops up out of the mouth; neither has a flap', () => {
+    const dived = arrivalAir('dive');
+    expect(dived).toEqual({ z: DIVE_ARRIVAL.z, vz: DIVE_ARRIVAL.vz, s: AIRBORNE, f: 0 });
+    expect(carryOn(dived, 700).s).toBe(0);
+    const out = arrivalAir('tunnel');
+    expect(out).toEqual({ z: 0, vz: TUNNEL_HOP, s: AIRBORNE, f: 0 });
+    expect(carryOn(out, 900).s).toBe(0);
+  });
+
+  it('comes in over the perch its spawn stands on, where it stands on one', () => {
+    expect(arrivalAir('dive', 0, 540).z).toBe(540 + DIVE_ARRIVAL.z);
+    expect(arrivalAir('tunnel', 0, 540)).toEqual({ z: 540, vz: TUNNEL_HOP, s: AIRBORNE, f: 0 });
+  });
+
+  it('the hop out of a tunnel is a third of a jump at most, and over in half a second: under what hangs 60 px over a doorway', () => {
+    const out = arrivalAir('tunnel');
+    const top = Math.max(...Array.from({ length: 60 }, (_, i) => carryOn(out, i * 10).z));
+    expect(top).toBeGreaterThan(30);
+    expect(top).toBeLessThan(JUMP_RISE / 3);
+    expect(top).toBeLessThan(60 - 10);
+    expect(carryOn(out, 500).s).toBe(0);
+    // The room server takes both as any owl in the air.
+    expect(checkAir(out, MAX_RISE, [0])).not.toBeNull();
+    expect(checkAir(arrivalAir('dive'), MAX_RISE, [0])).not.toBeNull();
+  });
+});
+
+describe('the courses’ movers (OP-287): every doorway a tunnel, and the ways straight down dived into', () => {
+  const courses = Object.values(COURSES).filter((c) => !c.keeper);
+  const courseRooms = courses.flatMap((c) => [...c.acts, ...(c.rooms ?? [])]).map((id) => ROOMS[id]!);
+  const leadsOn = (d: { to?: unknown; toNew?: unknown }) => d.to !== undefined || d.toNew !== undefined;
+
+  it('a room’s doorways as tunnels: one for each that leads somewhere, its mouth in the middle of the doorway, and those named going straight down', () => {
+    const doors = [
+      { id: 'on', rect: { x: 100, y: 750, w: 80, h: 40 }, to: { room: 'next', spawn: 'from-back' } },
+      { id: 'spot', rect: { x: 400, y: 750, w: 80, h: 40 } },
+      { id: 'down', rect: { x: 10, y: 750, w: 60, h: 40 }, toNew: { room: 'under', spawn: 'from-above' } },
+    ];
+    expect(doorwayTunnels(doors, ['down'])).toEqual([
+      { id: 'tunnel-on', door: 'on', mouth: { x: 140, y: 770 } },
+      { id: 'tunnel-down', door: 'down', mouth: { x: 40, y: 770 }, drop: true },
+    ]);
+    expect(doorwayTunnels(doors)[1]).toEqual({ id: 'tunnel-down', door: 'down', mouth: { x: 40, y: 770 } });
+    expect(doorwayTunnels([])).toEqual([]);
+  });
+
+  it('every doorway of a course that leads on is a tunnel, and a course room has no other mover', () => {
+    for (const room of courseRooms) {
+      const ways = room.doors.filter(leadsOn).map((d) => d.id);
+      expect(ways.length, room.id).toBeGreaterThan(0);
+      expect((room.movers?.tunnels ?? []).map((t) => t.door), room.id).toEqual(ways);
+      expect(room.movers?.downdrafts, room.id).toBeUndefined();
+      expect(room.movers?.lanes, room.id).toBeUndefined();
+      for (const t of room.movers!.tunnels!) {
+        const door = room.doors.find((d) => d.id === t.door)!;
+        expect(pointInRect(t.mouth, door.rect), `${room.id}/${t.id}`).toBe(true);
+        // The doorway's own art is the realm's knot-hole slot: a tunnel hides nothing and draws nothing new.
+        expect(t.hides, `${room.id}/${t.id}`).toBeUndefined();
+      }
+    }
+  });
+
+  it('the ways straight down are the trunk’s three hatches and each course’s way home from its finish: doorways marked down, to a room below', () => {
+    const drops = courseRooms.flatMap((r) => (r.movers?.tunnels ?? []).filter((t) => t.drop).map((t) => `${r.id}/${t.door}`));
+    expect(drops.sort()).toEqual(['brush-3b/home', 'canopy-2b/down', 'canopy-2c/down', 'canopy-3/down', 'canopy-hut/out', 'circuit-3/home']);
+    expect(Object.entries(COURSE_DROPS).flatMap(([room, doors]) => doors.map((d) => `${room}/${d}`)).sort()).toEqual(drops);
+    for (const key of drops) {
+      const [roomId, doorId] = key.split('/') as [string, string];
+      const door = ROOMS[roomId]!.doors.find((d) => d.id === doorId)!;
+      expect(door.way, key).toBe('down');
+    }
+    // Each course's way home is its exit, to the Great Hollow; the trunk's go one storey down.
+    for (const c of courses) {
+      const exit = ROOMS[c.exit.room]!.movers!.tunnels!.find((t) => t.door === c.exit.door)!;
+      expect(exit.drop, c.id).toBe(true);
+      expect(ROOMS[c.exit.room]!.doors.find((d) => d.id === c.exit.door)!.to!.room, c.id).toBe('m3-hall');
+    }
+    expect(ROOMS['canopy-2b']!.doors.find((d) => d.id === 'down')!.to).toEqual({ room: 'canopy-2a', spawn: 'from-above' });
+    expect(ROOMS['canopy-2c']!.doors.find((d) => d.id === 'down')!.to).toEqual({ room: 'canopy-2b', spawn: 'from-above' });
+    expect(ROOMS['canopy-3']!.doors.find((d) => d.id === 'down')!.to).toEqual({ room: 'canopy-2c', spawn: 'from-above' });
+  });
+
+  it('no doorway that leads up or on through a course is dived into: a dive is never the way forward', () => {
+    for (const room of courseRooms) {
+      for (const t of room.movers!.tunnels!) {
+        const door = room.doors.find((d) => d.id === t.door)!;
+        if (door.way === 'up') expect(t.drop, `${room.id}/${t.door}`).toBeUndefined();
+      }
+    }
+  });
+
+  it('a diver comes into a room seen from the side under its ceiling for an owl in the air, wherever its spawn stands', () => {
+    for (const room of courseRooms) {
+      for (const from of courseRooms) {
+        for (const t of from.movers!.tunnels!.filter((x) => x.drop)) {
+          const to = from.doors.find((d) => d.id === t.door)!.to!;
+          if (to.room !== room.id) continue;
+          const z = arrivalAir('dive', 0, room.spawnTops?.[to.spawn] ?? 0).z;
+          expect(z, `${room.id}@${to.spawn}`).toBeLessThanOrEqual(highestTop(room) + MAX_RISE);
+          expect(findSpawn(room, to.spawn), `${room.id}@${to.spawn}`).toEqual(room.spawns[to.spawn]);
+        }
+      }
+    }
+  });
+
+  it('every course doorway has something to do within four seconds’ walk: a bell, a bench, a feather, a column, a stone or a sign', () => {
+    const far: string[] = [];
+    for (const room of courseRooms) {
+      const c = room.course!;
+      const xs = [
+        ...INTERACTABLES.filter((i) => i.room === room.id).map((i) => i.pos.x),
+        ...[...(c.benches ?? []), ...(c.parts ?? []), ...(c.feathers ?? []), ...(c.shrine ? [c.shrine] : [])].map((p) => p.at.x),
+        ...(room.updrafts ?? []).map((u) => u.x + u.w / 2),
+        ...(room.winds ?? []).map((w) => w.x0),
+        ...(room.brushStones ?? []).map((b) => (b.x0 + b.x1) / 2),
+        ...(room.neonSigns ?? []).map((n) => (n.x0 + n.x1) / 2),
+      ];
+      for (const t of room.movers!.tunnels!) {
+        const near = Math.min(...xs.map((x) => Math.abs(x - t.mouth.x)));
+        expect(near, `${room.id}/${t.door}`).toBeLessThanOrEqual(4 * WALK_SPEED);
+        if (near > 3 * WALK_SPEED) far.push(`${room.id}/${t.door}`);
+      }
+    }
+    // Past three seconds and inside four: the den under the roots (its one feather is the room's point) and the ink mountain's fold.
+    expect(far.sort()).toEqual(['brush-3a/fold', 'canopy-roots/out']);
   });
 });

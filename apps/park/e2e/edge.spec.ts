@@ -608,6 +608,35 @@ test.describe('room server', () => {
     for (const page of [watcher, rider]) await page.context().close();
   });
 
+  test('a dive down a storey of a course is a change of room and a fall for the room server: another owl, with no flag of its own, sees the diver come in up in the air and land (OP-287)', async ({ browser }) => {
+    test.slow(); // live parks drawn with software WebGL on CI runners, and two rooms
+    const watcher = await visitor(browser, { room: 'canopy-2a' });
+    expect((await state(watcher)).movers).toBeNull();
+    // From now on, the highest the watcher's page has drawn any other owl.
+    await watcher.evaluate(() => {
+      const w = window as unknown as { peerTop: number };
+      w.peerTop = 0;
+      const look = () => {
+        for (const p of window.owlPark?.state?.()?.peers ?? []) w.peerTop = Math.max(w.peerTop, p.height);
+        requestAnimationFrame(look);
+      };
+      requestAnimationFrame(look);
+    });
+    const diver = await visitor(browser, { room: 'canopy-2b', spawn: 'from-below', movers: '1' });
+    await walkToDoor(diver, 'down');
+    await expect.poll(async () => (await state(diver)).room, { timeout: 20_000 }).toBe('canopy-2a');
+    await diver.waitForFunction(() => document.querySelector('[data-dot]')?.getAttribute('data-status') === 'online', null, { timeout: 20_000 });
+    expect((await state(diver)).movers?.cameBy).toBe('dive');
+    // Down on the storey's floor for both pages, and the watcher saw it well up in the air on the way.
+    await expect.poll(async () => (await state(diver)).air.s, { timeout: 10_000 }).toBe(0);
+    await expect.poll(async () => (await state(watcher)).peers.length, { timeout: 15_000 }).toBe(1);
+    await expect.poll(async () => (await state(watcher)).peers[0]?.height ?? -1, { timeout: 15_000 }).toBe(0);
+    expect(await watcher.evaluate(() => (window as unknown as { peerTop: number }).peerTop)).toBeGreaterThan(100);
+    await expect.poll(async () => dist((await state(watcher)).peers[0]!.pos, (await state(diver)).pos), { timeout: 15_000 }).toBeLessThan(8);
+    expect((await state(diver)).air.z).toBe(0);
+    for (const page of [watcher, diver]) await page.context().close();
+  });
+
   test('quests live on the server: talk, take on and progress are checked there', async ({ browser }) => {
     const a = await visitor(browser);
     await expect.poll(async () => (await state(a)).npcs.find((n) => n.id === 'bramble')?.mark, { timeout: 15_000 }).toBe('offer');
