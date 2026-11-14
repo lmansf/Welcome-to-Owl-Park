@@ -122,7 +122,7 @@ export interface ParkState {
     quiz: { n: number; right: 'a' | 'b' | 'c'; revealAt: number } | null;
   } | null;
   /** In the arcade: the score wall as the page shows it. */
-  wall: { walls: Array<{ game: string; top: Array<{ score: number; look: { body: string; belly: string; accent: string; species?: string } }> }>; mine: Record<string, number> } | null;
+  wall: { walls: Array<{ game: string; top: Array<{ score: number; look: { body: string; belly: string; accent: string; species?: string } }> }>; mine: Record<string, number>; shown: string[] } | null;
   street: Array<{ kind: 'own'; nestId: string | null } | { kind: 'nest'; nestId: string; look: { body: string; belly: string; accent: string } | null } | { kind: 'empty' }> | null;
   nest: { id: string; mine: boolean; open: boolean; layout: Record<string, string>; drawn: Record<string, string>; owned: string[]; gift: { taken: boolean } | null; decorating: boolean; spot: string } | null;
   /** In a nest, its mirror: where it stands, and while Your owl is open at it, the stage the room's camera draws in (CSS pixels). */

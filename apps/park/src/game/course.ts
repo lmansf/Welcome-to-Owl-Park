@@ -26,6 +26,7 @@ import {
 import type { CourseLink, CourseReply } from '../collect/service';
 import { COURSES, ROOMS, groundOf } from '../rooms';
 import { COURSE_WORDS, clearLine } from '../ui/courseWords';
+import { pageStore, recordDeviceBest } from '../ui/resultCard';
 import type { Hud } from '../ui/hud';
 import { createObjectiveStrip, type ObjectiveStrip } from '../ui/objectiveStrip';
 import { glintAt } from './featherTrailView';
@@ -288,7 +289,9 @@ export class Course {
     const paid = res.paid;
     if (!paid) return;
     this.finishes += 1;
-    this.host.hud.toast(clearLine(paid, SPECTATOR_WORDS.keep), 4000);
+    // The time and this device's best lead the line; a spectator's Day Ticket line comes last (OP-379).
+    const mine = recordDeviceBest(pageStore(), `course:${this.def.id}`, paid.ms, true);
+    this.host.hud.toast(clearLine(paid, SPECTATOR_WORDS.keep, mine), 4000);
     this.host.sound?.('clear');
     if (paid.gold) this.host.hud.toast(COURSE_WORDS.gold, 3500);
     if (paid.emote) this.host.hud.toast(COURSE_WORDS.emote, 3500);
