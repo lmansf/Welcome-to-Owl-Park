@@ -52,6 +52,10 @@ export const PLACE_NAMES: Readonly<Record<string, string>> = {
   'canopy-1': 'Updraft Canopy',
   'circuit-1': 'Blackout Circuit',
   'brush-1': 'Brushstroke Bridges',
+  // The park's front entrance and its arcade, by the names the map gives them (OP-281).
+  lobby: 'the Treetop Commons',
+  homes: 'the nests’ street',
+  arcade: 'Neon Roost, the arcade',
 };
 
 export function placeName(room: string): string {
@@ -195,6 +199,20 @@ export const NPCS: readonly NpcDef[] = [
     look: { body: '#D9D6CF', belly: '#F7F4EC', accent: '#2B2B30', wear: { head: 'bucket-hat~0', neck: 'knit-scarf~0', pet: 'snail~0' } },
     greetings: ['Every stone in this garden was painted with one brush. Walk softly.', 'The moon gate opens on Brushstroke Bridges. Take the steps up.', 'The bench by the wall is warm. Hop up and rest a while.'],
     idle: ['nod', 'tilt'],
+  },
+  {
+    // The front entrance's quest owl (OP-281): out on the Treetop Commons' plaza, south of the walk from
+    // the street of nests to the turnstiles, so a newcomer who lands here has a first job before going in.
+    // Like Prism it gives only its own story quest (questCatalog.ts, TOWN_NPCS).
+    id: 'maple',
+    name: 'Maple',
+    role: 'Greeter at the front gate',
+    room: 'lobby',
+    pos: { x: 1300, y: 1000 },
+    facing: 1,
+    look: { body: '#B5652E', belly: '#F4E3C3', accent: '#E0A23B', wear: { head: 'acorn-cap~0', neck: 'knit-scarf~0' } },
+    greetings: ['Welcome in! The turnstiles are just up there, past the booth.', 'Every owl comes through this gate. I try to say hello to each one.', 'The Great Hollow is through the turnstiles. Four Commons, and an owl in each one.'],
+    idle: ['wave', 'nod'],
   },
   // The Great Hollow's quest owls (OP-281, OP-258): one in each Commons round its rim, the ink Commons'
   // first, each beside its plaza (hollowOval.ts, questOwlAt). Like Prism they give only their own story
