@@ -1581,6 +1581,7 @@ export const HOMES_PLAZA = { front: 1335, rings: [{ x: 2300, y: 1110 }] } as con
 export const MARKET_PLAZA = { front: 1335, rings: [{ x: 900, y: 1110 }, { x: 2400, y: 1110 }] } as const;
 export const GROVE_PLAZA = { front: 1235, rings: [{ x: 900, y: 1060 }, { x: 2600, y: 1060 }, { x: 3900, y: 1060 }] } as const;
 export const GLASS_PLAZA = { front: 1700, rings: [{ x: 800, y: 1260 }] } as const;
+export const INK_PLAZA = { front: 1335, rings: [{ x: 1600, y: 1110 }] } as const;
 export const HUB_PLAZA = { front: 1235, rings: [{ x: 1150, y: 1060 }, { x: 3650, y: 1060 }] } as const;
 
 /** A solid thing in a painting's foot that a grown floor now reaches, hopped up on (plaza.ts): its outline, closed at the painting's foot. */
@@ -1661,6 +1662,74 @@ ROOMS['glass'] = growToPlaza(ROOMS['glass']!, {
     footMound('glass-lantern-east', [{ x: 1390, y: 840 }, { x: 1530, y: 840 }, { x: 1530, y: 880 }, { x: 1390, y: 880 }]),
   ],
 });
+// The ink garden (OP-402): the ink-wash realm's own room at last, behind the ink Commons' way in the
+// Great Hollow, which was grown over with roots until now. Two painted screens side by side (they meet
+// with no seam): in through the glowing doorway in the old tree on the west, the snowy owl idol on its
+// stone plinth, a stone lantern and a bench along the wall, the round moon gate whose steps climb on to
+// Brushstroke Bridges, and the bamboo gateway at the east end, painted shut. The blossom branch hangs over
+// the front of the first screen. The floor is the paving along the wall's foot, round the plinth (the
+// idol stands on it, off the floor) and the lantern's base, and it runs on toward the viewer as a plaza.
+// Every spot in it is a few steps from something to do: the quest owl, the leaf piles, the moonbeam,
+// the bench to hop up on and its two ways.
+ROOMS['ink'] = growToPlaza(
+  {
+    id: 'ink',
+    size: { w: 2 * ROOM_W, h: ROOM_H },
+    background: 'ink',
+    backgrounds: [
+      { key: 'ink', x: 0, y: 0 },
+      { key: 'ink-east', x: ROOM_W, y: 0 },
+    ],
+    foregrounds: [{ key: 'ink-fg', x: 0, y: 0 }],
+    mood: 'dusk',
+    walkable: [
+      pts(
+        // The tree's doorway, then along the wall's foot.
+        [150, 742], [290, 742], [310, 718], [1140, 712],
+        // Round the plinth the idol stands on.
+        [1140, 806], [1392, 806], [1392, 712],
+        // Round the stone lantern's base.
+        [1440, 712], [1440, 728], [1545, 728], [1545, 712],
+        // Into the moon gate's foot, where its steps start.
+        [2190, 712], [2190, 702], [2370, 702], [2370, 712],
+        // On to the shut gateway and the east end, then the front and back up past the tree's roots.
+        [3170, 712], [3170, 890], [160, 890], [175, 800],
+      ),
+    ],
+    spawns: { default: { x: 420, y: 820 }, 'from-hub': { x: 420, y: 820 } },
+    doors: [
+      // Back through the tree's doorway: on the new map into the Great Hollow, in front of the ink Commons
+      // (NEW_MAP_WAYS); today's park has no way in here, so its way out is the great tree's floor.
+      { id: 'to-hub', rect: { x: 150, y: 735, w: 140, h: 45 }, to: at('hub', 'default'), marker: { x: 220, y: 760 } },
+      // Up the steps through the moon gate: the first of Brushstroke Bridges.
+      { id: 'to-course', rect: { x: 2200, y: 702, w: 160, h: 50 }, to: at('brush-1', 'from-gate'), marker: { x: 2280, y: 730 } },
+    ],
+    // Hiding spots for finds (and the moonlit gate's last lock, puzzles.ts): on the floor, clear of the ways.
+    spots: pts(
+      // The first screen: either side of the quest owl, by the plinth and the lantern.
+      [380, 860], [820, 860], [960, 780], [1080, 880], [1460, 860], [1570, 790],
+      // The second: by the bench, the moon gate and the shut gateway.
+      [1720, 800], [1960, 870], [2480, 790], [2720, 870], [2900, 790], [3080, 860],
+      // Out on the plaza.
+      [640, 1040], [1240, 1240], [2040, 1220], [2780, 1120],
+    ),
+    pieces: [{ id: 'idol', key: 'ink-idol', x: 1264, y: 712 }],
+  },
+  {
+    ...INK_PLAZA,
+    rings: [...INK_PLAZA.rings],
+    oldFront: 885,
+    west: 150,
+    east: 3170,
+    texture: 'kit-tex-ink-ink-stone',
+    tint: 0xd8d2c4,
+    ring: 'edge-ink-ring',
+    corner: 'edge-ink-corner-front',
+    frontBumps: ['edge-ink-stones-a', 'edge-ink-stones-b', 'edge-ink-stones-a', 'edge-ink-stones-b'],
+    // The stone bench along the wall, between the lantern and the moon gate, hopped up on.
+    perches: [footMound('ink-bench', pts([1870, 704], [2105, 704], [2105, 742], [1870, 742]))],
+  },
+);
 // The grove's clearing runs on toward the viewer. Its floors overlap where the meadow meets the trunk
 // and the east path, so the back of the grown floor is traced round them by hand (each corner one of
 // theirs); the dock stays as it is. What closed the meadow's front (its west bank, the ferny mound
@@ -1706,7 +1775,7 @@ ROOMS['hub'] = growToPlaza(ROOMS['hub']!, {
 
 // Out on each plaza's floor (plazaFloor.ts, the owner's ask, Nov 8: things to interact with around the
 // room, not all on the wall): its little scenes' stumps and logs to land on and the art that sets each scene.
-for (const id of ['lobby', 'arcade', 'homes', 'market', 'glass', 'grove', 'hub']) {
+for (const id of ['lobby', 'arcade', 'homes', 'market', 'glass', 'ink', 'grove', 'hub']) {
   const room = ROOMS[id]!;
   const perches = floorPerches(id);
   ROOMS[id] = { ...room, ...(perches.length ? { perches: [...(room.perches ?? []), ...perches] } : {}), pieces: [...(room.pieces ?? []), ...floorPieces(id)] };
@@ -1754,6 +1823,7 @@ const NEW_MAP_WAYS: Readonly<Record<string, Readonly<Record<string, { room: stri
   // Great Hollow, each realm's way out back into its Commons there, and the Party Grove's way into the trunk.
   lobby: { gate: at(HALL_ID, 'from-lobby') },
   glass: { 'to-hub': at(HALL_ID, fromRealm('glass')) },
+  ink: { 'to-hub': at(HALL_ID, fromRealm('ink')) },
   grove: { 'to-hub': at(HALL_ID, fromRealm('grove')) },
   market: { 'to-hub': at(HALL_ID, fromRealm('market')) },
   hub: { 'to-lobby': at(HALL_ID, 'from-party') },
@@ -1869,13 +1939,15 @@ export interface GuardianDef {
   species: OwlSpeciesId;
   /** Held for a realm not open yet, so no other realm takes its species; it has no room. */
   reserved?: true;
+  /** Its idol stands in its realm, but the Realm Vote does not take it yet: no vote spot (the ink garden, OP-402). */
+  noVote?: true;
 }
 
 /**
  * Every realm's guardian owl and its species (OP-112): a different real species in each realm, so
  * the realms read apart at a glance. The grove's guardian is a great horned owl, the market's giant
- * robot is built as a barred owl and the stained-glass realm's idol is a barn owl. Two are held for
- * realms not open yet: the snowy owl for the ink-wash realm and the burrowing owl for a desert realm.
+ * robot is built as a barred owl, the stained-glass realm's idol is a barn owl and the ink garden's
+ * (OP-402) a snowy owl. One is held for a realm not open yet: the burrowing owl for a desert realm.
  *
  * TODO-DOCS (OP-112): docs/GLOSSARY.md (Guardian: every realm has one, each a species of its own;
  * Species: the barred owl is the market guardian's only) and docs/ART-PIPELINE.md's `robot-owl` row
@@ -1885,7 +1957,7 @@ export const GUARDIANS: readonly GuardianDef[] = [
   { realm: 'grove', species: 'great-horned' },
   { realm: 'market', species: 'barred' },
   { realm: 'glass', species: 'barn' },
-  { realm: 'ink', species: 'snowy', reserved: true },
+  { realm: 'ink', species: 'snowy', noVote: true },
   { realm: 'desert', species: 'burrowing', reserved: true },
 ];
 

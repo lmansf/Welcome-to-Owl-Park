@@ -270,8 +270,8 @@ export const NEW_MAP_PLACES: readonly Place[] = [
   { id: 'homes', name: 'The nests’ street', col: 1, row: 0 },
   { id: 'lobby', name: 'The Treetop Commons', col: 1, row: 1 },
   { id: 'm3-hall', name: 'The Great Hollow', col: 1, row: 2 },
-  // The ink-wash realm has no room yet: its Commons leads only to its course, so the course is its place (OP-303).
-  { id: 'ink', name: 'Brushstroke Bridges', col: 0, row: 2, noTravel: true },
+  // The ink-wash realm's place is its room, the ink garden (OP-402), and its course Brushstroke Bridges with it (OP-303).
+  { id: 'ink', name: 'The ink garden', col: 0, row: 2 },
   { id: 'glass', name: 'The glass realm', col: 0, row: 3 },
   { id: 'grove', name: 'The treehouse clearing', col: 1, row: 3 },
   { id: 'market', name: 'The neon street', col: 2, row: 3 },

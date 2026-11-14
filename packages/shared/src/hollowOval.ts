@@ -151,11 +151,11 @@ export const wayAt = (id: HallWay, inset = 0): Vec2 => rimAt(wayS(id), inset);
 
 /**
  * The ways with nothing behind them yet (OP-337; OP-286, the owner's "arches with nothing behind them
- * come down"): the ink-wash realm has no room and the glass realm no course. No doorway, blockade or
+ * come down"): the glass realm has no course (the ink-wash realm's room, the ink garden, opened it way in, OP-402). No doorway, blockade or
  * closed sign stands at one: the tree has grown over it (rooms/hollowHall.ts, HALL_GROWN, which a test
  * holds to what each Commons leads to). A way opens by coming off this list and its Commons gaining the room.
  */
-export const GROWN_WAYS: readonly HallWay[] = ['to-ink', 'course-glass'];
+export const GROWN_WAYS: readonly HallWay[] = ['course-glass'];
 
 /** Each Commons' middle round the rim: between its realm's doorway and its course's gate, where its idol stands. */
 export const commonsS = (level: HallLevel): number => (wayS(`to-${level}` as HallWay) + wayS(`course-${level}` as HallWay)) / 2;

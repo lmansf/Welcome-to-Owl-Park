@@ -305,6 +305,14 @@
       "key_colour": "#00FF00",
       "with_2x": true
     },
+    "ink-idol": {
+      "w": 520,
+      "h": 416,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "format": "webp",
+      "with_2x": true
+    },
     "blockade-not-yet-fledged": {
       "w": 300,
       "h": 300,
@@ -1717,6 +1725,26 @@
       "w": 1600,
       "h": 900,
       "kind": "room",
+      "with_2x": true
+    },
+    "ink": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "ink-east": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "with_2x": true
+    },
+    "ink-fg": {
+      "w": 1600,
+      "h": 900,
+      "kind": "room",
+      "overlay": true,
+      "key_colour": "#00FF00",
       "with_2x": true
     },
     "climb-sky": {
@@ -6618,6 +6646,14 @@
     "kit-landmark-pavilion-summit": {
       "w": 400,
       "h": 400,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-landmark-door-ink": {
+      "w": 240,
+      "h": 320,
       "kind": "piece",
       "key_colour": "#FF00FF",
       "format": "webp",

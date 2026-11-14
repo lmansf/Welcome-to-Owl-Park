@@ -37,6 +37,7 @@ export const NPC_EMOTE_RADIUS = 220;
 export const PLACE_NAMES: Readonly<Record<string, string>> = {
   hub: 'the great tree',
   glass: 'the glass street',
+  ink: 'the ink garden',
   grove: 'the treehouse clearing',
   market: 'the neon street',
   // The new map's stairs (map 3), top to bottom.
@@ -180,6 +181,20 @@ export const NPCS: readonly NpcDef[] = [
     look: { body: '#4B5D8A', belly: '#E6ECF7', accent: '#9FD0FF', wear: { head: 'glass-circlet~0', neck: 'moon-pendant~0' } },
     greetings: ['The light comes through every pane a different colour. I keep count.', 'The guardian listens when you stand in front of it.', 'The climb is just past the nest. Mind the wind.'],
     idle: ['tilt', 'nod'],
+  },
+  {
+    // The ink garden's quest owl (OP-402), a snowy owl like the garden's idol, on the paving just in from
+    // the tree's doorway, so an owl coming in from the Great Hollow meets it first. Like Prism its quests
+    // are its own (questCatalog.ts, TOWN_NPCS).
+    id: 'sumi',
+    name: 'Sumi',
+    role: 'Keeper of the ink garden',
+    room: 'ink',
+    pos: { x: 600, y: 790 },
+    facing: 1,
+    look: { body: '#D9D6CF', belly: '#F7F4EC', accent: '#2B2B30', wear: { head: 'bucket-hat~0', neck: 'knit-scarf~0', pet: 'snail~0' } },
+    greetings: ['Every stone in this garden was painted with one brush. Walk softly.', 'The moon gate opens on Brushstroke Bridges. Take the steps up.', 'The bench by the wall is warm. Hop up and rest a while.'],
+    idle: ['nod', 'tilt'],
   },
   // The Great Hollow's quest owls (OP-281, OP-258): one in each Commons round its rim, the ink Commons'
   // first, each beside its plaza (hollowOval.ts, questOwlAt). Like Prism they give only their own story

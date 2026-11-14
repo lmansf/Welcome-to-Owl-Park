@@ -163,6 +163,21 @@ export const STORY_QUESTS: readonly QuestDef[] = [
     offer: 'The wind off the climb keeps blowing leaves against the trading nest. Flop into the pile for me, then come back and give me a hoot.',
     thanks: 'The panes are clear again and the light is back. Here, for your trouble.',
   },
+  {
+    // The ink garden (OP-402): a job from its quest owl just in from the doorway, the leaves the wind
+    // blows in through the moon gate, and a hoot back, so the garden has something to do from the start.
+    id: 'story-sumi-garden',
+    title: 'Leaves in the garden',
+    giver: 'sumi',
+    type: 'mixed',
+    difficulty: 'easy',
+    length: 'medium',
+    cadence: 'story',
+    steps: [flop(1, 'ink'), emote('hoot', { npc: 'sumi' })],
+    reward: { feathers: 40, item: null },
+    offer: 'The wind through the moon gate keeps blowing leaves onto my paving stones. Flop into a pile for me, then come back and give me a hoot.',
+    thanks: 'The stones are clear and the ink can dry. Here, for your trouble.',
+  },
   // The Great Hollow's Commons (OP-281, OP-258): each Commons' quest owl asks for a leaf pile or the
   // moonbeam on the hollow's floor and a look through its Commons' door, then a hoot back, so every
   // Commons has something to do and points the way on. The ink Commons' first: before these, all it had

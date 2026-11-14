@@ -645,7 +645,12 @@ describe("the realms' guardians (OP-112)", () => {
   it('stand in every realm with a Realm Vote spot, and only there', () => {
     // A Commons of the hollow hall holds its realm's idol (votesFor), as the realm itself does until the hall opens.
     const voting = [...new Set(Object.values(ROOMS).filter((r) => r.doors.some((d) => d.id === 'idol')).map((r) => r.votesFor ?? r.id))];
-    expect(GUARDIANS.filter((g) => !g.reserved).map((g) => g.realm).sort()).toEqual(voting.sort());
+    expect(GUARDIANS.filter((g) => !g.reserved && !g.noVote).map((g) => g.realm).sort()).toEqual(voting.sort());
+    // The ink garden's snowy owl idol stands in its room (OP-402) with no vote spot yet.
+    for (const g of GUARDIANS.filter((x) => x.noVote)) {
+      expect(Object.hasOwn(ROOMS, g.realm), g.realm).toBe(true);
+      expect(ROOMS[g.realm]!.doors.some((d) => d.id === 'idol'), g.realm).toBe(false);
+    }
   });
 
   it('are a different real species in every realm, the held ones too', () => {
@@ -658,7 +663,7 @@ describe("the realms' guardians (OP-112)", () => {
 
   it('hold a species for a realm not open yet, which has no room', () => {
     const held = GUARDIANS.filter((g) => g.reserved);
-    expect(held.map((g) => g.species).sort()).toEqual(['burrowing', 'snowy']);
+    expect(held.map((g) => g.species).sort()).toEqual(['burrowing']);
     for (const g of held) expect(Object.hasOwn(ROOMS, g.realm)).toBe(false);
   });
 
@@ -1296,8 +1301,10 @@ describe('the new map (map 3): the park as one tree', () => {
       // In from the Party Grove's arch, back out to it.
       expect(ways(ROOMS[realm]!, 'hub').find((w) => w.door.id === 'to-hub')?.to.room, realm).toBe('hub');
     }
-    // The ink-wash realm has no room yet: no doorway stands at its way (the tree has grown over it, OP-337).
-    expect(ROOMS['m3-hall']!.doors.some((d) => d.id === 'to-ink')).toBe(false);
+    // The ink-wash realm's room, the ink garden (OP-402): out through its doorway and back, its idol in the garden, not the hall.
+    expect(ways(ROOMS['m3-hall']!).find((w) => w.door.id === 'to-ink')?.to).toEqual({ room: 'ink', spawn: 'from-hub' });
+    expect(ways(ROOMS['ink']!).find((w) => w.door.id === 'to-hub')?.to).toEqual({ room: 'm3-hall', spawn: 'from-ink' });
+    expect(ROOMS['m3-hall']!.doors.some((d) => d.id === 'idol-ink')).toBe(false);
   });
 
   it('leaves the old stairs strand no one: nothing leads into them now, and every one of them still leads out to the hall\'s map', () => {

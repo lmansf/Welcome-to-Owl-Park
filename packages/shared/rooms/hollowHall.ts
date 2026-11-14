@@ -98,6 +98,8 @@ export interface CommonsOf {
   courseName?: string;
   /** The doorway's art (a kit piece), and its realm's colour, pooled softly on the floor by its ways. */
   door: string;
+  /** The art of its realm's doorway, where that has its own (the ink garden's, OP-402); else `door`. */
+  realmDoorArt?: string;
   colour: number;
 }
 
@@ -123,12 +125,16 @@ export const HALL_COMMONS: readonly CommonsOf[] = [
     door: 'kit-neon-rooftop-door-open',
     colour: 0xff4fb8,
   },
-  // The ink-wash realm has no room yet: its Commons leads only to its course, Brushstroke Bridges.
+  // The ink-wash realm's Commons: in to its room, the ink garden (OP-402), through the painted doorway
+  // delivered for it, and out to its course, Brushstroke Bridges. Its idol stands in the garden, not here.
   {
     level: 'ink',
+    realm: { room: 'ink', spawn: 'from-hub' },
     course: { room: 'brush-1', spawn: 'from-gate' },
+    realmName: 'The ink garden',
     courseName: 'Brushstroke Bridges',
     door: 'kit-ink-door-paper-open',
+    realmDoorArt: 'kit-landmark-door-ink',
     colour: 0xe8dcc0,
   },
   {
@@ -204,7 +210,7 @@ function wayArt(id: HallWay): string | null {
   const c = HALL_COMMONS.find((x) => x.level === level)!;
   const open = id.startsWith('to-') ? c.realm : c.course;
   // A way with nothing behind it has no doorway: the roots grown over it instead (GROWN_ART).
-  return open ? c.door : null;
+  return open ? (id.startsWith('to-') && c.realmDoorArt ? c.realmDoorArt : c.door) : null;
 }
 
 /**

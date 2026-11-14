@@ -127,6 +127,13 @@ export const INTERACTABLES: readonly InteractableDef[] = [
   { id: 'market-leaves-east', kind: 'leaf-pile', room: 'market', pos: { x: 3000, y: 1230 } },
   // The glass street (Nov 8): a moonbeam on its ring of glass tiles, leaves by the lanterns and at its front corners.
   { id: 'glass-moonbeam', kind: 'moonbeam', room: 'glass', pos: { x: 800, y: 1260 } },
+  // The ink garden (OP-402): its moonbeam in the plaza's ring, the leaves blown in through the moon gate,
+  // and a pile each side of the plaza and at the east end, so no spot is more than a few steps from one.
+  { id: 'ink-moonbeam', kind: 'moonbeam', room: 'ink', pos: { x: 1600, y: 1110 } },
+  { id: 'ink-leaves-gate', kind: 'leaf-pile', room: 'ink', pos: { x: 2560, y: 820 } },
+  { id: 'ink-leaves-east', kind: 'leaf-pile', room: 'ink', pos: { x: 3040, y: 840 } },
+  { id: 'ink-leaves-west', kind: 'leaf-pile', room: 'ink', pos: { x: 420, y: 1110 } },
+  { id: 'ink-leaves-plaza', kind: 'leaf-pile', room: 'ink', pos: { x: 2450, y: 1220 } },
   { id: 'glass-leaves-lantern-west', kind: 'leaf-pile', room: 'glass', pos: { x: 230, y: 1010 } },
   { id: 'glass-leaves-lantern-east', kind: 'leaf-pile', room: 'glass', pos: { x: 1380, y: 1010 } },
   { id: 'glass-leaves-front-west', kind: 'leaf-pile', room: 'glass', pos: { x: 330, y: 1560 } },

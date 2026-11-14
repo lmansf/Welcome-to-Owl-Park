@@ -57,7 +57,7 @@ describe('the map’s travel cards (OP-130)', () => {
 });
 
 describe('the map on the new map (OP-282)', () => {
-  const NEW_ROOMS = ['homes', 'lobby', 'm3-hall', 'glass', 'grove', 'market', 'hub', 'arcade'];
+  const NEW_ROOMS = ['homes', 'lobby', 'm3-hall', 'glass', 'ink', 'grove', 'market', 'hub', 'arcade'];
 
   it("shows 'You are here' in every room of the new map, and in a nest", () => {
     for (const room of NEW_ROOMS) expect(mapPlaceOf(room, true, [], 3), room).toBe(room);
@@ -84,9 +84,10 @@ describe('the map on the new map (OP-282)', () => {
     for (const room of seen) expect(mapPlaceOf(room, true, [], 3), room).not.toBeNull();
   });
 
-  it("puts the ink-wash realm's course on the map, and each course's rooms at its realm (OP-303)", () => {
+  it("puts the ink-wash realm's room on the map, and each course's rooms at its realm (OP-303, OP-402)", () => {
     const ink = mapLayout(3).places.find((p) => p.id === 'ink');
-    expect(ink).toMatchObject({ name: 'Brushstroke Bridges', noTravel: true });
+    expect(ink).toMatchObject({ name: 'The ink garden' });
+    expect(ink?.noTravel).toBeUndefined();
     expect(mapLayout(3).paths).toContainEqual(['m3-hall', 'ink']);
     for (const room of ['brush-1', 'brush-2', 'brush-falls', 'brush-3a', 'brush-3b']) expect(mapPlaceOf(room, true, [], 3), room).toBe('ink');
     expect(mapPlaceOf('canopy-hut', true, [], 3)).toBe('grove');
@@ -113,8 +114,8 @@ describe('the map on the new map (OP-282)', () => {
   });
 
   it('travels to every place of the new map from the start, not only the places walked into (OP-305)', () => {
-    // The ink course is the one place without a landing: its realm has no room yet, the course is walked into from its Commons (OP-303).
-    expect(mapLayout(3).places.filter((p) => p.noTravel).map((p) => p.id)).toEqual(['ink']);
+    // Every place has a landing now the ink-wash realm has its room, the ink garden (OP-402).
+    expect(mapLayout(3).places.filter((p) => p.noTravel).map((p) => p.id)).toEqual([]);
     for (const room of NEW_ROOMS) expect(placeCard(room, 'nest', walked([], true), 3), room).toEqual({ line: null, button: { label: TRAVEL_WORDS.here, to: room } });
   });
 
