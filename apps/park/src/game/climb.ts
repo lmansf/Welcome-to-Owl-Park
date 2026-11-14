@@ -30,6 +30,7 @@ import { climbWouldEarn, endOfGameLine } from '../ui/spectator';
 import type { PreviewRect } from './BuilderScene';
 import type { ClimbScene } from './ClimbScene';
 import { sceneReady } from './lazyScenes';
+import { ROOM_DOWN } from './roomDown';
 
 /** The realm whose portal opens the climb. */
 export const CLIMB_ROOM = 'glass';
@@ -156,7 +157,8 @@ export class Climb {
   /** Climb, at the portal: the room starts or returns the run, and the screen opens on its card. */
   async play(): Promise<void> {
     const acts = this.host.acts();
-    if (!acts || this.destroyed) return;
+    if (this.destroyed) return;
+    if (!acts) return void this.host.hud.toast(ROOM_DOWN);
     if (!this.host.portalLive()) {
       this.host.hud.toast(PORTAL_OFF);
       return;
@@ -169,7 +171,7 @@ export class Climb {
     const reply = await acts.climb();
     if (this.destroyed) return;
     if (!reply.ok) {
-      const line = reply.reason === 'far' ? 'Stand at the portal to climb.' : reply.reason === 'closed' ? PORTAL_OFF : 'The park did not catch that. Try again in a moment.';
+      const line = reply.reason === 'far' ? 'Stand at the portal to climb.' : reply.reason === 'closed' ? PORTAL_OFF : reply.reason === 'offline' ? ROOM_DOWN : 'The park did not catch that. Try again in a moment.';
       this.host.hud.toast(line);
       return;
     }

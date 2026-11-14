@@ -233,6 +233,7 @@ import { artTrialFor, drawArtTrial } from './artTrial';
 import { drawEdges } from './edgeView';
 import { drawSkirts } from './plazaSkirt';
 import { setVignette } from './vignette';
+import { ROOM_DOWN } from './roomDown';
 
 export interface RoomStart {
   room: string;
@@ -3016,7 +3017,7 @@ export class RoomScene extends Phaser.Scene {
     if (!npc || this.busy) return;
     // The NPC owls' quests and Nova's shop are ticket holders' (OP-191).
     if (this.spectator) return this.offerDayTicket(SPECTATOR_WORDS.locked);
-    if (!this.link) return void this.hud.toast(`${npc.def.name} is lost in thought. Try again in a moment.`, 3000);
+    if (!this.link) return void this.hud.toast(ROOM_DOWN, 3200);
     const gen = this.gen;
     this.busy = true;
     try {
@@ -3024,7 +3025,7 @@ export class RoomScene extends Phaser.Scene {
       if (gen !== this.gen || this.leaving) return;
       if (!res.ok) {
         if (res.reason === 'spectator') return this.offerDayTicket(SPECTATOR_WORDS.locked);
-        this.hud.toast(res.reason === 'far' ? `Walk a little closer to ${npc.def.name}.` : `${npc.def.name} did not hear you. Try again in a moment.`, 3000);
+        this.hud.toast(res.reason === 'far' ? `Walk a little closer to ${npc.def.name}.` : res.reason === 'offline' ? ROOM_DOWN : `${npc.def.name} did not hear you. Try again in a moment.`, res.reason === 'offline' ? 3200 : 3000);
         return;
       }
       npc.greet();
@@ -3039,7 +3040,8 @@ export class RoomScene extends Phaser.Scene {
   /** Use an interactable close by: flop into a leaf pile, browse a stall, bask in the moonbeam. */
   private async use(id: string): Promise<void> {
     const def = getInteractable(id);
-    if (!def || this.busy || !this.link) return;
+    if (!def || this.busy) return;
+    if (!this.link) return void this.hud.toast(ROOM_DOWN, 3200);
     // A free guest flops, browses and basks too (OP-243): the room server makes it count for nothing.
     const gen = this.gen;
     this.busy = true;
@@ -3050,6 +3052,7 @@ export class RoomScene extends Phaser.Scene {
         if (res.reason === 'spectator') this.offerDayTicket(SPECTATOR_WORDS.locked);
         else if (res.reason === 'gone') this.hud.toast('Someone flopped in first. The leaves will blow back together soon.', 3200);
         else if (res.reason === 'far') this.hud.toast('A little closer...', 2000);
+        else if (res.reason === 'offline') this.hud.toast(ROOM_DOWN, 3200);
         else if (res.reason !== 'busy') this.hud.toast('The park did not catch that. Try again in a moment.', 3000);
         return;
       }

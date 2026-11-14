@@ -35,6 +35,7 @@ import { ARCADE_INK } from './arcadeInk';
 import type { ArcadeScene, ArcadeSim } from './ArcadeScene';
 import { sceneReady } from './lazyScenes';
 import type { PreviewRect } from './BuilderScene';
+import { ROOM_DOWN } from './roomDown';
 
 /** A box on the arcade's painting, in room pixels. */
 interface Box {
@@ -301,7 +302,8 @@ export class Arcade {
   /** Play at a cabinet: the room starts a run, the HUD's arcade screen opens, and the game begins. */
   async play(game: ArcadeGame): Promise<void> {
     const acts = this.host.acts();
-    if (!acts || this.destroyed) return;
+    if (this.destroyed) return;
+    if (!acts) return void this.host.hud.toast(ROOM_DOWN);
     const physics = game === 'sling' ? loadPhysics().catch(() => null) : null;
     // The games' scene, fetched alongside the room's answer the first time (OP-204).
     const scene = sceneReady(this.host.scene.scene, 'arcade').then(
@@ -311,7 +313,7 @@ export class Arcade {
     const reply = await acts.run(game);
     if (this.destroyed) return;
     if (!reply.ok) {
-      const line = reply.reason === 'far' ? 'Stand at the cabinet to play.' : reply.reason === 'unknown' ? CABINET_OFF : 'The park did not catch that. Try again in a moment.';
+      const line = reply.reason === 'far' ? 'Stand at the cabinet to play.' : reply.reason === 'unknown' ? CABINET_OFF : reply.reason === 'offline' ? ROOM_DOWN : 'The park did not catch that. Try again in a moment.';
       this.host.hud.toast(line);
       this.host.hud.closeArcade();
       return;
