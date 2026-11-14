@@ -10,6 +10,12 @@
  * - A knot-hole tunnel: a doorway taken as a tunnel. The owl is carried in at its mouth and comes out
  *   of the mouth at the other end, in the room the doorway leads to.
  *
+ * In a room seen from the side (a course) a doorway is still taken where the owl stands in it, with up
+ * (OP-212), and the movers there are tunnels alone: every doorway of a course that leads on is one
+ * (doorwayTunnels, rooms/courseAir.ts). A tunnel that goes straight down (`drop`) is taken as a dive,
+ * and the owl comes into the room below falling, as out of a downdraft. No column stands over it and
+ * no air pulls an owl in: a jump near a hole in a course must never cost a kid a storey.
+ *
  * A room lists its movers (RoomDef.movers) beside the doorways they stand for, and those doorways stay
  * in its data. A page shows and plays the movers only behind its flag (apps/park/src/flags.ts, `movers`);
  * without it every doorway is as it was. The rules here are what the page, the room server and the
@@ -25,7 +31,7 @@
  * wind and the thermal, and that a lane's lifted owl is held to the lane by the room; docs/MAP.md's
  * Great Hollow and arcade gain the knot hole, the tunnel and the lane once the flag is on for everyone.
  */
-import { AIRBORNE, JUMP_RISE, type Air } from './flight';
+import { AIRBORNE, JUMP_RISE, type Air, type Flaps } from './flight';
 import { closestPointOnSegment, distance, isWalkable, pointInRect, type Polygon, type Rect } from './geometry';
 import { MAX_FALL } from './jump';
 import type { Vec2 } from './protocol';
@@ -71,6 +77,11 @@ export interface KnotTunnel {
   door: string;
   /** Where its mouth stands on the room's plan (room px). */
   mouth: Vec2;
+  /**
+   * It goes straight down: its mouth is a hole in the floor, the owl dives into it, and it comes into
+   * the room the doorway leads to falling from above (DIVE_ARRIVAL), as out of a downdraft.
+   */
+  drop?: true;
   /** The room's set pieces (RoomPiece ids) it stands in place of: not drawn where the movers show. */
   hides?: string[];
 }
@@ -90,6 +101,27 @@ export const DIVE_SPEED = 900;
  * ceiling for an owl in the air (flight.ts, MAX_RISE). Jump held on the way down spreads its wings.
  */
 export const DIVE_ARRIVAL = { z: 380, vz: 0 } as const;
+/**
+ * How fast an owl comes up out of a tunnel's far mouth (px/s up): a hop of about 44 px, a third of a
+ * jump's height. Low on purpose: an owl comes out wherever a doorway stands, and the ledge behind the
+ * ink course's waterfall has falling water 60 px over it (the bots' arrivals test holds every course
+ * room's hop clear of what hangs over its spawn).
+ */
+export const TUNNEL_HOP = 480;
+
+/** How an owl comes into a room by a mover of the room it left: falling from a dive, or up out of a tunnel. */
+export type CameBy = 'dive' | 'tunnel';
+
+/**
+ * The air an owl comes into a room with, by the mover it came by: over where it lands and falling, or
+ * hopping up out of the mouth. `from` is the height it comes in at (the floor, or the perch its spawn
+ * stands on) and `flaps` the flaps it has for that flight: none, as the page plays it, so the way in is
+ * a fall or a hop and a glide at most, never a climb.
+ */
+export function arrivalAir(came: CameBy, flaps: Flaps = 0, from = 0): Air {
+  return came === 'dive' ? { z: from + DIVE_ARRIVAL.z, vz: DIVE_ARRIVAL.vz, s: AIRBORNE, f: flaps } : { z: from, vz: TUNNEL_HOP, s: AIRBORNE, f: flaps };
+}
+
 /** How far under and over a lane's height a glide is caught by it (room px): the wind's catch (wind.ts). */
 export const LANE_CATCH_BELOW = WIND_CATCH_BELOW;
 export const LANE_CATCH_ABOVE = WIND_CATCH_ABOVE;
@@ -117,6 +149,25 @@ export function downdraftFor(movers: Movers | undefined, door: string): Downdraf
 /** The tunnel a doorway is taken as, if the room has one for it. */
 export function tunnelFor(movers: Movers | undefined, door: string): KnotTunnel | undefined {
   return movers?.tunnels?.find((t) => t.door === door);
+}
+
+/** What doorwayTunnels reads of a doorway. */
+export interface TunnelDoor {
+  id: string;
+  rect: Rect;
+  to?: { room: string; spawn: string } | undefined;
+  toNew?: { room: string; spawn: string } | undefined;
+}
+
+/**
+ * A room's doorways as tunnels: one for each that leads somewhere, its mouth in the middle of the
+ * doorway, and those named in `drops` going straight down. A course's rooms take theirs this way
+ * (rooms/courseAir.ts), so a doorway added to a course is a tunnel with nothing more to write.
+ */
+export function doorwayTunnels(doors: readonly TunnelDoor[], drops: readonly string[] = []): KnotTunnel[] {
+  return doors
+    .filter((d) => d.to || d.toNew)
+    .map((d) => ({ id: `tunnel-${d.id}`, door: d.id, mouth: { x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2 }, ...(drops.includes(d.id) ? { drop: true as const } : {}) }));
 }
 
 /** How far a point of the plan is from a lane's line (room px). */

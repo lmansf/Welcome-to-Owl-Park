@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { AIRBORNE, DIVE_ARRIVAL, carryOn, distance, hiddenPieces } from '@owl-park/shared';
+import { distance, hiddenPieces } from '@owl-park/shared';
 import { ROOMS } from '@owl-park/shared/rooms';
 import { FLAGS, flagOn } from '../flags';
 import { ART } from './art';
-import { INTO_MOUTH_MS, MOVER_ART, MOVER_WORDS, TUNNEL_HOP, arrivalAir, headingOf, roomWithMovers, streamerSpots } from './movers';
+import { carryOn, arrivalAir } from '@owl-park/shared';
+import { INTO_HOLE_PX, INTO_MOUTH_MS, MOVER_ART, MOVER_FADE_IN_MS, MOVER_WORDS, headingOf, roomWithMovers, streamerSpots } from './movers';
 
 // The art list comes with the engine it draws with: nothing here draws.
 vi.mock('phaser', () => ({ default: {} }));
@@ -37,18 +38,27 @@ describe('the movers on a page (OP-287)', () => {
     expect(ART[MOVER_ART.mouth]).toEqual(ART['kit-hatch-down']);
   });
 
-  it('an owl that dived comes in over where it lands and drops; one out of a tunnel hops up out of the mouth', () => {
-    const dived = arrivalAir('dive', 0);
-    expect(dived).toEqual({ z: DIVE_ARRIVAL.z, vz: DIVE_ARRIVAL.vz, s: AIRBORNE, f: 0 });
-    expect(carryOn(dived, 700).s).toBe(0);
-    const out = arrivalAir('tunnel', 0);
-    expect(out).toEqual({ z: 0, vz: TUNNEL_HOP, s: AIRBORNE, f: 0 });
-    // Up a little and down again inside a second: a hop, lower than a jump.
-    const top = Math.max(...[60, 120, 180, 240, 300].map((ms) => carryOn(out, ms).z));
-    expect(top).toBeGreaterThan(40);
-    expect(top).toBeLessThan(120);
-    expect(carryOn(out, 900).s).toBe(0);
+  it('a course room drawn with them on is the room itself: its doorways’ art is the realm’s knot-hole slot already, and a tunnel hides nothing', () => {
+    for (const id of ['canopy-2b', 'brush-3b', 'circuit-1']) {
+      expect(ROOMS[id]!.movers?.tunnels?.length, id).toBeGreaterThan(0);
+      expect(roomWithMovers(ROOMS[id]!), id).toBe(ROOMS[id]);
+    }
+  });
+
+  it('an owl goes into a mouth in a moment, and sinks a little into a hole under its feet', () => {
     expect(INTO_MOUTH_MS).toBeLessThan(400);
+    expect(INTO_HOLE_PX).toBeGreaterThan(20);
+    expect(INTO_HOLE_PX).toBeLessThan(80);
+  });
+
+  it('the room comes up for an owl that came by a mover while it is still in the air: before the top of its hop, and with most of a dive’s fall to go', () => {
+    const hop = arrivalAir('tunnel');
+    const dive = arrivalAir('dive');
+    // Still rising as the room is fully up, and down well after.
+    expect(carryOn(hop, MOVER_FADE_IN_MS).vz).toBeGreaterThan(0);
+    expect(carryOn(hop, MOVER_FADE_IN_MS + 100).s).not.toBe(0);
+    expect(carryOn(dive, MOVER_FADE_IN_MS).z).toBeGreaterThan(dive.z * 0.8);
+    expect(MOVER_FADE_IN_MS).toBeGreaterThanOrEqual(150); // a fade, not a cut
   });
 
   it('a lane’s streamers stand end to end along it, the last stretch cut to fit', () => {
