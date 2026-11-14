@@ -201,7 +201,7 @@ test.describe('spectators (OP-191)', () => {
     await page.context().close();
   });
 
-  test('a spectator’s arcade run earns nothing, and its card offers the Day Ticket before Play again', async ({ browser, request }) => {
+  test('a spectator’s arcade run earns nothing, and its card offers the Day Ticket under Play again (OP-379)', async ({ browser, request }) => {
     await pastTheClose((await flip(request, 'ticket'))['closedAt'] as number);
     const page = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
     await openPark(page, { transport: 'edge', room: 'arcade' });
@@ -214,8 +214,11 @@ test.describe('spectators (OP-191)', () => {
     await expect(card).toBeVisible();
     await expect(card.locator('[data-offer]')).toHaveText(/^(Nice run! With a Day Ticket this would have earned \d+ feathers?\.|With a Day Ticket, games earn feathers\.)$/);
     await expect(card.locator('[data-paid]')).toHaveText('');
-    const buttons = card.locator('.a-buttons button:visible');
-    await expect(buttons).toHaveText(['Get a Day Ticket', 'Play again', 'Close']);
+    // Play again leads; the Day Ticket line and its button come last, under the next game (OP-379).
+    await expect(card.locator('.a-buttons button:visible')).toHaveText(['Play again', 'Close']);
+    await expect(card.locator('.a-ticket button:visible')).toHaveText(['Get a Day Ticket']);
+    const order = await card.evaluate((el) => ['[data-line]', '[data-again]', '[data-next]', '[data-offer]', '[data-spectator-get]'].map((sel) => el.querySelector(sel)!.getBoundingClientRect().top));
+    expect(order).toEqual([...order].sort((a, b) => a - b));
     await page.screenshot({ path: 'e2e-screenshots/spectator-arcade.png' });
     expect(await page.evaluate(() => window.owlPark.collection()?.feathers ?? 0)).toBe(before);
     // Its Get a Day Ticket closes the game for the turnstiles' sale, with the run's line above the card.
