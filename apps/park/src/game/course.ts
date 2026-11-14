@@ -34,6 +34,7 @@ import { glintAt } from './featherTrailView';
 const LEAD_LIFT = 90;
 import { SPECTATOR_WORDS } from '../ui/spectator';
 import type { CueName } from './sfxCues';
+import { fallBackHere } from './courseFall';
 
 /**
  * A parkour course in one of its acts (OP-224, course.ts in @owl-park/shared), on the page: its
@@ -70,6 +71,8 @@ export interface CourseHost {
 
 /** How long before a piece the room said was out of reach is asked again (the room has the owl a moment behind). */
 const FAR_RETRY_MS = 300;
+/** How long after a fall the page put back itself before another is put back (OP-405). */
+const LOCAL_FALL_MS = 500;
 /**
  * How long ago and how far off the owl's last place may be for the way from it to count as a move
  * (OP-353): a frame at seven a second, and the furthest a dash goes in that. Longer or further and the
@@ -131,6 +134,10 @@ export class Course {
   private runStartedAt: number | null = null;
   /** Falls and finishes this page has had answered, for the tests. */
   private falls = 0;
+  /** The bench the owl last stood at in this room, as this page saw it (OP-405). */
+  private benchHere: CoursePiece | undefined;
+  /** Until when a fall this page puts back itself is not put back again (the owl is still where it fell for a frame or two). */
+  private fellHereUntil = 0;
   /** Where the owl was a frame ago, and when: its move since is looked along for thorns (OP-353). Null as a room starts and where a fall puts the owl. */
   private wasAt: { x: number; z: number; at: number } | null = null;
   private finishes = 0;
@@ -178,10 +185,15 @@ export class Course {
   tick(now: number): void {
     const view = this.view;
     const link = this.host.link();
-    if (!view || !link || this.closed) return;
+    if (this.closed) return;
     const me = this.host.me();
     const c = this.room.course;
     if (!c) return;
+    const at = (p: CoursePiece) => distance(me.pos, p.at) <= COURSE_REACH && sameLevel(me.ground, p);
+    // The bench the owl last stood at in this room, as this page saw it: where a fall the room cannot
+    // answer brings it back to (OP-405).
+    const bench = (c.benches ?? []).find(at);
+    if (bench) this.benchHere = bench;
     // Down on the floor over a pit: a fall. Up on a ledge over a drop (a course seen from the side) is not
     // one, nor is the step off a ledge's end: the owl is still at the ledge's height then, and drops.
     // Thorns are looked for along the way the owl came since the last frame, not only where it is: a
@@ -191,19 +203,21 @@ export class Course {
     this.wasAt = here;
     const came = was && now - was.at <= MOVE_LOOK_MS && Math.abs(here.x - was.x) <= MOVE_LOOK_PX ? was : here;
     if (fellInPit(this.room, me.pos, me.grounded, me.z) || thornsBetween(this.room, came, here)) {
-      this.ask('fall', now, () => link.fall(), (res) => {
-        if (res.at) {
-          // Put somewhere else: the way from here to there is no move of the owl's.
-          this.wasAt = null;
-          this.host.fell(res.at, res.top ?? 0);
-          this.host.hud.toast(COURSE_WORDS.fell, 1500);
-          this.host.sound?.('fall');
-        }
-        this.falls += 1;
-      });
+      // With no room to ask (the park could not connect), the page puts the owl back itself (OP-405).
+      if (!view || !link) return this.fellHere(now, me.pos);
+      this.ask(
+        'fall',
+        now,
+        () => link.fall(),
+        (res) => {
+          if (res.at) this.putBack(res.at, res.top ?? 0);
+          this.falls += 1;
+        },
+        (res) => res.reason === 'offline' && this.fellHere(Date.now(), me.pos),
+      );
       return;
     }
-    const at = (p: CoursePiece) => distance(me.pos, p.at) <= COURSE_REACH && sameLevel(me.ground, p);
+    if (!view || !link) return;
     const run = view.run;
     for (const b of c.benches ?? []) {
       if (!at(b) || !run || run.bench === b.id) continue;
@@ -245,8 +259,26 @@ export class Course {
 
   // ---------- inside ----------
 
+  /** Put back after a fall: shown as the room's answer is (the room blinks, a line, the fall's sound). */
+  private putBack(at: Vec2, top: number): void {
+    // Put somewhere else: the way from here to there is no move of the owl's.
+    this.wasAt = null;
+    this.host.fell(at, top);
+    this.host.hud.toast(COURSE_WORDS.fell, 1500);
+    this.host.sound?.('fall');
+  }
+
+  /** A fall the room cannot answer: back the way the room would put it with no run (courseFall.ts), once a moment. */
+  private fellHere(now: number, pos: Vec2): void {
+    if (now < this.fellHereUntil) return;
+    this.fellHereUntil = now + LOCAL_FALL_MS;
+    const back = fallBackHere(this.room, this.def, this.host.spawn(), this.benchHere, pos);
+    this.putBack(back.at, back.top);
+    this.falls += 1;
+  }
+
   /** Ask the room once for `key`: again a moment later if it had the owl out of reach, much later after a refusal. */
-  private ask(key: string, now: number, call: () => Promise<CourseReply>, ok: (res: Extract<CourseReply, { ok: true }>) => void): void {
+  private ask(key: string, now: number, call: () => Promise<CourseReply>, ok: (res: Extract<CourseReply, { ok: true }>) => void, refused?: (res: Extract<CourseReply, { ok: false }>) => void): void {
     if (this.asking.has(key) || now < (this.waitUntil.get(key) ?? 0)) return;
     this.asking.add(key);
     void call().then((res) => {
@@ -255,6 +287,7 @@ export class Course {
       if (!res.ok) {
         this.waitUntil.set(key, Date.now() + (res.reason === 'far' ? FAR_RETRY_MS : REFUSED_RETRY_MS));
         if (res.reason === 'idle' || res.reason === 'forgotten') this.say(`said:${key}`, Date.now(), COURSE_WORDS.idle);
+        refused?.(res);
         return;
       }
       this.take(res);
