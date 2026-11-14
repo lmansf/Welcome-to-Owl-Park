@@ -14,6 +14,7 @@ import type { RoomDef } from '@owl-park/shared';
 import { publishedArtUrl } from './art';
 import { OLD_ART } from './artLooks';
 import { BOWL_DEPTH } from './bowlView';
+import { tintImage } from './canvasTint';
 import { EDGE_DEPTH } from './edgeView';
 
 export interface ArtTrial {
@@ -23,10 +24,24 @@ export interface ArtTrial {
   key: string;
   /** The colour the picture has along its edges: what a camera drawn back past the room shows round it (townView.ts). */
   beyond: string;
+  /** A light the picture is drawn in (multiplied by it), where it is painted brighter than what stands on it reads against. */
+  tint?: number;
 }
 
+/**
+ * The light the Great Hollow's painting is drawn in (OP-370). The picture is painted bright, its floor
+ * lit to near white along the rings, and the owner's audit of Nov 12 read that as glare that flattens
+ * the room. Drawn about an eighth darker, a little more from the blue than the red so it stays warm,
+ * the owls, the feather trail, the leaf piles and the signs stand off it. One number: `0xffffff` is
+ * the picture as it was painted, and `?arttint=<rrggbb>` tries another on any page.
+ *
+ * TODO-DOCS (OP-370): docs/ART-PIPELINE.md's note on the Great Hollow's painting gains the light it is
+ * drawn in and the `?arttint` address for trying another.
+ */
+export const HOLLOW_LIGHT = 0xddd2c6;
+
 export const ART_TRIALS: Record<string, ArtTrial> = {
-  hollow: { room: 'm3-hall', key: 'hollow-painted', beyond: '#0e0a06' },
+  hollow: { room: 'm3-hall', key: 'hollow-painted', beyond: '#0e0a06', tint: HOLLOW_LIGHT },
 };
 
 /** Drawn over the room's own floor and wall, under everything drawn on them. */
@@ -65,6 +80,15 @@ export async function drawArtTrial(scene: Phaser.Scene, room: RoomDef, search: s
     if (!img || !scene.sys.isActive()) return false;
     if (!scene.textures.exists(key)) scene.textures.addImage(key, img);
   }
-  scene.add.image(0, 0, key).setOrigin(0).setDisplaySize(room.size.w, room.size.h).setDepth(TRIAL_DEPTH);
+  const picture = scene.add.image(0, 0, key).setOrigin(0).setDisplaySize(room.size.w, room.size.h).setDepth(TRIAL_DEPTH);
+  const tint = trialTint(trial, search);
+  if (tint !== undefined) tintImage(scene, picture, key, tint);
   return true;
+}
+
+/** The light a trial's picture is drawn in on this page: its own, or one tried from the address (`?arttint=<rrggbb>`, for a look before it is kept). */
+export function trialTint(trial: ArtTrial, search: string): number | undefined {
+  const asked = new URLSearchParams(search).get('arttint');
+  if (asked && /^[0-9a-f]{6}$/i.test(asked)) return Number.parseInt(asked, 16);
+  return trial.tint;
 }

@@ -3,12 +3,13 @@
  * board on the floor at each named doorway, the same size on any screen, so an owl standing in the
  * Great Hollow can read which doorway is the Party Grove and which the stair up (Logan, Nov 8: "i
  * can't even find the grove"). Only one shows at a time (OP-309, hints.ts signFocus), fading in as the owl
- * comes near its doorway; the rest wait unseen, each doorway still marked by its own glow. A room seen
- * from the side marks its doorways its own way (treeView).
+ * comes near its doorway; the rest wait unseen, each doorway still marked by its own glow. An owl that
+ * has not played yet is shown two more, wherever it stands (OP-370, firstWays.ts). A room seen from
+ * the side marks its doorways its own way (treeView).
  */
 import Phaser from 'phaser';
 import type { RoomDef, WalkMap } from '@owl-park/shared';
-import { signDepth, signX, signY, signedDoors } from './hints';
+import { farSignX, signDepth, signX, signY, signedDoors } from './hints';
 
 /** Room pixels per screen pixel now: what keeps a sign the same size on any screen. */
 type Scale = () => number;
@@ -19,11 +20,16 @@ const FONT_PX = 15;
 /** How long a sign takes to fade in or out (ms). */
 const FADE_MS = 220;
 
+/** No doorways named besides the one in focus. */
+const NONE: ReadonlySet<string> = new Set();
+
 
 export class DoorSigns {
   private readonly signs: Array<{ text: Phaser.GameObjects.Text; label: string; id: string; at: { x: number; y: number }; anchor: number }> = [];
   private scaleNow = 0;
   private focused: string | null = null;
+  /** The doorways whose signs show besides the one in focus (firstWays.ts). */
+  private also: ReadonlySet<string> = NONE;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -88,14 +94,28 @@ export class DoorSigns {
     return v.width > 0 && b.left >= v.left && b.right <= v.right && b.top >= v.top && b.bottom <= v.bottom;
   }
 
-  /** Show the sign of this doorway alone (none for null or a doorway with no sign), fading. */
-  focus(id: string | null): void {
-    if (id === this.focused) return;
+  /**
+   * Show the sign of this doorway (none for null or a doorway with no sign) and of those in `also`, and
+   * no other, fading.
+   */
+  focus(id: string | null, also: ReadonlySet<string> = NONE): void {
+    if (id === this.focused && also.size === this.also.size && [...also].every((x) => this.also.has(x))) return;
     this.focused = id;
+    this.also = also;
     for (const { text, id: door } of this.signs) {
       this.scene.tweens.killTweensOf(text);
-      this.scene.tweens.add({ targets: text, alpha: door === id ? 1 : 0, duration: FADE_MS, ease: 'Sine.easeOut' });
+      this.scene.tweens.add({ targets: text, alpha: this.shows(door) ? 1 : 0, duration: FADE_MS, ease: 'Sine.easeOut' });
     }
+  }
+
+  /** Whether this doorway's sign is one of those showing. */
+  private shows(id: string): boolean {
+    return id === this.focused || this.also.has(id);
+  }
+
+  /** The doorways whose signs show now. */
+  showing(): string[] {
+    return this.signs.filter((s) => this.shows(s.id)).map((s) => s.id);
   }
 
   private update(): void {
@@ -105,15 +125,18 @@ export class DoorSigns {
       // Drawn at twice the size and scaled down by half, so the words stay sharp when the camera zooms in.
       for (const { text } of this.signs) text.setScale(s / 2);
     }
-    const shown = this.signs.find((x) => x.id === this.focused);
-    if (!shown) return;
     const view = this.scene.cameras.main.worldView;
-    const w = shown.text.displayWidth;
-    // The sign's middle, from the part of it that stands at its spot.
-    const half = (0.5 - shown.anchor) * w;
-    const middle = view.width > 0 ? signX(shown.at.x + half, w, { x: view.x, w: view.width }, 12 * s) : shown.at.x + half;
-    shown.text.x = middle - half;
-    shown.text.y = signY({ x: middle, y: shown.at.y }, w, shown.text.displayHeight, this.owl());
+    for (const shown of this.signs) {
+      if (!this.shows(shown.id)) continue;
+      const w = shown.text.displayWidth;
+      // The sign's middle, from the part of it that stands at its spot.
+      const half = (0.5 - shown.anchor) * w;
+      // The one in focus is by the owl and slides in whole; one named from afar goes out with its doorway.
+      const slide = shown.id === this.focused ? signX : farSignX;
+      const middle = view.width > 0 ? slide(shown.at.x + half, w, { x: view.x, w: view.width }, 12 * s) : shown.at.x + half;
+      shown.text.x = middle - half;
+      shown.text.y = signY({ x: middle, y: shown.at.y }, w, shown.text.displayHeight, this.owl());
+    }
   }
 }
 

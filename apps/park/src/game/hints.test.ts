@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ROOMS, groundOf } from '@owl-park/shared/rooms';
-import { SIDE_HINT_OVER, SIGN_HOLD, SIGN_REACH, doorHintTarget, nearTargets, nearestOffSides, placeHints, signFocus, signWaits, signX, touchBottom, type ScreenBox, type ViewRect, CHIP_WORDS, sideChipWords } from './hints';
+import { SIDE_HINT_OVER, SIGN_HOLD, SIGN_REACH, doorHintTarget, farSignX, nearTargets, nearestOffSides, placeHints, signFocus, signWaits, signX, touchBottom, type ScreenBox, type ViewRect, CHIP_WORDS, sideChipWords } from './hints';
 
 // A 1000 x 600 screen showing room pixels 1000-2000 by 0-600 (one CSS pixel per room pixel).
 const view: ViewRect = { x: 1000, y: 0, w: 1000, h: 600 };
@@ -194,6 +194,30 @@ describe('a sign by a doorway at the screen’s edge slides in so all its words 
   });
   it('stands in the middle when it is wider than the screen', () => {
     expect(signX(900, 600, view, 10)).toBe(1200);
+  });
+});
+
+describe('a sign named from afar goes out with its doorway (OP-370)', () => {
+  const view = { x: 1000, w: 400 };
+  it('stands at its spot, or slides in whole, while its spot is on screen', () => {
+    expect(farSignX(1200, 200, view, 10)).toBe(1200);
+    expect(farSignX(1010, 200, view, 10)).toBe(1110);
+    expect(farSignX(1400, 200, view, 10)).toBe(1290);
+  });
+  it('is slid no further once its spot has left the screen, so it leaves with it', () => {
+    // 50 px past the right edge: 50 px less of it on screen, not held whole at the edge.
+    expect(farSignX(1450, 200, view, 10)).toBe(1340);
+    // Far off: where its spot is, less the same slide.
+    expect(farSignX(3000, 200, view, 10)).toBe(2890);
+    expect(farSignX(-500, 200, view, 10)).toBe(-390);
+  });
+  it('never jumps as the camera passes its spot', () => {
+    let last = farSignX(1500, 200, view, 10);
+    for (let x = 1499; x >= 1300; x--) {
+      const at = farSignX(x, 200, view, 10);
+      expect(Math.abs(at - last)).toBeLessThanOrEqual(1);
+      last = at;
+    }
   });
 });
 

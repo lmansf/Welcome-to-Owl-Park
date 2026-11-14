@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { HELD_FRAME_MS, cameraView, heldStandingAt, heldUntil, holdTheClock, openHeld, openPark, settleCamera, state, stateNow } from './helpers';
+import { HELD_FRAME_MS, cameraView, heldCameraAtRest, heldPass, heldStandingAt, heldUntil, holdTheClock, openHeld, openPark, settleCamera, state, stateNow } from './helpers';
 
 /**
  * The town view (OP-336, on for every visitor since OP-356): a room seen from above shows more of
@@ -196,5 +196,78 @@ test.describe('the Great Hollow’s camera rests the same however the owl came b
     const after = await heldStandingAt(page, SPOT);
     expect(after.view.viewW).toBe(before.view.viewW);
     expect(Math.abs(downView(after) - downView(before))).toBeLessThanOrEqual(SAME_REST);
+  });
+});
+
+/**
+ * The first ways (OP-370, firstWays.ts): the owner's audit asks that a newcomer in the Great Hollow can
+ * point to the next thing to do in five seconds. Before, once the opening look was over a newcomer's
+ * screen held the knothole behind it and no course or the arcade, and the look named nothing. Now an
+ * owl that has not played yet is named the arcade and the nearest course: on their doorways while the
+ * whole oval shows, and at the screen's edge once the camera is in on the owl. An owl that has been
+ * through a doorway into play is named neither, as before.
+ */
+test.describe('a new owl is named two places to play in the Great Hollow (OP-370)', () => {
+  const WAYS: Record<string, string> = { down: 'Down to the arcade', 'course-grove': 'Updraft Canopy' };
+
+  /** The chips with words at the screen's edge: whose doorway, what they say and where they stand. */
+  const chips = (page: Page) =>
+    page.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>('#hud [data-hint].say')].map((el) => {
+        const r = el.getBoundingClientRect();
+        return { id: el.dataset['hint'] ?? '', text: el.querySelector('span')?.textContent ?? '', left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+      }),
+    );
+
+  /** In by the knothole as through the turnstiles, to the moment the whole oval shows and its signs have come up. */
+  async function toTheLook(page: Page): Promise<void> {
+    await openHeld(page, { room: 'm3-hall', newmap: '1', spawn: 'from-lobby' });
+    const hallW = (await stateNow(page)).doors.find((d) => d.id === 'up')!.x * 2;
+    await heldUntil(page, 'the whole oval in view', async () => (await cameraView(page)).viewW >= hallW - 1);
+    await heldPass(page, 500);
+  }
+
+  /** On to where the camera has come in on the owl and rests. */
+  async function toRest(page: Page): Promise<void> {
+    const hallW = (await stateNow(page)).doors.find((d) => d.id === 'up')!.x * 2;
+    await heldUntil(page, 'the camera in on the owl', async () => (await cameraView(page)).viewW < hallW * 0.75);
+    await heldCameraAtRest(page);
+    await heldPass(page, 500);
+  }
+
+  test('the opening look names the arcade and the nearest course on their doorways; at rest their words stand at the screen’s edge; an owl that has played is named neither', async ({ page }) => {
+    test.slow(); // the room opened twice and the opening look through twice, a frame at a go
+    await holdTheClock(page);
+    await toTheLook(page);
+    const look = await stateNow(page);
+    expect(look.firstWays).toEqual(['down', 'course-grove']);
+    // On the whole oval both stand at their doorways, whole, so nothing at the screen's edge repeats them.
+    expect(look.signsOnScreen).toEqual(expect.arrayContaining(Object.keys(WAYS)));
+    expect((await chips(page)).filter((c) => c.id in WAYS)).toEqual([]);
+
+    await toRest(page);
+    // Neither doorway is in the view the camera rests on, at any screen size: their words are at its edge.
+    const rest = await stateNow(page);
+    for (const id of Object.keys(WAYS)) expect(rest.signsOnScreen, id).not.toContain(id);
+    const shown = (await chips(page)).filter((c) => c.id in WAYS);
+    expect(shown.map((c) => c.text).sort()).toEqual(Object.values(WAYS).sort());
+    const view = page.viewportSize()!;
+    for (const c of shown) {
+      expect(c.left, `${c.text} on screen`).toBeGreaterThanOrEqual(0);
+      expect(c.right, `${c.text} on screen`).toBeLessThanOrEqual(view.width);
+      expect(c.top, `${c.text} on screen`).toBeGreaterThanOrEqual(0);
+      expect(c.bottom, `${c.text} on screen`).toBeLessThanOrEqual(view.height);
+    }
+    const [a, b] = shown;
+    expect(Math.min(a!.right, b!.right) - Math.max(a!.left, b!.left) <= 0 || Math.min(a!.bottom, b!.bottom) - Math.max(a!.top, b!.top) <= 0, 'the two chips stand apart').toBe(true);
+
+    // An owl that has been down the hatch once knows a way to play: the hall names it no more than it names anyone.
+    await page.evaluate(() => localStorage.setItem('owl-park:doors-tried', JSON.stringify(['m3-hall#down'])));
+    await toTheLook(page);
+    const played = await stateNow(page);
+    expect(played.firstWays).toEqual([]);
+    expect(played.signsShowing.filter((id) => id in WAYS)).toEqual([]);
+    await toRest(page);
+    expect((await chips(page)).filter((c) => c.id in WAYS)).toEqual([]);
   });
 });

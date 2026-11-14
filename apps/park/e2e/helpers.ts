@@ -49,6 +49,12 @@ export interface ParkState {
   doorSigns: string[];
   /** Seen from above, the words on the one doorway sign showing now (OP-309). */
   signShown: string | null;
+  /** The doorways whose signs show now: the one in focus, and those named to an owl that has not played yet (OP-370). */
+  signsShowing: string[];
+  /** Of those, the ones whose signs stand whole on screen. */
+  signsOnScreen: string[];
+  /** The doorways named to an owl that has not played yet (OP-370, firstWays.ts). */
+  firstWays: string[];
   /** Where that sign's words stand (room px), if one shows. */
   signBox: { left: number; right: number; top: number; bottom: number } | null;
   /** The words of the course's tip showing now (OP-344), if any. */

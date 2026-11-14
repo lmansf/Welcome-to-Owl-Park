@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { ROOMS } from '../rooms';
-import { ART_TRIALS, DEFAULT_ART_TRIALS, TRIAL_DEPTH, artTrialFor } from './artTrial';
+import { ART_TRIALS, DEFAULT_ART_TRIALS, HOLLOW_LIGHT, TRIAL_DEPTH, artTrialFor, trialTint } from './artTrial';
 import { BOWL_DEPTH } from './bowlView';
 import { EDGE_DEPTH } from './edgeView';
 
@@ -36,5 +36,28 @@ describe('art trials (?art=hollow)', () => {
   it('lies over the room’s drawn floor and wall, and under its roots, floor edge, pieces and owls', () => {
     expect(TRIAL_DEPTH).toBeGreaterThan(BOWL_DEPTH.lines);
     expect(TRIAL_DEPTH).toBeLessThan(EDGE_DEPTH.litter);
+  });
+
+  it('draws the Great Hollow’s painting in a gentler light than it was painted in, warm, and never by much (OP-370)', () => {
+    const hollow = ART_TRIALS['hollow']!;
+    expect(trialTint(hollow, '')).toBe(HOLLOW_LIGHT);
+    const [r, g, b] = [(HOLLOW_LIGHT >> 16) & 255, (HOLLOW_LIGHT >> 8) & 255, HOLLOW_LIGHT & 255];
+    // Darker than the picture as painted, by no more than a fifth in any colour: toned down, not repainted.
+    for (const c of [r, g, b]) {
+      expect(c).toBeLessThan(255);
+      expect(c).toBeGreaterThanOrEqual(255 * 0.75);
+    }
+    // More taken from the blue than the red: the room stays the warm inside of a tree.
+    expect(r).toBeGreaterThanOrEqual(g);
+    expect(g).toBeGreaterThanOrEqual(b);
+  });
+
+  it('tries another light from the address, and only one that is a colour', () => {
+    const hollow = ART_TRIALS['hollow']!;
+    expect(trialTint(hollow, '?arttint=ffffff')).toBe(0xffffff);
+    expect(trialTint(hollow, '?arttint=C0B0A0')).toBe(0xc0b0a0);
+    expect(trialTint(hollow, '?arttint=red')).toBe(HOLLOW_LIGHT);
+    expect(trialTint(hollow, '?arttint=12345')).toBe(HOLLOW_LIGHT);
+    expect(trialTint({ room: 'x', key: 'y', beyond: '#000' }, '')).toBeUndefined();
   });
 });

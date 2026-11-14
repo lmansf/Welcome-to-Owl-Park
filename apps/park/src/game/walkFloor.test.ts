@@ -1,6 +1,6 @@
 import { roomFor } from '../rooms';
 import { describe, expect, it } from 'vitest';
-import { FOOTPRINT, floorLook, paintFloor, rgba, standsOwnArt } from './walkFloor';
+import { BOWL_EDGE, FOOTPRINT, floorLook, paintFloor, rgba, standsOwnArt } from './walkFloor';
 
 function recorder() {
   const calls: Array<{ op: string; args: unknown[] }> = [];
@@ -27,6 +27,24 @@ describe('the walkable floor, seen from above', () => {
     const moves = calls.filter((c) => c.op === 'moveTo').length;
     expect(moves).toBeGreaterThanOrEqual(2 * hub.walkable.length);
     expect(calls.some((c) => c.op === 'stroke')).toBe(true);
+  });
+
+  it('edges a floor with a wall all round it as a groove, darker than the floor and never bright (OP-370)', () => {
+    const line = rgba(BOWL_EDGE.line);
+    const shade = rgba(BOWL_EDGE.shade);
+    const cream = rgba(floorLook(false).edge);
+    const bright = (c: number) => ((c >> 16) & 255) + ((c >> 8) & 255) + (c & 255);
+    // The cream line of every other room is a light one; the groove is dark, and so is the shade round it.
+    expect(bright(cream.color)).toBeGreaterThan(600);
+    expect(bright(line.color)).toBeLessThan(150);
+    expect(bright(shade.color)).toBeLessThan(150);
+    // Still drawn: the owl's stopping place is there to see, the line clearer than its shade and narrower.
+    expect(line.alpha).toBeGreaterThan(0.25);
+    expect(line.alpha).toBeGreaterThan(shade.alpha);
+    expect(BOWL_EDGE.linePx).toBeLessThan(BOWL_EDGE.shadePx);
+    // The Great Hollow is such a room; a plaza is not.
+    expect(roomFor('m3-hall')!.bowl).toBeDefined();
+    expect(roomFor('hub')!.bowl).toBeUndefined();
   });
 
   it("reads the look's colours as Phaser takes them", () => {

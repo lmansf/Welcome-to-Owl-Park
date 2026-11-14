@@ -93,12 +93,33 @@ export function rgba(css: string): { color: number; alpha: number } {
   return { color: (r << 16) | (g << 8) | b, alpha: a };
 }
 
-/** Draws the floor's edges as lines over the painting: the floor's in cream, a solid perch's in amber. */
+/**
+ * The floor's edge in a room whose painting has a wall all the way round its floor (RoomDef.bowl, the
+ * Great Hollow). The wall's foot already shows where the floor ends, and the cream line drawn along it
+ * read there as an outline left in by mistake (the owner's audit of Nov 12, OP-370: "bright polygon
+ * lines"). So in such a room the edge is a worn groove at the wall's foot: a dark line with a soft
+ * shade round it, still there to see where the owl stops (the owner's ask of Nov 7) and never brighter
+ * than the floor it lies on.
+ *
+ * TODO-DOCS (OP-370): docs/ARCHITECTURE.md's note on the floor's edge line says it is cream in every
+ * room seen from above; in a room with a bowl it is this groove.
+ */
+export const BOWL_EDGE = { line: 'rgba(46, 24, 8, 0.4)', linePx: 4, shade: 'rgba(46, 24, 8, 0.13)', shadePx: 14 } as const;
+
+/** Draws the floor's edges as lines over the painting: the floor's in cream (a groove where a wall stands all round it), a solid perch's in amber. */
 export function drawFloorEdges(scene: Phaser.Scene, room: RoomDef, depth: number): Phaser.GameObjects.Graphics {
   const look = floorLook(false);
   const g = scene.add.graphics().setDepth(depth);
-  const edge = rgba(look.edge);
-  g.lineStyle(look.edgePx, edge.color, edge.alpha);
+  if (room.bowl) {
+    const shade = rgba(BOWL_EDGE.shade);
+    g.lineStyle(BOWL_EDGE.shadePx, shade.color, shade.alpha);
+    for (const poly of room.walkable) g.strokePoints(poly, true, true);
+    const line = rgba(BOWL_EDGE.line);
+    g.lineStyle(BOWL_EDGE.linePx, line.color, line.alpha);
+  } else {
+    const edge = rgba(look.edge);
+    g.lineStyle(look.edgePx, edge.color, edge.alpha);
+  }
   for (const poly of room.walkable) g.strokePoints(poly, true, true);
   const solid = rgba(look.solidEdge);
   g.lineStyle(look.edgePx, solid.color, solid.alpha);
