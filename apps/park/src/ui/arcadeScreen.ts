@@ -2,6 +2,7 @@ import { FIELD_H, FIELD_W } from '../arcade/field';
 import type { HopDir } from '../arcade/hop';
 import type { PreviewRect } from '../game/BuilderScene';
 import { createModal, modalHeader } from './modal';
+import { arcadeSubline } from './resultCard';
 import { SPECTATOR_WORDS } from './spectator';
 import { typingInField } from './typing';
 
@@ -29,9 +30,11 @@ export interface ArcadeResultView {
   best: number | null;
   /** Something more to say: the day's feathers from games used up, or the room not answering. */
   note?: string;
+  /** The one activity to try next, under Play again (OP-379). */
+  next?: string;
   /**
    * A spectator's run (OP-191): what it would have earned with a Day Ticket, and the Get a Day Ticket
-   * button before Play again.
+   * button, below the score, Play again and what to try next (OP-379).
    */
   offer?: { line: string; get: () => void };
 }
@@ -112,7 +115,10 @@ const CSS = `
 #hud .arcade .a-note{font-size:13px;opacity:.85;text-align:center}
 #hud .arcade .a-buttons{display:flex;flex-wrap:wrap;justify-content:center;gap:10px}
 #hud .arcade .a-offer{font-size:15px;font-weight:700;text-align:center;color:#FFD36A}
-#hud .arcade .a-offer:empty,#hud .arcade [data-spectator-get][hidden]{display:none}
+#hud .arcade .a-next{font-size:14px;text-align:center;opacity:.9}
+#hud .arcade .a-next:empty,#hud .arcade .a-offer:empty,#hud .arcade [data-spectator-get][hidden],#hud .arcade .a-ticket[hidden]{display:none}
+#hud .arcade .a-ticket{display:flex;flex-direction:column;align-items:center;gap:8px;width:100%;padding-top:10px;border-top:1px solid rgba(246,241,227,.15)}
+#hud .arcade .a-ticket button{min-height:44px;padding:8px 22px}
 #hud .arcade .a-buttons button{min-height:44px;padding:8px 22px}
 #hud .arcade .a-howto{position:absolute;left:12px;right:12px;top:24%;margin:0 auto;max-width:420px;display:none;flex-direction:column;gap:10px;align-items:center;padding:18px 16px;border-radius:20px;background:rgba(12,30,54,.95);border:1px solid var(--neon);box-shadow:0 0 30px rgba(0,0,0,.6);text-align:center}
 #hud .arcade.howto .a-howto{display:flex}
@@ -187,12 +193,13 @@ export function createArcadeScreen(root: HTMLElement): ArcadeScreen {
       </div>
       <div class="a-result" data-result aria-live="polite">
         <div class="a-line" data-line></div>
-        <div data-paid></div>
         <div class="a-new" data-new></div>
         <div data-best></div>
+        <div data-paid></div>
         <div class="a-note" data-note></div>
-        <div class="a-offer" data-offer></div>
-        <div class="a-buttons"><button data-spectator-get="arcade" hidden></button><button data-again>Play</button><button class="ghost" data-done>Close</button></div>
+        <div class="a-buttons"><button data-again>Play again</button><button class="ghost" data-done>Close</button></div>
+        <div class="a-next" data-next></div>
+        <div class="a-ticket" data-ticket hidden><div class="a-offer" data-offer></div><button class="ghost" data-spectator-get="arcade" hidden></button></div>
       </div>
     </div>`;
   const $ = <T extends Element>(sel: string) => box.querySelector(sel) as T;
@@ -367,7 +374,8 @@ export function createArcadeScreen(root: HTMLElement): ArcadeScreen {
       againBtn.disabled = false;
       box.style.setProperty('--neon', v.colour);
       box.querySelector(':scope > header')?.remove();
-      const sub = [v.top !== null ? `Today's best ${v.top}` : '', v.best !== null ? `Your best ${v.best}` : ''].filter(Boolean).join(' · ');
+      // An empty board for the day reads as an invitation to be first (OP-379).
+      const sub = arcadeSubline(v.top, v.best);
       // Close pauses a run under way first (OP-345); with no run to pause it closes.
       box.prepend(modalHeader(v.name, { sub, onClose: () => void (escape() || modal.close()), closeLabel: `Close ${v.name}` }));
       hintEl.textContent = v.hint;
@@ -428,10 +436,12 @@ export function createArcadeScreen(root: HTMLElement): ArcadeScreen {
       $<HTMLElement>('[data-new]').textContent = r.newBest ? 'New best!' : '';
       $<HTMLElement>('[data-best]').textContent = r.best !== null ? `Your best ${r.best}` : '';
       $<HTMLElement>('[data-note]').textContent = r.note ?? '';
+      $<HTMLElement>('[data-next]').textContent = r.next ?? '';
+      // The score, the best and Play again lead; a spectator's Day Ticket line comes last, under them (OP-379).
       $<HTMLElement>('[data-offer]').textContent = r.offer?.line ?? '';
       offerGet = r.offer?.get ?? null;
       getBtn.hidden = !r.offer;
-      againBtn.textContent = r.offer ? SPECTATOR_WORDS.again : 'Play';
+      $<HTMLElement>('[data-ticket]').hidden = !r.offer;
       bannerEl.textContent = '';
       box.classList.remove('paused');
       box.classList.add('over', 'holding');
@@ -445,7 +455,7 @@ export function createArcadeScreen(root: HTMLElement): ArcadeScreen {
         againBtn.disabled = false;
         if (!over()) return;
         box.classList.remove('holding');
-        (r.offer ? getBtn : againBtn).focus({ preventScroll: true });
+        againBtn.focus({ preventScroll: true });
       }, RESULT_HOLD_MS);
     },
     close: () => modal.close(),
