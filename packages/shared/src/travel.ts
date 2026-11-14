@@ -65,6 +65,7 @@ export const NEW_MAP_LANDINGS: Readonly<Record<string, Landing>> = {
   homes: { room: STREET_ROOM, spawn: 'default' },
   'm3-hall': { room: 'm3-hall', spawn: 'default' },
   glass: { room: 'glass', spawn: 'from-hub' },
+  ink: { room: 'ink', spawn: 'from-hub' },
   grove: { room: 'grove', spawn: 'default' },
   market: { room: 'market', spawn: 'default' },
   hub: { room: 'hub', spawn: 'default' },

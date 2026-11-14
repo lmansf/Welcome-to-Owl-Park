@@ -481,6 +481,7 @@ export const KIT_CATALOG: Readonly<Record<string, KitCatalogEntry>> = {
   'kit-landmark-arcade-door': { w: 240, h: 320, kind: 'piece', top: 9, foot: 320, left: 9, right: 225 },
   'kit-landmark-copy-stage': { w: 240, h: 120, kind: 'piece', top: 29, foot: 120, left: 5, right: 235 },
   'kit-landmark-idol-owl-ink': { w: 320, h: 400, kind: 'piece', top: 30, foot: 400, left: 60, right: 259 },
+  'kit-landmark-door-ink': { w: 240, h: 320, kind: 'piece', top: 72, foot: 320, left: 4, right: 236 },
   'kit-landmark-crane-paper': { w: 240, h: 320, kind: 'piece', top: 112, foot: 308, left: 38, right: 200 },
   'kit-landmark-heron-ink': { w: 200, h: 280, kind: 'piece', top: 94, foot: 279, left: 4, right: 195 },
   'kit-landmark-scroll-tower': { w: 240, h: 400, kind: 'piece', top: 40, foot: 398, left: 11, right: 229 },

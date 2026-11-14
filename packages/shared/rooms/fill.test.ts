@@ -16,7 +16,7 @@ import { getRoom } from './index';
  * Something to do is a doorway (a cabinet's spot counts), a leaf pile, a stall, a moonbeam, an owl to
  * talk to, a perch to hop up on, or one of the Party Grove's games.
  */
-const ROOMS_WALKED = [LOBBY_ROOM, STREET_ROOM, 'm3-hall', 'glass', 'grove', 'market', 'hub', 'arcade'];
+const ROOMS_WALKED = [LOBBY_ROOM, STREET_ROOM, 'm3-hall', 'glass', 'ink', 'grove', 'market', 'hub', 'arcade'];
 
 /** The longest walk to the nearest thing to do, in seconds at walking speed. */
 const MOST_S = 3;

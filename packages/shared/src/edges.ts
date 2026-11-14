@@ -117,6 +117,8 @@ export const EDGE_ART: Readonly<Record<string, EdgeArt>> = {
   ...plazaPieces('lane', 'ferns'),
   ...plazaPieces('market', 'clutter'),
   ...plazaPieces('glass', 'planters'),
+  // The ink garden (OP-402): a ring of pale paving stones round its moonbeam, and mossy stones along its front.
+  ...plazaPieces('ink', 'stones'),
   ...plazaPieces('clearing', 'ferns'),
   ...plazaPieces('party', 'mushrooms'),
   // Seen from the side, on every platform drawn from the kit: down its sides (repeats down; the right side is the left mirrored) and under it (repeats across).
@@ -524,7 +526,8 @@ function underOps(key: string, a: EdgeArt): KitOp[] {
 /** An edge piece's placeholder: plain shapes in the tree's palette, where its art will be. Null for a key that is not one. */
 export function edgePlaceholder(key: string): KitOp[] | null {
   const ops = edgePlaceholderOps(key);
-  const recolour = key.startsWith('edge-arcade-') || key.startsWith('edge-market-') ? ARCADE_RECOLOUR : key.startsWith('edge-glass-') ? GLASS_RECOLOUR : null;
+  const recolour =
+    key.startsWith('edge-arcade-') || key.startsWith('edge-market-') ? ARCADE_RECOLOUR : key.startsWith('edge-glass-') ? GLASS_RECOLOUR : key.startsWith('edge-ink-') ? INK_RECOLOUR : null;
   return ops && recolour ? ops.map((o) => ({ ...o, c: recolour[o.c] ?? o.c })) : ops;
 }
 
@@ -539,6 +542,19 @@ export const GLASS_RECOLOUR: Readonly<Record<number, number>> = {
   [P.wood]: 0x5d6a94,
   [P.woodDark]: 0x39425e,
   [P.navyDeep]: 0x0d1024,
+};
+
+/** The ink garden's stand-ins (OP-402): washes of grey ink on pale paper, a little pine green, no colour louder than its lanterns. */
+export const INK_RECOLOUR: Readonly<Record<number, number>> = {
+  [P.moss]: 0x5f6a5c,
+  [P.mossLight]: 0xa9b3a0,
+  [P.leaf]: 0x6e7768,
+  [P.leafLight]: 0xc9cdbd,
+  [P.bark]: 0x4a4a4f,
+  [P.barkDark]: 0x2b2b30,
+  [P.wood]: 0x8f8a80,
+  [P.woodDark]: 0x625e57,
+  [P.navyDeep]: 0x29292e,
 };
 
 /**

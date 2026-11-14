@@ -24,7 +24,7 @@ function doorwaysFrom(start: string): Map<string, number> {
 }
 
 /** The areas of the new map a guest goes looking for (OP-305): the realms' Commons, each course's start, the Party Grove and the arcade. */
-const AREAS = ['m3-hall', 'glass', 'grove', 'market', 'brush-1', 'canopy-1', 'circuit-1', 'hub', 'arcade'];
+const AREAS = ['m3-hall', 'glass', 'ink', 'grove', 'market', 'brush-1', 'canopy-1', 'circuit-1', 'hub', 'arcade'];
 describe('the new map’s flow: hub and spokes from the Treetop Commons (OP-305)', () => {
   it('reaches every area within two doorways of the Commons', () => {
     const far = doorwaysFrom(LOBBY_ROOM);
