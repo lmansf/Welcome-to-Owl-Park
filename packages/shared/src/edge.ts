@@ -599,6 +599,15 @@ export interface ServerAdmitted {
  * the piece is. A spectator's run is practice (coursebook.ts): it is answered as anyone's.
  */
 export type ServerCourse = { t: 'course'; r: number; a: CourseAct } & ({ ok: true; view: CourseView; first?: boolean; at?: Vec2; top?: number; paid?: CoursePaid } | { ok: false; reason: CourseRefusal | 'far' | 'offline' });
+/**
+ * The Realm Vote's shares this month moved (OP-288): a vote landed. Each realm's part in whole percent
+ * (voteShares.ts), never the counts. Sent to the Great Hollow, where the info desk shows them.
+ */
+export interface ServerShares {
+  t: 'shares';
+  month: string;
+  shares: Record<string, number>;
+}
 /** The realms switch changed (a keeper opened or closed a realm, lit the portal, or named a night). */
 export interface ServerRealms {
   t: 'realms';
@@ -708,6 +717,7 @@ export type ServerFrame =
   | ServerNotice
   | ServerRestart
   | ServerRealms
+  | ServerShares
   | ServerAdmitted
   | ServerCourse;
 
@@ -899,7 +909,7 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
   }
 }
 
-const SERVER_FRAME_TYPES = new Set(['escape', 'stump', 'party', 'puzzle', 'welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'say', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'wall', 'closed', 'notice', 'restart', 'realms', 'rest', 'air', 'admitted', 'course']);
+const SERVER_FRAME_TYPES = new Set(['escape', 'stump', 'party', 'puzzle', 'welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'say', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'wall', 'closed', 'notice', 'restart', 'realms', 'shares', 'rest', 'air', 'admitted', 'course']);
 
 /** Loose check for server frames on the client (a trusted source, but never crash on garbage). */
 export function parseServerFrame(text: string): ServerFrame | null {

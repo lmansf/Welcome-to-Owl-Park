@@ -193,6 +193,8 @@ import { backWaits, carriedIn, doorwayUnder, doorwaysOff, heldAtFall, roomsAhead
 import { PLAY_SPOTS, RISE_SPOT, ROOTS_SPOT, TriedDoors, doorSpot, leadsToPlay, playSpotsAt, trailTo, type PlaySpot } from './featherTrail';
 import { CALLS, GUARDIAN_ROOM, GUARDIAN_VIEW, guardianShade, lookShowing, mustShow, presence, type OwlSeen } from './guardian';
 import { GuardianView, type GuardianState } from './guardianView';
+import { VOTE_DESK_ROOM, type DeskState } from './voteDesk';
+import { VoteDeskView } from './voteDeskView';
 import { FIRST_FLIGHT_MARK, glidedOff, hallTipFor, hallTips } from './hallTips';
 import { FIRST_RISE_MARK, marksFirstRise, rodeUp } from './firstRise';
 import { COMMONS_WORDS, HALL_WORDS } from '../ui/hallWords';
@@ -492,6 +494,8 @@ export class RoomScene extends Phaser.Scene {
   private seeThrough: SeeThrough | null = null;
   /** The guardian alive at the heart of the Great Hollow (OP-359): only there, and only behind `?guardian=1` (flags.ts). */
   private guardian: GuardianView | null = null;
+  /** The vote desk in the Great Hollow (OP-288): only there, and only behind `?desk=1` (flags.ts). */
+  private desk: VoteDeskView | null = null;
   /**
    * The camera near the guardian (guardian.ts, presence): how much it is the guardian's now (0 to 1, eased),
    * whether it has the camera, what the HUD covered as it took it, and when this was last worked out.
@@ -748,6 +752,7 @@ export class RoomScene extends Phaser.Scene {
     this.pieces = {};
     this.seeThrough = null;
     this.guardian = null;
+    this.desk = null;
     this.guardianCam = null;
     this.sideCam = null;
     this.opening = null;
@@ -1123,6 +1128,14 @@ export class RoomScene extends Phaser.Scene {
       this.guardian = new GuardianView(this, { light: room.bowl?.light, calm: () => this.calm(), onHoot: () => this.sfx.play('guardianHoot') });
       (this.pieces.standing ??= []).push(this.guardian.image);
     }
+    // The vote desk in the Great Hollow (OP-288, behind ?desk=1): this month's Realm Vote in percents, moving as owls vote.
+    if (room.id === VOTE_DESK_ROOM && flagOn('desk') && !this.sideView()) {
+      const desk = new VoteDeskView(this);
+      this.desk = desk;
+      void this.transport.voteShares?.().then((r) => {
+        if (r && this.desk === desk) desk.show(r.month, r.shares);
+      });
+    }
     // Seen from above, tall art an owl can stand behind goes see-through while the visitor's own owl is behind it (OP-346).
     this.seeThrough = this.sideView() ? null : new SeeThrough(this, this.pieces.standing ?? []);
     this.setRealms(this.transport.kind === 'edge' ? this.realms : { open: [...GATED_ROOMS], portal: true, night: null });
@@ -1476,6 +1489,7 @@ export class RoomScene extends Phaser.Scene {
       onQueued: () => live() && this.queued(),
       onNotice: (words) => live() && (this.registry.get('ribbon') as Ribbon | undefined)?.set(words),
       onRealms: (realms) => live() && this.setRealms(realms),
+      onShares: (month, shares) => live() && this.desk?.show(month, shares),
       onRealmClosed: (sign) => live() && this.onRealmClosed(sign),
       onNotThroughGate: () => live() && this.notThroughGate(),
       onRestartNotice: (words) => live() && this.hud.toast(words, RESTART_NOTICE_MS),
@@ -2563,6 +2577,8 @@ export class RoomScene extends Phaser.Scene {
     seeThrough: string[];
     /** The guardian at the heart of the Great Hollow (OP-359), where it is: null on any address without `?guardian=1`. */
     guardian: GuardianState | null;
+    /** The vote desk in the Great Hollow (OP-288): where it stands and what it says; null on any address without `?desk=1`. */
+    desk: DeskState | null;
     /** The feather trail (OP-307): the feathers out now (room px) and the doorways that glint; null in a course. */
     trail: { feathers: Vec2[]; glints: string[]; on: boolean } | null;
     floorShown: boolean;
@@ -2651,6 +2667,7 @@ export class RoomScene extends Phaser.Scene {
       promptShown: this.reach?.shown() ?? null,
       seeThrough: this.seeThrough?.faded() ?? [],
       guardian: this.guardian?.state() ?? null,
+      desk: this.desk?.state() ?? null,
       trail: this.trail ? { ...this.trail.debug(), on: this.trailOn } : null,
       floorShown: this.floorShown,
       edges: this.edgesDrawn,
