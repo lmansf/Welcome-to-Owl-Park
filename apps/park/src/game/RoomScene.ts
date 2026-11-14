@@ -7,6 +7,7 @@ import {
   EMOTE_IDS,
   FLIGHT_STEP_MS,
   GAMES,
+  AIRBORNE,
   GLIDING,
   LIFTED,
   GROUNDED,
@@ -117,6 +118,18 @@ import {
   liftAt,
   thermalAt,
   thermalTop,
+  DIVE_SPEED,
+  dive,
+  downdraftAt,
+  downdraftFor,
+  inDowndraft,
+  laneAt,
+  laneEnd,
+  laneOff,
+  tunnelFor,
+  type Downdraft,
+  type GlideLane,
+  type KnotTunnel,
   spendDash,
   windAt,
   windEnd,
@@ -195,6 +208,8 @@ import { CALLS, GUARDIAN_ROOM, GUARDIAN_VIEW, guardianShade, lookShowing, mustSh
 import { GuardianView, type GuardianState } from './guardianView';
 import { FIRST_FLIGHT_MARK, glidedOff, hallTipFor, hallTips } from './hallTips';
 import { FIRST_RISE_MARK, marksFirstRise, rodeUp } from './firstRise';
+import { INTO_MOUTH_MS, MOVER_WORDS, arrivalAir, headingOf, roomWithMovers, type CameBy } from './movers';
+import { MoversView, type MoverPiece } from './moversView';
 import { COMMONS_WORDS, HALL_WORDS } from '../ui/hallWords';
 import { FeatherTrail } from './featherTrailView';
 import { admitTarget } from './gateAdmit';
@@ -247,6 +262,8 @@ export interface RoomStart {
   side?: boolean | undefined;
   /** Come by travel from the Menu's map (OP-130): into the park, the room server lets it in only once it has walked through the gate. */
   via?: 'travel' | undefined;
+  /** Come by a mover of the room it left (OP-287, movers.ts): falling in from a dive, or up out of a tunnel. Only a page with the `movers` flag sets it. */
+  came?: CameBy | undefined;
   /**
    * Back from the store's checkout in a page of its own (OP-190): the bought ticket, on the owl now.
    * Play lands the owl in front of the turnstiles, and it goes through them with it by itself.
@@ -256,6 +273,10 @@ export interface RoomStart {
 
 /** Past a plaza's edges, where a ride on its rising air draws the camera back past them (OP-363, the Treetop Commons): the night sky its painting ends in. */
 const PLAZA_BEYOND = '#081226';
+/** How near the end of its carry a lane sets an owl down (room px). */
+const LANE_END_PX = 6;
+/** How far outside a downdraft's column an owl it took down may still land and go through its hole (room px): a frame's walk. */
+const DIVE_LAND_SLACK = 30;
 /** What an owl is told the first time it stands in a thermal (OP-340): the one line of words the thermal has. */
 const THERMAL_WORDS = 'Warm air rises here. Jump and keep holding to ride it up.';
 /** How far a tap may drift before it counts as a drag (game pixels). */
@@ -604,6 +625,19 @@ export class RoomScene extends Phaser.Scene {
   private firstFlown = false;
   /** Whether this room still waits for this device's owl to ride its rising air for the first time (OP-363, firstRise.ts: the Treetop Commons). */
   private riseWaits = false;
+  /** The movers (OP-287, movers.ts): played and drawn on this page only behind its flag (flags.ts). Without it nothing below is touched. */
+  private readonly moversOn = flagOn('movers');
+  private moversView: MoversView | null = null;
+  /** How the owl came into this room, if by a mover of the room it left. */
+  private cameBy: CameBy | null = null;
+  /** The downdraft that has taken the owl down, until it lands. */
+  private diving: Downdraft | null = null;
+  /** The end the lane the owl rides is carrying it to; and the lane that has set it down, until it lands or leaves it. */
+  private laneTo: Vec2 | null = null;
+  private laneSetDown: string | null = null;
+  private laneTold = false;
+  /** Lanes caught on this page (for tests). */
+  private laneRides = 0;
   /** When the HUD was last told where the owl is on the screen (the thumbstick's quiet, OP-349). */
   private owlToldAt = 0;
   /** Where the room put the own owl when it last let it in (its welcome), until the room is caught up with the owl (OP-138). */
@@ -707,6 +741,8 @@ export class RoomScene extends Phaser.Scene {
   init(data: RoomStart): void {
     // On the new map a realm whose idol now stands in the Great Hollow has none of its own (roomOnMap).
     this.room = roomOnMap(getRoom(data.room), walkingMap());
+    // With the movers on (OP-287), the set pieces they stand in place of (the hatch's art) are not the room's.
+    if (this.moversOn) this.room = roomWithMovers(this.room);
     this.ownRoom = this.room;
     this.painter = null;
     enteredRoom(this.room);
@@ -753,6 +789,11 @@ export class RoomScene extends Phaser.Scene {
     this.opening = null;
     this.rise = null;
     this.thermalTold = false;
+    this.laneTold = false;
+    this.diving = null;
+    this.laneTo = null;
+    this.laneSetDown = null;
+    this.cameBy = this.moversOn ? (data.came ?? null) : null;
     this.cameFrom = data.from;
     this.backWaiting = data.from !== undefined;
     this.restsThen = data.rests ?? this.keys?.rests() ?? 0;
@@ -860,6 +901,14 @@ export class RoomScene extends Phaser.Scene {
     // height is told to the room after the welcome (retellAir).
     const arriveTop = spawnTop(this.room, this.registry.get('spawnName') as string | undefined);
     if (arriveTop > 0) this.flier = { ...this.flier, air: { ...this.flier.air, z: arriveTop } };
+    else if (this.cameBy && !this.sideView()) {
+      // Come by a mover of the room it left (OP-287): falling in from a dive, or hopping up out of a tunnel's
+      // mouth. A flight of its own, begun here: nothing of the last room's flight is carried into it.
+      this.flier = { ...this.flier, air: arrivalAir(this.cameBy, 0) };
+      this.flown = { n: this.flown.n + 1, peak: this.flier.air.z, glided: false, lifted: false, ms: 0 };
+      this.flownFrom = Date.now();
+      this.flownOff = { pos: { x: spawn.x, y: spawn.y }, z: 0 };
+    }
     const joining = this.join(spawn);
     // Gone before the room was built (the page went on to another scene): the room is left too.
     const leaveEarly = () => void joining.conn.then((conn) => conn.leave());
@@ -888,7 +937,7 @@ export class RoomScene extends Phaser.Scene {
     // Up on a perch from the first frame (the hollow hall's knothole landing, OP-277): the owl is drawn
     // at that height too. The flight's step only tells the drawing of a change of mode, and a grounded
     // owl's height alone is none, so without this it stood drawn on the floor far below the camera.
-    if (this.flier.air.z > 0) {
+    if (this.flier.air.z > 0 || this.flier.air.s !== GROUNDED) {
       this.drawnAir = this.flier.air;
       this.me.fly(this.flier.air, Date.now());
     }
@@ -1151,6 +1200,8 @@ export class RoomScene extends Phaser.Scene {
       : null;
     // The streaks in the room's wind currents (OP-275): which way the air carries a glide, and where.
     this.winds = room.winds?.length ? new WindStreaks(this, room.winds, groundOf(room), 1, (this.registry.get('settings') as SettingsStore | undefined)?.get().calm ?? false) : null;
+    // The movers' three pieces, as boxes with their names and sizes until they are painted (OP-287): behind the flag, in a room seen from above.
+    this.moversView = this.moversOn && room.movers && !this.sideView() ? new MoversView(this, room.movers, this.cfg.pixelRatio) : null;
     // The ink of the room's brush stones (OP-235): its strokes drawn while they last, and stood on only then.
     this.brush = room.brushStones?.length ? new BrushInk(this, room.brushStones, groundOf(room)) : null;
     // The neon signs on their circuits: drawn lit or dark by park time, and stood on only while lit.
@@ -2553,6 +2604,12 @@ export class RoomScene extends Phaser.Scene {
     signBox: { left: number; right: number; top: number; bottom: number } | null;
     /** The words of the course's tip showing now (OP-344), if any. */
     tipShown: string | null;
+    /**
+     * The movers (OP-287): null on a page without the `movers` flag. Else the pieces drawn in this room, the
+     * downdraft that has taken the owl down, the lanes it has caught on this page and the end it is being
+     * carried to, and how it came into the room.
+     */
+    movers: { pieces: MoverPiece[]; diving: string | null; laneRides: number; laneTo: Vec2 | null; cameBy: CameBy | null } | null;
     /** Whether this device's owl has glided off one of the Great Hollow's roots (OP-347). */
     firstFlight: boolean;
     /** Whether this device's owl has ridden this room's rising air (OP-363, the Treetop Commons); null in a room that marks no such ride. */
@@ -2646,6 +2703,7 @@ export class RoomScene extends Phaser.Scene {
       firstWays: [...this.firstNamed],
       signBox: this.doorSigns?.shownBox() ?? null,
       tipShown: this.tips?.shown() ?? null,
+      movers: this.moversOn ? { pieces: this.moversView?.pieces() ?? [], diving: this.diving?.id ?? null, laneRides: this.laneRides, laneTo: this.laneTo, cameBy: this.cameBy } : null,
       firstFlight: this.firstFlown,
       firstRise: marksFirstRise(this.room, this.rootTips) ? !this.riseWaits : null,
       promptShown: this.reach?.shown() ?? null,
@@ -3305,6 +3363,58 @@ export class RoomScene extends Phaser.Scene {
   }
 
   /**
+   * In a glide lane (OP-287, movers.ts): the lane holds the owl level and carries it to the end it is
+   * heading for, by the owl's own walk, as a wind current does (rideWind). An owl that pushes a way of its
+   * own is steered by that push, still held level, and the lane carries it on that way once the push ends.
+   */
+  private rideLane(lane: GlideLane, caught: boolean): void {
+    const pushed = this.heldWay();
+    if (caught) {
+      this.laneRides += 1;
+      this.laneTo = laneEnd(lane, this.me.pos, headingOf(this.me.walk, pushed));
+    }
+    if (pushed) {
+      const along = pushed.x * (lane.b.x - lane.a.x) + pushed.y * (lane.b.y - lane.a.y);
+      if (along !== 0) this.laneTo = along > 0 ? lane.b : lane.a;
+      return;
+    }
+    const to = this.laneTo ?? laneEnd(lane, this.me.pos, null);
+    this.laneTo = to;
+    const walk = this.me.walk;
+    if (walk && distance(walk.to, to) < 3 && !walk.dash) return;
+    if (distance(this.me.pos, to) < 3) return;
+    this.walkTo({ x: to.x, y: to.y });
+    // Stopped short by something on the floor: where that walk ends is where the lane sets the owl down.
+    const got = this.me.walk?.to ?? this.me.pos;
+    if (distance(got, to) >= 3) this.laneTo = { x: got.x, y: got.y };
+  }
+
+  /** Through a knot hole the owl came down in, or stepped onto (OP-287): into its mouth, and falling into the room below. */
+  private diveThrough(d: Downdraft): void {
+    const door = this.room.doors.find((x) => x.id === d.door);
+    const to = door ? this.doorTo(door) : undefined;
+    if (!door || !to || this.leaving || this.realmClosed(to.room)) return;
+    triedDoors().add(this.room.id, door.id);
+    this.intoMouth(d.pos);
+    // Down at the downdraft's own landing spot where it has one (under a glide lane), else at the doorway's.
+    void this.goTo(to.room, d.lands ?? to.spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined }, LEAVE_FADE_MS, undefined, undefined, 'dive');
+  }
+
+  /** Into a tunnel's mouth (OP-287): carried through to the room its doorway leads to, and up out of the mouth there. */
+  private tunnelThrough(t: KnotTunnel, door: DoorDef, to: { room: string; spawn: string }, cameIn: Vec2): void {
+    triedDoors().add(this.room.id, door.id);
+    this.intoMouth(t.mouth);
+    void this.goTo(to.room, to.spawn, { room: this.room.id, spawn: this.registry.get('spawnName') as string | undefined }, LEAVE_FADE_MS, laneThrough(this.room, door, cameIn), undefined, 'tunnel');
+  }
+
+  /** The owl goes into a mouth as its room fades: smaller and dimmer, toward the mouth. In calm motion it only fades with the room. */
+  private intoMouth(at: Vec2): void {
+    if (this.calm()) return;
+    const pose = this.me.pose;
+    this.tweens.add({ targets: pose, x: pose.x + (at.x - this.me.pos.x), y: pose.y + (at.y - this.me.pos.y), scaleX: pose.scaleX * 0.35, scaleY: pose.scaleY * 0.35, alpha: 0.25, duration: INTO_MOUTH_MS, ease: 'Sine.easeIn' });
+  }
+
+  /**
    * A fall in a course, shown (OP-343). The owl is back where the fall takes it at once, as ever; the
    * camera goes with it in the same frame, where it used to slide back across the room after an owl
    * that had silently moved, and the room blinks dark and comes back, so the player sees that something
@@ -3412,17 +3522,54 @@ export class RoomScene extends Phaser.Scene {
       const gust = column === null ? windAt(this.room.winds, place.x, this.flier.air.z) : undefined;
       // Else, in a room seen from above, the thermal it glides in carries it up to its top (thermal.ts, OP-340).
       const warm = column === null && !gust ? (thermalAt(this.room.thermals, place, this.flier.air.z)?.top ?? null) : null;
-      const lift = column ?? gust?.z ?? warm;
+      // Else, with the movers on (OP-287), a glide lane it glides beside holds it at the lane's height. At the end
+      // it was carried to the lane sets it down, and does not take it up again until it has landed or left the lane.
+      let lane = this.moversOn && column === null && !gust && warm === null ? laneAt(this.room.movers?.lanes, place, this.flier.air.z) : undefined;
+      if (lane && this.laneTo && distance(place, this.laneTo) < LANE_END_PX) {
+        this.laneSetDown = lane.id;
+        this.laneTo = null;
+      }
+      if (!lane) this.laneSetDown = null;
+      else if (lane.id === this.laneSetDown) lane = undefined;
+      const lift = column ?? gust?.z ?? warm ?? lane?.z ?? null;
       const wasLifted = this.flier.air.s === LIFTED;
       const stoodAt = this.flier.air.z;
       const before = this.flier.air;
       this.flier = stepFlier(this.flier, { pressed, held }, groundAt(this.room.perches, place, this.flier.air.z), this.abilities, lift);
-      const air = this.flier.air;
+      let air = this.flier.air;
+      // With the movers on (OP-287), a downdraft takes an owl in the air inside it down, wings folded: a dive.
+      // Once it has the owl it keeps it until it is down (at the column's edge the owl's place is a frame
+      // ahead of where it is drawn, so asking afresh each step let it go and took it again), and it pulls
+      // the owl in over the knot hole, so it comes down in the hole.
+      const sink = this.moversOn && air.s !== GROUNDED ? (this.diving ?? downdraftAt(this.room.movers?.downdrafts, place, air.z)) : undefined;
+      if (sink) {
+        if (air.s !== AIRBORNE || air.vz > -DIVE_SPEED) {
+          air = dive(air);
+          this.flier = { ...this.flier, air };
+        }
+        if (!this.diving) {
+          this.diving = sink;
+          const going = this.me.walk?.to;
+          if (distance(place, sink.pos) > 12 && !(going && distance(going, sink.pos) < 12)) this.walkTo({ x: sink.pos.x, y: sink.pos.y });
+        }
+      }
       // What the step did is heard (OP-350): a jump, a flap, the wings spread, a landing.
       for (const c of airCues(before, air)) this.sfx.play(c.cue, c.strength);
       // Taken up by a thermal: the camera draws back with the owl's height from here until it is down again (frameRise).
       if (warm !== null && air.s === LIFTED && !this.rise) this.rise = { from: air.z, top: warm, covered: this.hud.coveredEdges(), back: false };
       if (gust && air.s === LIFTED && air.h === gust.z) this.rideWind(gust, !wasLifted);
+      if (lane && air.s === LIFTED && air.h === lane.z) this.rideLane(lane, !wasLifted);
+      else if (wasLifted && air.s !== LIFTED && this.laneTo) {
+        // The ride ended in the air (Jump let go, or steered out of the lane's reach): its carry ends with it,
+        // so the owl comes down where it is and is not walked on to the lane's end.
+        const carry = this.me.walk;
+        if (carry && distance(carry.to, this.laneTo) < 3) {
+          this.stop();
+          // Nor is the lane's end a goal the walk takes up again as the owl lands (reaim).
+          this.walkGoal = null;
+        }
+        this.laneTo = null;
+      }
       const level = footingLevel(this.room, air.z);
       if (level !== this.footLevel) {
         this.footLevel = level;
@@ -3439,7 +3586,13 @@ export class RoomScene extends Phaser.Scene {
         if (air.s === LIFTED) this.flown.lifted = true;
       } else if (!grounded) {
         this.flown.ms = at - this.flownFrom;
-        this.landedFromFlight(place);
+        this.laneTo = null;
+        this.laneSetDown = null;
+        // Down inside the downdraft that took it: through the knot hole (OP-287). Else a flight as any other.
+        const dived = this.diving;
+        this.diving = null;
+        if (dived && inDowndraft(dived, place, DIVE_LAND_SLACK)) this.diveThrough(dived);
+        else this.landedFromFlight(place);
       }
       this.drawnAir = fall(this.drawnAir, FLIGHT_STEP_MS);
       if (airChanged(this.drawnAir, air)) {
@@ -3681,6 +3834,17 @@ export class RoomScene extends Phaser.Scene {
         if (waits !== null) {
           if (said) this.hud.toast(waits, 2600);
           continue;
+        }
+        // With the movers on (OP-287), a doorway a downdraft or a tunnel stands for is taken as that. An owl in
+        // the air over a knot hole is not through yet: the downdraft takes it down first (fly), and it dives as it lands.
+        if (this.moversOn) {
+          const sinks = downdraftFor(this.room.movers, door.id);
+          if (sinks) {
+            if (this.flier.air.s !== GROUNDED) continue;
+            return this.diveThrough(sinks);
+          }
+          const tunnel = tunnelFor(this.room.movers, door.id);
+          if (tunnel) return this.tunnelThrough(tunnel, door, to, cameIn);
         }
         triedDoors().add(this.room.id, door.id);
         if (door.id === 'gate') {
@@ -4031,11 +4195,11 @@ export class RoomScene extends Phaser.Scene {
     else this.hud.toast('The gift shop opens soon.');
   }
 
-  private async goTo(roomId: string, spawn: string, from: RoomStart['from'], fadeMs = LEAVE_FADE_MS, lane?: Lane, via?: RoomStart['via']): Promise<void> {
+  private async goTo(roomId: string, spawn: string, from: RoomStart['from'], fadeMs = LEAVE_FADE_MS, lane?: Lane, via?: RoomStart['via'], came?: CameBy): Promise<void> {
     // Counted before the room fades: keys let go during the fade or the next room's load are let go all the same.
     const rests = this.keys?.rests();
     const side = this.sideView();
-    if (await this.leaveRoom(fadeMs)) this.scene.start('room', { room: roomId, spawn, from, lane, via, rests, side } satisfies RoomStart);
+    if (await this.leaveRoom(fadeMs)) this.scene.start('room', { room: roomId, spawn, from, lane, via, rests, side, came } satisfies RoomStart);
   }
 
   /** The owl stops, the room fades and its connection closes. False when the room is already being left. */
@@ -4057,6 +4221,8 @@ export class RoomScene extends Phaser.Scene {
   private async teardown(): Promise<void> {
     this.fitOverlay?.destroy();
     this.fitOverlay = null;
+    this.moversView?.destroy();
+    this.moversView = null;
     this.painter?.destroy();
     this.painter = null;
     this.endDecorating(false);
@@ -4611,6 +4777,11 @@ export class RoomScene extends Phaser.Scene {
     if (!this.thermalTold && this.flier.air.s === GROUNDED && thermalAt(this.room.thermals, this.me.pos, 0)) {
       this.thermalTold = true;
       this.hud.toast(THERMAL_WORDS, 4200, '#FFD36A');
+    }
+    // With the movers on (OP-287): what a glide lane is for, the first time the owl stands under one on a visit to its room.
+    if (this.moversOn && !this.laneTold && this.flier.air.s === GROUNDED && (this.room.movers?.lanes ?? []).some((l) => laneOff(l, this.me.pos) <= l.r)) {
+      this.laneTold = true;
+      this.hud.toast(MOVER_WORDS.lane, 4200, '#FFD36A');
     }
     const r = this.rise;
     if (!r || this.opening) return;
