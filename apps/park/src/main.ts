@@ -266,6 +266,8 @@ declare global {
        * Jump do (OP-084); false out of a room. The letting go is set at once, so a slow page never holds it longer.
        */
       jump(holdMs?: number): boolean;
+      /** Throw a snowball (OP-074, in the snow): at an owl by id, or the nearest in reach. */
+      snowball(at?: string): boolean;
       /** Drop the room server's socket as a bad network would; it reconnects on its own (false in the local mode). */
       drop(): boolean;
       /** As Q does: to the mirror (walking up to it in a nest, else home to it); false where it cannot. */
@@ -864,6 +866,7 @@ window.owlPark = {
   tasks: () => tasks.view,
   talk: (npc) => roomScene()?.goDo({ kind: 'talk', id: npc }) ?? false,
   jump: (holdMs = 0) => roomScene()?.jumpFor(holdMs) ?? false,
+  snowball: (at) => roomScene()?.throwSnowball(at ?? undefined) ?? false,
   drop: () => roomScene()?.dropConnection() ?? false,
   mirror: () => roomScene()?.toMirror() ?? false,
   openBuilder: () => hud.openOwl(document.body),

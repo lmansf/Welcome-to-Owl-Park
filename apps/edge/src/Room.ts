@@ -38,6 +38,8 @@ import {
   closestPointOnPolygon,
   pointInPolygon,
   distance,
+  SNOWBALL_EVERY_MS,
+  SNOWBALL_REACH,
   WALK_SPEED,
   EDGE_PROTOCOL_VERSION,
   CLOSE,
@@ -105,6 +107,8 @@ interface Visitor {
   strikes: number[];
   frames: number[];
   emotedAt: number;
+  /** When its last snowball flew (OP-074): one every SNOWBALL_EVERY_MS. */
+  snowballAt: number;
   /** Air states this visitor may still send now (OP-084), and when they last refilled. */
   airTokens: number;
   airRefilledAt: number;
@@ -457,7 +461,7 @@ export class Room {
     if (!pos) pos = this.scatter(spawn, isDoorEntry ? LIMITS.scatterDoor : LIMITS.scatterDefault, undefined, told);
 
     const now = this.now();
-    const v: Visitor = { peer, sid, st: { id, look: hello.look, pos, walk: null }, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, airTokens: LIMITS.airBurst, airRefilledAt: now, saidAt: 0, usedAt: 0, arrangedAt: 0, dash: { ...FRESH_DASH } };
+    const v: Visitor = { peer, sid, st: { id, look: hello.look, pos, walk: null }, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, snowballAt: 0, airTokens: LIMITS.airBurst, airRefilledAt: now, saidAt: 0, usedAt: 0, arrangedAt: 0, dash: { ...FRESH_DASH } };
     if (hello.spawn !== undefined && Object.hasOwn(this.def.spawns, hello.spawn)) v.cameIn = hello.spawn;
     this.visitors.set(id, v);
     this.leavers.delete(id);
@@ -484,7 +488,7 @@ export class Room {
   /** Re-attach a visitor after the host process was recycled (no frames are sent). */
   restore(peer: Peer, st: VisitorState, sid = ''): void {
     const now = this.now();
-    this.visitors.set(st.id, { peer, sid, st, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, airTokens: LIMITS.airBurst, airRefilledAt: now, saidAt: 0, usedAt: 0, arrangedAt: 0, dash: { ...FRESH_DASH } });
+    this.visitors.set(st.id, { peer, sid, st, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, snowballAt: 0, airTokens: LIMITS.airBurst, airRefilledAt: now, saidAt: 0, usedAt: 0, arrangedAt: 0, dash: { ...FRESH_DASH } });
   }
 
   /**
@@ -777,6 +781,26 @@ export class Room {
     if (now - v.emotedAt < LIMITS.emoteEveryMs) return false;
     v.emotedAt = now;
     this.broadcast({ t: 'emote', id, e }, id);
+    return true;
+  }
+
+  /**
+   * A snowball thrown at another owl here (OP-074, the first snow): told to everyone else, the owl hit
+   * included, so each page draws it fly and the hit owl shiver. Nothing more happens to anyone. One
+   * every SNOWBALL_EVERY_MS an owl; at an owl not here, at itself or past twice its reach it is dropped.
+   * Whether snow falls in the room is the adapter's check.
+   */
+  snowball(id: string, at: string): boolean {
+    const v = this.visitors.get(id);
+    const target = this.visitors.get(at);
+    if (!v || !target || at === id) return false;
+    const now = this.now();
+    if (now - v.snowballAt < SNOWBALL_EVERY_MS) return false;
+    const from = this.positionOf(id);
+    const to = this.positionOf(at);
+    if (from && to && distance(from, to) > 2 * SNOWBALL_REACH) return false;
+    v.snowballAt = now;
+    this.broadcast({ t: 'snowball', id, at }, id);
     return true;
   }
 

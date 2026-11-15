@@ -4,6 +4,7 @@ export interface ParkState {
   room: string;
   /** Whether the first snow falls in this room (OP-074, behind ?snow=1). */
   snow: boolean;
+  snowballs: { thrown: number; landed: number; hits: string[] };
   /** The owl walks this room as a spectator, as its welcome said (OP-191). */
   spectator: boolean;
   /** The dash (OP-224): held in a parkour course only, spent until the owl lands, and the dashes made in this room. */

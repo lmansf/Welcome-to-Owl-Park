@@ -77,6 +77,8 @@ export function isParkMessage(value: unknown): value is ParkMessage {
       return isId(value['id']);
     case 'emote':
       return isId(value['id']) && isEmoteId(value['e']);
+    case 'snowball':
+      return isId(value['id']) && isId(value['at']) && value['at'] !== value['id'];
     case 'say':
       // A phrase this page does not know is dropped: there is nothing to show for it.
       return isId(value['id']) && isPhrase(value['n']);

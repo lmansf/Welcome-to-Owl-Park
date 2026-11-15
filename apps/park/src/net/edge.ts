@@ -837,6 +837,9 @@ export class EdgeTransport implements ParkTransport {
         case 'emote':
           if (f.id !== selfId) handlers.onPeerEmote?.(f.id, f.e);
           break;
+        case 'snowball':
+          if (f.id !== selfId) handlers.onPeerSnowball?.(f.id, f.at);
+          break;
       }
     };
 
@@ -1212,6 +1215,9 @@ export class EdgeTransport implements ParkTransport {
               emotesDropped = 0;
             }
             sendFrame({ t: 'emote', e: msg.e });
+            break;
+          case 'snowball':
+            sendFrame({ t: 'snowball', at: msg.at });
             break;
           case 'say':
             sendFrame({ t: 'say', n: msg.n });

@@ -89,6 +89,17 @@ export interface EmoteMessage {
   e: string;
 }
 
+/**
+ * A player threw a snowball at another owl in the room (OP-074, the first snow): it arcs over and lands
+ * with a puff, and a hit owl shivers. Nothing else: no feathers lost, no words.
+ */
+export interface SnowballMessage {
+  t: 'snowball';
+  id: string;
+  /** The owl it was thrown at. */
+  at: string;
+}
+
 /** A player said a prewritten phrase: its number in the phrase list, never words. */
 export interface SayMessage {
   t: 'say';
@@ -111,4 +122,4 @@ export interface AirMessage {
   at: number;
 }
 
-export type ParkMessage = HelloMessage | StateMessage | MoveMessage | ByeMessage | EmoteMessage | SayMessage | RestMessage | AirMessage;
+export type ParkMessage = HelloMessage | StateMessage | MoveMessage | ByeMessage | EmoteMessage | SnowballMessage | SayMessage | RestMessage | AirMessage;

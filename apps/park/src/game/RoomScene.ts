@@ -163,6 +163,8 @@ import {
   isPartyRoom,
   throughGate as walkedThroughGate,
   eggBubble,
+  SNOWBALL_EVERY_MS,
+  SNOWBALL_REACH,
 } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { ActivityLink, ActivityPushes, CourseLink, NestLink, NestPushes, NestSeen, PuzzleArgs, PuzzleReply, QuestLink, QuestPushes, QuestReply } from '../collect/service';
@@ -285,6 +287,8 @@ const LANE_END_PX = 6;
 /** How far outside a downdraft's column an owl it took down may still land and go through its hole (room px): a frame's walk. */
 const DIVE_LAND_SLACK = 30;
 /** What an owl is told the first time it stands in a thermal (OP-340): the one line of words the thermal has. */
+/** The one thing to do in the snow (OP-074). */
+const SNOWBALL_LABEL = 'Throw a snowball';
 const THERMAL_WORDS = 'Warm air rises here. Jump and keep holding to ride it up.';
 /** How far a tap may drift before it counts as a drag (game pixels). */
 const TAP_SLOP = 16;
@@ -747,6 +751,10 @@ export class RoomScene extends Phaser.Scene {
   private thermalTold = false;
   /** Whether the first snow falls in this room (OP-074, ambience.ts). */
   private snowing = false;
+  /** When this owl last threw a snowball (OP-074): the room takes one every SNOWBALL_EVERY_MS. */
+  private snowballAt = 0;
+  /** Snowballs this page has thrown and seen land, for the browser tests. */
+  private snowballs = { thrown: 0, landed: 0, hits: [] as string[] };
   /** The Decorate sheet's pictures of pieces, drawn once each from their textures. */
   private readonly thumbs = new Map<string, string>();
   /** How sharp this room's art is drawn (pixels per room pixel at most): a nest's furniture loads at it too. */
@@ -1570,6 +1578,7 @@ export class RoomScene extends Phaser.Scene {
       onRestart: () => live() && this.restarted(),
       onSetup: (words) => live() && this.closedForSetup(words),
       onTicketEnded: () => live() && this.ticketEnded(),
+      onPeerSnowball: (id, at) => live() && this.snowballFlies(id, at),
       onPeerEmote: (id, e) => {
         if (!live()) return;
         this.peerEmotes.set(id, e);
@@ -1849,6 +1858,9 @@ export class RoomScene extends Phaser.Scene {
       const world = this.cameras.main.getWorldPoint(p.x, p.y);
       // A tap on a painted egg, the own owl's or another's, says when it hatches (OP-261).
       if (this.tapEgg({ x: world.x, y: world.y })) return;
+      // In the snow a tap on another owl throws a snowball at it (OP-074), when it is near enough.
+      const target = this.snowing ? this.owlAt({ x: world.x, y: world.y }) : null;
+      if (target && this.throwSnowball(target)) return;
       // A tap on a thing to use out on a plaza's floor walks the owl over and uses it (a bird bath, mushrooms, a telescope, a shiny thing).
       const thing = this.thingAt({ x: world.x, y: world.y });
       if (thing) {
@@ -2583,6 +2595,8 @@ export class RoomScene extends Phaser.Scene {
     room: string;
     /** Whether the first snow falls in this room (OP-074, behind ?snow=1). */
     snow: boolean;
+    /** Snowballs this page threw and saw land, and who each landing hit (OP-074). */
+    snowballs: { thrown: number; landed: number; hits: string[] };
     pos: Vec2;
     walking: boolean;
     look: OwlLook;
@@ -2714,6 +2728,7 @@ export class RoomScene extends Phaser.Scene {
     return {
       egg: { at: this.me.eggPos(), said: this.eggSaid },
       snow: this.snowing,
+      snowballs: { ...this.snowballs, hits: [...this.snowballs.hits] },
       sounds: this.sfx.heard().slice(-16),
       sideCam: this.sideCam ? { lead: this.sideCam.lead, level: this.sideCam.level, x: this.sideCam.x, y: this.sideCam.y } : null,
       spectator: this.spectator,
@@ -2886,10 +2901,104 @@ export class RoomScene extends Phaser.Scene {
       if (!close || this.piles.get(def.id)?.here === false) continue;
       out.push({ id: `use:${def.id}`, label: def.label ?? rules.label, run: () => void this.use(def.id) });
     }
+    // In the snow, standing on the ground with another owl near enough (OP-074): one more thing to do.
+    if (this.snowing && this.flier.air.s === GROUNDED && this.snowballTarget()) {
+      out.push({ id: 'act:snowball', label: SNOWBALL_LABEL, run: () => void this.throwSnowball() });
+    }
     // Lanterns, fishing and the robot owl's game where the owl stands.
     if (this.play) out.push(...this.play.actions(pos));
     if (this.party) out.push(...this.party.actions(pos));
     return out;
+  }
+
+  /** The other owl under a tap in the room, if any: on its body, the nearest one first. */
+  private owlAt(p: Vec2): string | null {
+    let best: string | null = null;
+    let bestD = Infinity;
+    for (const [id, owl] of this.peers) {
+      const k = Math.abs(owl.scaleX) || 1;
+      const dx = Math.abs(p.x - owl.pos.x);
+      const up = owl.pos.y - p.y;
+      if (dx > 60 * k || up < -20 * k || up > 170 * k) continue;
+      const d = distance(p, owl.pos);
+      if (d < bestD) {
+        best = id;
+        bestD = d;
+      }
+    }
+    return best;
+  }
+
+  /** The owl a snowball thrown now would go to: the nearest other owl in reach. */
+  private snowballTarget(): string | null {
+    let best: string | null = null;
+    let bestD = SNOWBALL_REACH;
+    for (const [id, owl] of this.peers) {
+      const d = distance(this.me.pos, owl.pos);
+      if (d <= bestD) {
+        best = id;
+        bestD = d;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Throw a snowball (OP-074): at `at`, or the nearest owl in reach. Only in the snow, standing on the
+   * ground, one every SNOWBALL_EVERY_MS; the room tells everyone else, and this page draws it at once.
+   */
+  throwSnowball(at: string | null = this.snowballTarget()): boolean {
+    if (!this.built || this.leaving || !this.snowing || !at || this.flier.air.s !== GROUNDED) return false;
+    const owl = this.peers.get(at);
+    if (!owl || distance(this.me.pos, owl.pos) > SNOWBALL_REACH) return false;
+    const now = Date.now();
+    if (now - this.snowballAt < SNOWBALL_EVERY_MS) return false;
+    this.snowballAt = now;
+    this.me.face(owl.pos.x < this.me.pos.x ? -1 : 1);
+    this.conn?.send({ t: 'snowball', id: this.playerId, at });
+    this.snowballs.thrown += 1;
+    this.snowballFlies(this.playerId, at);
+    return true;
+  }
+
+  /**
+   * A snowball from one owl here to another (OP-074): it arcs over and lands with a puff, and the owl
+   * hit shivers. Nothing else: no feathers lost, no words.
+   */
+  private snowballFlies(from: string, at: string): void {
+    const owlOf = (id: string) => (id === this.playerId ? this.me : this.peers.get(id));
+    const a = owlOf(from);
+    const b = owlOf(at);
+    if (!a || !b) return;
+    const lift = (o: Owl) => 90 * (Math.abs(o.scaleX) || 1);
+    const start = { x: a.pos.x, y: a.pos.y - lift(a) };
+    const ball = this.add.image(start.x, start.y, 'fx-dot').setTint(0xffffff).setScale(1.1).setDepth(this.room.size.h + 30);
+    const ms = Math.max(380, Math.min(800, distance(a.pos, b.pos) * 0.9));
+    const peak = 60 + distance(a.pos, b.pos) * 0.18;
+    this.tweens.addCounter({
+      from: 0,
+      to: 1,
+      duration: ms,
+      onUpdate: (t) => {
+        const k = t.getValue() ?? 0;
+        const end = { x: b.pos.x, y: b.pos.y - lift(b) };
+        ball.setPosition(start.x + (end.x - start.x) * k, start.y + (end.y - start.y) * k - peak * 4 * k * (1 - k));
+      },
+      onComplete: () => {
+        const x = ball.x;
+        const y = ball.y;
+        ball.destroy();
+        if (!this.scene.isActive()) return;
+        const puff = this.add
+          .particles(x, y, 'fx-dot', { speed: { min: 40, max: 120 }, scale: { start: 0.5, end: 0 }, alpha: { start: 0.95, end: 0 }, lifespan: 420, tint: 0xffffff, emitting: false })
+          .setDepth(this.room.size.h + 30);
+        puff.explode(10);
+        this.time.delayedCall(600, () => puff.destroy());
+        b.playEmote('shiver');
+        this.snowballs.landed += 1;
+        this.snowballs.hits.push(at);
+      },
+    });
   }
 
   /** Ask for the quest board; come back when the park day turns, or soon if the room did not answer. */

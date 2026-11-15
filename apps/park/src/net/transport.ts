@@ -33,6 +33,8 @@ export interface RoomHandlers extends QuestPushes, ActivityPushes, NestPushes {
   onFull?(room: string, spectators?: boolean): void;
   /** A peer played an emote. */
   onPeerEmote?(id: string, emote: string): void;
+  /** An owl here threw a snowball (OP-074): `id` threw it at `at`, which may be this page's own owl. */
+  onPeerSnowball?(id: string, at: string): void;
   /** A peer said a prewritten phrase (its number in the phrase list). */
   onPeerSay?(id: string, phrase: number): void;
   /** A peer's owl fell asleep or woke (OP-126). */

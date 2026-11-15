@@ -124,6 +124,7 @@ import {
   type Wear,
   VOTABLE_REALMS,
   isVoteShares,
+  snowsIn,
 } from '@owl-park/shared';
 import { accountsOn } from './accounts';
 import type { Collections } from './Collections';
@@ -1124,6 +1125,13 @@ export class RoomObject extends DurableObject<Env> {
       case 'emote':
         if (!room.admit(att.id)) return;
         return this.emote(ws, att, room, frame.e);
+      case 'snowball':
+        // Only where snow falls (OP-074): the room's own rule, whatever the page's flag says.
+        if (!room.admit(att.id)) return;
+        const def = roomDef(att.room);
+        if (!def || !snowsIn(def) || room.sessionOf(att.id) !== att.sid) return;
+        room.snowball(att.id, frame.at);
+        return;
       case 'say':
         // Every phrase is everyone's: no collection is needed to say one.
         if (!room.admit(att.id)) return;
