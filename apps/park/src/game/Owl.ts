@@ -371,10 +371,20 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
           if (!wanted('pet', variant)) return;
           const art = parseVariant(variant)?.item.art;
           if (this.pet) this.pet.setTexture(key, art);
-          else this.pet = new Pet(this.scene, key, this.pos, art, this.size);
+          else this.pet = new Pet(this.scene, key, this.pos, art, this.size, this.textureScale);
         });
       }
     }
+  }
+
+  /** Whether a room point is on this owl's painted egg (OP-261), so a tap on it says when it hatches. */
+  eggAt(p: { x: number; y: number }): boolean {
+    return !!this.pet?.isEgg && this.pet.contains(p);
+  }
+
+  /** Where this owl's painted egg is drawn (the middle of it), or null without one. */
+  eggPos(): { x: number; y: number } | null {
+    return this.pet?.isEgg ? this.pet.middle() : null;
   }
 
   /** Play an emote on this owl (everyone in the room plays it on their copy). */

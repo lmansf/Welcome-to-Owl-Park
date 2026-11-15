@@ -1,4 +1,10 @@
-import { PRESENTS, RARITY_COLOURS, parseVariant, type Present } from '@owl-park/shared';
+import { BUNNY_VARIANT, EASTER_HATCH_AT, HATCH_NOTE, PRESENTS, RARITY_COLOURS, parseVariant, type Present } from '@owl-park/shared';
+
+/**
+ * What the page announces once: the park's presents, and the Rainbow Bunny from a hatched painted egg
+ * (OP-262), said for a month after Easter 2027 (only egg holders have the bunny, so only they hear it).
+ */
+export const ANNOUNCED: readonly Present[] = [...PRESENTS, { variant: BUNNY_VARIANT, note: HATCH_NOTE, noteUntil: EASTER_HATCH_AT + 31 * 24 * 60 * 60 * 1000 }];
 
 /** The presents this device has already told its visitor about. */
 const SEEN_KEY = 'owl-park:presents-seen';
@@ -24,7 +30,7 @@ export function announcePresents(
   toast: (message: string, ms: number, accent: string) => void,
   storage: Store | null,
   now = Date.now(),
-  presents: readonly Present[] = PRESENTS,
+  presents: readonly Present[] = ANNOUNCED,
 ): Present[] {
   const seen = seenOn(storage);
   const fresh = presents.filter((p) => owned.includes(p.variant) && !seen.includes(p.variant) && (p.noteUntil === undefined || now < p.noteUntil));

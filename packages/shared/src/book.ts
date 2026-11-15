@@ -7,6 +7,7 @@
  * shop.
  */
 import { PLAY_FEATHERS_PER_DAY, TASKS_BONUS, TASK_FEATHERS, dailyTasks, taskProgress, type PlayEvent, type TaskView } from './activities';
+import { hatchGrants } from './easter';
 import { DUPLICATE_FEATHERS, PRESENTS, STARTER_PACK, filterOwnedWear, isWear, normalizeTimeZone, parseVariant, type Wear } from './collectibles';
 import type { QuestItemSpot } from './interactables';
 import { nextParkDayAt, parkDay } from './parktime';
@@ -120,11 +121,12 @@ export class CollectionBook {
 
   /**
    * What the collector owns, with any starter piece (OP-243) or present from the park it does not hold
-   * yet added first.
+   * yet added first, and the Rainbow Bunny once its painted egg has hatched (OP-262).
    */
   private ownedWithPresents(cid: string, now: number): string[] {
     const owned = this.store.owned(cid);
     const missing = [...STARTER_PACK, ...PRESENTS.map((p) => p.variant)].filter((v) => !owned.includes(v));
+    missing.push(...hatchGrants(owned, now));
     if (!missing.length) return owned;
     for (const v of missing) this.store.addOwned(cid, v, 'granted', now);
     return this.store.owned(cid);

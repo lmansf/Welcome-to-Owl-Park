@@ -162,6 +162,7 @@ import {
   STUMP_ROOM,
   isPartyRoom,
   throughGate as walkedThroughGate,
+  eggBubble,
 } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { ActivityLink, ActivityPushes, CourseLink, NestLink, NestPushes, NestSeen, PuzzleArgs, PuzzleReply, QuestLink, QuestPushes, QuestReply } from '../collect/service';
@@ -570,6 +571,8 @@ export class RoomScene extends Phaser.Scene {
   private readonly peerEmotes = new Map<string, string>();
   /** Phrases said here, in bubbles over the owls (C44), and when this owl last said one. */
   private bubbles: SpeechBubbles | null = null;
+  /** What tapping a painted egg last said here (OP-261). */
+  private eggSaid: string | null = null;
   /** The feather trail toward a doorway not tried yet (OP-307), and whether Settings has it on; none in a course. */
   private trail: FeatherTrail | null = null;
   private trailOn = true;
@@ -1840,6 +1843,8 @@ export class RoomScene extends Phaser.Scene {
       this.pendingVote = false; // a new destination cancels a walk to the idol
       this.errand = null; // ...or to an NPC or a leaf pile
       const world = this.cameras.main.getWorldPoint(p.x, p.y);
+      // A tap on a painted egg, the own owl's or another's, says when it hatches (OP-261).
+      if (this.tapEgg({ x: world.x, y: world.y })) return;
       // A tap on a thing to use out on a plaza's floor walks the owl over and uses it (a bird bath, mushrooms, a telescope, a shiny thing).
       const thing = this.thingAt({ x: world.x, y: world.y });
       if (thing) {
@@ -1851,6 +1856,19 @@ export class RoomScene extends Phaser.Scene {
       // A tap on the doorway the owl already stands in (a side view, OP-212) goes through, as one walked to would.
       if (!this.walkTo(goal)) this.tapIntoDoorway(goal);
     });
+  }
+
+  /**
+   * A tap on a painted egg (OP-261): the owl it follows shows the days until Easter in a bubble, on
+   * this page alone; with bubbles off, the same words come as a tip. False when no egg is there.
+   */
+  tapEgg(p: Vec2): boolean {
+    const owl = [this.me, ...this.peers.values()].find((o) => o.eggAt(p));
+    if (!owl) return false;
+    const words = eggBubble(Date.now());
+    this.eggSaid = words;
+    if (!this.bubbles?.note(owl, words, this.time.now)) this.hud.toast(words, 3000);
+    return true;
   }
 
   /** The thing to use out on a plaza's floor under a tap, if any: the nearest whose art or spot it is on. */
@@ -2681,9 +2699,12 @@ export class RoomScene extends Phaser.Scene {
     sounds: string[];
     /** The side camera (OP-351): its lead and the height it holds, and where it looks; null in a room seen from above. */
     sideCam: { lead: number; level: number; x: number; y: number } | null;
+    /** The painted egg (OP-261): where the own owl's egg is drawn (null without one), and what tapping an egg last said. */
+    egg: { at: Vec2 | null; said: string | null };
   } | null {
     if (!this.built) return null;
     return {
+      egg: { at: this.me.eggPos(), said: this.eggSaid },
       sounds: this.sfx.heard().slice(-16),
       sideCam: this.sideCam ? { lead: this.sideCam.lead, level: this.sideCam.level, x: this.sideCam.x, y: this.sideCam.y } : null,
       spectator: this.spectator,
