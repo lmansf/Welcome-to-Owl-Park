@@ -324,3 +324,30 @@ describe('the Blackout Circuit’s first roof, as a newcomer leaves it (OP-361)'
     expect(Math.min(...rooftops.course!.pits![0]!.map((v) => v.x))).toBe(deck.x1);
   });
 });
+
+/**
+ * The Blackout Circuit's footbridge, as a newcomer leaves it (OP-361). An owl comes to the footbridge
+ * on a held Jump off the first roof, and the far street (560 wide) asks for the same again: of the
+ * one-press plays off the bridge, 200 of 250 come down in the street, and a Jump held the whole
+ * flight from anywhere on it crosses. The street stays a glide's, so a fall from it sends the owl
+ * back to a bench on the bridge for another try, not to the bench on the roof.
+ */
+describe('the Blackout Circuit’s footbridge, as a newcomer leaves it (OP-361)', () => {
+  const rooftops = ROOMS['circuit-1']!;
+  const bridge = (rooftops.kit!.ledges ?? []).find((l) => l.id === 'bridge1')!;
+
+  it('a Jump held the whole flight from anywhere on the footbridge crosses the far street', () => {
+    for (let x = bridge.x0; x <= bridge.x1; x += 10) {
+      const end = playEast(rooftops, { x: bridge.x0, z: bridge.top }, 2760, { jumpAt: x, holdMs: Number.POSITIVE_INFINITY });
+      expect(end.where, `a Jump held from ${x}: ${end.path.join(' ')}, then ${end.where} at ${end.x}`).not.toBe('fall');
+    }
+  });
+
+  it('keeps a bench on the footbridge, so a fall in the far street comes back to it', () => {
+    const benches = rooftops.course!.benches!.filter((b) => b.at.x > bridge.x0 && b.at.x < bridge.x1);
+    expect(benches).toHaveLength(1);
+    expect(benches[0]!.top).toBe(bridge.top);
+    const feather = rooftops.course!.feathers!.find((f) => f.id === 'feather-1')!;
+    expect(Math.abs(benches[0]!.at.x - feather.at.x)).toBeGreaterThanOrEqual(64);
+  });
+});
