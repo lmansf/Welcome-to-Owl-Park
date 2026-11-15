@@ -121,6 +121,8 @@ import {
   type ServerFrame,
   type ServerNest,
   type Wear,
+  VOTABLE_REALMS,
+  isVoteShares,
 } from '@owl-park/shared';
 import { accountsOn } from './accounts';
 import type { Collections } from './Collections';
@@ -130,7 +132,7 @@ import { loggerFor, moduleLog, runIdOf } from './logs';
 import type { Sighting } from './parkStats';
 import { LIMITS, Room, type Leaver, type Peer, type PositionRejection, type VisitorState } from './Room';
 import { ROOMS, isRoomId, publicCounts, roomCap, roomDef, spectatorLimit } from './rooms';
-import { COURSES } from '@owl-park/shared/rooms';
+import { COURSES, HALL_ROOM } from '@owl-park/shared/rooms';
 import { isCollectorId, signingSecret, verifyKeeper, verifyPass } from './pass';
 import { PartyHost, type StumpMark } from './partyHost';
 import type { Env } from './env';
@@ -896,6 +898,13 @@ export class RoomObject extends DurableObject<Env> {
       this.setNotice(body?.words, true);
       if (body?.realms !== undefined) this.setRealms(body.realms);
       if (body?.setup !== undefined) this.setSetup(body.setup);
+      return Response.json({ ok: true });
+    }
+    if (url.pathname === '/shares' && request.method === 'POST') {
+      // The Worker's word that a Realm Vote landed (OP-288): the Great Hollow's owls see the shares move on the info desk.
+      const body = (await request.json().catch(() => null)) as { month?: unknown; shares?: unknown } | null;
+      if (typeof body?.month !== 'string' || !isVoteShares(body.shares, VOTABLE_REALMS)) return Response.json({ error: 'bad request' }, { status: 400 });
+      this.rooms.get(HALL_ROOM.id)?.broadcast({ t: 'shares', month: body.month, shares: body.shares });
       return Response.json({ ok: true });
     }
     if (url.pathname === '/restart' && request.method === 'POST') {

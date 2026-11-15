@@ -118,6 +118,11 @@ test.describe('the stained-glass climb', () => {
     await expect(card(page).locator('[data-paid]')).toHaveText('+10 feathers this climb');
     await expect(card(page).locator('[data-item]')).toHaveText('The Glass Circlet is yours.');
     await expect(card(page).locator('[data-ref]')).toHaveText(/^Climb [0-9a-f]{8}$/);
+    // Play again leads, then one thing to try next (OP-379).
+    await expect(card(page).locator('.c-buttons button:visible')).toHaveText(['Play again', 'Close']);
+    await expect(card(page).locator('[data-again]')).toBeFocused();
+    await expect(card(page).locator('[data-next]')).toHaveText('Next: try a game in the arcade.');
+    await expect(card(page).locator('[data-ticket]')).toBeHidden();
     await expect.poll(() => feathers(page)).toBe(before + 10);
     await expect.poll(() => page.evaluate(() => window.owlPark.collection()?.owned.includes('glass-circlet~0') ?? false)).toBe(true);
     await card(page).locator('[data-done]').click();

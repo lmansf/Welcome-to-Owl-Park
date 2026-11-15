@@ -1,4 +1,5 @@
 import type { CoursePaid, ObjectiveKind } from '@owl-park/shared';
+import type { DeviceBest } from './resultCard';
 
 /**
  * Everything a parkour course says to its visitor (OP-224), in one place: drafts for the owner to
@@ -80,12 +81,17 @@ export function clearTime(ms: number): string {
 
 const feathersOf = (n: number) => `${n} feather${n === 1 ? '' : 's'}`;
 
-/** The finish shrine's line: the time, whether it is a best, and what it paid (a spectator's earns nothing). */
-export function clearLine(paid: CoursePaid, keep: string): string {
+/**
+ * The finish shrine's line: the time and this device's best first, then what it paid; a spectator's earns
+ * nothing, and its Day Ticket line comes last (OP-379). `device` is the best this device keeps for the
+ * course (resultCard.ts), when it keeps one.
+ */
+export function clearLine(paid: CoursePaid, keep: string, device?: DeviceBest): string {
   const time = `Course clear in ${clearTime(paid.ms)}`;
-  if (paid.practice) return `${time}! ${keep}`;
+  const mine = device && !device.first && device.best !== null ? (device.isNew ? ' (a new best)' : device.best < paid.ms ? `. Your best: ${clearTime(device.best)}` : '') : '';
+  if (paid.practice) return `${time}${mine}. ${keep}`;
   if (paid.first) return `${time}! +${feathersOf(paid.feathers)}${paid.item ? ' and a new item' : ''}.`;
-  const best = paid.best ? ' (a new best)' : '';
+  const best = paid.best ? ' (a new best)' : mine;
   if (paid.why === 'paid-today') return `${time}${best}. This course's feathers for today are paid.`;
   if (paid.why === 'capped' && paid.feathers === 0) return `${time}${best}. Games have paid all they can today.`;
   return `${time}${best}. +${feathersOf(paid.feathers)}.`;

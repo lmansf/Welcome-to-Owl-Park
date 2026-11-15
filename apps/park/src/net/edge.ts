@@ -4,6 +4,8 @@ import {
   HEARTBEAT_FRAME,
   HEARTBEAT_INTERVAL_MS,
   STUMP_ROOM,
+  VOTABLE_REALMS,
+  isVoteShares,
   isPartyRoom,
   parseServerFrame,
   positionAlongWalk,
@@ -459,6 +461,18 @@ export class EdgeTransport implements ParkTransport {
     });
   }
 
+  /** This month's Realm Vote shares (OP-288), as anyone may read them: percentages only. Null when the park cannot say. */
+  async voteShares(): Promise<{ month: string; shares: Record<string, number> } | null> {
+    try {
+      const res = await fetch(`${this.base}/api/vote/shares`);
+      if (!res.ok) return null;
+      const body = (await res.json()) as { month?: unknown; shares?: unknown };
+      return typeof body.month === 'string' && isVoteShares(body.shares, VOTABLE_REALMS) ? { month: body.month, shares: body.shares } : null;
+    } catch {
+      return null;
+    }
+  }
+
   /** Feedback for the park's keepers, sent with this visitor's pass. */
   feedback(draft: FeedbackDraft): Promise<Response> {
     return this.api('/api/feedback', { method: 'POST', body: JSON.stringify(draft) });
@@ -518,6 +532,16 @@ export class EdgeTransport implements ParkTransport {
     const waiters = new Map<number, { resolve: (f: Answer | null) => void; timer: ReturnType<typeof setTimeout> }>();
     let lastR = 0;
     const readyWaiters: Array<(ok: boolean) => void> = [];
+    /**
+     * The room's socket is down and not yet back (OP-406, OP-407): a request made meanwhile is answered at
+     * once as offline, so the scene says why nothing happened instead of waiting out the reply time in silence.
+     */
+    let down = false;
+    const goneDown = () => {
+      down = true;
+      handlers.onStatus('offline');
+      for (const ready of readyWaiters.splice(0)) ready(false);
+    };
 
     const toLocalWalk = (w: { from: Vec2; to: Vec2; at: number; dash?: true }): Walk => ({ from: w.from, to: w.to, startedAt: w.at - offset + RENDER_DELAY_MS, ...(w.dash ? { dash: true as const } : {}) });
     /** A time on the room's clock as remote owls are drawn on this page's (an air state's, OP-084). */
@@ -666,6 +690,7 @@ export class EdgeTransport implements ParkTransport {
           if (f.realms) handlers.onRealms?.(f.realms);
           // Spectators (OP-191): every welcome says whether this owl walks the park as one.
           handlers.onSpectator?.(f.spectator === true);
+          down = false;
           handlers.onStatus('online');
           for (const ready of readyWaiters.splice(0)) ready(true);
           // This page speaks the room's protocol: a later version change may reload it again.
@@ -766,6 +791,9 @@ export class EdgeTransport implements ParkTransport {
         case 'realms':
           handlers.onRealms?.(f.realms);
           break;
+        case 'shares':
+          handlers.onShares?.(f.month, f.shares);
+          break;
         case 'stump':
           // The Old Stump's seats (OP-314): an answer and a push alike; times are none.
           handlers.onStump?.(f);
@@ -816,7 +844,7 @@ export class EdgeTransport implements ParkTransport {
     /** Resolves true once the server has welcomed us (the scene asks for its quests right after joining). */
     const whenWelcomed = (): Promise<boolean> => {
       if (isOpen()) return Promise.resolve(true);
-      if (closed) return Promise.resolve(false);
+      if (closed || down) return Promise.resolve(false);
       return new Promise((resolve) => {
         const done = (ok: boolean) => {
           clearTimeout(timer);
@@ -1027,7 +1055,7 @@ export class EdgeTransport implements ParkTransport {
       try {
         pass = await this.getPass(forcePass);
       } catch (e) {
-        handlers.onStatus('offline');
+        goneDown();
         // The owl is on another screen: the page shows the moved card, and nothing reconnects.
         if (!(e instanceof MovedError)) scheduleReconnect();
         return;
@@ -1044,6 +1072,7 @@ export class EdgeTransport implements ParkTransport {
       ws = socket;
       socket.onopen = () => {
         opened = true;
+        down = false; // requests wait for the welcome again
         lastRx = Date.now();
         const hello: ClientFrame = { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: current.look };
         if (spawn) hello.spawn = spawn;
@@ -1080,7 +1109,7 @@ export class EdgeTransport implements ParkTransport {
         if (ev.code === CLOSE.MOVED) {
           // Restored on another screen (OP-139): the page shows the moved card, and nothing reconnects.
           this.markMoved();
-          handlers.onStatus('offline');
+          goneDown();
           return;
         }
         if (ev.code === CLOSE.RESTART) {
@@ -1089,7 +1118,7 @@ export class EdgeTransport implements ParkTransport {
           this.pass = null;
           this.ticketId = null;
           handlers.onRestart?.();
-          handlers.onStatus('offline');
+          goneDown();
           return;
         }
         if (ev.code === CLOSE.TICKET_ENDED) {
@@ -1098,24 +1127,24 @@ export class EdgeTransport implements ParkTransport {
           this.pass = null;
           this.ticketId = null;
           handlers.onTicketEnded?.();
-          handlers.onStatus('offline');
+          goneDown();
           return;
         }
         if (ev.code === CLOSE.SETUP) {
           // Closed for setup (OP-205): home, where the closed card shows the keepers' words. Nothing
           // reconnects; Play tries again, and the room says so again until the park opens.
           handlers.onSetup?.(setupSign ?? '');
-          handlers.onStatus('offline');
+          goneDown();
           return;
         }
         if (ev.code === CLOSE.QUEUED) {
           // The scene leaves for the line first, so going offline here tells nobody the park could not connect.
           handlers.onQueued?.();
-          handlers.onStatus('offline');
+          goneDown();
           return; // it waits in the line on the home screen
         }
         if (ev.code === CLOSE.ROOM_FULL || ev.code === CLOSE.REPLACED || ev.code === CLOSE.NOT_ADMITTED || ev.code === CLOSE.NEST_CLOSED || ev.code === CLOSE.REALM_CLOSED || ev.code === CLOSE.NOT_THROUGH_GATE || ev.code === CLOSE.PARTY_CLOSED) {
-          handlers.onStatus('offline');
+          goneDown();
           return; // the scene decides what to do; no reconnect loop
         }
         if (ev.code === CLOSE.BAD_PROTOCOL && !welcomed) {
@@ -1132,7 +1161,7 @@ export class EdgeTransport implements ParkTransport {
             return;
           }
         }
-        handlers.onStatus('offline');
+        goneDown();
         // A refused handshake (bad pass, too many connections) surfaces as 1006 before open:
         // fetch a fresh pass for the next attempt rather than retrying a rejected one for hours.
         if (ev.code === CLOSE.BAD_PASS || !opened) this.pass = null;

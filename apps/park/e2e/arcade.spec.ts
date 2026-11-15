@@ -334,4 +334,48 @@ test.describe('the arcade (this device)', () => {
     await expect(page.locator('.arcade-layer')).toBeHidden();
     expect((await state(page)).room).toBe('arcade');
   });
+
+  test('a run’s card leads with the score and the best on this device, then Play again, then the next game; an empty board invites the first score (OP-379)', async ({ page }) => {
+    await intoArcade(page, `e2e-return-${test.info().project.name}`);
+    // No score on the wall yet today: every column invites the first one, and so does the game's header.
+    await expect.poll(async () => (await state(page)).wall?.shown.filter((l) => l === 'Be the first!').length ?? 0).toBe(3);
+    await playAt(page, 'flight');
+    await expect(page.locator('.arcade header [data-sub]')).toHaveText('No scores yet today. Be the first!');
+    await flyThrough(page, 1);
+    await untilOver(page);
+    const score = (await run(page))!.score;
+    expect(score).toBeGreaterThan(0);
+    const card = page.locator('.arcade [data-result]');
+    await expect(card).toBeVisible();
+    await expect(card.locator('[data-new]')).toHaveText('New best!');
+    await expect(card.locator('[data-best]')).toHaveText(`Your best ${score}`);
+    await expect(card.locator('.a-buttons button:visible')).toHaveText(['Play again', 'Close']);
+    await expect(card.locator('[data-next]')).toHaveText('Next: try Talon Toss at the next cabinet.');
+    await expect(card.locator('[data-ticket]')).toBeHidden();
+    // Top to bottom on the screen: the score, the best, Play again, then what to try next; all of it on the screen, phone too.
+    const tops = await card.evaluate((el) =>
+      ['[data-line]', '[data-best]', '[data-again]', '[data-next]'].map((sel) => {
+        const r = el.querySelector(sel)!.getBoundingClientRect();
+        return { top: r.top, bottom: r.bottom };
+      }),
+    );
+    for (let i = 1; i < tops.length; i++) expect(tops[i]!.top, `row ${i} below row ${i - 1}`).toBeGreaterThanOrEqual(tops[i - 1]!.bottom - 1);
+    expect(tops.at(-1)!.bottom).toBeLessThanOrEqual(page.viewportSize()!.height);
+    await expect(card.locator('[data-again]')).toBeFocused();
+    await page.screenshot({ path: `e2e-screenshots/result-card-${test.info().project.name}.png` });
+    // A short run (one flap, then down): the card shows the best kept on this device, and a new best only if it beat it.
+    await card.locator('[data-again]').click();
+    await expect(card).toBeHidden();
+    await expect.poll(async () => (await run(page))?.over).toBe(false);
+    await page.locator('.arcade [data-stage]').dispatchEvent('pointerdown');
+    await untilOver(page);
+    await expect(card).toBeVisible();
+    const second = (await run(page))!.score;
+    await expect(card.locator('[data-new]')).toHaveText(second > score ? 'New best!' : '');
+    await expect(card.locator('[data-best]')).toHaveText(`Your best ${Math.max(score, second)}`);
+    // Back in the arcade: Moon Flap's column has its score now; the other two still invite the first.
+    await card.locator('[data-done]').click();
+    await expect(page.locator('.arcade-layer')).toBeHidden();
+    await expect.poll(async () => (await state(page)).wall?.shown.filter((l) => l === 'Be the first!').length ?? 0).toBe(2);
+  });
 });

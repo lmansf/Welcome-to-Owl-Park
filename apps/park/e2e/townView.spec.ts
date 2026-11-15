@@ -208,7 +208,7 @@ test.describe('the Great Hollow’s camera rests the same however the owl came b
  * through a doorway into play is named neither, as before.
  */
 test.describe('a new owl is named two places to play in the Great Hollow (OP-370)', () => {
-  const WAYS: Record<string, string> = { down: 'Down to the arcade', 'course-grove': 'Updraft Canopy' };
+  const WAYS: Record<string, string> = { down: 'Down to Neon Roost, the arcade', 'course-grove': 'Updraft Canopy' };
 
   /** The chips with words at the screen's edge: whose doorway, what they say and where they stand. */
   const chips = (page: Page) =>

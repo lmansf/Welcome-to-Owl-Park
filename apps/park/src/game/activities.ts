@@ -44,6 +44,7 @@ import { LanternGlows } from './Lanterns';
 import type { Owl } from './Owl';
 import { QuizPlates } from './QuizStage';
 import { symbolTexture } from './symbols';
+import { ROOM_DOWN } from './roomDown';
 
 /** What the activities need of the room scene. */
 export interface ActivityHost {
@@ -207,7 +208,11 @@ export class ActivityLayer {
   /** One request at a time; nothing once the scene has moved on. */
   private async ask<T>(fn: (link: ActivityLink) => Promise<T>): Promise<T | null> {
     const link = this.link;
-    if (!link || this.busy || this.dead) return null;
+    if (this.busy || this.dead) return null;
+    if (!link) {
+      this.host.hud.toast(ROOM_DOWN, 3200);
+      return null;
+    }
     this.busy = true;
     try {
       const res = await fn(link);
@@ -218,8 +223,8 @@ export class ActivityLayer {
   }
 
   private refused(reason: ActRefusal, lines: Partial<Record<ActRefusal, string>>): void {
-    const line = lines[reason] ?? (reason === 'offline' || reason === 'unknown' ? 'The park did not catch that. Try again in a moment.' : null);
-    if (line) this.host.hud.toast(line, 3000);
+    const line = lines[reason] ?? (reason === 'offline' ? ROOM_DOWN : reason === 'unknown' ? 'The park did not catch that. Try again in a moment.' : null);
+    if (line) this.host.hud.toast(line, reason === 'offline' ? 3200 : 3000);
   }
 
   // ---------- the lanterns ----------

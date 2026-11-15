@@ -2,6 +2,7 @@ import { BAND_COUNT, BAND_NAMES, type ClimbInput, type ClimbTier } from '@owl-pa
 import type { PreviewRect } from '../game/BuilderScene';
 import { createJoystick, type Joystick } from './joystick';
 import { createModal } from './modal';
+import { CLIMB_NEXT } from './resultCard';
 import { SPECTATOR_WORDS } from './spectator';
 import { releaseOnTyping, typingInField } from './typing';
 
@@ -48,7 +49,7 @@ export interface ClimbResultView {
   note?: string;
   /**
    * A spectator's climb (OP-191): what it would have earned with a Day Ticket, and the Get a Day Ticket
-   * button, then Play again.
+   * button, below Play again and what to try next (OP-379).
    */
   offer?: { line: string; get: () => void };
 }
@@ -58,7 +59,7 @@ export interface ClimbHandlers {
   frame(rect: PreviewRect | null): void;
   /** Start (or carry on with) the climb from its card. */
   start(): void;
-  /** A spectator's Play again on the result card (OP-191): a new climb from the portal. */
+  /** Play again on the result card (OP-191, OP-379): a new climb from the portal. */
   again?(): void;
 }
 
@@ -116,7 +117,10 @@ const CSS = `
 #hud .climb .c-card div:empty{display:none}
 #hud .climb .c-buttons{display:flex;flex-wrap:wrap;justify-content:center;gap:10px}
 #hud .climb .c-offer{font-size:15px;font-weight:700;color:#FFD36A}
-#hud .climb .c-buttons button[hidden]{display:none}
+#hud .climb .c-next{font-size:14px;opacity:.9}
+#hud .climb .c-buttons button[hidden],#hud .climb .c-ticket[hidden],#hud .climb .c-ticket button[hidden]{display:none}
+#hud .climb .c-ticket{display:flex;flex-direction:column;align-items:center;gap:8px;width:100%;padding-top:10px;border-top:1px solid rgba(246,241,227,.15)}
+#hud .climb .c-ticket button{min-height:44px;padding:8px 22px}
 #hud .climb .c-buttons button{min-height:44px;padding:8px 22px}
 `;
 
@@ -174,8 +178,9 @@ export function createClimbScreen(root: HTMLElement): ClimbScreen {
         <div class="c-item" data-item></div>
         <div class="c-ref" data-ref></div>
         <div class="c-note" data-note></div>
-        <div class="c-offer" data-offer></div>
-        <div class="c-buttons"><button data-spectator-get="climb" hidden></button><button data-again hidden></button><button data-done>Close</button></div>
+        <div class="c-buttons"><button data-again hidden></button><button class="ghost" data-done>Close</button></div>
+        <div class="c-next" data-next></div>
+        <div class="c-ticket" data-ticket hidden><div class="c-offer" data-offer></div><button class="ghost" data-spectator-get="climb" hidden></button></div>
       </div>
     </div>`;
   const $ = <T extends Element>(sel: string) => box.querySelector(sel) as T;
@@ -430,17 +435,20 @@ export function createClimbScreen(root: HTMLElement): ClimbScreen {
       $<HTMLElement>('[data-item]').textContent = r.item ?? '';
       $<HTMLElement>('[data-ref]').textContent = r.ref ? `Climb ${r.ref}` : '';
       $<HTMLElement>('[data-note]').textContent = r.note ?? '';
+      // Play again leads, then one thing to try next; a spectator's Day Ticket line comes last, under them (OP-379).
+      againBtn.hidden = !handlers?.again;
+      $<HTMLElement>('[data-next]').textContent = CLIMB_NEXT;
       $<HTMLElement>('[data-offer]').textContent = r.offer?.line ?? '';
       offerGet = r.offer?.get ?? null;
       getBtn.hidden = !r.offer;
-      againBtn.hidden = !r.offer || !handlers?.again;
+      $<HTMLElement>('[data-ticket]').hidden = !r.offer;
       bandEl.textContent = '';
       hintEl.textContent = '';
       playing = false;
       box.classList.remove('playing');
       release();
       resultCard.classList.add('show');
-      requestAnimationFrame(() => (r.offer ? getBtn : $<HTMLButtonElement>('[data-done]')).focus({ preventScroll: true }));
+      requestAnimationFrame(() => (againBtn.hidden ? $<HTMLButtonElement>('[data-done]') : againBtn).focus({ preventScroll: true }));
     },
     close: () => modal.close(),
     isOpen: () => modal.isOpen(),

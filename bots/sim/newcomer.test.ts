@@ -235,3 +235,56 @@ describe('the Updraft Canopy’s first screen, as a newcomer plays it (OP-361)',
     expect(bench.top).toBe(f2.top);
   });
 });
+
+/**
+ * The ink course's second screen, the river in the rain (OP-361). A newcomer comes to it having been
+ * taught, over ground on the first screen, the jump, the full jump and the held Jump (with rising air
+ * at each cliff). Before this was laid again the end of the third bridge (k8's, under the temple eave)
+ * asked for something never taught: the rock r2 stands 220 up past the mooring post, and of every
+ * press from the bridge's last strides, a tap to a Jump held the whole flight, not one came down on
+ * it (a jump and a flap a third of a second after it, or a dash, was the only way). Now rising air
+ * stands over the post, as it does by the first rock, and a held Jump rides it onto r2 and its bench.
+ */
+describe('the ink course’s second screen, as a newcomer plays it (OP-361)', () => {
+  const river = ROOMS['brush-2']!;
+  const ledge = (id: string) => (river.kit!.ledges ?? []).find((l) => l.id === id)!;
+  const across = (stone: string, past: readonly string[]) => (play: Play) => {
+    const s = ledge(stone);
+    const end = playEast(river, { x: (s.x0 + s.x1) / 2, z: s.top }, 4700, play);
+    return { end, over: end.path.some((id) => past.includes(id)) };
+  };
+  /** The bridge each stone paints runs 480 east of it. */
+  const bridgeEnd = (stone: string) => ledge(stone).x1 + 480;
+
+  it('at the end of the first bridge, a Jump held from its last strides rides the rising air by the first rock across', () => {
+    const play = across('k6', ['r1', 'k7', 'k7~']);
+    for (let x = bridgeEnd('k6') - 240; x <= bridgeEnd('k6'); x += 20) {
+      expect(play({ jumpAt: x, holdMs: Number.POSITIVE_INFINITY }).over, `a Jump held from ${x}`).toBe(true);
+    }
+  });
+
+  it('at the end of the third bridge, a Jump held from its last strides rides the rising air over the mooring post onto r2, by its bench', () => {
+    const play = across('k8', ['post', 'r2']);
+    for (let x = bridgeEnd('k8') - 240; x <= bridgeEnd('k8'); x += 20) {
+      const { end, over } = play({ jumpAt: x, holdMs: Number.POSITIVE_INFINITY });
+      expect(over, `a Jump held from ${x}: ${end.path.join(' ')}, then ${end.where} at ${end.x}`).toBe(true);
+      expect(end.path, `a Jump held from ${x}`).toContain('r2');
+    }
+    const bench = river.course!.benches!.find((b) => b.id === 'bench-2c')!;
+    expect(bench.at.x).toBeGreaterThan(ledge('r2').x0);
+    expect(bench.at.x).toBeLessThan(ledge('r2').x1);
+  });
+
+  it('the rising air over the post tops out under the post’s lost feather, a flap from it, and lifts no owl past r2', () => {
+    const lift = (river.updrafts ?? []).find((u) => u.id === 'post-lift')!;
+    const post = ledge('post');
+    const r2 = ledge('r2');
+    const feather = river.course!.feathers!.find((f) => f.id === 'feather-4')!;
+    expect(lift.x).toBeGreaterThanOrEqual(bridgeEnd('k8'));
+    expect(lift.x + lift.w).toBeLessThanOrEqual(r2.x0);
+    expect(lift.top).toBeGreaterThan(r2.top);
+    expect(lift.top).toBeLessThan(post.top);
+    expect((feather.top ?? 0) - lift.top).toBe(post.top - lift.top);
+    expect(post.top - lift.top).toBeLessThanOrEqual(60);
+  });
+});

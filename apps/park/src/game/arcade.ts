@@ -30,11 +30,13 @@ import { KnockGame, MAX_PULL, loadPhysics } from '../arcade/knock';
 import type { ActivityLink } from '../collect/service';
 import type { ArcadeInput } from '../ui/arcadeScreen';
 import type { Hud } from '../ui/hud';
+import { EMPTY_BOARD, arcadeNextLine, pageStore, recordDeviceBest } from '../ui/resultCard';
 import { arcadeWouldEarn, endOfGameLine } from '../ui/spectator';
 import { ARCADE_INK } from './arcadeInk';
 import type { ArcadeScene, ArcadeSim } from './ArcadeScene';
 import { sceneReady } from './lazyScenes';
 import type { PreviewRect } from './BuilderScene';
+import { ROOM_DOWN } from './roomDown';
 
 /** A box on the arcade's painting, in room pixels. */
 interface Box {
@@ -207,6 +209,8 @@ export function drawPortrait(g: Phaser.GameObjects.Graphics, x: number, y: numbe
 export class Arcade {
   private readonly walls = new Map<ArcadeGame, GameWall>();
   private mine: OwnBests = {};
+  /** Every line the wall draws as it stands, for tests (its canvas text cannot be read off the page). */
+  private wallShown: string[] = [];
   private readonly wallLayer: Phaser.GameObjects.Container;
   private readonly portraits: Phaser.GameObjects.Graphics;
   private run: Run | null = null;
@@ -271,7 +275,9 @@ export class Arcade {
     for (const child of [...this.wallLayer.list]) if (child !== this.portraits) child.destroy();
     this.portraits.clear();
     const col = BOARD_W / ARCADE_GAMES.length;
+    this.wallShown = [];
     const text = (x: number, y: number, s: string, size: number, color: string, alpha = 1) => {
+      this.wallShown.push(s);
       const t = scene.add.text(x, y, s, { fontFamily: FONT, fontSize: `${size}px`, fontStyle: '700', color, resolution: 2 }).setOrigin(0.5).setAlpha(alpha);
       this.wallLayer.add(t);
       return t;
@@ -283,7 +289,12 @@ export class Arcade {
       text(cx, 20, GAMES[game].name, 18, art.ink).setShadow(0, 0, art.glow, 8, false, true);
       text(cx, 42, "Today's best", 12, '#F6F1E3', 0.75);
       const top = this.walls.get(game)?.top ?? [];
-      for (let k = 0; k < WALL_SIZE; k++) {
+      // A column with no score yet today invites the first one, in place of its first two rows (OP-379).
+      if (top.length === 0) {
+        text(cx, 68, EMPTY_BOARD.title, 12, '#F6F1E3', 0.85);
+        text(cx, 94, EMPTY_BOARD.call, 17, art.ink).setShadow(0, 0, art.glow, 8, false, true);
+      }
+      for (let k = top.length === 0 ? 2 : 0; k < WALL_SIZE; k++) {
         const y = 68 + k * 26;
         const e = top[k];
         if (!e) {
@@ -301,7 +312,8 @@ export class Arcade {
   /** Play at a cabinet: the room starts a run, the HUD's arcade screen opens, and the game begins. */
   async play(game: ArcadeGame): Promise<void> {
     const acts = this.host.acts();
-    if (!acts || this.destroyed) return;
+    if (this.destroyed) return;
+    if (!acts) return void this.host.hud.toast(ROOM_DOWN);
     const physics = game === 'sling' ? loadPhysics().catch(() => null) : null;
     // The games' scene, fetched alongside the room's answer the first time (OP-204).
     const scene = sceneReady(this.host.scene.scene, 'arcade').then(
@@ -311,7 +323,7 @@ export class Arcade {
     const reply = await acts.run(game);
     if (this.destroyed) return;
     if (!reply.ok) {
-      const line = reply.reason === 'far' ? 'Stand at the cabinet to play.' : reply.reason === 'unknown' ? CABINET_OFF : 'The park did not catch that. Try again in a moment.';
+      const line = reply.reason === 'far' ? 'Stand at the cabinet to play.' : reply.reason === 'unknown' ? CABINET_OFF : reply.reason === 'offline' ? ROOM_DOWN : 'The park did not catch that. Try again in a moment.';
       this.host.hud.toast(line);
       this.host.hud.closeArcade();
       return;
@@ -436,8 +448,12 @@ export class Arcade {
     const line = sim.overLine();
     const reply = await this.host.acts()?.score(result, run.seed);
     if (this.destroyed || this.run !== run) return;
+    // The best on this device leads the card with the score, and one game to try next follows Play again (OP-379).
+    const mine = recordDeviceBest(pageStore(), `arcade:${game}`, sim.score);
+    const best = (park: number | undefined) => (park === undefined ? mine.best : Math.max(park, mine.best ?? park));
+    const next = arcadeNextLine(game);
     if (!reply?.ok) {
-      this.host.hud.arcadeResult({ line, feathers: null, newBest: false, best: this.mine[game] ?? null, note: 'The park did not catch that run.' });
+      this.host.hud.arcadeResult({ line, feathers: null, newBest: mine.isNew, best: best(this.mine[game]), next, note: 'The park did not catch that run.' });
       return;
     }
     const paid = reply.paid;
@@ -446,15 +462,16 @@ export class Arcade {
     if (paid.practice) {
       // A spectator's run (OP-191): it paid nothing; what it would have with a Day Ticket, and the offer before Play again.
       const offer = endOfGameLine(arcadeWouldEarn(game, paid.score));
-      this.host.hud.arcadeResult({ line, feathers: null, newBest: false, best: paid.mine[game] ?? null, offer: { line: offer, get: () => this.host.offerTicket(offer) } });
+      this.host.hud.arcadeResult({ line, feathers: null, newBest: mine.isNew, best: best(paid.mine[game]), next, offer: { line: offer, get: () => this.host.offerTicket(offer) } });
       return;
     }
     const capped = paid.added < runFeathers(game, paid.score);
     this.host.hud.arcadeResult({
       line,
       feathers: paid.added,
-      newBest: paid.best,
-      best: paid.mine[game] ?? null,
+      newBest: paid.best || mine.isNew,
+      best: best(paid.mine[game]),
+      next,
       ...(capped ? { note: 'No more feathers from games today.' } : {}),
     });
   }
@@ -466,8 +483,8 @@ export class Arcade {
   }
 
   /** The wall as it stands, for tests. */
-  wall(): { walls: GameWall[]; mine: OwnBests } {
-    return { walls: ARCADE_GAMES.map((g) => this.walls.get(g)!), mine: { ...this.mine } };
+  wall(): { walls: GameWall[]; mine: OwnBests; shown: string[] } {
+    return { walls: ARCADE_GAMES.map((g) => this.walls.get(g)!), mine: { ...this.mine }, shown: [...this.wallShown] };
   }
 
   destroy(): void {

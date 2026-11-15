@@ -269,7 +269,7 @@ More hops, and notes on the ones above:
 | hop | rise | gap | needs | reach | note |
 | --- | ---: | ---: | --- | ---: | --- |
 | `k6~` (from x 1000) to `r1` | 300 | 280 | T2b | 377 | jump off at x 1000, about 1.2 s after landing on k6, inside the 2 s, and flap twice |
-| `k8~` to `post` | 340 | 120 | T2b | 276 | both flaps off the bridge's end; the post stands in the river past it, and every way on to `r2` goes over it |
+| `k8~` to `post` | 340 | 120 | T2b | 276 | both flaps off the bridge's end; the post stands in the river past it, and every way on to `r2` goes over it. Since OP-361 the rising air over the post (`post-lift`, x 2860 to 3040, top 300) carries a Jump held from the bridge's end onto `r2` (section 11) |
 | `k9~` (from x 3800) to `k10` | 340 | 240 | T2b | 276 | jump off at x 3800, about 1.6 s along the bridge, inside the 2 s, and flap twice |
 | `k10~` to `dock-e` | -540 | 0 | T1 | 210 | walk on through the dry band past the falls and drop to the dock |
 | `dock-e` to `kE` | 60 | 0 | T1 | 125 | the raft run: off the raft, up the treads to the falls |
@@ -704,3 +704,28 @@ stand on ledges too.
 
 The README's shared rules (four benches, one dash-only gap) still hold for the other courses; this
 course keeps a dash gap that a careful jump can also make.
+
+## 11. The newcomer's second screen (OP-361, Nov 14)
+
+The question asked of the first screen in OP-360, asked of the river in the rain: does each crossing
+take a play a newcomer makes (the stick held east, Jump pressed once where the bridge ends, a tap or
+held the whole flight), or else only what the first screen taught over ground? The first screen
+teaches the jump, the full jump and the held Jump with rising air at each cliff. It teaches no flap
+and no dash.
+
+Measured with the newcomer bot (`bots/sim/newcomer.ts`, the game's own flight), from standing on each
+stone, Jump pressed anywhere in the bridge's last 240 px with every hold:
+
+| crossing | before | after | what changed |
+| --- | --- | --- | --- |
+| end of k6's bridge, on to `r1` or past it | a Jump held the whole flight crosses on `river-lift`, from every point; shorter holds are the river | the same | nothing: it asks the held Jump the first screen taught |
+| end of k8's bridge, on to `r2` | no press crosses (0 of 71 one-press plays); it took a jump and a flap about a third of a second after it, or a dash | a Jump held the whole flight lands on `r2`, by bench 2c, from every point | `post-lift`, rising air over the mooring post (x 2860 to 3040, top 300: 40 over `r2`, 40 under the post and its feather) |
+
+**What it opens.** The column stands in reach of a glide from k8's stone and the porch, as any help
+at the bridge's end must (the bridge is 480 long, and a jump with both flaps glides further). So an
+owl that flies well, a jump and both flaps then a held glide, can now cross the gap past k8 without
+its bridge; before, a few such plays and a well-timed dash already did. The route check counts it as
+the hardest tier (3): for an owl that does not fly well yet the bridges are still the way.
+
+**Not measured yet.** Updraft Canopy and Blackout Circuit past its first breaker: their ways go over
+ledges above the floor, and the newcomer bot only presses Jump where the ground ends.

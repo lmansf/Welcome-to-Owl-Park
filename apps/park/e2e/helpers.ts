@@ -91,6 +91,8 @@ export interface ParkState {
     alpha: number;
     boxes: Array<{ x: number; y: number; w: number; h: number }>;
   } | null;
+  /** The vote desk in the Great Hollow (OP-288): null on any address without `?desk=1`. */
+  desk: { at: { x: number; y: number }; month: string | null; shares: Record<string, number> | null; lines: string[] } | null;
   /** The sounds played for the visitor's own owl on this page, the newest last (OP-350). */
   sounds: string[];
   /** The side camera (OP-351): its lead (room px, to the right is positive), the height it holds and where it looks; null in a room seen from above. */
@@ -132,7 +134,7 @@ export interface ParkState {
     quiz: { n: number; right: 'a' | 'b' | 'c'; revealAt: number } | null;
   } | null;
   /** In the arcade: the score wall as the page shows it. */
-  wall: { walls: Array<{ game: string; top: Array<{ score: number; look: { body: string; belly: string; accent: string; species?: string } }> }>; mine: Record<string, number> } | null;
+  wall: { walls: Array<{ game: string; top: Array<{ score: number; look: { body: string; belly: string; accent: string; species?: string } }> }>; mine: Record<string, number>; shown: string[] } | null;
   street: Array<{ kind: 'own'; nestId: string | null } | { kind: 'nest'; nestId: string; look: { body: string; belly: string; accent: string } | null } | { kind: 'empty' }> | null;
   nest: { id: string; mine: boolean; open: boolean; layout: Record<string, string>; drawn: Record<string, string>; owned: string[]; gift: { taken: boolean } | null; decorating: boolean; spot: string } | null;
   /** In a nest, its mirror: where it stands, and while Your owl is open at it, the stage the room's camera draws in (CSS pixels). */
