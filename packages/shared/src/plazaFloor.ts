@@ -10,6 +10,10 @@
  *
  * The things to use are interactables (interactables.ts), each drawn from its kit art (`piece`); the
  * stumps and logs are solid perches with their art as the room's pieces; the rest is the room's pieces.
+ *
+ * One story per room (OP-416): a room keeps at most two scenes, built from its own realm's pieces, no
+ * piece stands in more than two rooms, and where the painting already has the thing (a fountain, a
+ * pond, a ring of mushrooms) the painted one is the thing to use (PAINTED_THINGS) instead of a sticker.
  */
 import type { InteractableDef } from './interactables';
 import type { Perch } from './perches';
@@ -57,9 +61,11 @@ export interface FloorThing {
   /** Its art's foot (room px); the owl stands FLOOR_THING_STAND in front of it to use it. */
   x: number;
   y: number;
-  /** Other art than the kind's own (the pale mushrooms). */
+  /** Other art than the kind's own (the pale mushrooms, the ink garden's pond edge). */
   piece?: string;
   flip?: true;
+  /** The action button's words where the kind's would be wrong (a pond is not a bird bath). */
+  label?: string;
 }
 
 export interface FloorCluster {
@@ -76,39 +82,24 @@ export interface FloorCluster {
 }
 
 export const PLAZA_CLUSTERS: readonly FloorCluster[] = [
-  // The Treetop Commons, on either side of its ring, clear of the walk from the street of nests to the turnstiles.
-  {
-    id: 'lobby-bath',
-    room: 'lobby',
-    story: 'A bird bath under a potted tree, where owls waiting for the turnstiles splash, and a log beside it to dry off on.',
-    decor: [{ key: 'kit-entrance-planter-tree', x: 520, y: 1010 }],
-    things: [{ kind: 'bird-bath', x: 700, y: 1040 }],
-    perches: [{ kind: 'log', x: 880, y: 1080 }],
-  },
+  // The Treetop Commons: east of its ring, by the turnstiles. The fountain is the painting's own (PAINTED_THINGS).
   {
     id: 'lobby-stars',
     room: 'lobby',
-    story: 'A brass telescope aimed at the stars over the tree, a stump to stand on for a better look, and a lost button glinting nearby.',
+    story: 'A brass telescope aimed at the moon over the gate, a stump to stand on for a better look, and a lost button glinting nearby.',
     things: [
       { kind: 'telescope', x: 2560, y: 1040 },
       { kind: 'shiny', x: 2680, y: 1068 },
     ],
     perches: [{ kind: 'stump', x: 2400, y: 1070 }],
   },
-  // The arcade hall: by the doorway, between its two rings, and at its far end.
-  {
-    id: 'arcade-skylight',
-    room: 'arcade',
-    story: 'A coin telescope by the door, pointed up through the skylight, for a look at the moon before a game.',
-    things: [{ kind: 'telescope', x: 520, y: 1090 }],
-  },
+  // The arcade hall, under the roots: between its two rings and at its far end.
   {
     id: 'arcade-token',
     room: 'arcade',
-    story: 'A token rolled out from under the vending machine and lies glinting on the wet tiles, by a bench to wait for a turn on.',
+    story: 'A token rolled out from under the vending machine and lies glinting on the wet tiles.',
     decor: [{ key: 'kit-neon-vending-machine', x: 2150, y: 1000 }],
     things: [{ kind: 'shiny', x: 2060, y: 1060 }],
-    perches: [{ kind: 'bench', x: 2300, y: 1060 }],
   },
   {
     id: 'arcade-crack',
@@ -138,10 +129,9 @@ export const PLAZA_CLUSTERS: readonly FloorCluster[] = [
   {
     id: 'market-coin',
     room: 'market',
-    story: 'A coin rolled away from the stalls and came to rest by a rain barrel, glinting in a puddle, with a bench to wait out the rain.',
+    story: 'A coin rolled away from the stalls and came to rest by a rain barrel, glinting in a puddle.',
     decor: [{ key: 'kit-ground-water-barrel', x: 1500, y: 1020 }],
     things: [{ kind: 'shiny', x: 1590, y: 1070 }],
-    perches: [{ kind: 'bench', x: 1780, y: 1060 }],
   },
   {
     id: 'market-planter',
@@ -150,7 +140,7 @@ export const PLAZA_CLUSTERS: readonly FloorCluster[] = [
     decor: [{ key: 'kit-neon-rooftop-garden', x: 3010, y: 1000 }],
     things: [{ kind: 'mushroom', x: 2950, y: 1080, piece: PALE_MUSHROOMS }],
   },
-  // The glass street: either side of its ring, and in the middle of its front.
+  // The glass street: west of its ring, and in the middle of its front.
   {
     id: 'glass-bath',
     room: 'glass',
@@ -159,61 +149,33 @@ export const PLAZA_CLUSTERS: readonly FloorCluster[] = [
     things: [{ kind: 'bird-bath', x: 240, y: 1300 }],
   },
   {
-    id: 'glass-vane',
-    room: 'glass',
-    story: 'A telescope by the feather weathervane, for owls who want to see which way the wind will blow them next.',
-    decor: [{ key: 'kit-glass-weathervane', x: 1470, y: 1290 }],
-    things: [{ kind: 'telescope', x: 1330, y: 1250 }],
-  },
-  {
     id: 'glass-chip',
     room: 'glass',
     story: 'A chip of coloured glass, fallen from the windows high above, glints in the middle of the street.',
     things: [{ kind: 'shiny', x: 800, y: 1560 }],
   },
-  // The ink garden (OP-402): either side of its ring, and at its front.
+  // The ink garden (OP-402): either side of its ring. The pond's edge is the water to splash in.
   {
     id: 'ink-pond',
     room: 'ink',
-    story: 'A bird bath at the edge of a still pond, its water as grey as fresh ink.',
-    decor: [{ key: 'kit-ink-pond-edge', x: 1000, y: 1260 }],
-    things: [{ kind: 'bird-bath', x: 760, y: 1270 }],
+    story: 'A still pond, its water as grey as fresh ink, shallow enough at the stones for an owl to splash in.',
+    things: [{ kind: 'bird-bath', x: 1000, y: 1260, piece: 'kit-ink-pond-edge', label: 'Splash in the pond' }],
   },
   {
     id: 'ink-heron',
     room: 'ink',
-    story: 'A telescope beside the ink heron, pointed at the misty hills painted on the far wall.',
+    story: 'The ink heron stands fishing, and a drop of fresh ink, still wet from its brush, glints on the stones beside it.',
     decor: [{ key: 'kit-landmark-heron-ink', x: 2880, y: 1250 }],
-    things: [{ kind: 'telescope', x: 2700, y: 1260 }],
+    things: [{ kind: 'shiny', x: 2700, y: 1260 }],
   },
+  // The grove's clearing: its pond and glowing mushrooms are the painting's own (PAINTED_THINGS).
   {
-    id: 'ink-drop',
-    room: 'ink',
-    story: 'A drop of fresh ink, still wet from the brush, glints on the paving stones.',
-    things: [{ kind: 'shiny', x: 2120, y: 1260 }],
-  },
-  // The grove's clearing, in the gaps between its three rings and at its east end.
-  {
-    id: 'grove-stump',
+    id: 'grove-moss',
     room: 'grove',
-    story: 'Mushrooms ring an old stump in the clearing: the caps are springy enough to bounce on, the stump a step up to look round.',
-    things: [{ kind: 'mushroom', x: 1880, y: 1050 }],
-    perches: [{ kind: 'stump', x: 2060, y: 1110 }],
-  },
-  {
-    id: 'grove-bath',
-    room: 'grove',
-    story: 'A bird bath brimming with rain at the edge of the east ring, where owls splash after the climb down from the huts.',
-    things: [{ kind: 'bird-bath', x: 3420, y: 1150 }],
-  },
-  {
-    id: 'grove-log',
-    room: 'grove',
-    story: "A fallen log at the clearing's east end, with something shiny caught in the moss in front of it.",
+    story: "Something shiny caught in the moss at the clearing's east end, dropped by an owl on the climb down from the huts.",
     things: [{ kind: 'shiny', x: 4620, y: 1120 }],
-    perches: [{ kind: 'log', x: 4620, y: 1000 }],
   },
-  // The Party Grove: either side of the way back into the trunk, and past its east ring.
+  // The Party Grove: either side of the way back into the trunk, and past its east ring. Rebuilt with its layout (OP-403).
   {
     id: 'hub-mushrooms',
     room: 'hub',
@@ -250,8 +212,21 @@ function thingIds(c: FloorCluster): string[] {
 
 const perchId = (c: FloorCluster, i: number) => (i === 0 ? `${c.id}-perch` : `${c.id}-perch-${i + 1}`);
 
-/** The things to use out on the plazas' floors, each standing in front of its art. */
-export const FLOOR_INTERACTABLES: readonly InteractableDef[] = PLAZA_CLUSTERS.flatMap((c) => {
+/**
+ * Things to use that the painting already has (OP-416, the owner's Nov 14 note on art "reused in every room
+ * instead of with purpose"): the entrance's owl fountain, the grove's pond off the end of its jetty and the
+ * glowing mushrooms by the east treehouse. The painting draws them, so the game adds only the glow under
+ * each and the show when it is used; a sticker of the same thing beside its painted twin is gone.
+ */
+export const PAINTED_THINGS: readonly InteractableDef[] = [
+  { id: 'lobby-fountain', kind: 'bird-bath', room: 'lobby', pos: { x: 665, y: 775 }, label: 'Splash in the fountain' },
+  // On the pond's near bank east of the jetty, out of reach from the jetty's end, so E there always reels in.
+  { id: 'grove-pond-bank', kind: 'bird-bath', room: 'grove', pos: { x: 1250, y: 685 }, label: 'Splash in the pond' },
+  { id: 'grove-glowcaps', kind: 'mushroom', room: 'grove', pos: { x: 3420, y: 850 }, label: 'Bounce on the glowing mushrooms' },
+];
+
+/** The things to use out on the plazas' floors, each standing in front of its art, and those the paintings have. */
+export const FLOOR_INTERACTABLES: readonly InteractableDef[] = [...PLAZA_CLUSTERS.flatMap((c) => {
   const ids = thingIds(c);
   return c.things.map((t, i): InteractableDef => {
     const piece = t.piece ?? FLOOR_THING_ART[t.kind];
@@ -262,9 +237,10 @@ export const FLOOR_INTERACTABLES: readonly InteractableDef[] = PLAZA_CLUSTERS.fl
       pos: { x: t.x, y: t.y + FLOOR_THING_STAND },
       ...(piece ? { piece } : {}),
       ...(t.flip ? { flip: true as const } : {}),
+      ...(t.label ? { label: t.label } : {}),
     };
   });
-});
+}), ...PAINTED_THINGS];
 
 /** A perch's standing surface along the room (room x), its art turned round when flipped. */
 export function floorPerchSpan(kind: FloorPerchKind, x: number, flip?: boolean): [number, number] {
