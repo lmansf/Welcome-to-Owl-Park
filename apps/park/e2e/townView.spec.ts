@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { HELD_FRAME_MS, cameraView, heldCameraAtRest, heldPass, heldStandingAt, heldUntil, holdTheClock, openHeld, openPark, settleCamera, state, stateNow } from './helpers';
+import { HELD_FRAME_MS, cameraView, heldCameraAtRest, heldPass, heldStandingAt, heldUntil, holdTheClock, openHeld, openPark, settleCamera, state, stateNow, type ParkState } from './helpers';
 
 /**
  * The town view (OP-336, on for every visitor since OP-356): a room seen from above shows more of
@@ -295,7 +295,8 @@ test.describe('a new owl is named two places to play in the Great Hollow (OP-370
     }
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-hall-tip-and-chips.png` });
     await page.locator('#hud [data-hint="down"]').click();
-    await heldUntil(page, 'the owl on its way to the hatch', async () => (await stateNow(page)).room === 'arcade' || (await stateNow(page)).pos.y > HEART.y + 400);
-    await heldUntil(page, 'the owl down the hatch, in the arcade', async () => (await stateNow(page)).room === 'arcade');
+    // Between the hall and the arcade the page has no room for a moment, and no state to read.
+    const roomNow = async () => ((await page.evaluate(() => window.owlPark.state())) as ParkState | null)?.room ?? null;
+    await heldUntil(page, 'the owl down the hatch, in the arcade', async () => (await roomNow()) === 'arcade');
   });
 });
