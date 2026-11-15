@@ -368,6 +368,7 @@ page and keep it in that tab only.
 | `/api/admin/restart` | POST | the key | the nightly restart, now (OP-181, below) |
 | `/api/admin/capacity`, `/admin/capacity` | GET, POST | the key | the busy-night settings and the tree's share (`docs/CAPACITY.md`, section 2) |
 | `/api/vote/tally` | GET | the key, unless `VOTE_TALLY_PUBLIC` is `"true"` | the Realm Vote's standings |
+| `/api/vote/shares` | GET | none | each realm's share of this month's Realm Vote in whole percents, never a count (the vote desk, OP-288) |
 | `/api/vote/close` | POST | the key | close the vote's month by hand |
 
 **The nightly restart** (OP-181): the 09:00 UTC cron restarts the park, and

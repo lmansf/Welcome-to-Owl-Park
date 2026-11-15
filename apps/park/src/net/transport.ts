@@ -45,6 +45,8 @@ export interface RoomHandlers extends QuestPushes, ActivityPushes, NestPushes {
   onNotice?(words: string | null): void;
   /** The realms switch (the stained-glass climb): which gated realms are open, whether the portal is live, the night. */
   onRealms?(realms: RealmsSettings): void;
+  /** The Realm Vote's shares this month moved (OP-288): each realm's part in whole percents, never a count. */
+  onShares?(month: string, shares: Record<string, number>): void;
   /** The realm this owl is in (or was entering) is closed: the page walks it back to the hub and shows the phrase. */
   onRealmClosed?(sign: string): void;
   /** A travel into the park was turned away (OP-130): the owl has not walked through the front gate since it was last outside. */
@@ -117,6 +119,8 @@ export interface ParkTransport {
   join(roomId: string, self: PlayerState, handlers: RoomHandlers): Promise<RoomConnection>;
   /** Cast a Realm Vote as this visitor; only transports with an authenticated server offer it. */
   vote?(realm: string): Promise<Response>;
+  /** This month's Realm Vote shares in whole percents (OP-288), for the vote desk's first look; only the room server keeps the vote. */
+  voteShares?(): Promise<{ month: string; shares: Record<string, number> } | null>;
   /** Send the visitor's feedback to the park's keepers; only the room server keeps it (net/feedback.ts). */
   feedback?(draft: FeedbackDraft): Promise<Response>;
   /** The thanks ladder for feedback (OP-272): where this owl stands, and whether its notes climb it. */

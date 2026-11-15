@@ -11,7 +11,7 @@ import { SqlVoteStore } from './sqlVoteStore';
 import { TicketBook } from './TicketBook';
 import { ticketDesk } from './ticketDesk';
 import type { Env } from './env';
-import { VOTABLE_REALMS } from '@owl-park/shared';
+import { VOTABLE_REALMS, voteShares } from '@owl-park/shared';
 
 /** Realms with an idol to vote at; the list lives in shared so a look's pledge is checked against it. */
 export { VOTABLE_REALMS };
@@ -64,6 +64,11 @@ export class VoteLedger extends DurableObject<Env> {
     if (url.pathname === '/status') {
       const visitor = url.searchParams.get('visitor') ?? '';
       return Response.json(this.ledger.status(visitor, day, url.searchParams.get('ticket')));
+    }
+    if (url.pathname === '/shares') {
+      // This month's shares in whole percent (OP-288): what the info desk shows; the counts stay private.
+      const month = parkMonth(now, this.tz);
+      return Response.json({ month, shares: voteShares(this.ledger.tally(month).counts, VOTABLE_REALMS) });
     }
     if (url.pathname === '/tally') {
       const month = url.searchParams.get('month') ?? parkMonth(now, this.tz);
