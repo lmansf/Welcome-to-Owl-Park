@@ -27,6 +27,7 @@ import {
   HALL_W,
   OWL_ROOM_PX2,
   ROOT_ART,
+  rootArt,
   ROOT_RUNS,
   RUN_END_CLEAR,
   RUN_HALF,
@@ -466,6 +467,29 @@ describe('the Great Hollow’s root runs (OP-308)', () => {
     expect(spawnTop(hall, 'on-stump')).toBe(stump.top);
     for (const b of boxes)
       for (const t of things) expect(t.x > b.x0 - 40 && t.x < b.x1 + 40 && t.y > b.y0 && t.y < b.y1, `${t.id} behind ${b.id}`).toBe(false);
+  });
+});
+
+describe('each corner’s roots are painted in its realm’s look, over the same outline (OP-418)', () => {
+  it('draws every root with its corner’s own art, its box and standing surface where the first art had them', () => {
+    const roots = hall.pieces!.filter((p) => p.id.startsWith('root-') && p.id !== 'root-hatch');
+    for (const run of ROOT_RUNS) {
+      for (const [kind] of run.steps) {
+        const piece = roots.find((p) => p.id === `root-${run.level}-${kind}`)!;
+        expect(piece.key, piece.id).toBe(rootArt(run.level, kind));
+        const art = KIT_ART[piece.key]!;
+        const first = KIT_ART[ROOT_ART[kind].key]!;
+        expect(art, piece.key).toBeDefined();
+        // The same box, standing on the same foot, its art as wide.
+        expect([art.w, art.h, art.foot]).toEqual([first.w, first.h, first.foot]);
+        expect(Math.abs(art.left! - first.left!)).toBeLessThanOrEqual(4);
+        expect(Math.abs(art.right! - first.right!)).toBeLessThanOrEqual(4);
+        // Its top within a few pixels of the first art's, so an owl's feet stay on the root (ROOT_ART.stands).
+        expect(Math.abs(art.top! - first.top!), piece.key).toBeLessThanOrEqual(6);
+      }
+    }
+    // Four corners, four looks: no two runs share their art.
+    expect(new Set(roots.map((r) => r.key)).size).toBe(roots.length);
   });
 });
 

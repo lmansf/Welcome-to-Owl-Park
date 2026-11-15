@@ -360,12 +360,20 @@ export const RUN_HALF = 20;
 
 export type RootKind = 'log' | 'knot' | 'stump';
 
-/** Each root's art, how high its standing surface is over its foot (measured off the art) and that surface's ends from the piece's middle. */
+/**
+ * Each root's shape: the arcade's piece it was first drawn with, how high its standing surface is over
+ * its foot (measured off the art) and that surface's ends from the piece's middle. Each corner's roots
+ * are painted in its own realm's look over that same outline (rootArt, OP-418), so where an owl stands
+ * on one is where it stood.
+ */
 export const ROOT_ART: Readonly<Record<RootKind, { key: string; stands: number; span: readonly [number, number] }>> = {
   log: { key: 'kit-under-root-ledge-mid', stands: 112, span: [-150, 150] },
   knot: { key: 'kit-under-root-knot', stands: 162, span: [-64, 56] },
   stump: { key: 'kit-under-root-buttress-right', stands: 275, span: [-120, -20] },
 };
+
+/** A root's art in its corner (OP-418): the kind's outline painted for the realm whose side of the hollow it stands on. */
+export const rootArt = (level: HallLevel, kind: RootKind) => `kit-landmark-hall-root-${level}-${kind}`;
 
 export interface RootRun {
   /** The Commons whose side of the hollow it stands on. */
@@ -435,18 +443,19 @@ export const ROOT_PERCHES: readonly Perch[] = ROOT_RUNS.flatMap((run) =>
 );
 
 /**
- * The Great Hollow's light (OP-348): warm, as its painted heartwood floor is lit. The roots are the
- * arcade's art, painted for a cold cave (frost on the fallen root, pale edges on the knot), and the
- * idols are each painted for their own realm; multiplied by the room's light they stand in the same
- * room as the floor under them. The idols take less of it: each keeps its realm's own colours.
+ * The Great Hollow's light (OP-348): warm, as its painted heartwood floor is lit. The idols are each
+ * painted for their own realm; multiplied by the room's light they stand in the same room as the floor
+ * under them. The roots were the arcade's cold-cave art and took a deeper light; since OP-418 they are
+ * painted for this room, so they take a gentler one, a little deeper than the idols' so the wood still
+ * reads as wood beside a realm's colours.
  */
-export const HALL_LIGHT = { roots: 0xffd9a6, idols: 0xffecd2 } as const;
+export const HALL_LIGHT = { roots: 0xffe6c8, idols: 0xffecd2 } as const;
 
 const ROOT_PIECES: RoomPiece[] = ROOT_RUNS.flatMap((run) =>
   run.steps.map(
     ([kind, x]): RoomPiece => ({
       id: rootId(run.level, kind),
-      key: ROOT_ART[kind].key,
+      key: rootArt(run.level, kind),
       x,
       y: RUN_Y - RUN_HALF,
       ...(run.flip ? { flip: true as const } : {}),
