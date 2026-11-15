@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { ROOMS } from '../rooms';
-import { ART_TRIALS, DEFAULT_ART_TRIALS, HOLLOW_LIGHT, TRIAL_DEPTH, artTrialFor, trialTint } from './artTrial';
+import { ART_TRIALS, DEFAULT_ART_TRIALS, HOLLOW_LIGHT, HOLLOW_PAINTS, TRIAL_DEPTH, artTrialFor, hidePaintedPieces, trialTint } from './artTrial';
 import { BOWL_DEPTH } from './bowlView';
 import { EDGE_DEPTH } from './edgeView';
 
@@ -59,5 +59,27 @@ describe('art trials (?art=hollow)', () => {
     expect(trialTint(hollow, '?arttint=red')).toBe(HOLLOW_LIGHT);
     expect(trialTint(hollow, '?arttint=12345')).toBe(HOLLOW_LIGHT);
     expect(trialTint({ room: 'x', key: 'y', beyond: '#000' }, '')).toBeUndefined();
+  });
+
+  it('puts away only the Great Hollow’s doorways it paints itself, never a perch an owl stands on (OP-418)', () => {
+    const ids = new Set((ROOMS['m3-hall']!.pieces ?? []).map((p) => p.id));
+    for (const id of HOLLOW_PAINTS) expect(ids.has(id), id).toBe(true);
+    expect(new Set(HOLLOW_PAINTS).size).toBe(HOLLOW_PAINTS.length);
+    // Roots, ledges and anything else that stands are drawn as before.
+    for (const id of HOLLOW_PAINTS) expect(id).not.toMatch(/^root-(ink|glass|grove|market)-/);
+    expect(ART_TRIALS['hollow']!.paints).toBe(HOLLOW_PAINTS);
+  });
+
+  it('hides only the pieces it is named for, and leaves the rest as they stand', () => {
+    const img = (name: string) => {
+      const o = { name, visible: true, setVisible(v: boolean) { o.visible = v; return o; } };
+      return o;
+    };
+    const pieces = [img('to-grove-door'), img('root-0-log'), img(''), img('knothole')];
+    const n = hidePaintedPieces(ART_TRIALS['hollow']!, pieces as never);
+    expect(n).toBe(2);
+    expect(pieces.map((p) => p.visible)).toEqual([false, true, true, false]);
+    // A trial that paints nothing hides nothing.
+    expect(hidePaintedPieces({ room: 'm3-hall', key: 'k', beyond: '#000' }, pieces as never)).toBe(0);
   });
 });
