@@ -2314,7 +2314,7 @@ describe('a parkour course in the room object (OP-224)', () => {
     // A way in the room does not have is not kept.
     const odd = connect('canopy-1', 'v_odd', GUEST);
     await send(obj, odd, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK, spawn: 'from-nowhere' });
-    await walkTo(obj, odd, { x: 900, y: 770 }, 1);
+    await walkTo(obj, odd, { x: 2100, y: 770 }, 1);
     await send(obj, odd, { t: 'course', a: 'fall', r: 1 });
     await settle();
     expect(course(odd, 1)).toMatchObject({ ok: true, at: PARK_ROOMS['canopy-1']!.spawns['from-gate'] });
