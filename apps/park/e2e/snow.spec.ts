@@ -34,10 +34,10 @@ test.describe('the first snow (OP-074, behind ?snow=1)', () => {
     await expect(throwIt).toBeVisible();
     if (isMobile) await throwIt.tap();
     else await throwIt.click();
+    // Another at once is not thrown (one every two seconds), asked straight after, before the first lands.
+    expect(await a.evaluate(() => window.owlPark.snowball('owl-b'))).toBe(false);
     await expect.poll(async () => (await state(a)).snowballs).toEqual({ thrown: 1, landed: 1, hits: ['owl-b'] });
     await expect.poll(async () => (await state(b)).snowballs.hits).toEqual(['owl-b']);
     await b.screenshot({ path: `e2e-screenshots/${test.info().project.name}-snowball.png` });
-    // Another at once is not thrown.
-    expect(await a.evaluate(() => window.owlPark.snowball('owl-b'))).toBe(false);
   });
 });
