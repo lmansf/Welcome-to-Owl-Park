@@ -216,16 +216,6 @@ export const HALL_HEART: Vec2 = { x: HALL_CX, y: HALL_CY - sized(340) };
  */
 export const RUN_Y = HALL_CY;
 
-/**
- * Which way along the rim leads away from the hollow's middle line (where the root runs stand) at `s`:
- * 1 clockwise, -1 the other way. On the west side clockwise runs toward the back, on the east toward the front.
- */
-function awayFromMiddle(s: number): 1 | -1 {
-  const back = rimAt(s).y < HALL_CY;
-  const west = rimAt(s).x < HALL_CX;
-  return back === west ? 1 : -1;
-}
-
 /** The moonbeams: one in each Commons' plaza and one at the heart. */
 export const HALL_MOONBEAMS: ReadonlyArray<{ id: string; pos: Vec2 }> = [
   ...(['glass', 'ink', 'grove', 'market'] as const).map((level) => ({ id: `moonbeam-${level}`, pos: plazaAt(level) })),
@@ -233,29 +223,13 @@ export const HALL_MOONBEAMS: ReadonlyArray<{ id: string; pos: Vec2 }> = [
 ];
 
 /**
- * The leaf piles: blown in at the knothole, they drift round the rim, so two lie in each Commons either
- * side of its plaza, clear of its two doorways' signs and landing spots, one by the hatch, one by the trunk's door, two by the knothole, two either side of
- * the heart and one out in front of it, between the trunk's door and the hatch; and one drifted up by
- * the roots over each grown-over way.
- *
- * A Commons' two piles lie COMMONS_PILE round the rim from its middle, where its idol's vote stone is.
- * That is room between two pieces of art, a pile and a stone, so it keeps its size in a smaller hollow.
+ * The leaf piles (OP-417, the owner's Nov 14 note on art "scattered around randomly"): only where the wind
+ * would leave them. Two drift either side of the knothole at the back, where it blows in, one lies by the
+ * hatch, where they fall through, and one out in front of the heart, between the trunk's door and the hatch.
  */
-const COMMONS_PILE = 600;
 export const HALL_LEAVES: ReadonlyArray<{ id: string; pos: Vec2 }> = [
-  ...(['glass', 'ink', 'grove', 'market'] as const).flatMap((level) => [
-    { id: `leaves-${level}`, pos: ringAt(commonsS(level) - COMMONS_PILE, 0.74) },
-    { id: `leaves-${level}-far`, pos: ringAt(commonsS(level) + COMMONS_PILE, 0.74) },
-  ]),
   { id: 'leaves-hatch', pos: rimAt(wayS('down') + sized(380), 260) },
-  { id: 'leaves-party', pos: rimAt(wayS('to-party') - sized(380), 260) },
-  // A drift of leaves by the roots grown over each way with nothing behind it (OP-337): with no doorway
-  // there, that stretch of the rim still has something to do within a few seconds' walk.
-  // Each on the side of its roots away from the middle of the hollow, where the root runs' stumps stand.
-  ...GROWN_WAYS.map((id) => ({ id: `leaves-${id}-roots`, pos: rimAt(wayS(id) + awayFromMiddle(wayS(id)) * 150, 180) })),
   { id: 'leaves-knothole-west', pos: rimAt(wayS('up') - sized(420), 220) },
   { id: 'leaves-knothole-east', pos: rimAt(wayS('up') + sized(420), 220) },
-  { id: 'leaves-heart-west', pos: { x: HALL_CX - sized(760), y: HALL_CY + sized(160) } },
-  { id: 'leaves-heart-east', pos: { x: HALL_CX + sized(760), y: HALL_CY + sized(160) } },
   { id: 'leaves-front', pos: { x: HALL_CX, y: HALL_CY + sized(700) } },
 ];

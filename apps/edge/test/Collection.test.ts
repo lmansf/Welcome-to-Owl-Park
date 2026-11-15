@@ -103,7 +103,7 @@ describe('SqlCollectionStore', () => {
     quests.event(CID, { kind: 'talk', npc: 'pip' }, MON, 'hub');
     expect(store.quests(CID)).toEqual([expect.objectContaining({ quest: 'story-welcome', period: '', step: 1, count: 0, seen: [], items: [], acceptedAt: MON, doneAt: null })]);
     quests.event(CID, { kind: 'visit', room: 'grove' }, MON, 'grove');
-    quests.event(CID, { kind: 'interact', what: 'leaf-pile', id: 'grove-leaves-1', room: 'grove' }, MON, 'grove');
+    quests.event(CID, { kind: 'interact', what: 'leaf-pile', id: 'grove-leaves-2', room: 'grove' }, MON, 'grove');
     quests.event(CID, { kind: 'talk', npc: 'nova' }, MON, 'market');
     quests.event(CID, { kind: 'emote', emote: 'hoot', room: 'hub', near: ['bramble'] }, MON, 'hub');
     expect(quests.handIn(CID, 'story-welcome', 'bramble', MON, () => 0.5)).toMatchObject({ ok: true, award: { variant: 'leaf-crown~0', dup: false } });
@@ -114,7 +114,7 @@ describe('SqlCollectionStore', () => {
     const acorns = () => store.quests(CID).find((r) => r.quest === 'story-hazel-acorns')!;
     const [first] = acorns().items;
     expect(acorns().items).toHaveLength(3);
-    expect(quests.gather(CID, 'story-hazel-acorns', first!.n, 'grove', first!, MON).ok).toBe(true);
+    expect(quests.gather(CID, 'story-hazel-acorns', first!.n, 'grove', first!, MON, first!.top ?? 0).ok).toBe(true);
     expect(acorns().items.find((i) => i.n === first!.n)!.taken).toBe(true);
     expect(quests.abandon(CID, 'story-hazel-acorns', MON).ok).toBe(true);
     expect(store.quests(CID).map((r) => r.quest)).toEqual(['story-welcome']);

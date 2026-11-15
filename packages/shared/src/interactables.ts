@@ -54,10 +54,8 @@ export const INTERACTABLES: readonly InteractableDef[] = [
   { id: 'hub-leaves-1', kind: 'leaf-pile', room: 'hub', pos: { x: 1930, y: 820 } },
   // ...and some up on the lantern beam in the west wing, a jump and the second flap from the root bench (OP-084).
   { id: 'hub-leaves-beam', kind: 'leaf-pile', room: 'hub', pos: { x: 930, y: 696 }, top: 264 },
-  // ...and drift around the hollow at the foot of the tree outside.
-  { id: 'grove-leaves-1', kind: 'leaf-pile', room: 'grove', pos: { x: 2500, y: 835 } },
+  // ...and drift against the roots at the foot of the tree outside, past its doorway (OP-417: three piles a room, each where the wind would leave it).
   { id: 'grove-leaves-2', kind: 'leaf-pile', room: 'grove', pos: { x: 2890, y: 845 } },
-  { id: 'grove-leaves-3', kind: 'leaf-pile', room: 'grove', pos: { x: 2220, y: 820 } },
   // ...and up in the east wing's treehouses (OP-084): on the porch, at the top of the ladder, and on
   // the left tree's treehouse, which only a glide from the loft reaches (the glide's small extra).
   { id: 'grove-leaves-porch', kind: 'leaf-pile', room: 'grove', pos: { x: 4290, y: 708 }, top: 218 },
@@ -91,27 +89,20 @@ export const INTERACTABLES: readonly InteractableDef[] = [
   { id: 'market-stall-2', kind: 'stall', room: 'market', pos: { x: 640, y: 705 } },
   { id: 'market-stall-3', kind: 'stall', room: 'market', pos: { x: 780, y: 705 } },
   { id: 'hub-moonbeam', kind: 'moonbeam', room: 'hub', pos: { x: 2400, y: 690 } },
-  // The Treetop Commons (OP-306): leaves blown off the lantern trees settle against the fountain's rim,
-  // under the bench by the balustrade and at the foot of the ticket booth, so the walk from the lane to
-  // the turnstiles meets a pile every few seconds. A free guest's flop turns up nothing (OP-243).
-  { id: 'lobby-leaves-fountain', kind: 'leaf-pile', room: 'lobby', pos: { x: 860, y: 790 } },
+  // The Treetop Commons (OP-306, OP-417): leaves blown off the lantern trees settle under the bench by the
+  // balustrade and at the foot of the ticket booth, and nowhere out on the open cobbles. A free guest's flop
+  // turns up nothing (OP-243).
   { id: 'lobby-leaves-bench', kind: 'leaf-pile', room: 'lobby', pos: { x: 1100, y: 775 } },
   { id: 'lobby-leaves-booth', kind: 'leaf-pile', room: 'lobby', pos: { x: 1650, y: 765 } },
-  // The arcade (OP-306): leaves fall down the hatch from the Great Hollow and pile at the foot of the
-  // stair, where the root stair's pile went when it folded into the arcade; the draught carries the rest
-  // along the wet tiles until something stops them: the chrome pillar in the passage past Hoot & Hop,
-  // the wall under the scoreboard, and the second chrome pillar before Talon Toss.
+  // The arcade (OP-306, OP-417): leaves fall down the hatch from the Great Hollow and pile at the foot of
+  // the stair; the draught carries a few along the wet tiles until something stops them: the chrome pillar
+  // in the passage past Hoot & Hop and the wall under the scoreboard. None out on the hall's open floor.
   { id: 'arcade-leaves-stair', kind: 'leaf-pile', room: 'arcade', pos: { x: 150, y: 850 } },
   { id: 'arcade-leaves-pillar', kind: 'leaf-pile', room: 'arcade', pos: { x: 1250, y: 780 } },
   { id: 'arcade-leaves-scoreboard', kind: 'leaf-pile', room: 'arcade', pos: { x: 2550, y: 790 } },
-  { id: 'arcade-leaves-pillar-east', kind: 'leaf-pile', room: 'arcade', pos: { x: 3080, y: 770 } },
-  // The Treetop Commons' plaza (Nov 8): a moonbeam in its middle where a crowd gathers, leaves blown into its corners and along its front.
+  // The Treetop Commons' plaza (Nov 8): a moonbeam in its middle where a crowd gathers.
   { id: 'lobby-moonbeam', kind: 'moonbeam', room: 'lobby', pos: { x: 1600, y: 1110 } },
-  { id: 'lobby-leaves-plaza-west', kind: 'leaf-pile', room: 'lobby', pos: { x: 430, y: 1180 } },
-  { id: 'lobby-leaves-plaza-east', kind: 'leaf-pile', room: 'lobby', pos: { x: 2780, y: 1180 } },
-  { id: 'lobby-leaves-planters-west', kind: 'leaf-pile', room: 'lobby', pos: { x: 1000, y: 1270 } },
-  { id: 'lobby-leaves-planters-east', kind: 'leaf-pile', room: 'lobby', pos: { x: 2200, y: 1270 } },
-  // The arcade hall's floor (Nov 8): a moonbeam through a skylight over each of its two gathering rings, leaves blown along it from the doorway.
+  // The arcade hall's floor (Nov 8): a moonbeam through a skylight over each of its two gathering rings.
   { id: 'arcade-moonbeam-west', kind: 'moonbeam', room: 'arcade', pos: { x: 1200, y: 1110 } },
   { id: 'arcade-moonbeam-east', kind: 'moonbeam', room: 'arcade', pos: { x: 3600, y: 1110 } },
   // The lane under the nests, grown into a plaza (Nov 8): a moonbeam in its ring, leaves blown under the banks and along its front.
@@ -125,37 +116,24 @@ export const INTERACTABLES: readonly InteractableDef[] = [
   { id: 'market-leaves-west', kind: 'leaf-pile', room: 'market', pos: { x: 260, y: 1230 } },
   { id: 'market-leaves-middle', kind: 'leaf-pile', room: 'market', pos: { x: 1650, y: 1240 } },
   { id: 'market-leaves-east', kind: 'leaf-pile', room: 'market', pos: { x: 3000, y: 1230 } },
-  // The glass street (Nov 8): a moonbeam on its ring of glass tiles, leaves by the lanterns and at its front corners.
+  // The glass street (Nov 8): a moonbeam on its ring of glass tiles, leaves caught at the lanterns' feet.
   { id: 'glass-moonbeam', kind: 'moonbeam', room: 'glass', pos: { x: 800, y: 1260 } },
   // The ink garden (OP-402): its moonbeam in the plaza's ring, the leaves blown in through the moon gate,
-  // and a pile each side of the plaza and at the east end, so no spot is more than a few steps from one.
+  // against the wall at the east end and in the west corner (OP-417: none out in the plaza's middle).
   { id: 'ink-moonbeam', kind: 'moonbeam', room: 'ink', pos: { x: 1600, y: 1110 } },
   { id: 'ink-leaves-gate', kind: 'leaf-pile', room: 'ink', pos: { x: 2560, y: 820 } },
   { id: 'ink-leaves-east', kind: 'leaf-pile', room: 'ink', pos: { x: 3040, y: 840 } },
   { id: 'ink-leaves-west', kind: 'leaf-pile', room: 'ink', pos: { x: 420, y: 1110 } },
-  { id: 'ink-leaves-plaza', kind: 'leaf-pile', room: 'ink', pos: { x: 2450, y: 1220 } },
   { id: 'glass-leaves-lantern-west', kind: 'leaf-pile', room: 'glass', pos: { x: 230, y: 1010 } },
   { id: 'glass-leaves-lantern-east', kind: 'leaf-pile', room: 'glass', pos: { x: 1380, y: 1010 } },
-  { id: 'glass-leaves-front-west', kind: 'leaf-pile', room: 'glass', pos: { x: 330, y: 1560 } },
-  { id: 'glass-leaves-front-east', kind: 'leaf-pile', room: 'glass', pos: { x: 1270, y: 1560 } },
-  // The grove's clearing (Nov 8): a moonbeam through the canopy over each of its three rings, leaves drifted against its mounds.
+  // The grove's clearing (Nov 8): a moonbeam through the canopy over each of its three rings.
   { id: 'grove-moonbeam-west', kind: 'moonbeam', room: 'grove', pos: { x: 900, y: 1060 } },
   { id: 'grove-moonbeam-middle', kind: 'moonbeam', room: 'grove', pos: { x: 2600, y: 1060 } },
   { id: 'grove-moonbeam-east', kind: 'moonbeam', room: 'grove', pos: { x: 3900, y: 1060 } },
-  { id: 'grove-leaves-bank-west', kind: 'leaf-pile', room: 'grove', pos: { x: 380, y: 1060 } },
-  { id: 'grove-leaves-mound', kind: 'leaf-pile', room: 'grove', pos: { x: 1700, y: 1080 } },
-  { id: 'grove-leaves-mushrooms', kind: 'leaf-pile', room: 'grove', pos: { x: 3250, y: 1080 } },
-  { id: 'grove-leaves-bank-east', kind: 'leaf-pile', room: 'grove', pos: { x: 4480, y: 1060 } },
-  // The Party Grove's plaza (Nov 8): a moonbeam over each of its two rings, either side of the way back into the trunk, leaves blown into its corners and along its front.
+  // The Party Grove's plaza (Nov 8): a moonbeam over each of its two rings, either side of the way back into the trunk, and leaves blown into its east corner.
   { id: 'hub-moonbeam-west', kind: 'moonbeam', room: 'hub', pos: { x: 1150, y: 1060 } },
   { id: 'hub-moonbeam-east', kind: 'moonbeam', room: 'hub', pos: { x: 3650, y: 1060 } },
-  { id: 'hub-leaves-plaza-west', kind: 'leaf-pile', room: 'hub', pos: { x: 380, y: 1140 } },
-  { id: 'hub-leaves-plaza-front-west', kind: 'leaf-pile', room: 'hub', pos: { x: 1800, y: 1150 } },
-  { id: 'hub-leaves-plaza-front-east', kind: 'leaf-pile', room: 'hub', pos: { x: 3000, y: 1150 } },
   { id: 'hub-leaves-plaza-east', kind: 'leaf-pile', room: 'hub', pos: { x: 4480, y: 1140 } },
-  { id: 'arcade-leaves-street', kind: 'leaf-pile', room: 'arcade', pos: { x: 300, y: 1230 } },
-  { id: 'arcade-leaves-floor', kind: 'leaf-pile', room: 'arcade', pos: { x: 2400, y: 1200 } },
-  { id: 'arcade-leaves-end', kind: 'leaf-pile', room: 'arcade', pos: { x: 4500, y: 1230 } },
   // Out on the plazas' floors (Nov 8): a few little scenes in each, things to splash in, bounce on, look through and pick up.
   ...FLOOR_INTERACTABLES,
 ];
@@ -173,7 +151,13 @@ export function interactablesIn(room: string): InteractableDef[] {
 // ---------- leaf piles (defaults the owner may change) ----------
 
 /** A flopped pile grows back after a random time in this range (ms). */
-export const LEAF_RESPAWN_MS: readonly [number, number] = [90_000, 150_000];
+// About half as many piles as before OP-417 (three a room), so each grows back in about half the time:
+// the feathers an owl can find in a day stay about where they were.
+export const LEAF_RESPAWN_MS: readonly [number, number] = [50_000, 80_000];
+
+/** At most this many leaf piles in a room, each where the wind would leave it (OP-417); the Great Hollow, the size of a town square, a few more. */
+export const LEAF_PILES_A_ROOM = 3;
+export const LEAF_PILES_IN_THE_HOLLOW = 5;
 /** The chance that a flop turns up feathers, and how many. */
 export const LEAF_FEATHER_CHANCE = 0.4;
 export const LEAF_FEATHERS: readonly [number, number] = [1, 3];

@@ -221,7 +221,7 @@ describe('the park’s movers (OP-287)', () => {
     expect(highestTop(arcade)).toBeLessThan(ARCADE_LANE.z);
   });
 
-  it('each path has something to do along it: a leaf pile by the knot hole and by the tunnel’s mouth, three along the lane, and no point of the lane more than three seconds’ walk from one of the room’s things', () => {
+  it('each path has something to do along it: a leaf pile by the knot hole and by the tunnel’s mouth, two along the lane (OP-417: three piles a room), and no point of the lane more than three seconds’ walk from one of the room’s things', () => {
     const things = (room: string) => INTERACTABLES.filter((i) => i.room === room && !i.top);
     const piles = (room: string) => things(room).filter((i) => i.kind === 'leaf-pile');
     const nearest = (from: { x: number; y: number }, list: ReturnType<typeof things>) => Math.min(...list.map((i) => distance(i.pos, from)));
@@ -231,7 +231,7 @@ describe('the park’s movers (OP-287)', () => {
     // The tunnel's mouth: the pile by the arcade's doorway.
     expect(nearest(ARCADE_TUNNEL.mouth, piles('arcade'))).toBeLessThan(200);
     // The lane: piles beside its line, and one of the room's things near every stretch of it.
-    expect(piles('arcade').filter((i) => laneOff(ARCADE_LANE, i.pos) <= 150).length).toBeGreaterThanOrEqual(3);
+    expect(piles('arcade').filter((i) => laneOff(ARCADE_LANE, i.pos) <= 150).length).toBeGreaterThanOrEqual(2);
     for (let x = ARCADE_LANE.a.x; x <= ARCADE_LANE.b.x; x += 100) expect(nearest({ x, y: ARCADE_LANE.a.y }, things('arcade')), `x ${x}`).toBeLessThan(threeSeconds);
   });
 });

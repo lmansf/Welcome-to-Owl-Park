@@ -288,7 +288,7 @@ describe('quest ledger', () => {
     expect(quests.event('c1', { kind: 'talk', npc: 'nova' }, MON)).toEqual([]);
     expect(quests.event('c1', { kind: 'talk', npc: 'pip' }, MON, 'hub')[0]).toMatchObject({ quest: 'story-welcome', step: 0, count: 1, need: 1, ready: false });
     quests.event('c1', { kind: 'visit', room: 'grove' }, MON, 'grove');
-    quests.event('c1', { kind: 'interact', what: 'leaf-pile', id: 'grove-leaves-1', room: 'grove' }, MON, 'grove');
+    quests.event('c1', { kind: 'interact', what: 'leaf-pile', id: 'grove-leaves-2', room: 'grove' }, MON, 'grove');
     quests.event('c1', { kind: 'talk', npc: 'nova' }, MON, 'market');
     expect(quests.handIn('c1', 'story-welcome', 'bramble', MON, () => 0.5)).toMatchObject({ ok: false, reason: 'not-ready' });
     // An emote far from Bramble does not count; near him it does.
@@ -422,7 +422,7 @@ describe('quest ledger', () => {
     const q = getQuest('leaves-hazel-medium')!;
     expect(goalCount(q.steps[0]!.goal)).toBe(4);
     expect(goalText(q.steps[0]!.goal)).toBe('Flop into 4 leaf piles');
-    expect(getInteractable('grove-leaves-1')!.kind).toBe('leaf-pile');
+    expect(getInteractable('grove-leaves-2')!.kind).toBe('leaf-pile');
     expect(NPC_TALK_RADIUS).toBeGreaterThan(KIND_RULES['leaf-pile'].reach);
   });
 });
