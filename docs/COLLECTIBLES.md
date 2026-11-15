@@ -38,6 +38,12 @@ Shades, Candy Necklace, Vampire Collar) and four pets (Little Ghost, Pumpkin Spr
 Black Kitten). They can be earned all year, like everything else, and are the featured shelf in
 their season.
 
+Four pets of their own come in one colourway and are never sold, given as the day's gift or drawn
+as a prize: the Golden Mouse and the Hollow Moth (rewards), and the Painted Egg and Rainbow Bunny
+(OP-261, OP-262; `easter.ts`). Only a code gives the egg (OP-260). It rocks more as Easter 2027
+nears, cracks on its last day, and says the days left when tapped. At midnight Eastern on March 28,
+2027 every egg holder also gets the bunny the next time its collection is read, and keeps the egg.
+
 Ids, names and rarities live in `CATALOGUE`; variant ids are `<item>~<colourway>` (`witch-hat~3`)
 and bare ids for emotes (`hoot`).
 

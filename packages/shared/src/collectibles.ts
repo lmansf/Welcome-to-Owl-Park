@@ -270,6 +270,10 @@ export const CATALOGUE: readonly ItemDef[] = [
   { id: 'golden-mouse', kind: 'pet', name: 'Golden Mouse', rarity: E, art: 'item-mouse', reward: true, gild: true } satisfies ItemDef as ItemDef,
   // The Hollow Moth (OP-310): the sealed hollow gives it once, the first time an owl escapes (escape.ts). The Moth's own art, gilded, until its own is made.
   { id: 'hollow-moth', kind: 'pet', name: 'Hollow Moth', rarity: R, art: 'item-moth', reward: true, gild: true } satisfies ItemDef as ItemDef,
+  // The Painted Egg (OP-261): only a code gives it (OP-260). It rocks more as Easter 2027 nears (easter.ts).
+  { id: 'painted-egg', kind: 'pet', name: 'Painted Egg', rarity: E, art: 'item-painted-egg', reward: true } satisfies ItemDef as ItemDef,
+  // The Rainbow Bunny (OP-262): every egg hatches one at Easter 2027, and the owl keeps the egg (easter.ts).
+  { id: 'rainbow-bunny', kind: 'pet', name: 'Rainbow Bunny', rarity: E, art: 'item-rainbow-bunny', reward: true } satisfies ItemDef as ItemDef,
   ...(
     [
       ['aura', 'Aura', C],
