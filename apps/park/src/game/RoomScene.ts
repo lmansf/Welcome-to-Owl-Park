@@ -248,7 +248,7 @@ import { airCues, type CueName } from './sfxCues';
 import { sideEdges } from './sideEdges';
 import { drawWalkFloor } from './walkFloor';
 import { BOWL_BEYOND, BOWL_SHADOW, drawBowl } from './bowlView';
-import { artTrialFor, drawArtTrial } from './artTrial';
+import { artTrialFor, drawArtTrial, hidePaintedPieces } from './artTrial';
 import { drawEdges } from './edgeView';
 import { drawSkirts } from './plazaSkirt';
 import { setVignette } from './vignette';
@@ -1177,7 +1177,11 @@ export class RoomScene extends Phaser.Scene {
     // An oval floor seen from almost straight above (the Great Hollow): its wall with height round it, the floor shaded so it recedes.
     drawBowl(this, room);
     // A painting of the whole room (the Great Hollow's; `?art=old` leaves it off, artTrial.ts), over its floor and wall, under all that is drawn on them.
-    void drawArtTrial(this, room);
+    // Once it is drawn, the pieces it paints itself (its doorways) are put away: the pieces are added below, before it can arrive.
+    void drawArtTrial(this, room).then((drawn) => {
+      const trial = drawn ? artTrialFor(globalThis.location?.search ?? '', room.id) : null;
+      if (trial && this.sys.isActive() && this.pieces.standing) hidePaintedPieces(trial, this.pieces.standing);
+    });
     // A soft shade in the view's corners, so a room seems to run on past the screen instead of stopping in a box.
     setVignette(true);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => setVignette(false));

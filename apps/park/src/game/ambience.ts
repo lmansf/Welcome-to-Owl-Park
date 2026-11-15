@@ -287,6 +287,8 @@ export function addSetPieces(
     const img = piece(scene, p.x, p.y, p.key).setDepth(p.y).setFlipX(!!p.flip);
     if (p.scale) img.setDisplaySize(img.displayWidth * p.scale, img.displayHeight * p.scale);
     if (p.tint !== undefined) tintImage(scene, img, p.key, p.tint);
+    // Named by its piece, so a painting of the whole room that already shows it can put it away (artTrial.ts).
+    img.setName(p.id);
     standing.push(img);
   }
   for (const door of room.doors) {
