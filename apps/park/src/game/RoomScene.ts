@@ -741,6 +741,8 @@ export class RoomScene extends Phaser.Scene {
   private rise: { from: number; top: number; covered: CoveredEdges; back: boolean } | null = null;
   /** Whether this room's visit has said what its thermal is for (once, as the owl first stands in it). */
   private thermalTold = false;
+  /** Whether the first snow falls in this room (OP-074, ambience.ts). */
+  private snowing = false;
   /** The Decorate sheet's pictures of pieces, drawn once each from their textures. */
   private readonly thumbs = new Map<string, string>();
   /** How sharp this room's art is drawn (pixels per room pixel at most): a nest's furniture loads at it too. */
@@ -1259,6 +1261,7 @@ export class RoomScene extends Phaser.Scene {
     this.hud.setDash(this.flier.dash !== undefined);
     // Calm motion (a setting) stills the drifting particles, at once and in every room after.
     const ambience = addAmbience(this, room);
+    this.snowing = ambience.snowing;
     // What owls say shows in bubbles over everything in the room, the words the same size on any screen.
     this.bubbles = new SpeechBubbles(this, room.size.h + 150, () => this.cfg.pixelRatio / this.cameras.main.zoom);
     if (this.cfg.sizes) this.sizeLabels = new SizeLabels(this, room.size.h + 140, () => this.cfg.pixelRatio / this.cameras.main.zoom);
@@ -2559,6 +2562,8 @@ export class RoomScene extends Phaser.Scene {
   /** Read-only snapshot for tests and the console. */
   debugState(): {
     room: string;
+    /** Whether the first snow falls in this room (OP-074, behind ?snow=1). */
+    snow: boolean;
     pos: Vec2;
     walking: boolean;
     look: OwlLook;
@@ -2684,6 +2689,7 @@ export class RoomScene extends Phaser.Scene {
   } | null {
     if (!this.built) return null;
     return {
+      snow: this.snowing,
       sounds: this.sfx.heard().slice(-16),
       sideCam: this.sideCam ? { lead: this.sideCam.lead, level: this.sideCam.level, x: this.sideCam.x, y: this.sideCam.y } : null,
       spectator: this.spectator,
