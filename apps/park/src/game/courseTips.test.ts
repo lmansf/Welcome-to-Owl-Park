@@ -66,15 +66,16 @@ describe("a course's tips (OP-344)", () => {
   it("a course with no line of its own for a fall says the plain one, and a thing up high has its tip hung under it", () => {
     const plain = courseTips({ ...COURSES['canopy']!, id: 'another' }, rooms, groundOf, false);
     expect(tip(plain, 'pit').words).toBe(COURSE_WORDS.tips.fall);
-    // The canopy's first bell hangs 480 up: its tip is under it, where an owl comes to it from; a bench on the floor has its tip over it.
+    // The canopy's first bell hangs 480 up: its tip is under it, where an owl comes to it from; a bench low down has its tip over it.
     const canopy = tipsOf('canopy');
     const g = groundOf(ROOMS['canopy-1']!);
     const bell = ROOMS['canopy-1']!.course!.parts![0]!;
     expect(bell.top).toBeGreaterThanOrEqual(300);
     expect(tip(canopy, 'part').at).toEqual({ x: bell.at.x, y: g - bell.top! + 150 });
     const bench = [...ROOMS['canopy-1']!.course!.benches!].sort((a, b) => a.at.x - b.at.x)[0]!;
-    expect(bench.top ?? 0).toBe(0);
-    expect(tip(canopy, 'bench').at).toEqual({ x: bench.at.x, y: g - 240 });
+    // The first bench stands low, on the frond before the first rising air (OP-361): its tip is over it.
+    expect(bench.top ?? 0).toBeLessThan(bell.top!);
+    expect(tip(canopy, 'bench').at).toEqual({ x: bench.at.x, y: g - (bench.top ?? 0) - 240 });
   });
 
   it('shows the one tip an owl is walking up to: the nearest across at about its height, none when it is far across or far below', () => {

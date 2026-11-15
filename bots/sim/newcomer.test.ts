@@ -154,3 +154,84 @@ describe('the Blackout Circuit’s first screen, as a newcomer plays it (OP-378)
     expect(play({ jumpAt: null, holdMs: 0 }).where).toBe('floor0');
   });
 });
+
+/**
+ * The Updraft Canopy's first screen, played as a newcomer plays it (OP-361). Before it was laid again
+ * the fern floor ended at 700 in bramble that ran to 1500, with every hop from the boulders to the
+ * first bough over it: of the one-press plays from the boulders and fronds (a tap to a Jump held the
+ * whole flight, with or without one flap) 153 of 440 came down in it before they stood anywhere, and
+ * a fall sent the owl back to the door. From the last frond no play but a held Jump got up to the
+ * bough, and that one rode the rising air and glided on past the bough and its bell (0 of 17 came down
+ * on it). Now the fern floor runs on under the fronds, so
+ * a miss is ground to walk back from; the rising air stands from the frond's end to over the bough and
+ * tops out just above it, so the Jump held from the frond comes down on the bough; and a bench on that
+ * frond keeps a fall further on from sending the owl back to the door.
+ */
+const canopy = ROOMS['canopy-1']!;
+const canopyLedge = (id: string) => {
+  const l = (canopy.kit!.ledges ?? []).find((k) => k.id === id)!;
+  return { x0: l.x0, x1: l.x1, top: l.top };
+};
+const SCREEN = 1600;
+
+describe('the Updraft Canopy’s first screen, as a newcomer plays it (OP-361)', () => {
+  // Each place an owl stands on the first screen, and the stretch it presses Jump over going east.
+  const STARTS: ReadonlyArray<readonly [string, { x: number; z: number }, number, number]> = [
+    ['the floor by the door', { x: canopy.spawns.default!.x, z: 0 }, canopy.spawns.default!.x, 680],
+    ...(['s1', 's2', 'f1', 'f2'] as const).map((id) => {
+      const l = canopyLedge(id);
+      return [id, { x: l.x0, z: l.top }, l.x0, l.x1] as const;
+    }),
+    ['the fern hollow', { x: 700, z: 0 }, 700, 1460],
+    ['the first bough', { x: canopyLedge('b1').x0, z: canopyLedge('b1').top }, canopyLedge('b1').x0, SCREEN - 20],
+  ];
+
+  it('has no pit on it: the fern floor runs from the door to past the first bough', () => {
+    for (const p of canopy.course!.pits ?? []) expect(Math.min(...p.map((v) => v.x))).toBeGreaterThan(canopyLedge('b1').x1);
+  });
+
+  it('no play of one press, a tap or held the whole flight, with or without a flap, falls anywhere on it', { timeout: 60_000 }, () => {
+    const ends: Array<{ play: Play; end: PlayEnd }> = [];
+    for (const [, from, x0, x1] of STARTS) {
+      for (let x = x0; x <= x1; x += 20) {
+        for (const holdMs of HOLDS) {
+          for (const flaps of [[], [300]]) {
+            const play = { jumpAt: x, holdMs, flaps, flapHoldMs: 150 };
+            ends.push({ play, end: playEast(canopy, from, SCREEN, play) });
+          }
+        }
+      }
+    }
+    expect(ends.length).toBeGreaterThan(700);
+    // A Jump held the whole flight from under the rising air can carry an owl past the screen's end: what comes of it there is the next screen's.
+    expect(fallsOf(ends.filter((e) => e.end.x < SCREEN))).toEqual([]);
+  });
+
+  it('a Jump held the whole flight from anywhere on the last frond rides the rising air and comes down on the first bough, by its bell', () => {
+    const f2 = canopyLedge('f2');
+    const b1 = canopyLedge('b1');
+    const bell = canopy.course!.parts!.find((p) => p.id === 'bell-1')!;
+    expect(bell.at.x).toBeGreaterThan(b1.x0);
+    expect(bell.at.x).toBeLessThan(b1.x1);
+    for (let x = f2.x0; x <= f2.x1; x += 10) {
+      const end = playEast(canopy, { x: f2.x0, z: f2.top }, b1.x0, { jumpAt: x, holdMs: Number.POSITIVE_INFINITY });
+      expect(end.where, `held from ${x}`).toBe('b1');
+      // With room to spare before the bough's far end.
+      expect(b1.x1 - end.x, `held from ${x}`).toBeGreaterThanOrEqual(40);
+    }
+    // The air stands from the frond's end and tops out over the bough, no higher than a jump off it.
+    const u1 = canopy.updrafts!.find((u) => u.id === 'U1')!;
+    expect(u1.x).toBeLessThanOrEqual(f2.x1);
+    expect(u1.x + u1.w).toBeGreaterThan(b1.x0);
+    expect(u1.top).toBeGreaterThan(b1.top);
+    expect(u1.top - b1.top).toBeLessThanOrEqual(20);
+  });
+
+  it('keeps its bench on that frond, so a fall past the bough sends an owl back one held Jump from it, not to the door', () => {
+    const f2 = canopyLedge('f2');
+    const bench = [...canopy.course!.benches!].sort((a, b) => a.at.x - b.at.x)[0]!;
+    expect(bench.at.x).toBeGreaterThan(f2.x0);
+    expect(bench.at.x).toBeLessThan(f2.x1);
+    expect(bench.top).toBe(f2.top);
+  });
+});

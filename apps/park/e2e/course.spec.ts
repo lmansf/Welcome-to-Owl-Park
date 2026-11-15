@@ -119,8 +119,9 @@ test.describe('the parkour courses (OP-224)', () => {
     expect((await state(page)).tipShown).toContain(touch ? 'Tap Jump to jump' : 'Space to jump');
     // The strip shows the run's clock, and the gold time it can still beat.
     await expect(page.locator('[data-objective-clock]')).toContainText(/^0:0\d · Gold under 1:45$/);
-    // At the bank where the walk first ends: what a fall does. One tip at a time.
-    await walkTo(page, 660, 770);
+    // At the bank where the walk first ends, past the fern hollow (OP-361): what a fall does. One tip at a time.
+    await walkTo(page, 1000, 770);
+    await walkTo(page, 1960, 770);
     await expect.poll(async () => (await state(page)).tipShown, { timeout: 10_000 }).toBe('Bramble sends you back to your checkpoint. Cross on the leaves.');
     // The ink course's own first things: its stones.
     await openPark(page, { room: 'brush-1', spawn: 'from-gate', kit: '1' });
