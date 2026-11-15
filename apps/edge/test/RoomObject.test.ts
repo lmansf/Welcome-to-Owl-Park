@@ -768,6 +768,36 @@ describe('the arcade in the room object', () => {
   });
 });
 
+describe('snowballs in the room object (OP-074, the first snow)', () => {
+  it('relays a snowball to every other owl, the one hit included, once every two seconds, and only where snow falls', async () => {
+    const obj = roomObject();
+    const a = await join(obj, 'hub', 'v_a', GUEST);
+    const b = await join(obj, 'hub', 'v_b');
+    const c = await join(obj, 'hub', 'v_c');
+    await send(obj, a, { t: 'snowball', at: 'v_b' });
+    expect(b.last('snowball')).toEqual({ t: 'snowball', id: 'v_a', at: 'v_b' });
+    expect(c.last('snowball')).toEqual({ t: 'snowball', id: 'v_a', at: 'v_b' });
+    expect(a.of('snowball')).toEqual([]);
+    // Another at once is dropped; two seconds on it flies.
+    await send(obj, a, { t: 'snowball', at: 'v_c' });
+    expect(c.of('snowball')).toHaveLength(1);
+    clock += 2_000;
+    await send(obj, a, { t: 'snowball', at: 'v_c' });
+    expect(b.last('snowball')).toEqual({ t: 'snowball', id: 'v_a', at: 'v_c' });
+    // At itself, or at an owl not here: nothing, and the socket stays open.
+    clock += 2_000;
+    await send(obj, a, { t: 'snowball', at: 'v_a' });
+    await send(obj, a, { t: 'snowball', at: 'v_gone' });
+    expect(b.of('snowball')).toHaveLength(2);
+    expect(a.closed).toBeNull();
+    // Inside, where no snow falls (the arcade hall), none flies.
+    const d = await join(obj, 'arcade', 'v_d');
+    const e = await join(obj, 'arcade', 'v_e');
+    await send(obj, d, { t: 'snowball', at: 'v_e' });
+    expect(e.of('snowball')).toEqual([]);
+  });
+});
+
 describe('prewritten chat in the room object', () => {
   it('relays a phrase’s number to the other owls in the room, and nothing for a number the list lacks', async () => {
     const obj = roomObject();

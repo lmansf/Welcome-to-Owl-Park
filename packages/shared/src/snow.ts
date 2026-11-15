@@ -24,3 +24,9 @@ export function snowsIn(room: Pick<RoomDef, 'id' | 'mood' | 'bowl' | 'weather'>)
 export function snowTints(mood: RoomDef['mood']): number[] {
   return mood === 'neon' ? [0xf4f8ff, 0xc9f4ff, 0xffd6ef] : [0xffffff, 0xf1f6ff, 0xe3ecf8];
 }
+
+/** A snowball every two seconds an owl at most (Logan's plan, Oct 23); the room drops the rest. */
+export const SNOWBALL_EVERY_MS = 2000;
+
+/** How far an owl throws a snowball, in room px: across a good part of one screen. */
+export const SNOWBALL_REACH = 700;

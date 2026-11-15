@@ -50,7 +50,7 @@ import type { Air } from './flight';
 import type { CoursePaid, CourseRefusal, CourseView } from './coursebook';
 import { PUZZLE_SYMBOLS, type PuzzleSymbol, type PuzzleView } from './puzzles';
 import { PARTY_KEYS, type PartyKey, type PartyLook, type PartyView } from './party/game';
-import { isEmoteId, isLook, isObj, isVec2 } from './validate';
+import { isEmoteId, isId, isLook, isObj, isVec2 } from './validate';
 
 /** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests, 8: prewritten chat, 9: the arcade, 10: the stained-glass climb and the realms switch, 11: owls asleep, 12: flight, 13: travel from the map, 14: owls standing on perches, 15: spectators, 16: closed for setup, 17: the courses and the dash, 18: the triple jump), so a stale page reloads. */
 export const EDGE_PROTOCOL_VERSION = 18;
@@ -183,6 +183,12 @@ export interface ClientAir {
 export interface ClientEmote {
   t: 'emote';
   e: string;
+}
+/** Throw a snowball at another owl in the room (OP-074): where snow falls, one every SNOWBALL_EVERY_MS. */
+export interface ClientSnowball {
+  t: 'snowball';
+  /** The owl thrown at. */
+  at: string;
 }
 /** Say a prewritten phrase to everyone in the room: its number in the phrase list (phrases.ts). */
 export interface ClientSay {
@@ -326,7 +332,7 @@ export interface ClientParty {
   v?: number;
 }
 
-export type ClientFrame = ClientParty | ClientDash | ClientCourse | ClientHello | ClientMove | ClientLook | ClientBye | ClientRest | ClientAir | ClientEmote | ClientSay | ClientQuests | ClientTalk | ClientQuestAction | ClientUse | ClientGather | ClientAct | ClientStreet | ClientNest | ClientAdmit | ClientPuzzle | ClientEscape;
+export type ClientFrame = ClientParty | ClientDash | ClientCourse | ClientHello | ClientMove | ClientLook | ClientBye | ClientRest | ClientAir | ClientEmote | ClientSnowball | ClientSay | ClientQuests | ClientTalk | ClientQuestAction | ClientUse | ClientGather | ClientAct | ClientStreet | ClientNest | ClientAdmit | ClientPuzzle | ClientEscape;
 
 // ---- server -> client ----
 export interface ServerWelcome {
@@ -405,6 +411,12 @@ export interface ServerEmote {
   t: 'emote';
   id: string;
   e: string;
+}
+/** An owl threw a snowball at another (OP-074): `id` threw it, `at` is the owl it was thrown at. */
+export interface ServerSnowball {
+  t: 'snowball';
+  id: string;
+  at: string;
 }
 /** An owl said a prewritten phrase (its number; the page shows the phrase in a bubble above the owl). */
 export interface ServerSay {
@@ -698,6 +710,7 @@ export type ServerFrame =
   | ServerCounts
   | ServerFull
   | ServerEmote
+  | ServerSnowball
   | ServerSay
   | ServerQuests
   | ServerHandIn
@@ -799,6 +812,8 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
       return { t: 'air', air: v['air'] };
     case 'emote':
       return isEmoteId(v['e']) ? { t: 'emote', e: v['e'] } : null;
+    case 'snowball':
+      return isId(v['at']) ? { t: 'snowball', at: v['at'] } : null;
     case 'say': {
       // A whole number in range; whether the phrase list has it is the room's to decide.
       const n = v['n'];
@@ -909,7 +924,7 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
   }
 }
 
-const SERVER_FRAME_TYPES = new Set(['escape', 'stump', 'party', 'puzzle', 'welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'say', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'wall', 'closed', 'notice', 'restart', 'realms', 'shares', 'rest', 'air', 'admitted', 'course']);
+const SERVER_FRAME_TYPES = new Set(['escape', 'stump', 'party', 'puzzle', 'welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'snowball', 'say', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'wall', 'closed', 'notice', 'restart', 'realms', 'shares', 'rest', 'air', 'admitted', 'course']);
 
 /** Loose check for server frames on the client (a trusted source, but never crash on garbage). */
 export function parseServerFrame(text: string): ServerFrame | null {

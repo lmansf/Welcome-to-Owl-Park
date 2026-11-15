@@ -53,6 +53,11 @@ export class LocalTransport implements ParkTransport {
           lastSeen.set(msg.id, Date.now());
           handlers.onPeerEmote?.(msg.id, msg.e);
           break;
+        case 'snowball':
+          if (msg.id === current.id) return;
+          lastSeen.set(msg.id, Date.now());
+          handlers.onPeerSnowball?.(msg.id, msg.at);
+          break;
         case 'say':
           if (msg.id === current.id) return;
           lastSeen.set(msg.id, Date.now());
