@@ -34,8 +34,22 @@ test.describe('the first snow (OP-074, behind ?snow=1)', () => {
     await expect(throwIt).toBeVisible();
     if (isMobile) await throwIt.tap();
     else await throwIt.click();
-    // Another at once is not thrown (one every two seconds), asked straight after, before the first lands.
-    expect(await a.evaluate(() => window.owlPark.snowball('owl-b'))).toBe(false);
+    // Another at once is not thrown (one every two seconds). Asked in the page the moment the button's
+    // throw is counted, with no round trip between: the click can resolve before the game has handled it.
+    const again = await a.evaluate(
+      () =>
+        new Promise<boolean | null>((done) => {
+          const end = performance.now() + 10_000;
+          const look = () => {
+            if ((window.owlPark.state()?.snowballs.thrown ?? 0) >= 1) done(window.owlPark.snowball('owl-b'));
+            else if (performance.now() < end) setTimeout(look, 5);
+            else done(null);
+          };
+          look();
+        }),
+    );
+    expect(again, 'the button threw nothing within 10 s').not.toBeNull();
+    expect(again).toBe(false);
     await expect.poll(async () => (await state(a)).snowballs).toEqual({ thrown: 1, landed: 1, hits: ['owl-b'] });
     await expect.poll(async () => (await state(b)).snowballs.hits).toEqual(['owl-b']);
     await b.screenshot({ path: `e2e-screenshots/${test.info().project.name}-snowball.png` });
