@@ -10,13 +10,13 @@
         "updraft": ["kit-clearing-updraft-vent"],
         "sky": ["kit-clearing-sky-a", "kit-clearing-sky-b", "kit-under-sky-b"],
         "far": ["kit-clearing-far-a", "kit-clearing-far-b", "kit-under-far-b"],
-        "mid": ["kit-clearing-mid-a", "kit-clearing-mid-b", "kit-under-mid-b"],
+        "mid": ["kit-clearing-mid-a", "kit-clearing-mid-b", "kit-clearing-mid-c", "kit-under-mid-b"],
         "knot-hole": ["kit-doorway-knothole", "kit-clearing-trunk-entrance", "kit-landmark-door-root-tiny", "kit-hatch-down", "kit-clearing-hut-door-open", "kit-clearing-vine-curtain", "kit-landmark-hut-lookout"],
         "roost": ["kit-clearing-checkpoint-bench"],
         "lost-feather": ["kit-clearing-feather-lost"],
         "hazard": ["kit-clearing-bramble-patch", "kit-clearing-thorn-roots"],
         "finish-roost": ["kit-clearing-finish-shrine"],
-        "prop-small": ["kit-clearing-mushroom-cluster", "kit-landmark-bell-hanging", "kit-landmark-cabinet-miniature", "kit-landmark-telescope-brass"],
+        "prop-small": ["kit-clearing-mushroom-cluster", "kit-landmark-bell-hanging", "kit-clearing-acorn-cap", "kit-clearing-hammock"],
         "plant": ["kit-clearing-fern-clump", "kit-clearing-fern-tall", "kit-under-root-hang"]
       }
     },
@@ -33,8 +33,8 @@
         "lost-feather": ["kit-ink-feather-lost"],
         "mechanic": ["kit-ink-brush-stone"],
         "finish-roost": ["kit-ink-finish-shrine"],
-        "prop-large": ["kit-ink-tea-stall", "kit-landmark-scroll-tower", "kit-landmark-crane-paper", "kit-landmark-heron-ink", "kit-ink-eave-shelter", "kit-ink-temple-eave"],
-        "prop-small": ["kit-ink-stone-lantern", "kit-ink-paper-lantern", "kit-ink-easel-blank", "kit-ink-seal-red"],
+        "prop-large": ["kit-landmark-scroll-tower", "kit-landmark-crane-paper", "kit-landmark-heron-ink", "kit-ink-eave-shelter", "kit-ink-temple-eave"],
+        "prop-small": ["kit-ink-stone-lantern", "kit-ink-paper-lantern", "kit-ink-easel-blank", "kit-ink-crane-perch", "kit-ink-seal-red"],
         "plant": ["kit-ink-lotus-pads", "kit-ink-pond-edge"]
       }
     },
@@ -47,14 +47,14 @@
         "perch-small": ["kit-neon-air-unit", "kit-neon-billboard-blank"],
         "sky": ["kit-neon-sky-a"],
         "far": ["kit-neon-far-a", "kit-neon-far-b"],
-        "mid": ["kit-neon-mid-b", "kit-neon-mid-c"],
+        "mid": ["kit-neon-mid-a", "kit-neon-mid-b", "kit-neon-mid-c"],
         "knot-hole": ["kit-neon-rooftop-door-open"],
         "roost": ["kit-neon-checkpoint-bench"],
         "lost-feather": ["kit-neon-feather-lost"],
         "hazard": ["kit-neon-neon-tube-hazard"],
         "finish-roost": ["kit-neon-finish-shrine"],
-        "prop-large": ["kit-neon-water-tank", "kit-neon-noodle-stall", "kit-neon-antenna-mast"],
-        "prop-small": ["kit-neon-vending-machine", "kit-neon-pigeon-coop", "kit-neon-satellite-dish"]
+        "prop-large": ["kit-neon-water-tank", "kit-neon-rooftop-tent", "kit-neon-antenna-mast"],
+        "prop-small": ["kit-neon-rooftop-garden", "kit-neon-pigeon-coop", "kit-neon-chimney-stack"]
       }
     },
     "glass": {

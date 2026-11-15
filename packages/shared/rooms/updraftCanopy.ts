@@ -20,7 +20,7 @@ import { kitPerches, kitRoom } from '../src/kit';
 import { ROOM_W, type KitBackdrop, type KitDecal, type KitLedge, type DoorDef, type RoomDef, type RoomKit } from '../src/room';
 import type { Updraft } from '../src/updraft';
 import { inRealmKit } from '../src/kitSlots';
-import { withCourseAir } from './courseAir';
+import { inTurn, withCourseAir } from './courseAir';
 
 export const CANOPY_COURSE_ID = 'canopy';
 /** The tree's ground line (TREE_GROUND in rooms/index.ts, which this file cannot import: index.ts imports it). */
@@ -116,15 +116,23 @@ const layer = (key: string, rate: number, screens: readonly [number, number], fa
 const FADES = { left: 230, right: 230 };
 
 /** The clearing's air, screen by screen: its two skies (each screen's own tile), far trees and the two quieter middle layers in turn. */
-function clearingAir(screens: number): KitBackdrop[] {
+function clearingAir(screens: number, start = 0): KitBackdrop[] {
   const out: KitBackdrop[] = [];
   for (let s = 0; s < screens; s++) {
-    out.push(layer(s % 2 ? 'kit-clearing-sky-b' : 'kit-clearing-sky-a', 1, [s, s]));
-    out.push(layer(s % 2 ? 'kit-clearing-far-b' : 'kit-clearing-far-a', 0.6, [s, s], FADES));
-    out.push(layer(s % 2 ? 'kit-clearing-mid-b' : 'kit-clearing-mid-a', 0.75, [s, s], FADES));
+    out.push(layer(inTurn(CLEARING_SKY, start + s), 1, [s, s]));
+    out.push(layer(inTurn(CLEARING_FAR, start + s), 0.6, [s, s], FADES));
+    out.push(layer(inTurn(CLEARING_MID, start + s), 0.75, [s, s], FADES));
   }
   return out;
 }
+
+/**
+ * The clearing's layers taken in turn (OP-419): its two skies and far trees and all three middle layers,
+ * so the same picture comes round only every sixth screen, and each act starts where the one before it ended.
+ */
+const CLEARING_SKY = ['kit-clearing-sky-a', 'kit-clearing-sky-b'] as const;
+const CLEARING_FAR = ['kit-clearing-far-a', 'kit-clearing-far-b'] as const;
+const CLEARING_MID = ['kit-clearing-mid-a', 'kit-clearing-mid-c', 'kit-clearing-mid-b'] as const;
 
 /** Inside the trunk: its hollow wood all round, with the clearing's sky behind it (seen through no gap). */
 function trunkInside(w: number): Pick<RoomKit, 'backdrops' | 'surfaces'> {
@@ -173,7 +181,7 @@ const U_ACT1 = [
 
 const CANOPY_1: RoomKit = {
   ground: G,
-  backdrops: clearingAir(3),
+  backdrops: clearingAir(3, 0),
   paths: [
     walk('fern-floor', 0, 700, FERN),
     // Ground under the fronds (OP-361): the first screen is where the held Jump and the rising air are
@@ -223,10 +231,10 @@ const ROOT_DEN: RoomKit = {
   ledges: [ledge('shelf', 900, 200, 200, { cap: 'kit-clearing-root-shelf' })],
   doors: [{ door: 'out', piece: 'kit-landmark-door-root-tiny' }],
   props: [
-    { id: 'cabinet', piece: 'kit-landmark-cabinet-miniature', x: 600, top: 0 },
+    { id: 'acorn', piece: 'kit-clearing-acorn-cap', x: 600, top: 0, scale: 0.8 },
     { id: 'den-shrooms', piece: 'kit-clearing-mushroom-cluster', x: 420, top: 0, scale: 0.8 },
   ],
-  scenes: [{ id: 'den', story: 'A dry den under the roots where someone keeps a tiny game cabinet, mushrooms glowing beside it.', props: ['cabinet', 'den-shrooms'] }],
+  scenes: [{ id: 'den', story: 'A dry den under the roots where someone keeps an acorn cap for a bowl, mushrooms glowing beside it.', props: ['acorn', 'den-shrooms'] }],
   decals: [{ piece: 'kit-under-root-hang', x: 1200, y: 120 }],
 };
 
@@ -287,7 +295,7 @@ const U_ACT3 = [
 ];
 const CROWN: RoomKit = {
   ground: G,
-  backdrops: clearingAir(4),
+  backdrops: clearingAir(4, 3),
   // Under the crown run, bramble grown up through the clearing's leaves: the drop an owl falls back from.
   paths: [walk('crown-floor', 0, 600, 'kit-tex-clearing-leaf-canopy'), dip('crown-drop', 600, 4 * ROOM_W, 'kit-tex-clearing-leaf-canopy')],
   ledges: [
@@ -323,8 +331,8 @@ const HUT: RoomKit = {
   paths: [{ id: 'hut-floor', x0: 0, x1: ROOM_W, top: 0, row: 'kit-cut-plank', mid: 'kit-tex-planks' }],
   ledges: [ledge('sill', 1100, 260, 130, { cap: 'kit-plank-single' })],
   doors: [{ door: 'out', piece: 'kit-clearing-hut-door-open', scale: 0.9 }],
-  props: [{ id: 'telescope', piece: 'kit-landmark-telescope-brass', x: 1230, top: 130 }],
-  scenes: [{ id: 'window-seat', story: 'On the window seat a brass telescope points out across the night, at a far-off glow of neon.', props: ['telescope'] }],
+  props: [{ id: 'hammock', piece: 'kit-clearing-hammock', x: 1230, top: 130, scale: 0.75 }],
+  scenes: [{ id: 'window-seat', story: 'Over the window seat hangs a little hammock, where the lookout owl naps between watches, facing a far-off glow of neon.', props: ['hammock'] }],
 };
 
 export const CANOPY_ROOMS: Record<string, RoomDef> = inRealmKit('clearing', withCourseAir('clearing', {

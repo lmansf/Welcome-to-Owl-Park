@@ -18,7 +18,7 @@ import type { CourseDef, CoursePiece, CourseThorns, RoomCourse } from '../src/co
 import { kitPerches, kitRoom } from '../src/kit';
 import { ROOM_W, type DoorDef, type KitBackdrop, type KitDecal, type KitLedge, type RoomDef, type RoomKit } from '../src/room';
 import { inRealmKit } from '../src/kitSlots';
-import { withCourseAir } from './courseAir';
+import { inTurn, withCourseAir } from './courseAir';
 
 export const CIRCUIT_COURSE_ID = 'circuit';
 /** The tree's ground line (TREE_GROUND in rooms/index.ts, which this file cannot import: index.ts imports it). */
@@ -97,6 +97,14 @@ function tubes(x0: number, x1: number, step = 140): KitDecal[] {
 
 const layer = (key: string, rate: number, screens: readonly [number, number], fade?: KitBackdrop['fade']): KitBackdrop => ({ key, rate, screens, ...(fade ? { fade } : {}) });
 const EDGE_FADE = 230;
+/**
+ * The far towers and the nearer blocks, taken in turn screen by screen (OP-419): two far and three
+ * middle layers, so no screen shows its neighbour's picture and the same pair comes round only every
+ * sixth screen. Each act starts where the one before it ended, so the course runs on without a repeat
+ * at its doors.
+ */
+const NEON_FAR = ['kit-neon-far-a', 'kit-neon-far-b'] as const;
+const NEON_MID = ['kit-neon-mid-c', 'kit-neon-mid-b', 'kit-neon-mid-a'] as const;
 
 /**
  * The neon city's night, screen by screen: the one violet sky drifting slowest, the far towers in turn standing
@@ -104,13 +112,13 @@ const EDGE_FADE = 230;
  * is drawn first, then every far layer, then every middle one, so a neighbouring screen's layer never
  * draws over a nearer one (as the ink-wash course's air, brushstrokeBridges.ts).
  */
-function cityAir(screens: number): KitBackdrop[] {
+function cityAir(screens: number, start = 0): KitBackdrop[] {
   const at = Array.from({ length: screens }, (_, s) => s);
   const fade = (s: number) => ({ ...(s > 0 ? { left: EDGE_FADE } : {}), ...(s < screens - 1 ? { right: EDGE_FADE } : {}) });
   return [
     ...at.map((s) => layer('kit-neon-sky-a', 0.5, [s, s])),
-    ...at.map((s) => layer(s % 2 ? 'kit-neon-far-b' : 'kit-neon-far-a', 1, [s, s])),
-    ...at.map((s) => layer(s % 2 ? 'kit-neon-mid-b' : 'kit-neon-mid-c', 0.75, [s, s], fade(s))),
+    ...at.map((s) => layer(inTurn(NEON_FAR, start + s), 1, [s, s])),
+    ...at.map((s) => layer(inTurn(NEON_MID, start + s), 0.75, [s, s], fade(s))),
   ];
 }
 
@@ -139,7 +147,7 @@ const SIGNS_1 = [sign('s1', 700, 180, 230, 'a'), sign('s2', 3000, 180, 200, 'a')
 
 const ROOFTOPS: RoomKit = {
   ground: G,
-  backdrops: cityAir(3),
+  backdrops: cityAir(3, 0),
   paths: [deck('deck-a', 0, 1800), drop('street', 1800, 2700), deck('deck-b', 2700, 3 * ROOM_W)],
   ledges: [
     ledge('ac1', 300, 200, 120, AIR_UNIT),
@@ -153,14 +161,14 @@ const ROOFTOPS: RoomKit = {
     { door: 'to-cut', piece: 'kit-neon-rooftop-door-open', scale: 0.7 },
   ],
   props: [
-    { id: 'vending', piece: 'kit-neon-vending-machine', x: 200, top: 0, scale: 0.6 },
+    { id: 'garden', piece: 'kit-neon-rooftop-garden', x: 200, top: 0, scale: 0.6 },
     { id: 'coop', piece: 'kit-neon-pigeon-coop', x: 1300, top: 420, scale: 0.55 },
-    { id: 'noodles', piece: 'kit-neon-noodle-stall', x: 4520, top: 0, scale: 0.55 },
+    { id: 'tent', piece: 'kit-neon-rooftop-tent', x: 4500, top: 0, scale: 0.75 },
   ],
   scenes: [
-    { id: 'gate', story: 'A vending machine hums beside the rooftop door back down to the Commons, where the run over the roofs begins.', props: ['vending'], about: ['to-commons'] },
+    { id: 'gate', story: 'A rooftop garden of herbs and moss grows beside the door back down to the Commons, where the run over the roofs begins.', props: ['garden'], about: ['to-commons'] },
     { id: 'coop', story: 'On the high roof a pigeon coop faces the street, its pigeons watching the signs blink on and off.', props: ['coop'], about: ['b1'] },
-    { id: 'noodles', story: 'A noodle stall on the far roof keeps its lanterns lit on its own battery, by the door to the dark block.', props: ['noodles'], about: ['to-cut'] },
+    { id: 'camp', story: 'A little tent pitched on the far roof glows from inside, its lamp lit on its own battery, by the door to the dark block.', props: ['tent'], about: ['to-cut'] },
   ],
   decals: tubes(1800, 2700),
 };
@@ -177,7 +185,7 @@ const SIGNS_2 = [
 
 const POWER_CUT: RoomKit = {
   ground: G,
-  backdrops: cityAir(3),
+  backdrops: cityAir(3, 3),
   paths: [deck('deck-a', 0, 600), drop('street-1', 600, 2300), deck('deck-b', 2300, 2700), drop('street-2', 2700, 4300), deck('deck-c', 4300, 3 * ROOM_W)],
   ledges: [
     ledge('r1', 800, 300, 420, roof(420, true)),
@@ -192,11 +200,11 @@ const POWER_CUT: RoomKit = {
   ],
   props: [
     { id: 'tank', piece: 'kit-neon-water-tank', x: 950, top: 420, scale: 0.6 },
-    { id: 'dish', piece: 'kit-neon-satellite-dish', x: 3630, top: 540, scale: 0.6 },
+    { id: 'chimney', piece: 'kit-neon-chimney-stack', x: 3630, top: 540, scale: 0.6 },
   ],
   scenes: [
     { id: 'tank', story: 'The water tank on the first dark roof, its little lantern the only light left on the block.', props: ['tank'], about: ['r1'] },
-    { id: 'dish', story: 'A satellite dish on the tall roof still points at the sky, though nothing in the block has power to watch it.', props: ['dish'], about: ['r3'] },
+    { id: 'chimney', story: 'A chimney on the tall roof still breathes a thin warm smoke, the one warm spot left on the dark block.', props: ['chimney'], about: ['r3'] },
   ],
   decals: [...tubes(600, 2300), ...tubes(2700, 4300)],
 };
@@ -207,7 +215,7 @@ const SIGNS_3 = [sign('s9', 500, 160, 180, 'a'), sign('s10', 1250, 160, 470, 'b'
 
 const ANTENNA: RoomKit = {
   ground: G,
-  backdrops: cityAir(2),
+  backdrops: cityAir(2, 6),
   paths: [deck('deck-a', 0, 700), drop('street', 700, 2 * ROOM_W)],
   ledges: [
     ledge('m1', 800, 200, 380, roof(380, true)),
