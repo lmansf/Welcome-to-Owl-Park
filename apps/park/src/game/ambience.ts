@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { KIT_ART, ROOM_W, WAY_OUT_DOOR, idolRealms, kitFilesOf, seenFromSide, type RoomDef } from '@owl-park/shared';
+import { KIT_ART, ROOM_W, WAY_OUT_DOOR, idolRealms, kitFilesOf, seenFromSide, snowTints, snowsIn, type RoomDef } from '@owl-park/shared';
 import { flagOn } from '../flags';
 import { ANCHORS } from '../rooms';
 import { ART, blockadeKey } from './art';
@@ -347,6 +347,25 @@ export function addSetPieces(
 /** The room's drifting particles, which calm motion (a setting) stills and hides. */
 export interface Ambience {
   setCalm(calm: boolean): void;
+  /** Whether the first snow falls here (OP-074, behind ?snow=1). */
+  snowing: boolean;
+}
+
+/**
+ * Snow lying thin on a floor seen from above (OP-074): the walkable floor washed white, more at its
+ * edges where snow would drift, under the owls, their shadows and the floor's edge line. Drawn in code
+ * over the painting; a painted snow edit of a room replaces it once its spend is approved.
+ */
+export const FROST = { depth: -0.95, alpha: 0.22, edgeAlpha: 0.32, edgePx: 26 } as const;
+
+function frostFloor(scene: Phaser.Scene, room: RoomDef): void {
+  const g = scene.add.graphics().setDepth(FROST.depth);
+  for (const poly of room.walkable) {
+    g.fillStyle(0xf4f8ff, FROST.alpha);
+    g.fillPoints(poly, true, true);
+    g.lineStyle(FROST.edgePx, 0xffffff, FROST.edgeAlpha);
+    g.strokePoints(poly, true, true);
+  }
 }
 
 /** Mood particles: fireflies, neon rain, drifting gold dust, spread over the whole room. */
@@ -396,8 +415,32 @@ export function addAmbience(scene: Phaser.Scene, room: RoomDef): Ambience {
       .setDepth(h + 20);
     drifting.push(rain);
   }
+  // The first snow (OP-074, D6, behind ?snow=1): falling in every room open to the sky (snowsIn), and
+  // seen from above lying thin on the floor. Drawn in code: no painted snow until its spend is approved.
+  const snowing = flagOn('snow') && snowsIn(room);
+  if (snowing) {
+    const snow = scene.add
+      .particles(0, 0, 'fx-dot', {
+        x: { min: -60, max: w + 60 },
+        y: { min: -40, max: h - 120 },
+        lifespan: { min: 9000, max: 14000 },
+        speedY: { min: 40, max: 85 },
+        speedX: { min: -18, max: 12 },
+        accelerationX: { min: -6, max: 6 },
+        scale: { min: 0.18, max: 0.5 },
+        alpha: { start: 0, end: 0.9, ease: 'Sine.easeOut' },
+        tint: snowTints(room.mood),
+        frequency: 70 / k,
+        quantity: 1,
+        maxAliveParticles: Math.round(160 * k),
+      })
+      .setDepth(h + 20);
+    drifting.push(snow);
+    if (!seenFromSide(room)) frostFloor(scene, room);
+  }
   if (room.mood === 'neon') {
-    const rain = scene.add
+    // In the snow the neon street's rain has turned to it.
+    const rain = snowing ? null : scene.add
       .particles(0, 0, 'fx-rain', {
         x: { min: -100, max: w + 100 },
         y: -30,
@@ -413,7 +456,7 @@ export function addAmbience(scene: Phaser.Scene, room: RoomDef): Ambience {
         maxAliveParticles: Math.round(140 * k),
       })
       .setDepth(h + 20);
-    drifting.push(rain);
+    if (rain) drifting.push(rain);
     haze = scene.add.rectangle(w / 2, h / 2, w, h, 0xff2aa1, 0.05).setDepth(h + 5).setBlendMode(Phaser.BlendModes.ADD);
     scene.tweens.add({ targets: haze, fillAlpha: 0.1, duration: 1400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   } else if (room.mood === 'arcade') {
@@ -463,6 +506,7 @@ export function addAmbience(scene: Phaser.Scene, room: RoomDef): Ambience {
     }
   }
   return {
+    snowing,
     setCalm(calm) {
       for (const e of drifting) {
         if (calm) e.stop(true);

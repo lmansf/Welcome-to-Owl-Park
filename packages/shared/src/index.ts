@@ -42,6 +42,7 @@ export * from './climbCity';
 export * from './climbPilot';
 export * from './flight';
 export * from './updraft';
+export * from './snow';
 export * from './thermal';
 export * from './wind';
 export * from './movers';
