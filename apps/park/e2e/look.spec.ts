@@ -6,9 +6,10 @@ import { openPark } from './helpers';
 const LOOK_ROUND = ['front', '3q', 'side', 'back', 'side', '3q', 'front'];
 
 /**
- * The head frames this page's owl shows over `ms`, each change once, and whether its body (the pose
- * the other emotes move) stayed at rest the whole time. Sampled in the page, so no frame is missed
- * between round trips.
+ * The head frames this page's owl shows, each change once, from now until the head has turned and come
+ * back to the front (at most `ms`), and whether its body (the pose the other emotes move) stayed at rest
+ * the whole time. Sampled in the page, so no frame is missed between round trips, and timed by the
+ * turn itself, not the clock: on a slow runner the click that starts it can take a second or more.
  */
 function watchHead(page: Page, ms: number): Promise<{ frames: string[]; bodyStill: boolean }> {
   return page.evaluate(
@@ -23,7 +24,8 @@ function watchHead(page: Page, ms: number): Promise<{ frames: string[]; bodyStil
             if (frames[frames.length - 1] !== s.head.frame) frames.push(s.head.frame);
             bodyStill &&= s.head.bodyAtRest;
           }
-          if (performance.now() < end) setTimeout(look, 10);
+          const back = frames.length > 1 && frames[frames.length - 1] === 'front';
+          if (!back && performance.now() < end) setTimeout(look, 10);
           else done({ frames, bodyStill });
         };
         look();
@@ -58,7 +60,7 @@ test.describe('the look around (OP-289, behind ?look=1)', () => {
     await expect(wheel.locator('[data-emote]').first()).toHaveAttribute('data-emote', 'look');
     await expect(look).toHaveAttribute('aria-label', 'Look around');
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-look-wheel.png` });
-    const watched = watchHead(page, 2_500);
+    const watched = watchHead(page, 8_000);
     await look.click();
     await expect(wheel).toBeHidden();
     const { frames, bodyStill } = await watched;
