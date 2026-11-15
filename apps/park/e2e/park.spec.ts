@@ -726,7 +726,7 @@ test.describe('the side camera (OP-351)', () => {
     // Walked, turned and hopped from inside the page, each key let go on the frame that shows what it was
     // held for. A key timed from outside the page comes late on a slow runner, and a late one here walks
     // the owl out again by the doorway it came in by (it stands 80 px from it: the room is left and
-    // nothing jumps), or on into the course's first pit (at 700).
+    // nothing jumps), or on east along the fern floor.
     const seen = await page.evaluate(
       ({ restLead, turnAt, hopAt }) =>
         new Promise<{

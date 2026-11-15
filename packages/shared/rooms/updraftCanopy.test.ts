@@ -21,6 +21,7 @@ describe('the Updraft Canopy (OP-226)', () => {
     expect(Object.keys(CANOPY_ROOMS).sort()).toEqual([...ids].sort());
     expect(courseParts(CANOPY_COURSE, rooms).map((p) => p.id)).toEqual(['bell-1', 'bell-2', 'bell-3', 'bell-4', 'bell-5']);
     expect(coursePieces(CANOPY_COURSE, rooms, 'bench').map((b) => `${b.room}:${b.id}`)).toEqual([
+      'canopy-1:bench-0',
       'canopy-1:bench-1',
       'canopy-1:bench-1b',
       'canopy-2a:bench-2',

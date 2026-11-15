@@ -109,7 +109,7 @@ Floor along the ground line:
 | from x | to x | floor |
 | ---: | ---: | --- |
 | 0 | 700 | safe: moss at the course gate |
-| 700 | 1500 | hazard: bramble |
+| 700 | 1500 | safe: the fern hollow under the fronds (OP-361: bramble until Nov 14) |
 | 1500 | 2000 | safe: moss: the log's west mouth, bench 1 |
 | 2000 | 4200 | hazard: bramble |
 | 4200 | 4800 | safe: moss among the trunk's roots |
@@ -127,7 +127,7 @@ The hanging thorns trail down from the boughs over the fern floor: from above th
 940, past the highest an owl may be, 932) down to their foot. No glide goes over them, and an owl
 that passes under one is already in the air.
 
-**Screen 1.1 The fern gate** (x 0 to 1600). Beat: Jump and step: stumps are Tier 1 and the bramble floor sends an owl back to its last ledge. Then the first updraft, always on: glide into the leaves and they carry you to bell 1. Time: 40 s on a first clear, 18 s on a shortcut run.
+**Screen 1.1 The fern gate** (x 0 to 1600). Beat: Jump and step: stumps are Tier 1, over ground. Then the first updraft, always on: glide into the leaves and they carry you to bell 1. Since OP-361 (Nov 14) the screen has no pit: the fern floor runs under the fronds, so a miss is ground to walk back from, and the first bramble is screen 1.2's. U1 stands from f2's end to over b1 and tops out 10 px above it, so a Jump held from anywhere on f2 comes down on b1 by the bell (16 of 16 in the newcomer bot, against 0 of 17 before). Bench 0 sits on f2, so a fall in screen 1.2 before bench 1 is one held Jump from b1, not back at the gate. Time: 40 s on a first clear, 18 s on a shortcut run.
 
 | id | what | x | y | w | top | from | rise | gap | needs | reach |
 | --- | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | --- | ---: |
@@ -135,9 +135,9 @@ that passes under one is already in the air.
 | `s2` | stump (solid) | 520 | 570 | 140 | 200 | `s1` | 110 | 60 | T1 | 106 |
 | `fern-hi` | high fern, lost feather 1 | 40 | 440 | 120 | 330 | `s2` | 130 | 360 | T3 | 771 |
 | `f1` | fern frond | 760 | 610 | 180 | 160 | `s2` | -40 | 100 | T1 | 150 |
-| `f2` | fern frond | 1050 | 670 | 160 | 100 | `f1` | -60 | 110 | T1 | 154 |
+| `f2` | fern frond, bench 0 | 1000 | 670 | 150 | 100 | `f1` | -60 | 60 | T1 | 154 |
 | `b1` | branch, acorn bell 1 | 1480 | 290 | 160 | 480 | `U1` | -100 | 100 | U (glide off) | 240 |
-| `U1` | updraft, always on | 1260 | - | 120 | 580 | `f2` | 0 | 50 | T1 into U1 | 141 |
+| `U1` | updraft, always on | 1150 | - | 380 | 490 | `f2` | 0 | 0 | T1 into U1 | 141 |
 
 **Screen 1.2 The switching gusts** (x 1600 to 3200). Beat: Updrafts switch: on for 3 s, off for 2 s, and the leaves thin out for the last 0.75 s before a gust drops. Bench 1 sits at the log's west mouth, plugged until later. Time: 40 s on a first clear, skipped on a shortcut run.
 
