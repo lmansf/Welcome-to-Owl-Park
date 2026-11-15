@@ -22,7 +22,7 @@ import type { CourseDef, CoursePiece, CourseThorns, RoomCourse } from '../src/co
 import { kitPerches, kitRoom } from '../src/kit';
 import { ROOM_W, type DoorDef, type KitBackdrop, type KitLedge, type KitRun, type RoomDef, type RoomKit } from '../src/room';
 import { inRealmKit } from '../src/kitSlots';
-import { withCourseAir } from './courseAir';
+import { inTurn, withCourseAir } from './courseAir';
 
 export const BRUSH_COURSE_ID = 'brush';
 /** The tree's ground line (TREE_GROUND in rooms/index.ts, which this file cannot import: index.ts imports it). */
@@ -102,15 +102,23 @@ const EDGE_FADE = 230;
  * palette (tools/kit preview.py --check). The mountains fade where they meet the next screen's, not at
  * the room's own ends, where none drifts in over the fade.
  */
-function inkAir(screens: number): KitBackdrop[] {
+function inkAir(screens: number, start = 0): KitBackdrop[] {
   const at = Array.from({ length: screens }, (_, s) => s);
   const fade = (s: number) => ({ ...(s > 0 ? { left: EDGE_FADE } : {}), ...(s < screens - 1 ? { right: EDGE_FADE } : {}) });
   return [
     ...at.map((s) => layer('kit-ink-sky-b', 0.5, [s, s])),
-    ...at.map((s) => layer(s % 2 ? 'kit-ink-far-b' : 'kit-ink-far-a', 1, [s, s])),
+    ...at.map((s) => layer(inTurn(INK_FAR, start + s), 1, [s, s])),
     ...at.map((s) => layer('kit-ink-mid-a', 0.75, [s, s], fade(s))),
   ];
 }
+
+/**
+ * The far hills, taken in turn screen by screen (OP-419), each act starting where the one before it
+ * ended, so no screen shows its neighbour's hills, across a door too. The mountains stay mid-a: the
+ * other two middle layers' rims outshine the walkway (preview.py --check), so they wait for a darker
+ * repaint (OP-373's list).
+ */
+const INK_FAR = ['kit-ink-far-a', 'kit-ink-far-b'] as const;
 
 const COURSE_ROOM = { map: 2 as const, owlScale: 1.25, mood: 'dusk' as const };
 
@@ -195,7 +203,7 @@ const S1 = [stone('k1', 480, 140, WAY, 'R'), stone('k2', 1700, 140, WAY, 'R'), s
 
 const GARDEN: RoomKit = {
   ground: G,
-  backdrops: inkAir(3),
+  backdrops: inkAir(3, 0),
   paths: [bank('ground', 0, POND.x0), river('pond', POND.x0, POND.x1), bank('far-bank', POND.x1, 3 * ROOM_W)],
   ledges: [
     ledge('g1', 300, 120, 70, ROCK),
@@ -218,12 +226,12 @@ const GARDEN: RoomKit = {
     { id: 'gate-lantern', piece: 'kit-ink-stone-lantern', x: 180, top: 0, scale: 0.7 },
     { id: 'crane', piece: 'kit-landmark-crane-paper', x: 2130, top: 40, scale: 0.55 },
     { id: 'easel', piece: 'kit-ink-easel-blank', x: 4420, top: 160, scale: 0.6 },
-    { id: 'tea', piece: 'kit-ink-tea-stall', x: 4580, top: 160, scale: 0.55 },
+    { id: 'perch', piece: 'kit-ink-crane-perch', x: 4600, top: 160, scale: 0.55 },
   ],
   scenes: [
     { id: 'gate', story: 'A stone lantern lights the paper door back to the Commons, where the garden path begins.', props: ['gate-lantern'], about: ['to-commons'] },
     { id: 'crane', story: 'A paper crane sleeps on a rock in the middle of the pond, its head tucked under a wing.', props: ['crane'], about: ['crane-rock'] },
-    { id: 'painting', story: 'On the tea terrace an easel holds an ink painting of this very garden, one stroke short of finished.', props: ['easel', 'tea'], about: ['t1'] },
+    { id: 'painting', story: 'On the terrace an easel holds an ink painting of this very garden, one stroke short of finished, beside the post its painter perches on.', props: ['easel', 'perch'], about: ['t1'] },
   ],
 };
 
@@ -241,7 +249,7 @@ const S2 = [
 
 const RIVER: RoomKit = {
   ground: G,
-  backdrops: inkAir(3),
+  backdrops: inkAir(3, 3),
   paths: [bank('ground', 0, 500), river('river', 500, 4400), bank('far-bank', 4400, 3 * ROOM_W)],
   ledges: [
     ...S2.map((s) => s.ledge),
@@ -294,7 +302,7 @@ const S3A = [stone('k11', 420, 120, 100, 'R'), stone('k12', 1060, 120, 150, 'L')
 
 const PANEL_1: RoomKit = {
   ground: G,
-  backdrops: inkAir(2),
+  backdrops: inkAir(2, 6),
   paths: [bank('ground', 0, 400), river('tarn', 400, 2 * ROOM_W)],
   ledges: [
     ...S3A.map((s) => s.ledge),
@@ -316,7 +324,7 @@ const S3B = [stone('k16', 360, 160, 110, 'U'), stone('k18', 1000, 120, 60, 'R')]
 
 const PANEL_2: RoomKit = {
   ground: G,
-  backdrops: inkAir(2),
+  backdrops: inkAir(2, 8),
   paths: [bank('ground', 0, 300), river('tarn', 300, 2 * ROOM_W)],
   ledges: [...S3B.map((s) => s.ledge), ledge('n1', 620, 200, 520, ROCK), ledge('n2', 1700, 160, 260, DRY), ledge('n3', 2360, 200, 540, CLIFF), ledge('n4', 2610, 590, 540, terrace(540))],
   doors: [

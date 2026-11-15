@@ -94,3 +94,6 @@ export function withCourseAir(realm: KitRealm, rooms: Record<string, RoomDef>): 
     }),
   );
 }
+
+/** The `n`th of `keys`, round and round (OP-419): a course's backdrop layers taken in turn, screen by screen. */
+export const inTurn = (keys: readonly string[], n: number): string => keys[((n % keys.length) + keys.length) % keys.length]!;
