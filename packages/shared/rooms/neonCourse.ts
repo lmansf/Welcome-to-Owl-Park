@@ -232,7 +232,9 @@ export const CIRCUIT_ROOMS: Record<string, RoomDef> = inRealmKit('neon', withCou
     course: {
       act: 1,
       pits: [floor(1800, 2700)],
-      benches: [piece('bench-1', 1150, 420)],
+      // A second bench on the footbridge (OP-361): the way on from it to the far deck is a held Jump, as it was
+      // onto it, and a miss there sends the owl back to try it again from the bridge, not from the roof.
+      benches: [piece('bench-1', 1150, 420), piece('bench-1b', 2100, 300)],
       // The first breaker on the air unit by the start (OP-378): the first move is one hop up over the
       // deck, where a miss lands back on the deck, and it earns a breaker before anything can be fallen
       // into. The first sign, the high roof and the street come after a first success.

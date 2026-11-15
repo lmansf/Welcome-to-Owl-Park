@@ -8,6 +8,10 @@
  * doorways, idols, roots, floor edge and owls, so where an owl can walk and every way out read as before.
  * The owner asked for it to be copied into the game on Nov 9, and on Nov 10 made it the room's look for
  * everyone: every page draws it in the Great Hollow, and `?art=old` draws the room as it was.
+ *
+ * Repainted on Nov 15 (OP-418), from a guide of the room's ways, idol pedestals and vote stones, so each
+ * corner reads as the realm its doors lead to and every doorway is painted where the way out is. The
+ * doorways the room stuck on over the old painting (`paints`) are put away once the new one is drawn.
  */
 import type Phaser from 'phaser';
 import type { RoomDef } from '@owl-park/shared';
@@ -26,6 +30,12 @@ export interface ArtTrial {
   beyond: string;
   /** A light the picture is drawn in (multiplied by it), where it is painted brighter than what stands on it reads against. */
   tint?: number;
+  /**
+   * The room's pieces (RoomPiece.id) the picture paints itself, in their places: put away once it is
+   * drawn, so a doorway is not drawn twice, once painted and once stuck on over it. Where the picture
+   * does not arrive they stand as before, and every way out still has its doorway.
+   */
+  paints?: readonly string[];
 }
 
 /**
@@ -40,8 +50,27 @@ export interface ArtTrial {
  */
 export const HOLLOW_LIGHT = 0xddd2c6;
 
+/**
+ * What the Great Hollow's painting (OP-418, Nov 15) paints in its wall: every way's doorway in its own
+ * realm's look (the knothole up, the trunk's door, the hatch, each Commons' realm door and course gate),
+ * and the course gate grown over with roots. The root runs across the floor are perches, drawn over it.
+ */
+export const HOLLOW_PAINTS: readonly string[] = [
+  'knothole',
+  'to-grove-door',
+  'course-grove-door',
+  'to-market-door',
+  'course-market-door',
+  'trunk-door',
+  'root-hatch',
+  'course-ink-door',
+  'to-ink-door',
+  'course-glass-grown',
+  'to-glass-door',
+];
+
 export const ART_TRIALS: Record<string, ArtTrial> = {
-  hollow: { room: 'm3-hall', key: 'hollow-painted', beyond: '#0e0a06', tint: HOLLOW_LIGHT },
+  hollow: { room: 'm3-hall', key: 'hollow-painted', beyond: '#0e0a06', tint: HOLLOW_LIGHT, paints: HOLLOW_PAINTS },
 };
 
 /** Drawn over the room's own floor and wall, under everything drawn on them. */
@@ -67,6 +96,19 @@ function loadPicture(url: string): Promise<HTMLImageElement | null> {
     img.onerror = () => resolve(null);
     img.src = url;
   });
+}
+
+/** The trial drawn in a room puts away the pieces its picture paints: each named by its piece (ambience.ts) and in `paints`. */
+export function hidePaintedPieces(trial: ArtTrial, pieces: readonly Phaser.GameObjects.Image[]): number {
+  const painted = new Set(trial.paints ?? []);
+  let n = 0;
+  for (const img of pieces) {
+    if (img.name && painted.has(img.name)) {
+      img.setVisible(false);
+      n++;
+    }
+  }
+  return n;
 }
 
 /** Draws this page's art trial over `room` once its picture arrives; whether it was drawn. */
