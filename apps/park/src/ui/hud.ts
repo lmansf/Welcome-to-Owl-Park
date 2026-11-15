@@ -39,6 +39,10 @@ import { createGatePrompt, type GateAsk } from './gatePrompt';
 import { SPECTATOR_WORDS, createSpectatorBadge } from './spectator';
 import { watchTopStack } from './topStack';
 import { createTurnPhone } from './turnPhone';
+import { toastLift } from './toastLift';
+
+/** The highest the tips go, lifted clear of the chips (OP-415): under the bar along the top. */
+const TOASTS_TOP = 64;
 
 /** What the HUD asks of the park for the visitor's collection: wearing things, emotes, messages. */
 export interface CollectionActions {
@@ -339,7 +343,7 @@ const CSS = `
 #hud.just-in .fb-bug,#hud.just-in .fb-card{pointer-events:none}
 #hud.at-home .bar,#hud.at-home .welcome,#hud.at-home .welcome.show,#hud.at-home .nest-welcome.show,#hud.at-home .bottom,#hud.at-home .hints,#hud.at-home .cards,#hud.at-home .notices{display:none}
 @media (pointer:coarse){#hud.no-stick .bottom .actions{bottom:0}}
-#hud .toasts{position:absolute;z-index:10;left:50%;transform:translateX(-50%);bottom:calc(max(12px,env(safe-area-inset-bottom)) + 64px);display:flex;flex-direction:column;gap:6px;align-items:center;width:min(92vw,520px)}
+#hud .toasts{position:absolute;z-index:10;left:50%;transform:translate(-50%,calc(-1 * var(--toasts-lift,0px)));bottom:calc(max(12px,env(safe-area-inset-bottom)) + 64px);display:flex;flex-direction:column;gap:6px;align-items:center;width:min(92vw,520px)}
 #hud .toast{background:rgba(246,241,227,.95);color:#0C1E36;border-radius:12px;padding:10px 14px;font-size:14px;font-weight:600;text-align:center;box-shadow:0 4px 16px rgba(0,0,0,.4);animation:hud-in .25s ease-out}
 @keyframes hud-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 #hud .actions button{animation:hud-in .25s ease-out}
@@ -986,13 +990,29 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     setTimeout(() => el.remove(), ms);
   };
 
+  /** The tips kept clear of the chips at the screen's edge (OP-415, toastLift.ts): up above any they would cover. */
+  const liftToasts = () => {
+    const lift = parseFloat(toasts.style.getPropertyValue('--toasts-lift')) || 0;
+    const r = toasts.getBoundingClientRect();
+    const column = { left: r.left, right: r.right, top: r.top + lift, bottom: r.bottom + lift };
+    const chips = [...hintEls.values()].map((el) => el.getBoundingClientRect());
+    const next = toasts.childElementCount ? toastLift(column, chips, TOASTS_TOP) : 0;
+    if (Math.abs(next - lift) >= 0.5) toasts.style.setProperty('--toasts-lift', `${next.toFixed(1)}px`);
+  };
+  const dropToast = (el: HTMLElement, ms: number) =>
+    setTimeout(() => {
+      el.remove();
+      liftToasts();
+    }, ms);
+
   const toast = (message: string, ms = 2600, accent?: string) => {
     const el = document.createElement('div');
     el.className = accent ? 'toast accent' : 'toast';
     if (accent) el.style.setProperty('--accent', accent);
     el.textContent = message;
     toasts.appendChild(el);
-    setTimeout(() => el.remove(), ms);
+    liftToasts();
+    dropToast(el, ms);
   };
 
   /** A line with a Get a Day Ticket button under it (OP-191); the button opens the turnstiles' sale with the same line. */
@@ -1005,11 +1025,13 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     get.dataset['spectatorGet'] = 'offer';
     get.addEventListener('click', () => {
       el.remove();
+      liftToasts();
       getTicket?.(line);
     });
     el.append(get);
     toasts.appendChild(el);
-    setTimeout(() => el.remove(), ms);
+    liftToasts();
+    dropToast(el, ms);
   };
   const badge = createSpectatorBadge(root, () => getTicket?.(SPECTATOR_WORDS.keep));
   // One safe area along the top (OP-369): the strip and the notices are kept clear of the ribbon, the badge and the cards.
@@ -1412,6 +1434,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
         hintEls.delete(id);
       }
       unstackHints([...hintEls.values()]);
+      liftToasts();
     },
     onHint(cb) {
       hintCb = cb;

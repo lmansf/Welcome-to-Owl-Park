@@ -19,6 +19,7 @@ import { loadSvgTexture } from './svgLoader';
 import { boxable, paintSizeBox } from './sizeBoxes';
 import { fitTrialArt, setTrialBackdropVeil, trialFilesOf, updraftBitsKey } from './skinTrial';
 import { allLookKeys } from './artLooks';
+import { HEAD_KEYS, drawHeadShapes, headPlaceholderFor, isHeadKey } from './headTurn';
 
 export const ART_PATH = 'art/';
 export const OWL_W = 200;
@@ -291,6 +292,9 @@ export const ART: Record<string, ArtSpec> = {
   // twice behind the body (the left one mirrored) and turned at the shoulder, so it loads at boot.
   'owl-wing-body': { w: WING_W, h: WING_H, kind: 'owl' },
   'owl-wing-accent': { w: WING_W, h: WING_H, kind: 'owl' },
+  // The look around (OP-289): the head drawn by frame on the owl canvas, each a base in the body
+  // colour and a detail layer (headTurn.ts). Loaded when an owl first looks around, never at boot.
+  ...Object.fromEntries(HEAD_KEYS.map((k) => [k, { w: OWL_W, h: OWL_H, kind: 'owl' as const }])),
   // In flight (OP-136) an owl wears its kind's flight body, belly and accent, its folded wings taken
   // away, so the wing above opens alone. Loaded once an owl may fly (loadFlightArt), never at boot.
   'owl-flight-body': { w: OWL_W, h: OWL_H, kind: 'owl' },
@@ -658,6 +662,18 @@ export const ART: Record<string, ArtSpec> = {
   'kit-landmark-telescope-brass': { w: 160, h: 200, kind: 'piece' },
   'kit-landmark-idol-owl-glass': { w: 320, h: 400, kind: 'piece' },
   'kit-landmark-lamp-moth': { w: 120, h: 120, kind: 'piece' },
+  'kit-landmark-hall-root-glass-log': { w: 400, h: 120, kind: 'piece' },
+  'kit-landmark-hall-root-glass-knot': { w: 200, h: 200, kind: 'piece' },
+  'kit-landmark-hall-root-glass-stump': { w: 320, h: 400, kind: 'piece' },
+  'kit-landmark-hall-root-ink-log': { w: 400, h: 120, kind: 'piece' },
+  'kit-landmark-hall-root-ink-knot': { w: 200, h: 200, kind: 'piece' },
+  'kit-landmark-hall-root-ink-stump': { w: 320, h: 400, kind: 'piece' },
+  'kit-landmark-hall-root-grove-log': { w: 400, h: 120, kind: 'piece' },
+  'kit-landmark-hall-root-grove-knot': { w: 200, h: 200, kind: 'piece' },
+  'kit-landmark-hall-root-grove-stump': { w: 320, h: 400, kind: 'piece' },
+  'kit-landmark-hall-root-market-log': { w: 400, h: 120, kind: 'piece' },
+  'kit-landmark-hall-root-market-knot': { w: 200, h: 200, kind: 'piece' },
+  'kit-landmark-hall-root-market-stump': { w: 320, h: 400, kind: 'piece' },
   'kit-landmark-pane-cracked': { w: 240, h: 320, kind: 'piece' },
   'kit-landmark-lever-brass': { w: 120, h: 160, kind: 'piece' },
   'kit-landmark-switch-lift': { w: 120, h: 160, kind: 'piece' },
@@ -981,7 +997,7 @@ for (const room of Object.values(ROOMS)) {
 }
 
 /** Art needed in every room (loaded once at boot). Species layers wait until an owl of that kind shows up, flight layers until one may fly. */
-export const GLOBAL_ART = Object.keys(ART).filter((k) => ART[k]!.kind === 'owl' && !isSpeciesLayer(k) && !isFlightLayer(k));
+export const GLOBAL_ART = Object.keys(ART).filter((k) => ART[k]!.kind === 'owl' && !isSpeciesLayer(k) && !isFlightLayer(k) && !isHeadKey(k));
 
 /** The blockade standing in a closed doorway that shows `phrase` ("Not Yet Fledged" -> blockade-not-yet-fledged). */
 export function blockadeKey(phrase: string): string {
@@ -1441,6 +1457,11 @@ export function ensurePlaceholder(scene: Phaser.Scene, key: string): void {
 }
 
 function drawOwlPlaceholder(g: Phaser.GameObjects.Graphics, key: string): void {
+  const head = headPlaceholderFor(key);
+  if (head) {
+    drawHeadShapes(g, head);
+    return;
+  }
   switch (key) {
     case 'owl-body':
       g.fillStyle(0xffffff, 1);

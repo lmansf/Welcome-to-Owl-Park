@@ -22,6 +22,8 @@ export interface EmoteHost {
   anchor(name: AnchorName): { x: number; y: number };
   /** Close the eyes for a while (the blink frame). */
   closeEyes(ms: number): void;
+  /** Turn the head on its own layer through a full look round, the body still (OP-289); a host without a head layer has none. */
+  lookAround?(): boolean;
 }
 
 /** Body height in owl canvas units: the pivot for spins and flips is the middle of the owl. */
@@ -175,6 +177,9 @@ export function playEmote(host: EmoteHost, emote: string): boolean {
       tw({ x: 10 * host.forward(), angle: 8 * host.forward(), duration: 90, yoyo: true, ease: 'Quad.easeOut', delay: 300 });
       scene.time.delayedCall(320, () => burst(host, 'puff', 'beak', [cream, 0xbfe9ff], { speedX: { min: 60 * host.facing(), max: 120 * host.facing() }, speedY: { min: -20, max: 20 }, scale: { start: 0.2, end: 0.6 }, alpha: { start: 0.8, end: 0 }, lifespan: 600 }, 6));
       return true;
+    case 'look':
+      // Not a tween of the pose: the head turns on its own layer, the body stays still (Owl.lookAround).
+      return host.lookAround?.() ?? false;
     case 'peek':
       tw({ scaleY: 0.4, y: 10, duration: 200, yoyo: true, hold: 500, ease: 'Back.easeIn' });
       return true;

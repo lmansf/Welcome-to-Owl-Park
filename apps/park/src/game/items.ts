@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { DEFAULT_ANCHORS, measureAnchors, type Mask, type OwlAnchors } from '../collect/pixels';
-import { itemCanvas } from './itemArt';
+import { itemCanvas, petArtCanvas } from './itemArt';
 
 /** The texture key a variant is drawn with at a scale (textures are shared by every scene). */
 export function variantKey(variant: string, scale: number): string {
@@ -16,6 +16,22 @@ export function ensureVariantTexture(scene: Phaser.Scene, variant: string, scale
   let p = pending.get(key);
   if (!p) {
     p = itemCanvas(variant, scale).then((canvas) => {
+      if (!scene.textures.exists(key)) scene.textures.addCanvas(key, canvas);
+      pending.delete(key);
+      return key;
+    });
+    pending.set(key, p);
+  }
+  return p;
+}
+
+/** Make sure a pet's own art key (the egg's cracks, OP-261) has a texture; resolves to its key. */
+export function ensurePetArtTexture(scene: Phaser.Scene, art: string, scale: number): Promise<string> {
+  const key = `pet-art:${art}@${scale}`;
+  if (scene.textures.exists(key)) return Promise.resolve(key);
+  let p = pending.get(key);
+  if (!p) {
+    p = petArtCanvas(art, scale).then((canvas) => {
       if (!scene.textures.exists(key)) scene.textures.addCanvas(key, canvas);
       pending.delete(key);
       return key;

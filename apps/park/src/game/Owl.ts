@@ -1,8 +1,12 @@
 import Phaser from 'phaser';
 import { AIRBORNE, DEFAULT_SPECIES, GLIDING, GROUNDED, LIFTED, ON_GROUND, facing, hexToInt, parseVariant, positionAlongWalk, speciesOf, type Air, type OwlLook, type Vec2, type Walk, type Wear } from '@owl-park/shared';
 import { tintedTexture } from './canvasTint';
-import { artFacing, type OwlAnchors } from '../collect/pixels';
-import { OWL_H, OWL_LAYERS, OWL_W, SPECIES_FLIGHT_LAYERS, SPECIES_LAYERS, WING_H, WING_W, loadFlightArt, loadSpeciesArt } from './art';
+import { DEFAULT_ANCHORS, artFacing, type OwlAnchors } from '../collect/pixels';
+import { OWL_H, OWL_LAYERS, OWL_W, SPECIES_FLIGHT_LAYERS, SPECIES_LAYERS, WING_H, WING_W, ensurePlaceholder, loadArt, loadFlightArt, loadSpeciesArt } from './art';
+import { rasterNames } from './artNames';
+import { flagOn } from '../flags';
+import { HEAD_KEYS, LOOK_AROUND, LOOK_EMOTE, LOOK_MS, headBox, headFaceKey, headKey, headPose, type HeadFrame } from './headTurn';
+import { PUBLISHED_ART } from './publishedArt';
 import { playEmote, playFlop, type EmoteHost } from './emotes';
 import { AirTrack, LANDING, WING_TURN, landingHardness, landingSquash, shadowFade, wingTurn, type WingBeat } from './airTrack';
 import { createFx, type AnchorName, type FxHandle, type FxHost } from './fx';
@@ -70,6 +74,33 @@ const tintedLayer = tintedTexture;
 
 type WearImageSlot = 'head' | 'face' | 'neck';
 
+/** Head frames drawn as plain stand-ins (no file shipped): placed by the owl's measured head, not the canvas. */
+const headStandIns = new Set<string>();
+let headLoad: Promise<unknown> | null = null;
+
+/** Whether the build ships a file for a key (an artist's head, OP-289). */
+function shipped(key: string): boolean {
+  return PUBLISHED_ART.has(`${key}.svg`) || rasterNames(key, 1, PUBLISHED_ART).length > 0;
+}
+
+/**
+ * The look around's head frames (OP-289): an artist's shipped files load the first time an owl looks
+ * around (until they are in, those frames are skipped); the rest are drawn as stand-ins at once.
+ */
+function ensureHeadFrames(scene: Phaser.Scene): void {
+  const toLoad = HEAD_KEYS.filter((k) => !scene.textures.exists(k) && shipped(k));
+  if (toLoad.length && !headLoad) {
+    headLoad = loadArt(scene, toLoad, globalThis.devicePixelRatio || 1, 2).then((r) => {
+      for (const k of r.missing) headStandIns.add(k);
+    });
+  }
+  for (const k of HEAD_KEYS) {
+    if (scene.textures.exists(k) || shipped(k)) continue;
+    ensurePlaceholder(scene, k);
+    headStandIns.add(k);
+  }
+}
+
 /**
  * A visitor's owl: tintable layered sprites in a container whose origin is at the feet.
  * Walking is driven from wall-clock time via positionAlongWalk, so local and remote
@@ -103,6 +134,19 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
   private readonly pledgeMark: Phaser.GameObjects.Image;
   private readonly art: Phaser.GameObjects.Container;
   private readonly wearImgs: Record<WearImageSlot, Phaser.GameObjects.Image>;
+  /**
+   * The head layer (OP-289): its frame's head, the face wear and the hat, turned together about the
+   * head while the body stays still. At rest it is drawn as it always was (no frame, nothing moved).
+   */
+  private readonly head: Phaser.GameObjects.Container;
+  private readonly headBase: Phaser.GameObjects.Image;
+  private readonly headFace: Phaser.GameObjects.Image;
+  private readonly faceWearBox: Phaser.GameObjects.Container;
+  private readonly hatBox: Phaser.GameObjects.Container;
+  /** The look around under way: its frame changes and its end. */
+  private lookTimers: Phaser.Time.TimerEvent[] = [];
+  /** The head frame drawn right now ('front' at rest), for tests and the fit overlay. */
+  headFrame: HeadFrame = 'front';
   /** How far down its frame the worn hat's own top edge is (0..1), for the crown. */
   private hatTop = 0;
   /** Where worn items sit, measured from the layers in use (each species' painting differs). */
@@ -213,7 +257,13 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     };
     this.wingSides = [wing(1), wing(-1)];
     this.wings = scene.add.container(0, 0, this.wingSides.map((w) => w.side)).setVisible(false);
-    this.pose = scene.add.container(0, 0, [this.back, this.wings, this.bodyImg, this.bellyImg, this.accentImg, this.wearImgs.neck, this.faceImg, this.blinkImg, this.wearImgs.face, this.wearImgs.head, this.front]);
+    const headLayer = () => scene.add.image(-FEET.x, -FEET.y, '__DEFAULT').setOrigin(0, 0).setVisible(false);
+    this.headBase = headLayer();
+    this.headFace = headLayer();
+    this.faceWearBox = scene.add.container(0, 0, [this.wearImgs.face]);
+    this.hatBox = scene.add.container(0, 0, [this.wearImgs.head]);
+    this.head = scene.add.container(0, 0, [this.headBase, this.headFace, this.faceWearBox, this.hatBox]);
+    this.pose = scene.add.container(0, 0, [this.back, this.wings, this.bodyImg, this.bellyImg, this.accentImg, this.wearImgs.neck, this.faceImg, this.blinkImg, this.head, this.front]);
     this.art = scene.add.container(0, 0, [this.pose]);
     this.add([this.pledgeMark, this.shadow, this.art]);
     this.applyLook(look);
@@ -371,15 +421,107 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
           if (!wanted('pet', variant)) return;
           const art = parseVariant(variant)?.item.art;
           if (this.pet) this.pet.setTexture(key, art);
-          else this.pet = new Pet(this.scene, key, this.pos, art, this.size);
+          else this.pet = new Pet(this.scene, key, this.pos, art, this.size, this.textureScale);
         });
       }
     }
   }
 
+  /** Whether a room point is on this owl's painted egg (OP-261), so a tap on it says when it hatches. */
+  eggAt(p: { x: number; y: number }): boolean {
+    return !!this.pet?.isEgg && this.pet.contains(p);
+  }
+
+  /** Where this owl's painted egg is drawn (the middle of it), or null without one. */
+  eggPos(): { x: number; y: number } | null {
+    return this.pet?.isEgg ? this.pet.middle() : null;
+  }
+
   /** Play an emote on this owl (everyone in the room plays it on their copy). */
   playEmote(emote: string): boolean {
+    // The look around is behind ?look=1 (OP-289): a page without it plays nothing for it.
+    if (emote === LOOK_EMOTE && !flagOn('look')) return false;
+    if (emote !== LOOK_EMOTE) this.endLook();
     return playEmote(this, emote);
+  }
+
+  /**
+   * Look around (OP-289): the head turns through three-quarter, side and back and round by the other
+   * side to the front, about 1.2 s, the hat and face wear turning with it and the body still. It
+   * starts toward the way the owl faces.
+   */
+  lookAround(): boolean {
+    if (!this.scene || this.destroyed) return false;
+    ensureHeadFrames(this.scene);
+    this.endLook();
+    let at = 0;
+    for (const step of LOOK_AROUND) {
+      this.lookTimers.push(this.scene.time.delayedCall(at, () => this.showHead(step.frame, step.side)));
+      at += step.ms;
+    }
+    this.lookTimers.push(this.scene.time.delayedCall(LOOK_MS, () => this.endLook()));
+    return true;
+  }
+
+  /** Draw the head on a frame of the look around, looking to `side` of the way the owl faces. */
+  private showHead(frame: HeadFrame, side: 1 | -1): void {
+    if (this.destroyed || !this.scene) return;
+    this.headFrame = frame;
+    const a = this.anchors;
+    const box = headBox(a);
+    const pose = headPose(frame);
+    const mirror = side * this.drawnFacing;
+    const px = box.x - FEET.x;
+    const neckY = a.neck.y - FEET.y;
+    this.head.setScale(mirror, pose.squashY).setPosition(px * (1 - mirror), neckY * (1 - pose.squashY));
+    this.drawHeadLayer(this.headBase, headKey(frame), this.look.body);
+    this.drawHeadLayer(this.headFace, headFaceKey(frame), null);
+    const ex = a.eyes.x - FEET.x;
+    const fw = pose.faceWear;
+    this.faceWearBox.setVisible(fw.visible).setScale(fw.sx, 1).setPosition(ex * (1 - fw.sx) + fw.dx * box.rx * 2, 0);
+    const hx = a.head.x - FEET.x;
+    this.hatBox.setScale(pose.hat.sx, 1).setPosition(hx * (1 - pose.hat.sx), 0);
+  }
+
+  /** One of the head's two layers on a frame: `tint` the body colour for the base, null for the detail layer's own colours. */
+  private drawHeadLayer(img: Phaser.GameObjects.Image, key: string, tint: string | null): void {
+    const scene = this.scene;
+    if (!scene.textures.exists(key)) {
+      img.setVisible(false);
+      return;
+    }
+    if (tint && scene.renderer.type === Phaser.CANVAS) img.setTexture(tintedLayer(scene, key, tint));
+    else {
+      img.setTexture(key);
+      if (tint) img.setTint(hexToInt(tint));
+      else img.clearTint();
+    }
+    // A stand-in is drawn round the great horned owl's head on the canvas: moved and sized to this owl's.
+    if (headStandIns.has(key)) {
+      const c = headBox(DEFAULT_ANCHORS);
+      const t = headBox(this.anchors);
+      const sx = t.rx / c.rx;
+      const sy = t.ry / c.ry;
+      img.setPosition(t.x - c.x * sx - FEET.x, t.y - c.y * sy - FEET.y).setDisplaySize(OWL_W * sx, OWL_H * sy);
+    } else img.setPosition(-FEET.x, -FEET.y).setDisplaySize(OWL_W, OWL_H);
+    img.setVisible(true);
+  }
+
+  /** Whether the pose emotes move is at rest: the look around turns the head and leaves the body so. */
+  poseAtRest(): boolean {
+    const p = this.pose;
+    return p.x === 0 && p.y === 0 && p.rotation === 0 && p.scaleX === 1 && p.scaleY === 1;
+  }
+
+  /** Stop a look around and put the head back to rest: front on, nothing moved. */
+  endLook(): void {
+    for (const t of this.lookTimers.splice(0)) t.remove(false);
+    this.headFrame = 'front';
+    this.head.setScale(1, 1).setPosition(0, 0);
+    this.headBase.setVisible(false);
+    this.headFace.setVisible(false);
+    this.faceWearBox.setVisible(true).setScale(1, 1).setPosition(0, 0);
+    this.hatBox.setScale(1, 1).setPosition(0, 0);
   }
 
   /**
@@ -779,6 +921,7 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
   }
 
   override destroy(fromScene?: boolean): void {
+    for (const t of this.lookTimers.splice(0)) t.remove(false);
     this.destroyed = true;
     for (const z of this.zs.splice(0)) this.scene?.tweens.killTweensOf(z);
     this.scene?.tweens.killTweensOf(this.pose);

@@ -36,15 +36,15 @@ const seedOf = (k: number): Uint8Array => {
 };
 
 describe('catalogue', () => {
-  it('has 59 wearables, 26 pets, 24 effects and 24 emotes: 1192 variants', () => {
+  it('has 59 wearables, 28 pets, 24 effects and 24 emotes: 1194 variants', () => {
     const by = (k: string) => CATALOGUE.filter((i) => i.kind === k).length;
-    expect([by('wear'), by('pet'), by('fx'), by('emote')]).toEqual([59, 26, 24, 24]);
+    expect([by('wear'), by('pet'), by('fx'), by('emote')]).toEqual([59, 28, 24, 24]);
     expect(CATALOGUE.filter((i) => i.slot === 'head')).toHaveLength(36);
     expect(CATALOGUE.filter((i) => i.slot === 'face')).toHaveLength(11);
     expect(CATALOGUE.filter((i) => i.slot === 'neck')).toHaveLength(12);
-    // The Golden Mouse and the Hollow Moth come in their one colourway each.
-    expect(allVariants()).toHaveLength(590 + 192 + 2 + 384 + 24);
-    expect(new Set(allVariants()).size).toBe(1192);
+    // The Golden Mouse, the Hollow Moth, the Painted Egg and the Rainbow Bunny come in their one colourway each.
+    expect(allVariants()).toHaveLength(590 + 192 + 4 + 384 + 24);
+    expect(new Set(allVariants()).size).toBe(1194);
     expect(new Set(CATALOGUE.map((i) => i.id)).size).toBe(CATALOGUE.length);
   });
 
@@ -113,9 +113,11 @@ describe('catalogue', () => {
   it('lists every variant by rarity, once each, but the rewards of their own (no prize is ever the Golden Mouse)', () => {
     const by = variantsByRarity();
     const all = [...by.common, ...by.uncommon, ...by.rare, ...by.epic];
-    expect(all.length).toBe(allVariants().length - 2);
+    expect(all.length).toBe(allVariants().length - 4);
     expect(all).not.toContain(GOLDEN_MOUSE);
     expect(all).not.toContain('hollow-moth~0');
+    expect(all).not.toContain('painted-egg~0');
+    expect(all).not.toContain('rainbow-bunny~0');
     expect(allVariants()).toContain(GOLDEN_MOUSE);
     expect(variantName(GOLDEN_MOUSE)).toBe('Golden Mouse');
     expect(new Set(all).size).toBe(all.length);

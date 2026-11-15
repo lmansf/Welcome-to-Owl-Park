@@ -22,6 +22,7 @@ import {
   Activities,
   CLOSE,
   COPY_BASE_EMOTES,
+  FREE_EMOTES,
   DEFAULT_LOOK,
   HEARTBEAT_FRAME,
   KIND_RULES,
@@ -2261,10 +2262,16 @@ export class RoomObject extends DurableObject<Env> {
 
   private async emote(ws: WebSocket, att: Attachment, room: Room, e: string): Promise<void> {
     if (!att.cid) return;
-    let entry: OwnedEntry | null | undefined = this.owned.get(att.cid);
-    if (!entry?.set.has(e)) entry = await this.loadOwned(att.cid, att.tz, true, visitOf(att));
-    if (!entry?.set.has(e) || room.sessionOf(att.id) !== att.sid) return;
+    // One every owl has (the look around, OP-289) needs no collection, and counts for no quest.
+    const free = FREE_EMOTES.includes(e);
+    if (!free) {
+      let entry: OwnedEntry | null | undefined = this.owned.get(att.cid);
+      if (!entry?.set.has(e)) entry = await this.loadOwned(att.cid, att.tz, true, visitOf(att));
+      if (!entry?.set.has(e)) return;
+    }
+    if (room.sessionOf(att.id) !== att.sid) return;
     if (!room.emote(att.id, e)) return this.emoteThrottled(att);
+    if (free) return;
     // An emote counts for quests in this room, and "for" any NPC owl standing close enough.
     const pos = room.positionOf(att.id);
     const near = pos ? npcsIn(att.room).filter((n) => distance(n.pos, pos) <= NPC_EMOTE_RADIUS).map((n) => n.id) : [];
