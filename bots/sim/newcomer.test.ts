@@ -288,3 +288,39 @@ describe('the ink course’s second screen, as a newcomer plays it (OP-361)', ()
     expect(post.top - lift.top).toBeLessThanOrEqual(60);
   });
 });
+
+/**
+ * The Blackout Circuit's first roof, as a newcomer leaves it (OP-361). The way on from b1 is a glide
+ * off its east end on the roof wind to the footbridge; before the deck was laid on under that wind it
+ * ended at the roof's own end, 1400, and of the one-press plays off b1 (a tap to a Jump held the whole
+ * flight, with or without one flap) 168 of 210 came straight down into the street and back to the
+ * bench. Now the deck runs on to 1800, past where any of them comes down, so a miss is deck to walk
+ * back from. (Logan, Nov 15, accepted that a strong flyer can ride the wind up from that deck to b1, or
+ * flap across to the footbridge, without the sign.)
+ */
+describe('the Blackout Circuit’s first roof, as a newcomer leaves it (OP-361)', () => {
+  const rooftops = ROOMS['circuit-1']!;
+  const b1 = (rooftops.kit!.ledges ?? []).find((l) => l.id === 'b1')!;
+
+  it('no play of one press off the first roof comes straight down into the street', { timeout: 60_000 }, () => {
+    const ends: Array<{ play: Play; end: PlayEnd }> = [];
+    for (let x = b1.x0; x <= b1.x1; x += 20) {
+      for (const holdMs of HOLDS) {
+        for (const flaps of [[], [300]]) {
+          const play = { jumpAt: x, holdMs, flaps, flapHoldMs: 150 };
+          ends.push({ play, end: playEast(rooftops, { x: b1.x0, z: b1.top }, 2700, play) });
+        }
+      }
+    }
+    expect(ends.length).toBeGreaterThan(200);
+    // The bot walks on east once it has stood somewhere, so an owl that comes down on the deck walks off its end later: that is not this.
+    expect(fallsOf(ends.filter((e) => e.end.path.length === 1))).toEqual([]);
+  });
+
+  it('runs the deck on under the whole roof wind', () => {
+    const deck = (rooftops.kit!.paths ?? []).find((p) => p.id === 'deck-a')!;
+    const wind = (rooftops.winds ?? []).find((w) => w.id === 'roof-wind')!;
+    expect(deck.x1).toBeGreaterThanOrEqual(wind.x1);
+    expect(Math.min(...rooftops.course!.pits![0]!.map((v) => v.x))).toBe(deck.x1);
+  });
+});
