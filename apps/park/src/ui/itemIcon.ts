@@ -46,6 +46,46 @@ const EMOTE_SYMBOL: Record<string, SymbolName> = {
   wink: 'star4',
 };
 
+/**
+ * The look around's icon (OP-289): a round head in the emote blue, its eyes turned to one side, and an
+ * arrow half round it.
+ */
+export function lookIcon(w = 64, h = 48): HTMLCanvasElement {
+  const dpr = Math.min(2, Math.max(1, globalThis.devicePixelRatio || 1));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(w * dpr);
+  canvas.height = Math.round(h * dpr);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return canvas;
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+  const r = Math.min(canvas.width, canvas.height) * 0.3;
+  ctx.fillStyle = '#4FA3FF';
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#0C1E36';
+  for (const dx of [0.05, 0.55]) {
+    ctx.beginPath();
+    ctx.arc(cx + r * dx, cy - r * 0.1, r * 0.17, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.strokeStyle = '#F6F1E3';
+  ctx.lineWidth = Math.max(1.5, r * 0.14);
+  ctx.lineCap = 'round';
+  const R = r * 1.45;
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, Math.PI * 1.05, Math.PI * 1.95);
+  ctx.stroke();
+  const tip = { x: cx + R * Math.cos(Math.PI * 1.95), y: cy + R * Math.sin(Math.PI * 1.95) };
+  ctx.beginPath();
+  ctx.moveTo(tip.x - r * 0.45, tip.y - r * 0.12);
+  ctx.lineTo(tip.x, tip.y);
+  ctx.lineTo(tip.x - r * 0.1, tip.y - r * 0.5);
+  ctx.stroke();
+  return canvas;
+}
+
 /** An icon for any variant, drawn on a canvas (async for item art). */
 export function variantIcon(variant: string, w = 64, h = 48): HTMLCanvasElement {
   const dpr = Math.min(2, Math.max(1, globalThis.devicePixelRatio || 1));

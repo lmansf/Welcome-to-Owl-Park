@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CLOSE, EDGE_PROTOCOL_VERSION as V, parseClientFrame, parseServerFrame, type ServerFrame } from './edge';
 import { MAX_RISE } from './flight';
 import { isEmoteId, isParkMessage } from './validate';
+import { EMOTE_IDS, FREE_EMOTES } from './collectibles';
 
 const look = { body: '#111111', belly: '#222222', accent: '#333333' };
 
@@ -148,6 +149,15 @@ describe('parseClientFrame', () => {
     expect(parseClientFrame(JSON.stringify({ t: 'emote', e: 'jump' }))).toBeNull();
     expect(isEmoteId('jump')).toBe(false);
     expect(isParkMessage({ t: 'emote', id: 'p1', e: 'jump' })).toBe(false);
+  });
+
+  it('carries the look around each way, an emote every owl has with no catalogue item (OP-289)', () => {
+    expect(FREE_EMOTES).toEqual(['look']);
+    expect(EMOTE_IDS).not.toContain('look');
+    expect(isEmoteId('look')).toBe(true);
+    expect(parseClientFrame(JSON.stringify({ t: 'emote', e: 'look' }))).toEqual({ t: 'emote', e: 'look' });
+    expect(parseServerFrame(JSON.stringify({ t: 'emote', id: 'o1', e: 'look' }))).toEqual({ t: 'emote', id: 'o1', e: 'look' });
+    expect(isParkMessage({ t: 'emote', id: 'p1', e: 'look' })).toBe(true);
   });
 
   it('carries an owl’s air state each way (OP-084); a page drops one it cannot believe', () => {

@@ -50,4 +50,18 @@ describe('emotes (OP-126)', () => {
     expect(() => owl.started[0]!.onComplete!()).not.toThrow();
     expect(owl.pose.set).toEqual([]);
   });
+
+  it('turns only the head for the look around: the pose is left alone, no tween starts (OP-289)', () => {
+    const owl = fakeOwl();
+    let looked = 0;
+    const host = { ...(owl.host as object), lookAround: () => ++looked > 0 };
+    owl.pose.set.length = 0;
+    expect(playEmote(host as never, 'look')).toBe(true);
+    expect(looked).toBe(1);
+    expect(owl.started).toEqual([]);
+    // The pose is only put back at rest, as before any emote.
+    expect(owl.pose.set).toEqual(['position']);
+    // A host with no head layer of its own plays nothing for it.
+    expect(playEmote(fakeOwl().host, 'look')).toBe(false);
+  });
 });

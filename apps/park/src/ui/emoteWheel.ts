@@ -1,6 +1,8 @@
 import { CATALOGUE, EMOTE_IDS, type ItemDef } from '@owl-park/shared';
 import type { CollectionState } from '../collect/state';
-import { variantIcon } from './itemIcon';
+import { lookIcon, variantIcon } from './itemIcon';
+import { flagOn } from '../flags';
+import { LOOK_EMOTE, LOOK_NAME } from '../game/headTurn';
 import { createModal, type Modal } from './modal';
 import { typingInField } from './typing';
 
@@ -20,9 +22,16 @@ export function wheelPage<T>(items: readonly T[], page: number, per = WHEEL_SLOT
   return { items: items.slice(p * per, p * per + per), page: p, pages };
 }
 
-/** The owl's emotes in the wheel's order: the first eight are its first page, and keys 1 to 8. */
-export function wheelEmotes(state: CollectionState): ItemDef[] {
-  return CATALOGUE.filter((i) => i.kind === 'emote' && state.owns(i.id));
+/** The look around (OP-289): no catalogue item, every owl has it. */
+export const LOOK_ITEM: ItemDef = { id: LOOK_EMOTE, kind: 'emote', name: LOOK_NAME, rarity: 'common' };
+
+/**
+ * The owl's emotes in the wheel's order: the first eight are its first page, and keys 1 to 8. With
+ * ?look=1 the look around comes first (key 1), so it is the one to find while it is tried out.
+ */
+export function wheelEmotes(state: CollectionState, look: boolean = flagOn('look')): ItemDef[] {
+  const owned = CATALOGUE.filter((i) => i.kind === 'emote' && state.owns(i.id));
+  return look ? [LOOK_ITEM, ...owned] : owned;
 }
 
 /**
@@ -116,6 +125,7 @@ export function createEmoteWheel(root: HTMLElement, state: CollectionState, play
     for (const s of slots) s.remove();
     slots = [];
     const all = wheelEmotes(state);
+    const owned = all.filter((i) => i !== LOOK_ITEM).length;
     const view = wheelPage(all, page);
     page = view.page;
     const r = parseFloat(getComputedStyle(ring).getPropertyValue('--r')) || 132;
@@ -136,7 +146,7 @@ export function createEmoteWheel(root: HTMLElement, state: CollectionState, play
         k.textContent = String(i + 1);
         const label = document.createElement('span');
         label.textContent = item.name;
-        b.append(variantIcon(item.id, 36, 36), label, k);
+        b.append(item.id === LOOK_EMOTE ? lookIcon(36, 36) : variantIcon(item.id, 36, 36), label, k);
         const id = item.id;
         b.addEventListener('click', () => {
           modal.close();
@@ -159,8 +169,8 @@ export function createEmoteWheel(root: HTMLElement, state: CollectionState, play
     pageLabel.textContent = `${view.page + 1} / ${view.pages}`;
     note.textContent = !state.inv
       ? 'Loading your emotes…'
-      : all.length < EMOTE_IDS.length
-        ? `${all.length} of ${EMOTE_IDS.length} emotes. Earn more on quests, or find them in the feather shop.`
+      : owned < EMOTE_IDS.length
+        ? `${owned} of ${EMOTE_IDS.length} emotes. Earn more on quests, or find them in the feather shop.`
         : '';
   };
 

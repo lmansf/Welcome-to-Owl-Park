@@ -335,6 +335,12 @@ export const GOLDEN_MOUSE = 'golden-mouse~0';
 
 export const EMOTE_IDS: readonly string[] = CATALOGUE.filter((i) => i.kind === 'emote').map((i) => i.id);
 
+/**
+ * Emotes every owl plays without owning them: no catalogue item, nothing kept in a collection, no
+ * quest counts them. `look` is the head-turn look around (OP-289), shown in the park behind ?look=1.
+ */
+export const FREE_EMOTES: readonly string[] = ['look'];
+
 /** The variant id for an item and colourway number. Emotes have no colourways. */
 export function variantId(itemId: string, n = 0): string {
   const item = ITEMS[itemId];

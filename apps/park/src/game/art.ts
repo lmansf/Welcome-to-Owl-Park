@@ -19,6 +19,7 @@ import { loadSvgTexture } from './svgLoader';
 import { boxable, paintSizeBox } from './sizeBoxes';
 import { fitTrialArt, setTrialBackdropVeil, trialFilesOf, updraftBitsKey } from './skinTrial';
 import { allLookKeys } from './artLooks';
+import { HEAD_KEYS, drawHeadShapes, headPlaceholderFor, isHeadKey } from './headTurn';
 
 export const ART_PATH = 'art/';
 export const OWL_W = 200;
@@ -291,6 +292,9 @@ export const ART: Record<string, ArtSpec> = {
   // twice behind the body (the left one mirrored) and turned at the shoulder, so it loads at boot.
   'owl-wing-body': { w: WING_W, h: WING_H, kind: 'owl' },
   'owl-wing-accent': { w: WING_W, h: WING_H, kind: 'owl' },
+  // The look around (OP-289): the head drawn by frame on the owl canvas, each a base in the body
+  // colour and a detail layer (headTurn.ts). Loaded when an owl first looks around, never at boot.
+  ...Object.fromEntries(HEAD_KEYS.map((k) => [k, { w: OWL_W, h: OWL_H, kind: 'owl' as const }])),
   // In flight (OP-136) an owl wears its kind's flight body, belly and accent, its folded wings taken
   // away, so the wing above opens alone. Loaded once an owl may fly (loadFlightArt), never at boot.
   'owl-flight-body': { w: OWL_W, h: OWL_H, kind: 'owl' },
@@ -981,7 +985,7 @@ for (const room of Object.values(ROOMS)) {
 }
 
 /** Art needed in every room (loaded once at boot). Species layers wait until an owl of that kind shows up, flight layers until one may fly. */
-export const GLOBAL_ART = Object.keys(ART).filter((k) => ART[k]!.kind === 'owl' && !isSpeciesLayer(k) && !isFlightLayer(k));
+export const GLOBAL_ART = Object.keys(ART).filter((k) => ART[k]!.kind === 'owl' && !isSpeciesLayer(k) && !isFlightLayer(k) && !isHeadKey(k));
 
 /** The blockade standing in a closed doorway that shows `phrase` ("Not Yet Fledged" -> blockade-not-yet-fledged). */
 export function blockadeKey(phrase: string): string {
@@ -1441,6 +1445,11 @@ export function ensurePlaceholder(scene: Phaser.Scene, key: string): void {
 }
 
 function drawOwlPlaceholder(g: Phaser.GameObjects.Graphics, key: string): void {
+  const head = headPlaceholderFor(key);
+  if (head) {
+    drawHeadShapes(g, head);
+    return;
+  }
   switch (key) {
     case 'owl-body':
       g.fillStyle(0xffffff, 1);
