@@ -23,6 +23,8 @@ export interface InteractableDef extends Raised {
   /** Its art (a kit key), drawn with its foot just behind `pos` (plazaFloor.ts); none for a thing the game draws itself. */
   piece?: string;
   flip?: true;
+  /** The action button's words for this one where its kind's would be wrong: "Splash in the fountain" (OP-416). */
+  label?: string;
 }
 
 export interface KindRules {

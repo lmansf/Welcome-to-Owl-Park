@@ -2849,7 +2849,7 @@ export class RoomScene extends Phaser.Scene {
       this.glows.get(def.id)?.setNear(close);
       this.things.get(def.id)?.setNear(close);
       if (!close || this.piles.get(def.id)?.here === false) continue;
-      out.push({ id: `use:${def.id}`, label: rules.label, run: () => void this.use(def.id) });
+      out.push({ id: `use:${def.id}`, label: def.label ?? rules.label, run: () => void this.use(def.id) });
     }
     // Lanterns, fishing and the robot owl's game where the owl stands.
     if (this.play) out.push(...this.play.actions(pos));

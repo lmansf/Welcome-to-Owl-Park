@@ -6,7 +6,7 @@ import { KIT_SCENE_GAP, KIT_SCENE_SPAN, KIT_STORY_MAX } from '../src/kit';
 import { KIT_ART } from '../src/kitArt';
 import { npcsIn } from '../src/npcs';
 import { footing } from '../src/perches';
-import { FLOOR_INTERACTABLES, FLOOR_PERCH_ART, FLOOR_THING_ART, PLAZA_CLUSTERS, type FloorCluster } from '../src/plazaFloor';
+import { FLOOR_INTERACTABLES, FLOOR_PERCH_ART, FLOOR_THING_ART, PAINTED_THINGS, PLAZA_CLUSTERS, type FloorCluster } from '../src/plazaFloor';
 import { ROOM_H } from '../src/room';
 import { perchTiers } from '../src/routes';
 import { wayAround } from '../src/wayAround';
@@ -50,11 +50,13 @@ function boxes(c: FloorCluster): Box[] {
 const span = (bs: Box[]) => ({ x0: Math.min(...bs.map((b) => b.x0)), x1: Math.max(...bs.map((b) => b.x1)) });
 
 describe("things to do out on the plazas' floors (Nov 8: stuff around the room, not all on the wall)", () => {
-  it.each(PLAZAS)('$id has at least two little scenes out on its floor, with more than one kind of thing to do', ({ id }) => {
+  it.each(PLAZAS)('$id has a scene or two out on its floor, and more than one kind of thing to use there or in its painting', ({ id }) => {
     const here = PLAZA_CLUSTERS.filter((c) => c.room === id);
-    expect(here.length).toBeGreaterThanOrEqual(2);
+    expect(here.length).toBeGreaterThanOrEqual(1);
+    // One story per room (OP-416): two scenes at most. The Party Grove's are rebuilt with its layout (OP-403).
+    if (id !== 'hub') expect(here.length).toBeLessThanOrEqual(2);
     for (const c of here) expect(c.things.length, c.id).toBeGreaterThanOrEqual(1);
-    expect(new Set(here.flatMap((c) => c.things.map((t) => t.kind))).size).toBeGreaterThanOrEqual(2);
+    expect(new Set(FLOOR_INTERACTABLES.filter((i) => i.room === id).map((i) => i.kind)).size).toBeGreaterThanOrEqual(2);
   });
 
   it('tells one short story a scene, each scene one glance wide and apart from the next', () => {
@@ -158,5 +160,70 @@ describe("things to do out on the plazas' floors (Nov 8: stuff around the room, 
     }
     expect(KIND_RULES.shiny.shared).toBe(true);
     for (const kind of ['bird-bath', 'mushroom', 'telescope'] as const) expect(KIND_RULES[kind].shared).toBe(false);
+  });
+});
+
+/** Every kit key a room's scenes draw: its things' art, its perches' and its decor. */
+function keysIn(room: string): Set<string> {
+  const keys = new Set<string>();
+  for (const c of PLAZA_CLUSTERS.filter((x) => x.room === room)) {
+    for (const t of c.things) {
+      const key = t.piece ?? FLOOR_THING_ART[t.kind];
+      if (key) keys.add(key);
+    }
+    for (const p of c.perches ?? []) keys.add(FLOOR_PERCH_ART[p.kind].key);
+    for (const d of c.decor ?? []) keys.add(d.key);
+  }
+  return keys;
+}
+
+/**
+ * What each room's scenes may be built from: its realm's own kit, and for the park's own rooms (the
+ * entrance, the lane under the nests, the clearing) the park's ground pieces. A bird bath and a rain
+ * barrel are things any street might have.
+ */
+const OWN_KIT: Readonly<Record<string, readonly string[]>> = {
+  lobby: ['kit-entrance-', 'kit-ground-', 'kit-landmark-telescope-brass'],
+  homes: ['kit-clearing-', 'kit-ground-', 'kit-low-', 'kit-seat-', 'kit-entrance-bird-bath'],
+  grove: ['kit-clearing-', 'kit-ground-', 'kit-low-', 'kit-seat-'],
+  arcade: ['kit-neon-', 'kit-under-'],
+  market: ['kit-neon-', 'kit-under-mushroom-cluster', 'kit-ground-water-barrel'],
+  glass: ['kit-glass-', 'kit-entrance-bird-bath'],
+  ink: ['kit-ink-', 'kit-landmark-heron-ink'],
+};
+
+describe("one story per room, not the same props in every one (OP-416, the owner's Nov 14 note: \"reused in every room instead of with purpose\")", () => {
+  // The Party Grove's floor is rebuilt with its layout and its party props (OP-403); it is left out until then.
+  const rooms = PLAZAS.map((p) => p.id).filter((id) => id !== 'hub');
+
+  it('stands no piece of art in more than two rooms', () => {
+    const where: Record<string, string[]> = {};
+    for (const id of rooms) for (const key of keysIn(id)) (where[key] ??= []).push(id);
+    for (const [key, ids] of Object.entries(where)) expect(ids.length, `${key} in ${ids.join(', ')}`).toBeLessThanOrEqual(2);
+  });
+
+  it('keeps the brass telescope to the entrance, aimed at the moon over the gate', () => {
+    for (const id of rooms) expect(keysIn(id).has('kit-landmark-telescope-brass'), id).toBe(id === 'lobby');
+  });
+
+  it.each(rooms)("builds %s's scenes from its own realm's pieces", (id) => {
+    const own = OWN_KIT[id]!;
+    for (const key of keysIn(id)) expect(own.some((k) => key.startsWith(k)), `${key} in ${id}`).toBe(true);
+  });
+
+  it("lets the painting's own fountain, pond and mushrooms be the things to use, with no sticker of them beside", () => {
+    for (const t of PAINTED_THINGS) {
+      expect(t.piece, t.id).toBeUndefined();
+      expect(t.label, t.id).toBeTruthy();
+      expect(getRoom(t.room)!.size.w, t.id).toBeGreaterThan(t.pos.x);
+      // Inside the painting, not out on the grown floor.
+      expect(t.pos.y, t.id).toBeLessThan(ROOM_H);
+    }
+    // The entrance's fountain is its water and the clearing's pond and mushrooms are its own: no bird bath or mushroom stickers there.
+    for (const id of ['lobby', 'grove']) {
+      const stickers = PLAZA_CLUSTERS.filter((c) => c.room === id).flatMap((c) => c.things.map((t) => t.kind));
+      expect(stickers, id).not.toContain('bird-bath');
+      if (id === 'grove') expect(stickers, id).not.toContain('mushroom');
+    }
   });
 });

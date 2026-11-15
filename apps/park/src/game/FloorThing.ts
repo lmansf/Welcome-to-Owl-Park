@@ -114,7 +114,8 @@ export class FloorThing {
   /** Water splashes up out of the basin and falls back in drops. */
   private splash(): void {
     const { x, y } = this.foot;
-    const h = this.art ? this.art.displayHeight : (KIT_ART[this.def.piece ?? '']?.h ?? 200);
+    // A painted fountain or pond has no art of ours: the water is at the painting's foot.
+    const h = this.art ? this.art.displayHeight : (KIT_ART[this.def.piece ?? '']?.h ?? 40);
     const drops = this.scene.add
       .particles(x, y - h * 0.9, symbolTexture(this.scene, 'bubble'), {
         emitting: false,
@@ -166,7 +167,7 @@ export class FloorThing {
       const angle = this.art.angle;
       this.scene.tweens.add({ targets: this.art, angle: angle + (this.def.flip ? 4 : -4), duration: 260, yoyo: true, ease: 'Sine.easeInOut', onComplete: () => this.art?.setAngle(angle) });
     }
-    const end = { x: x + (this.def.flip ? -50 : 50), y: y - (this.art?.displayHeight ?? 200) * 0.95 };
+    const end = { x: x + (this.def.flip ? -50 : 50), y: y - (this.art?.displayHeight ?? 120) * 0.95 };
     const stars = this.scene.add
       .particles(end.x, end.y, symbolTexture(this.scene, 'star5'), {
         emitting: false,
