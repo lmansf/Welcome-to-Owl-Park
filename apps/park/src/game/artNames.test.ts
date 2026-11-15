@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { GLOBAL_ART, artScale } from './art';
+import { ART, GLOBAL_ART, artScale } from './art';
+import { HEAD_KEYS } from './headTurn';
 import { BOOT_ART, DENSE_FROM_RATIO, DENSE_SCALE, earlyArtScript, owlArtScale, rasterCandidates } from './artNames';
 
 // art.ts only lists the art here; no Phaser runs.
@@ -19,6 +20,13 @@ function runEarly(script: string, devicePixelRatio: number, fetch: unknown = (ur
 describe('the boot art', () => {
   it('is the art the boot loads (GLOBAL_ART)', () => {
     expect([...BOOT_ART].sort()).toEqual([...GLOBAL_ART].sort());
+  });
+
+  it('leaves out the look around’s head frames: they load when an owl first looks around (OP-289)', () => {
+    for (const k of HEAD_KEYS) {
+      expect(ART[k]).toEqual({ w: 200, h: 240, kind: 'owl' });
+      expect(GLOBAL_ART).not.toContain(k);
+    }
   });
 
   it('loads at the scale owlArtScale says, on every screen', () => {

@@ -1622,6 +1622,25 @@ describe('the room server’s log (OP-134)', () => {
     expect(cap.lines.filter((l) => l.event === 'emote_throttled').map((l) => l['count'])).toEqual([1, 1]);
   });
 
+  it('plays the look around for every owl without owning it, and counts it for no quest (OP-289)', async () => {
+    (collections as unknown as { owned: () => Promise<string[]> }).owned = async () => ['hoot'];
+    const questEvent = vi.spyOn(collections, 'questEvent');
+    const obj = roomObject();
+    const a = await join(obj, 'hub', 'v_a', GUEST);
+    const b = await join(obj, 'hub', 'v_b', GUEST);
+    await settle();
+    questEvent.mockClear();
+    await send(obj, a, { t: 'emote', e: 'look' });
+    await settle();
+    expect(a.closed).toBeNull();
+    expect(b.last('emote')).toEqual({ t: 'emote', id: 'v_a', e: 'look' });
+    expect(questEvent).not.toHaveBeenCalled();
+    // An emote of the catalogue still has to be owned to be played.
+    await send(obj, b, { t: 'emote', e: 'twirl' });
+    await settle();
+    expect(a.of('emote')).toEqual([]);
+  });
+
   it('tells a place the room would not take as a page asked for it: at once, then once a minute with how many, and the rest as the owl leaves (OP-149)', async () => {
     const obj = roomObject();
     const ws = await join(obj, 'hub', 'v_a', GUEST);

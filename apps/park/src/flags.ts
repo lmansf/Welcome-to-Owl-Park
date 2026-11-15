@@ -24,6 +24,7 @@ export const FLAGS = {
   guardian: { param: 'guardian', note: 'The guardian alive at the heart of the Great Hollow: it breathes, turns its head to an owl, and hoots back' },
   movers: { param: 'movers', note: 'Owls move like owls: a dive down a knot hole in place of the Great Hollow’s hatch, a knot-hole tunnel up from the arcade, and a glide lane along its cabinets' },
   desk: { param: 'desk', note: 'The vote desk in the Great Hollow: each realm’s share of this month’s Realm Vote, in percents, moving as owls vote' },
+  look: { param: 'look', note: 'Look around: an emote every owl has, its head turning on its own through front, three-quarter, side and back while the body stays still' },
 } as const satisfies Record<string, FlagSpec>;
 
 export type FlagName = keyof typeof FLAGS;

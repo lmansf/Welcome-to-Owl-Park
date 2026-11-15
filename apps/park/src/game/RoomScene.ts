@@ -192,6 +192,7 @@ import { earlyPreview } from '../ui/preview';
 import { ActivityLayer } from './activities';
 import { PartyLayer } from './partyLayer';
 import { flagOn } from '../flags';
+import { LOOK_EMOTE } from './headTurn';
 import { addAmbience, addSetPieces, ensureFxTextures, type SetPieces } from './ambience';
 import { arcadeFor, type Arcade } from './arcade';
 import { PORTAL_OFF, climbFor, type Climb } from './climb';
@@ -2577,7 +2578,9 @@ export class RoomScene extends Phaser.Scene {
      * The others, with how high each is drawn, whether on the ground (0), in the air (1) or gliding (2),
      * and its take-offs as this page carried them on from the states it was told (as `flown` is for the own owl).
      */
-    peers: Array<{ id: string; pos: Vec2; walking: boolean; look: OwlLook; emote: string | null; height: number; air: Air['s']; flown: { n: number; peak: number; glided: boolean; ms: number }; asleep: boolean; wings: boolean; owlWorn: string }>;
+    peers: Array<{ id: string; pos: Vec2; walking: boolean; look: OwlLook; emote: string | null; height: number; air: Air['s']; flown: { n: number; peak: number; glided: boolean; ms: number }; asleep: boolean; wings: boolean; owlWorn: string; head: string }>;
+    /** This visitor's owl's head frame as drawn (OP-289: 'front' at rest), and whether its body (the pose emotes move) is at rest. */
+    head: { frame: string; bodyAtRest: boolean };
     /** Asleep, its visitor idle (OP-126). */
     asleep: boolean;
     /** The phrases in bubbles over the owls right now: whose (this visitor's own id included), and which. */
@@ -2698,7 +2701,8 @@ export class RoomScene extends Phaser.Scene {
       height: this.me.flightHeight(),
       air: { ...this.flier.air },
       flown: { ...this.flown },
-      peers: [...this.peers.values()].map((o) => ({ id: o.id, pos: { ...o.pos }, walking: o.walking, look: o.look, emote: this.peerEmotes.get(o.id) ?? null, height: o.flightHeight(), air: o.airMode, flown: o.flown, asleep: o.asleep, wings: o.wingsOut, owlWorn: o.wornKey })),
+      peers: [...this.peers.values()].map((o) => ({ id: o.id, pos: { ...o.pos }, walking: o.walking, look: o.look, emote: this.peerEmotes.get(o.id) ?? null, height: o.flightHeight(), air: o.airMode, flown: o.flown, asleep: o.asleep, wings: o.wingsOut, owlWorn: o.wornKey, head: o.headFrame })),
+      head: { frame: this.me.headFrame, bodyAtRest: this.me.poseAtRest() },
       asleep: this.me.asleep,
       bubbles: this.bubbles?.showing() ?? [],
       connected: this.conn !== null,
@@ -3320,12 +3324,17 @@ export class RoomScene extends Phaser.Scene {
     return true;
   }
 
-  /** Play an owned emote here and for everyone in the room (it counts for quests that ask for it). */
+  /**
+   * Play an owned emote here and for everyone in the room (it counts for quests that ask for it). The
+   * look around (OP-289) every owl has, behind ?look=1: it counts for no quest.
+   */
   emote(e: string): boolean {
-    if (!this.built || !EMOTE_IDS.includes(e) || !this.collection.owns(e)) return false;
+    const look = e === LOOK_EMOTE && flagOn('look');
+    if (!this.built || (!look && (!EMOTE_IDS.includes(e) || !this.collection.owns(e)))) return false;
     this.me.playEmote(e);
     this.guardianCalled(this.playerId, e);
     this.conn?.send({ t: 'emote', id: this.playerId, e });
+    if (look) return true;
     const near = [...this.npcs.values()].filter((n) => distance(n.def.pos, this.me.pos) <= NPC_EMOTE_RADIUS).map((n) => n.id);
     this.link?.note({ kind: 'emote', emote: e, room: this.room.id, near });
     return true;
