@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { HELD_FRAME_MS, cameraView, heldCameraAtRest, heldPass, heldStandingAt, heldUntil, holdTheClock, openHeld, openPark, settleCamera, state, stateNow } from './helpers';
+import { HELD_FRAME_MS, cameraView, heldCameraAtRest, heldPass, heldStandingAt, heldUntil, holdTheClock, openHeld, openPark, settleCamera, state, stateNow, type ParkState } from './helpers';
 
 /**
  * The town view (OP-336, on for every visitor since OP-356): a room seen from above shows more of
@@ -269,5 +269,34 @@ test.describe('a new owl is named two places to play in the Great Hollow (OP-370
     expect(played.signsShowing.filter((id) => id in WAYS)).toEqual([]);
     await toRest(page);
     expect((await chips(page)).filter((c) => c.id in WAYS)).toEqual([]);
+  });
+
+  /**
+   * OP-415 (QA walk, Nov 14): the arcade's chip and the two-second tips stood on the same spot at the
+   * bottom middle, so the warm air's tip, shown as a newcomer first stands in it at the hall's heart, hid
+   * the chip's words; and a tap on the chip from there was to take the owl all the way down the hatch.
+   */
+  test('the warm air’s tip at the hall’s heart covers neither chip, and a tap on the arcade’s chip from there takes the owl down the hatch', async ({ page }) => {
+    test.slow(); // the opening look and the walk across the hall, a frame at a go
+    await holdTheClock(page);
+    await toTheLook(page);
+    await toRest(page);
+    const HEART = { x: 2720, y: 969 };
+    await page.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), HEART);
+    const tip = page.locator('#hud [data-toasts] .toast', { hasText: 'Warm air rises here' });
+    await heldUntil(page, 'the warm air’s tip', async () => (await tip.count()) > 0);
+    await heldPass(page, 600);
+    const shown = (await chips(page)).filter((c) => c.id in WAYS);
+    expect(shown.map((c) => c.id), 'the arcade’s chip still shows').toContain('down');
+    const box = (await tip.boundingBox())!;
+    for (const c of shown) {
+      const apart = Math.min(box.x + box.width, c.right) - Math.max(box.x, c.left) <= 0 || Math.min(box.y + box.height, c.bottom) - Math.max(box.y, c.top) <= 0;
+      expect(apart, `the tip clear of ${c.text}`).toBe(true);
+    }
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-hall-tip-and-chips.png` });
+    await page.locator('#hud [data-hint="down"]').click();
+    // Between the hall and the arcade the page has no room for a moment, and no state to read.
+    const roomNow = async () => ((await page.evaluate(() => window.owlPark.state())) as ParkState | null)?.room ?? null;
+    await heldUntil(page, 'the owl down the hatch, in the arcade', async () => (await roomNow()) === 'arcade');
   });
 });
