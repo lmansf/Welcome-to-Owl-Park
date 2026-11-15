@@ -220,7 +220,8 @@ const perchId = (c: FloorCluster, i: number) => (i === 0 ? `${c.id}-perch` : `${
  */
 export const PAINTED_THINGS: readonly InteractableDef[] = [
   { id: 'lobby-fountain', kind: 'bird-bath', room: 'lobby', pos: { x: 665, y: 775 }, label: 'Splash in the fountain' },
-  { id: 'grove-jetty', kind: 'bird-bath', room: 'grove', pos: { x: 950, y: 636 }, label: 'Splash in the pond' },
+  // On the pond's near bank east of the jetty, out of reach from the jetty's end, so E there always reels in.
+  { id: 'grove-pond-bank', kind: 'bird-bath', room: 'grove', pos: { x: 1250, y: 685 }, label: 'Splash in the pond' },
   { id: 'grove-glowcaps', kind: 'mushroom', room: 'grove', pos: { x: 3420, y: 850 }, label: 'Bounce on the glowing mushrooms' },
 ];
 

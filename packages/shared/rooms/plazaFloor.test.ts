@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { FISHING_REACH, FISHING_ROOM, FISHING_SPOT } from '../src/activities';
 import { edgeArt } from '../src/edges';
 import { pointInPolygon } from '../src/geometry';
 import { INTERACTABLES, KIND_RULES, interactablesIn } from '../src/interactables';
@@ -224,6 +225,13 @@ describe("one story per room, not the same props in every one (OP-416, the owner
       const stickers = PLAZA_CLUSTERS.filter((c) => c.room === id).flatMap((c) => c.things.map((t) => t.kind));
       expect(stickers, id).not.toContain('bird-bath');
       if (id === 'grove') expect(stickers, id).not.toContain('mushroom');
+    }
+  });
+
+  it('leaves the end of the jetty to fishing: nothing else to use is in reach there, so Interact or E reels in on a bite', () => {
+    for (const def of interactablesIn(FISHING_ROOM)) {
+      const d = Math.hypot(def.pos.x - FISHING_SPOT.x, def.pos.y - FISHING_SPOT.y);
+      expect(d, def.id).toBeGreaterThan(KIND_RULES[def.kind].reach + FISHING_REACH);
     }
   });
 });
