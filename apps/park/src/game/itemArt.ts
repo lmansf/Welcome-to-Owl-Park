@@ -88,6 +88,28 @@ export function iconArt(id: string, scale = 1): Promise<HTMLImageElement | null>
 const canvases = new Map<string, Promise<HTMLCanvasElement>>();
 
 /** A variant's art at `scale` texture pixels per logical pixel (cached). */
+/**
+ * A pet's art of its own beside its variant's (the painted egg's cracks and hatch frames, OP-261):
+ * the published art at the pet's size, or an empty canvas while none has shipped.
+ */
+export function petArtCanvas(art: string, scale = 1): Promise<HTMLCanvasElement> {
+  const id = `art:${art}@${scale}`;
+  let p = canvases.get(id);
+  if (!p) {
+    p = (async () => {
+      const size = ITEM_SIZES.pet;
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(size.w * scale));
+      canvas.height = Math.max(1, Math.round(size.h * scale));
+      const real = await loadRealArt(art, scale);
+      if (real) canvas.getContext('2d')?.drawImage(real, 0, 0, canvas.width, canvas.height);
+      return canvas;
+    })();
+    canvases.set(id, p);
+  }
+  return p;
+}
+
 export function itemCanvas(variant: string, scale = 1): Promise<HTMLCanvasElement> {
   const id = `${variant}@${scale}`;
   let p = canvases.get(id);

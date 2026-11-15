@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { cameraView, dist, frames, openGround, openPark, settleCamera, state, tapRoomPoint, waitForArrival, walkAndStop, walkToDoor } from './helpers';
+import { cameraView, dist, frames, openGround, openPark, settleCamera, state, tapRoomPoint, toScreen, waitForArrival, walkAndStop, walkToDoor } from './helpers';
 
 /** A finger drawn down the screen from (x, y), `by` pixels, in a few steps, then lifted. */
 async function swipeDown(page: Page, x: number, y: number, by: number): Promise<void> {
@@ -886,3 +886,27 @@ test.describe('the side camera (OP-351)', () => {
   });
 });
 
+test.describe('the painted egg (OP-261)', () => {
+  test('follows its owl, and a tap on it says how many days until it hatches, without walking the owl there', async ({ page, isMobile }) => {
+    const cid = 'e2e-egg';
+    // The egg as if a code had given it, kept the way the local mode keeps a collection.
+    await page.addInitScript((id) => {
+      const key = `owl-park:collection:${id}`;
+      if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ collectors: [], owned: [[id, 'painted-egg~0', 'granted', 0]] }));
+    }, cid);
+    await openPark(page, { collector: cid, tz: 'UTC', room: 'hub' });
+    await expect.poll(() => page.evaluate(() => window.owlPark.equip('painted-egg~0'))).toBe(true);
+    await expect.poll(async () => (await state(page)).egg.at).not.toBeNull();
+    await settleCamera(page);
+    const before = (await state(page)).pos;
+    const egg = (await state(page)).egg.at!;
+    const p = await toScreen(page, egg.x, egg.y);
+    if (isMobile) await page.touchscreen.tap(p.x, p.y);
+    else await page.mouse.click(p.x, p.y);
+    await expect.poll(async () => (await state(page)).egg.said).toMatch(/^Hatches in \d+ days$/);
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-egg.png` });
+    const after = await state(page);
+    expect(after.walking).toBe(false);
+    expect(dist(after.pos, before)).toBeLessThan(2);
+  });
+});

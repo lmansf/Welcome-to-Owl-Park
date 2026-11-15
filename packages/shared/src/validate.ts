@@ -2,7 +2,7 @@
  * Structural validation for anything that arrives from another visitor. Peers share public
  * channels, so every field is untrusted until it has the expected shape and range.
  */
-import { EMOTE_IDS, isWear } from './collectibles';
+import { EMOTE_IDS, FREE_EMOTES, isWear } from './collectibles';
 import { MAX_AIR_Z, checkAir } from './flight';
 import { isHexColour, isPledge } from './look';
 import { isPhrase } from './phrases';
@@ -47,8 +47,9 @@ export function isLook(v: unknown): v is OwlLook {
   );
 }
 
+/** An emote of the catalogue, or one every owl has (FREE_EMOTES). */
 export function isEmoteId(v: unknown): v is string {
-  return typeof v === 'string' && EMOTE_IDS.includes(v);
+  return typeof v === 'string' && (EMOTE_IDS.includes(v) || FREE_EMOTES.includes(v));
 }
 
 export function isWalk(v: unknown): v is Walk {

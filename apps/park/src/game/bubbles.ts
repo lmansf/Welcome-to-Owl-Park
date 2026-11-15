@@ -45,10 +45,23 @@ export class SpeechBubbles {
   /** A phrase said by an owl; false when it is not one of the list's or bubbles are off. */
   say(owl: Owl, n: number, now: number): boolean {
     const phrase = getPhrase(n);
-    if (!phrase || !this.shown) return false;
+    if (!phrase) return false;
+    return this.show(owl, phrase.text, n, now);
+  }
+
+  /**
+   * Words of the park's own over an owl on this page alone, like a tapped egg's countdown (OP-261);
+   * false when bubbles are off.
+   */
+  note(owl: Owl, words: string, now: number): boolean {
+    return this.show(owl, words, -1, now);
+  }
+
+  private show(owl: Owl, words: string, n: number, now: number): boolean {
+    if (!this.shown) return false;
     this.drop(owl.id);
     const text = this.scene.add
-      .text(0, 0, phrase.text, { fontFamily: FONT, fontSize: `${DRAWN_PX}px`, fontStyle: '700', color: '#0C1E36', align: 'center', wordWrap: { width: DRAWN_PX * 9 }, resolution: 2 })
+      .text(0, 0, words, { fontFamily: FONT, fontSize: `${DRAWN_PX}px`, fontStyle: '700', color: '#0C1E36', align: 'center', wordWrap: { width: DRAWN_PX * 9 }, resolution: 2 })
       .setOrigin(0.5, 1);
     const padX = DRAWN_PX * 0.55;
     const padY = DRAWN_PX * 0.35;

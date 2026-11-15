@@ -162,6 +162,7 @@ import {
   STUMP_ROOM,
   isPartyRoom,
   throughGate as walkedThroughGate,
+  eggBubble,
   SNOWBALL_EVERY_MS,
   SNOWBALL_REACH,
 } from '@owl-park/shared';
@@ -194,6 +195,7 @@ import { earlyPreview } from '../ui/preview';
 import { ActivityLayer } from './activities';
 import { PartyLayer } from './partyLayer';
 import { flagOn } from '../flags';
+import { LOOK_EMOTE } from './headTurn';
 import { addAmbience, addSetPieces, ensureFxTextures, type SetPieces } from './ambience';
 import { arcadeFor, type Arcade } from './arcade';
 import { PORTAL_OFF, climbFor, type Climb } from './climb';
@@ -574,6 +576,8 @@ export class RoomScene extends Phaser.Scene {
   private readonly peerEmotes = new Map<string, string>();
   /** Phrases said here, in bubbles over the owls (C44), and when this owl last said one. */
   private bubbles: SpeechBubbles | null = null;
+  /** What tapping a painted egg last said here (OP-261). */
+  private eggSaid: string | null = null;
   /** The feather trail toward a doorway not tried yet (OP-307), and whether Settings has it on; none in a course. */
   private trail: FeatherTrail | null = null;
   private trailOn = true;
@@ -1852,6 +1856,8 @@ export class RoomScene extends Phaser.Scene {
       this.pendingVote = false; // a new destination cancels a walk to the idol
       this.errand = null; // ...or to an NPC or a leaf pile
       const world = this.cameras.main.getWorldPoint(p.x, p.y);
+      // A tap on a painted egg, the own owl's or another's, says when it hatches (OP-261).
+      if (this.tapEgg({ x: world.x, y: world.y })) return;
       // In the snow a tap on another owl throws a snowball at it (OP-074), when it is near enough.
       const target = this.snowing ? this.owlAt({ x: world.x, y: world.y }) : null;
       if (target && this.throwSnowball(target)) return;
@@ -1866,6 +1872,19 @@ export class RoomScene extends Phaser.Scene {
       // A tap on the doorway the owl already stands in (a side view, OP-212) goes through, as one walked to would.
       if (!this.walkTo(goal)) this.tapIntoDoorway(goal);
     });
+  }
+
+  /**
+   * A tap on a painted egg (OP-261): the owl it follows shows the days until Easter in a bubble, on
+   * this page alone; with bubbles off, the same words come as a tip. False when no egg is there.
+   */
+  tapEgg(p: Vec2): boolean {
+    const owl = [this.me, ...this.peers.values()].find((o) => o.eggAt(p));
+    if (!owl) return false;
+    const words = eggBubble(Date.now());
+    this.eggSaid = words;
+    if (!this.bubbles?.note(owl, words, this.time.now)) this.hud.toast(words, 3000);
+    return true;
   }
 
   /** The thing to use out on a plaza's floor under a tap, if any: the nearest whose art or spot it is on. */
@@ -2596,7 +2615,9 @@ export class RoomScene extends Phaser.Scene {
      * The others, with how high each is drawn, whether on the ground (0), in the air (1) or gliding (2),
      * and its take-offs as this page carried them on from the states it was told (as `flown` is for the own owl).
      */
-    peers: Array<{ id: string; pos: Vec2; walking: boolean; look: OwlLook; emote: string | null; height: number; air: Air['s']; flown: { n: number; peak: number; glided: boolean; ms: number }; asleep: boolean; wings: boolean; owlWorn: string }>;
+    peers: Array<{ id: string; pos: Vec2; walking: boolean; look: OwlLook; emote: string | null; height: number; air: Air['s']; flown: { n: number; peak: number; glided: boolean; ms: number }; asleep: boolean; wings: boolean; owlWorn: string; head: string }>;
+    /** This visitor's owl's head frame as drawn (OP-289: 'front' at rest), and whether its body (the pose emotes move) is at rest. */
+    head: { frame: string; bodyAtRest: boolean };
     /** Asleep, its visitor idle (OP-126). */
     asleep: boolean;
     /** The phrases in bubbles over the owls right now: whose (this visitor's own id included), and which. */
@@ -2700,9 +2721,12 @@ export class RoomScene extends Phaser.Scene {
     sounds: string[];
     /** The side camera (OP-351): its lead and the height it holds, and where it looks; null in a room seen from above. */
     sideCam: { lead: number; level: number; x: number; y: number } | null;
+    /** The painted egg (OP-261): where the own owl's egg is drawn (null without one), and what tapping an egg last said. */
+    egg: { at: Vec2 | null; said: string | null };
   } | null {
     if (!this.built) return null;
     return {
+      egg: { at: this.me.eggPos(), said: this.eggSaid },
       snow: this.snowing,
       snowballs: { ...this.snowballs, hits: [...this.snowballs.hits] },
       sounds: this.sfx.heard().slice(-16),
@@ -2719,7 +2743,8 @@ export class RoomScene extends Phaser.Scene {
       height: this.me.flightHeight(),
       air: { ...this.flier.air },
       flown: { ...this.flown },
-      peers: [...this.peers.values()].map((o) => ({ id: o.id, pos: { ...o.pos }, walking: o.walking, look: o.look, emote: this.peerEmotes.get(o.id) ?? null, height: o.flightHeight(), air: o.airMode, flown: o.flown, asleep: o.asleep, wings: o.wingsOut, owlWorn: o.wornKey })),
+      peers: [...this.peers.values()].map((o) => ({ id: o.id, pos: { ...o.pos }, walking: o.walking, look: o.look, emote: this.peerEmotes.get(o.id) ?? null, height: o.flightHeight(), air: o.airMode, flown: o.flown, asleep: o.asleep, wings: o.wingsOut, owlWorn: o.wornKey, head: o.headFrame })),
+      head: { frame: this.me.headFrame, bodyAtRest: this.me.poseAtRest() },
       asleep: this.me.asleep,
       bubbles: this.bubbles?.showing() ?? [],
       connected: this.conn !== null,
@@ -3435,12 +3460,17 @@ export class RoomScene extends Phaser.Scene {
     return true;
   }
 
-  /** Play an owned emote here and for everyone in the room (it counts for quests that ask for it). */
+  /**
+   * Play an owned emote here and for everyone in the room (it counts for quests that ask for it). The
+   * look around (OP-289) every owl has, behind ?look=1: it counts for no quest.
+   */
   emote(e: string): boolean {
-    if (!this.built || !EMOTE_IDS.includes(e) || !this.collection.owns(e)) return false;
+    const look = e === LOOK_EMOTE && flagOn('look');
+    if (!this.built || (!look && (!EMOTE_IDS.includes(e) || !this.collection.owns(e)))) return false;
     this.me.playEmote(e);
     this.guardianCalled(this.playerId, e);
     this.conn?.send({ t: 'emote', id: this.playerId, e });
+    if (look) return true;
     const near = [...this.npcs.values()].filter((n) => distance(n.def.pos, this.me.pos) <= NPC_EMOTE_RADIUS).map((n) => n.id);
     this.link?.note({ kind: 'emote', emote: e, room: this.room.id, near });
     return true;

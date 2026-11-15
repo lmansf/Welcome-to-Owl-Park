@@ -32,7 +32,11 @@ export interface ParkState {
     /** Its wings open, and the body layer drawn (its flight copy while they are, OP-136), as for this visitor's own owl. */
     wings: boolean;
     owlWorn: string;
+    /** Its head frame as drawn (OP-289): 'front' at rest, then '3q', 'side' and 'back' as it looks around. */
+    head: string;
   }>;
+  /** This visitor's owl's head frame as drawn (OP-289), and whether its body (the pose emotes move) is at rest. */
+  head: { frame: string; bodyAtRest: boolean };
   /** How high this visitor's owl is drawn above the floor (OP-084), in room pixels; `pos` stays on the floor. */
   height: number;
   /** Its flight as it steps: height and speed up (room px, px/s), on the ground (0), in the air (1), gliding (2) or held up by an updraft or a wind current (3), and flaps left. */
@@ -100,6 +104,7 @@ export interface ParkState {
   sounds: string[];
   /** The side camera (OP-351): its lead (room px, to the right is positive), the height it holds and where it looks; null in a room seen from above. */
   sideCam: { lead: number; level: number; x: number; y: number } | null;
+  egg: { at: { x: number; y: number } | null; said: string | null };
   trail: { feathers: Array<{ x: number; y: number }>; glints: string[]; on: boolean } | null;
   floorShown: boolean;
   /** How many pieces shaping the room's edges seen from above were drawn (edges.ts). */

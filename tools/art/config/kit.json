@@ -2733,6 +2733,78 @@
       "w": 400,
       "h": 400,
       "desc": "a small open pavilion of dark wood with a tiled upturned roof on four posts, a paper lantern inside, seen from the side"
+    },
+    "hall-root-glass-log": {
+      "area": "glass",
+      "w": 400,
+      "h": 120,
+      "desc": "a fallen root lying on its side, its top flat to stand on, with seams of stained glass and small violet crystals grown into its bark"
+    },
+    "hall-root-glass-knot": {
+      "area": "glass",
+      "w": 200,
+      "h": 200,
+      "desc": "a tangle of knotted roots, its top clear to perch on, with seams of stained glass and small violet crystals grown into its bark"
+    },
+    "hall-root-glass-stump": {
+      "area": "glass",
+      "w": 320,
+      "h": 400,
+      "desc": "a cut tree stump on spreading roots, its flat top to stand on, with seams of stained glass and small violet crystals grown into its bark"
+    },
+    "hall-root-ink-log": {
+      "area": "ink",
+      "w": 400,
+      "h": 120,
+      "desc": "a fallen root lying on its side, its top flat to stand on, of pale grey wood brushed with soft ink-wash leaves and a little moss"
+    },
+    "hall-root-ink-knot": {
+      "area": "ink",
+      "w": 200,
+      "h": 200,
+      "desc": "a tangle of knotted roots, its top clear to perch on, of pale grey wood brushed with soft ink-wash leaves and a little moss"
+    },
+    "hall-root-ink-stump": {
+      "area": "ink",
+      "w": 320,
+      "h": 400,
+      "desc": "a cut tree stump on spreading roots, its flat top to stand on, of pale grey wood brushed with soft ink-wash leaves and a little moss"
+    },
+    "hall-root-grove-log": {
+      "area": "clearing",
+      "w": 400,
+      "h": 120,
+      "desc": "a fallen root lying on its side, its top flat to stand on, wrapped in fresh moss and small ferns with a few tiny glowing mushrooms"
+    },
+    "hall-root-grove-knot": {
+      "area": "clearing",
+      "w": 200,
+      "h": 200,
+      "desc": "a tangle of knotted roots, its top clear to perch on, wrapped in fresh moss and small ferns with a few tiny glowing mushrooms"
+    },
+    "hall-root-grove-stump": {
+      "area": "clearing",
+      "w": 320,
+      "h": 400,
+      "desc": "a cut tree stump on spreading roots, its flat top to stand on, wrapped in fresh moss and small ferns with a few tiny glowing mushrooms"
+    },
+    "hall-root-market-log": {
+      "area": "neon",
+      "w": 400,
+      "h": 120,
+      "desc": "a fallen root lying on its side, its top flat to stand on, with thin copper wires grown into its bark and small glowing pink and cyan beads"
+    },
+    "hall-root-market-knot": {
+      "area": "neon",
+      "w": 200,
+      "h": 200,
+      "desc": "a tangle of knotted roots, its top clear to perch on, with thin copper wires grown into its bark and small glowing pink and cyan beads"
+    },
+    "hall-root-market-stump": {
+      "area": "neon",
+      "w": 320,
+      "h": 400,
+      "desc": "a cut tree stump on spreading roots, its flat top to stand on, with thin copper wires grown into its bark and small glowing pink and cyan beads"
     }
   },
   "recut": {

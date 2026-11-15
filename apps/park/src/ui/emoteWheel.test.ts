@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WHEEL_SLOTS, wheelPage, wheelSpot } from './emoteWheel';
+import { LOOK_ITEM, WHEEL_SLOTS, wheelEmotes, wheelPage, wheelSpot } from './emoteWheel';
 
 describe('the emote wheel', () => {
   it('puts the first slot at the top and goes round clockwise, evenly', () => {
@@ -23,5 +23,15 @@ describe('the emote wheel', () => {
     expect(wheelPage(ids, -1).page).toBe(0);
     expect(wheelPage([], 0)).toEqual({ items: [], page: 0, pages: 1 });
     expect(wheelPage(ids.slice(0, 8), 1)).toEqual({ items: ids.slice(0, 8), page: 0, pages: 1 });
+  });
+
+  it('puts the look around first while ?look=1 is on, for every owl, and leaves it out otherwise (OP-289)', () => {
+    const state = { owns: (id: string) => id === 'hoot' || id === 'flap' } as never;
+    expect(wheelEmotes(state, false).map((i) => i.id)).toEqual(['hoot', 'flap']);
+    expect(wheelEmotes(state, true).map((i) => i.id)).toEqual(['look', 'hoot', 'flap']);
+    expect(wheelEmotes(state, true)[0]).toBe(LOOK_ITEM);
+    expect(LOOK_ITEM).toMatchObject({ kind: 'emote', name: 'Look around' });
+    // An owl that owns no emote yet still has it.
+    expect(wheelEmotes({ owns: () => false } as never, true).map((i) => i.id)).toEqual(['look']);
   });
 });
