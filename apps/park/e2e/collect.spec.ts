@@ -67,8 +67,8 @@ test.describe('quests, NPC owls and leaf piles (this device)', () => {
     // Step 2 and 3: arriving in the clearing counts; then a flop into the leaves.
     await openPark(page, { ...params, room: 'grove' });
     await expect.poll(() => questStep(page, 'story-welcome'), { timeout: 15_000 }).toBe(2);
-    expect(await page.evaluate(() => window.owlPark.use('grove-leaves-1'))).toBe(true);
-    await expect.poll(async () => (await state(page)).objects.find((o) => o.id === 'grove-leaves-1')?.here, { timeout: 15_000 }).toBe(false);
+    expect(await page.evaluate(() => window.owlPark.use('grove-leaves-2'))).toBe(true);
+    await expect.poll(async () => (await state(page)).objects.find((o) => o.id === 'grove-leaves-2')?.here, { timeout: 15_000 }).toBe(false);
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-leaves.png` });
     await expect.poll(() => questStep(page, 'story-welcome')).toBe(3);
 

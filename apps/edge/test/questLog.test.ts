@@ -110,7 +110,7 @@ describe('the quest progress log (OP-266)', () => {
     t.quests.event(CID, { kind: 'talk', npc: 'pip' }, t.now(), 'hub');
     t.tick(60_000);
     t.quests.event(CID, { kind: 'visit', room: 'grove' }, t.now(), 'grove');
-    t.quests.event(CID, { kind: 'interact', what: 'leaf-pile', id: 'grove-leaves-1', room: 'grove' }, t.now(), 'grove');
+    t.quests.event(CID, { kind: 'interact', what: 'leaf-pile', id: 'grove-leaves-2', room: 'grove' }, t.now(), 'grove');
     t.quests.event(CID, { kind: 'talk', npc: 'nova' }, t.now(), 'market');
     t.quests.event(CID, { kind: 'emote', emote: 'hoot', room: 'hub', near: ['bramble'] }, t.now(), 'hub');
     t.tick(60_000);

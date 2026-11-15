@@ -103,12 +103,12 @@ describe('play events (OP-304)', () => {
     await t.obj.flop(CID, { kind: 'interact', what: 'leaf-pile', id: 'hub-leaves-1', room: 'hub' }, 'hub');
     await t.obj.questEvent(CID, { kind: 'interact', what: 'stall', id: 'glass-nest', room: 'glass' }, 'glass');
     await t.obj.questEvent(CID, { kind: 'talk', npc: 'pip' }, 'hub');
-    await t.obj.practiceUsed('c_guestowlxx', 'leaf-pile', 'grove-leaves-1', 'grove');
+    await t.obj.practiceUsed('c_guestowlxx', 'leaf-pile', 'grove-leaves-2', 'grove');
     await t.settle();
     expect(t.played.map((r) => [r.event, r.thing, r.realm, r.practice])).toEqual([
       ['interact', 'leaf-pile:hub-leaves-1', 'hub', false],
       ['interact', 'stall:glass-nest', 'glass', false],
-      ['interact', 'leaf-pile:grove-leaves-1', 'grove', true],
+      ['interact', 'leaf-pile:grove-leaves-2', 'grove', true],
     ]);
     expect(t.played.every((r) => r.course_id === null && r.run_id === null)).toBe(true);
   });

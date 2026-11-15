@@ -257,12 +257,10 @@ describe('the Great Hollow (Nov 7; an oval, Nov 8)', () => {
     expect(middle('up').x).toBe(HALL_MIDDLE);
     expect(Math.min(...hall.doors.map((d) => middle(d.id).y))).toBe(middle('up').y);
     for (const id of ['to-party', 'down']) expect(middle(id).y, id).toBeGreaterThan(HALL_CY + 0.8 * HALL_RY);
-    const piles = INTERACTABLES.filter((t) => t.room === HALL_ID);
-    for (const c of HALL_COMMONS)
-      expect(
-        piles.some((p) => p.id === `m3-hall-leaves-${c.level}`),
-        c.level,
-      ).toBe(true);
+    // The leaves lie where the wind leaves them (OP-417): by the knothole they blow in at, and by the hatch they fall through.
+    const piles = INTERACTABLES.filter((t) => t.room === HALL_ID && t.kind === 'leaf-pile');
+    expect(piles.filter((p) => Math.hypot(p.pos.x - middle('up').x, p.pos.y - middle('up').y) < 900).length).toBeGreaterThanOrEqual(2);
+    expect(piles.some((p) => Math.hypot(p.pos.x - middle('down').x, p.pos.y - middle('down').y) < 900)).toBe(true);
     for (const p of piles) expect(onFloor(p.pos), p.id).toBe(true);
   });
 

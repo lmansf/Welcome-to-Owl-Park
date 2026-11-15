@@ -112,10 +112,10 @@ describe('LocalCollections', () => {
     hub.where.y = npc('pip').y;
     expect((await hub.link.talk('pip')).updates[0]).toMatchObject({ quest: 'story-welcome', count: 1, need: 1 });
 
-    const grove = linkIn(page, 'grove', { x: 2500, y: 835 });
+    const grove = linkIn(page, 'grove', { x: 2890, y: 845 });
     grove.link.note({ kind: 'visit', room: 'grove' });
     expect(grove.pushed.boards.at(-1)?.active[0]?.step).toBe(2);
-    const flop = await grove.link.use('grove-leaves-1');
+    const flop = await grove.link.use('grove-leaves-2');
     expect(flop).toMatchObject({ ok: true, updates: [{ quest: 'story-welcome', count: 1 }] });
     expect(flop.board?.active[0]?.step).toBe(3);
 
@@ -134,23 +134,23 @@ describe('LocalCollections', () => {
 
   it('poofs a leaf pile for a while, pays feathers up to the daily cap, and spaces out flops', async () => {
     const { page, clock } = rig();
-    const { link, pushed } = linkIn(page, 'grove', { x: 2500, y: 835 });
+    const { link, pushed } = linkIn(page, 'grove', { x: 2890, y: 845 });
     await Promise.resolve(); // the used-up objects are reported once the scene listens
     expect(pushed.objects).toEqual([{}]);
-    const first = await link.use('grove-leaves-1');
+    const first = await link.use('grove-leaves-2');
     expect(first.ok).toBe(true);
     expect(pushed.used).toHaveLength(1);
     const [id, by, until] = pushed.used[0]!;
-    expect([id, by]).toEqual(['grove-leaves-1', null]);
+    expect([id, by]).toEqual(['grove-leaves-2', null]);
     expect(until).toBeGreaterThan(at);
     clock.now += USE_COOLDOWN_MS;
-    expect(await link.use('grove-leaves-1')).toMatchObject({ ok: false, reason: 'gone' });
-    expect(await link.use('grove-leaves-2')).toMatchObject({ ok: false, reason: 'far' });
+    expect(await link.use('grove-leaves-2')).toMatchObject({ ok: false, reason: 'gone' });
+    expect(await link.use('grove-leaves-porch')).toMatchObject({ ok: false, reason: 'far' });
     // random() = 0.1: every flop finds feathers, until the day's cap.
     let total = first.feathers;
     for (let i = 0; i < 40; i++) {
       clock.now = until + i * USE_COOLDOWN_MS * 200;
-      const res = await link.use('grove-leaves-1');
+      const res = await link.use('grove-leaves-2');
       expect(res.ok).toBe(true);
       total += res.feathers;
     }
