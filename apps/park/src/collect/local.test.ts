@@ -51,8 +51,8 @@ describe("a course's fall in this browser's own park (OP-343)", () => {
     expect((await link.start()).ok).toBe(true);
     // On the walk before the bramble: no fall.
     expect(await link.fall()).toEqual({ ok: false, reason: 'far' });
-    // Down in the bramble: a fall, back at the way in.
-    me.pos.x = 900;
+    // Down in the bramble (the first is past the fern hollow, OP-361): a fall, back at the way in.
+    me.pos.x = 2100;
     expect(await link.fall()).toMatchObject({ ok: true, at: { x: 120, y: 770 } });
     // Up on a frond over the bramble (standing 160 up): not one.
     me.ground = 160;

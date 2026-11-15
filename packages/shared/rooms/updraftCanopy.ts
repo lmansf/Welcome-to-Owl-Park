@@ -162,7 +162,9 @@ function canopyRoom(
 // ---------- Act 1: the fern floor ----------
 
 const U_ACT1 = [
-  updraft('U1', 1260, 540),
+  // The first rising air (OP-361) stands from the last frond's end to over the first bough and tops out just
+  // above it, so a newcomer's Jump held from anywhere on the frond comes down on the bough by its bell.
+  { ...updraft('U1', 1150, 490), w: 380 },
   updraft('U2', 2240, 540, GUST),
   updraft('U3', 2800, 600, GUST_LATE),
   updraft('U4', 3460, 580, GUST),
@@ -174,7 +176,9 @@ const CANOPY_1: RoomKit = {
   backdrops: clearingAir(3),
   paths: [
     walk('fern-floor', 0, 700, FERN),
-    dip('bramble-west', 700, 1500, FERN),
+    // Ground under the fronds (OP-361): the first screen is where the held Jump and the rising air are
+    // learnt, so a miss there is the fern floor to walk back from. The first bramble is the next screen's.
+    walk('fern-hollow', 700, 1500, FERN),
     walk('fern-rise', 1500, 2000, FERN),
     dip('bramble-east', 2000, ROOTS_MOSS, FERN),
     walk('roots-moss', ROOTS_MOSS, 3 * ROOM_W, FERN),
@@ -184,7 +188,7 @@ const CANOPY_1: RoomKit = {
     ledge('s2', 520, 140, 200, BOULDER),
     ledge('fern-hi', 40, 120, 330, FROND),
     ledge('f1', 760, 180, 160, FROND),
-    ledge('f2', 1050, 160, 100, FROND),
+    ledge('f2', 1000, 150, 100, FROND),
     ledge('b1', 1480, 160, 480, BRANCH),
     ledge('fern-bench', 1840, 100, 540, FROND),
     ledge('s4', 2040, 140, 120, BOULDER),
@@ -209,7 +213,7 @@ const CANOPY_1: RoomKit = {
     { id: 'gate', story: 'A tall fern leans over the curtain of vines where the course begins, the way back to the clearing.', props: ['gate-fern'], about: ['to-commons'] },
     { id: 'tiny-door', story: 'Half hidden by a fern among the roots, a tiny door with a warm light behind its crack.', props: ['roots-fern'], about: ['roots'] },
   ],
-  decals: [...bramble(700, 1500), ...bramble(2000, ROOTS_MOSS), ...vents(U_ACT1)],
+  decals: [...bramble(2000, ROOTS_MOSS), ...vents(U_ACT1)],
 };
 
 const ROOT_DEN: RoomKit = {
@@ -337,9 +341,10 @@ export const CANOPY_ROOMS: Record<string, RoomDef> = inRealmKit('clearing', with
     updrafts: U_ACT1,
     course: {
       act: 1,
-      pits: [pit(700, 1500), pit(2000, ROOTS_MOSS)],
+      pits: [pit(2000, ROOTS_MOSS)],
       thorns: [thorns('H1', 1960, 2020, 260), thorns('H2', 2700, 2750, 300), thorns('H3', 3400, 3450, 300), thorns('H4', 4000, 4050, 300)],
-      benches: [piece('bench-1', 1800), piece('bench-1b', 3285, 120)],
+      // bench-0 on the last frond (OP-361): a fall further on is one held Jump from it, not back at the door.
+      benches: [piece('bench-0', 1130, 100), piece('bench-1', 1800), piece('bench-1b', 3285, 120)],
       parts: [piece('bell-1', 1560, 480), piece('bell-2', 4340, 540)],
       feathers: [piece('feather-1', 100, 330), piece('feather-2', 1890, 540)],
     },
