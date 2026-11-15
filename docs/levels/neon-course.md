@@ -58,8 +58,12 @@ The ground line is the roofs' own deck; a sign's row says which circuit it is on
 | `b2` | 3620 | 360 | 540 | The tall roof, the harder way on (breaker 1 moved to `ac1`, OP-378) | `s3` only: without either sign it is out of reach |
 | `board1` | 4200 | 200 | 400 | A billboard, lost feather 2 | a glide down off `b2` |
 
-The street from 1400 to 2700 is 1300 wide: past a level glide with the dash (1175), so the way over
-is the glide down off `b1`, which only the first sign reaches.
+The street from 1800 to 2700 is 900 wide, and the way over is the glide down off `b1`, which the first
+sign reaches. The deck runs on past the roof's end, under the roof wind, to 1800 (OP-361): of the
+one-press plays off `b1`, 168 of 210 used to come straight down into the street when the deck ended at
+1400, and now each of them comes down on the deck. Logan's call (Nov 15, "Accept the skip"): from that
+deck a strong flyer can ride the wind up to `b1`, or flap across to `bridge1`, without the sign. The
+tall roof `b2` and `board1` stay the second sign's.
 
 ### Act 2: The Power Cut (`circuit-2`)
 

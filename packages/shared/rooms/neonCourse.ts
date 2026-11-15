@@ -140,7 +140,7 @@ const SIGNS_1 = [sign('s1', 700, 180, 230, 'a'), sign('s2', 3000, 180, 200, 'a')
 const ROOFTOPS: RoomKit = {
   ground: G,
   backdrops: cityAir(3),
-  paths: [deck('deck-a', 0, 1400), drop('street', 1400, 2700), deck('deck-b', 2700, 3 * ROOM_W)],
+  paths: [deck('deck-a', 0, 1800), drop('street', 1800, 2700), deck('deck-b', 2700, 3 * ROOM_W)],
   ledges: [
     ledge('ac1', 300, 200, 120, AIR_UNIT),
     ledge('b1', 1000, 400, 420, roof(420)),
@@ -162,7 +162,7 @@ const ROOFTOPS: RoomKit = {
     { id: 'coop', story: 'On the high roof a pigeon coop faces the street, its pigeons watching the signs blink on and off.', props: ['coop'], about: ['b1'] },
     { id: 'noodles', story: 'A noodle stall on the far roof keeps its lanterns lit on its own battery, by the door to the dark block.', props: ['noodles'], about: ['to-cut'] },
   ],
-  decals: tubes(1400, 2700),
+  decals: tubes(1800, 2700),
 };
 
 // ---------- Act 2: the power cut ----------
@@ -231,7 +231,7 @@ export const CIRCUIT_ROOMS: Record<string, RoomDef> = inRealmKit('neon', withCou
     signs: SIGNS_1,
     course: {
       act: 1,
-      pits: [floor(1400, 2700)],
+      pits: [floor(1800, 2700)],
       benches: [piece('bench-1', 1150, 420)],
       // The first breaker on the air unit by the start (OP-378): the first move is one hop up over the
       // deck, where a miss lands back on the deck, and it earns a breaker before anything can be fallen

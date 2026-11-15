@@ -114,18 +114,23 @@ describe("the neon realm's course", () => {
     for (const id of ids) {
       for (const [ledge, tier] of Object.entries(tiersFrom(id))) expect(tier, `${id} ${ledge}`).not.toBeNull();
     }
-    // With every sign dark the high roofs, the breakers' roofs and the summit are out of reach.
-    expect(tiersFrom('circuit-1', signIds('circuit-1'))).toMatchObject({ b1: null, b2: null, board1: null, bridge1: null });
+    // With every sign dark the high roofs, the breakers' roofs and the summit are out of reach. The one
+    // way round is act 1's first roof (Logan, Nov 15: "Accept the skip"): the deck runs on under the roof
+    // wind so a miss off b1 lands on it, and from there a strong flyer can ride the wind up to b1 (a glide)
+    // or flap across to the footbridge. Never a single jump, and the tall roof stays the second sign's.
+    const dark1 = tiersFrom('circuit-1', signIds('circuit-1'));
+    expect(dark1).toMatchObject({ b1: 3, bridge1: 2, b2: null, board1: null });
     expect(tiersFrom('circuit-2', signIds('circuit-2'))).toMatchObject({ r1: null, r2: null, r3: null });
     expect(tiersFrom('circuit-3', signIds('circuit-3'))).toMatchObject({ m1: null, m2: null, summit: null });
     // The climbs: up the second roof of act 1 either sign alone is not enough; up the tall roof of act 2 the last sign is the way (over the dark block the wires make the signs the way, below).
     expect(tiersFrom('circuit-1', ['s2'])).toMatchObject({ b2: null });
     expect(tiersFrom('circuit-1', ['s3'])).toMatchObject({ b2: null });
     expect(tiersFrom('circuit-2', ['s8'])).toMatchObject({ r3: null });
-    // Without the dash nothing of the course is skipped: the street gaps stay shut to a glide alone too.
+    // Without the dash the street gaps stay shut to a glide alone too: past the first roof's wind (the skip
+    // Logan accepted, above), the tall roof and its billboard stay out of reach with the signs dark.
     const r = ROOMS['circuit-1']!;
     const { course: _course, ...noCourse } = r;
-    expect(perchTiers({ ...noCourse, walkable: safeFloor(r), perches: (r.perches ?? []).filter((p) => !signIds('circuit-1').includes(p.id)) })).toMatchObject({ b1: null });
+    expect(perchTiers({ ...noCourse, walkable: safeFloor(r), perches: (r.perches ?? []).filter((p) => !signIds('circuit-1').includes(p.id)) })).toMatchObject({ b1: 3, b2: null, board1: null });
   });
 
   it('puts each piece on a ledge that is not a sign, the wires over the street, and every spawn on safe ground', () => {
