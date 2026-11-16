@@ -411,7 +411,7 @@ The arcade, three screens off the market street's east end, has a bay per game w
 spot in each (`packages/shared/src/arcade.ts`): a cabinet whose game is not live shows an unlit
 screen reading "Hatching Soon", and standing at it says so (all three are live, section 4). Art is referenced by key; artists replace files under
 `apps/park/public/art/` and redraw the polygons. Room caps live in the server's `ROOM_CAPS`
-variable (defaults in `apps/edge/src/rooms.ts`: lobby and hub 80; grove, market, arcade and the
+variable (defaults in `apps/edge/src/rooms.ts`: lobby, hub and the Great Hollow 80; grove, market, arcade and the
 street 40; a nest 12, its owner always admitted). What happens at the cap, and the line and the busy
 ribbon (OP-075, section 6), are in `docs/CAPACITY.md`.
 

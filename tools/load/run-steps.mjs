@@ -42,7 +42,7 @@ const STEPS = [
  * The new map (packages/shared/src/newMap.ts). The Great Hollow is its gathering place, so it takes half
  * of a spread; the lobby (where every owl arrives) and the ground room the next share; the three stair
  * rooms the rest. The copy sets the Hollow's and the ground room's caps to 120 (throwaway-config.mjs);
- * the park as deployed caps the Hollow at 40 (apps/edge/src/rooms.ts, ROOM_CAPS unset).
+ * the park as deployed caps the Hollow at 80 (apps/edge/src/rooms.ts, ROOM_CAPS unset).
  */
 const SPREAD = [
   ['m3-hall', 0.5],

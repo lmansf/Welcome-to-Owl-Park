@@ -27,7 +27,8 @@ export function paintableRoom(id: string): RoomDef | null {
 /** Owls in one nest at once, its owner aside: the owner always gets into its own nest. */
 export const NEST_CAP = 12;
 
-const DEFAULT_CAPS: Record<string, number> = { lobby: 80, hub: 80, grove: 40, market: 40, arcade: 40, homes: 40, nest: NEST_CAP, l1: 80, [ESCAPE_COUNT]: ESCAPE_MAX_OWLS };
+/** The Great Hollow (m3-hall), the new map's town square, holds 80 (the owner's ask, Nov 7): the Nov 13 and Nov 16 load tests held 80 in it on one object. */
+const DEFAULT_CAPS: Record<string, number> = { lobby: 80, hub: 80, grove: 40, market: 40, arcade: 40, homes: 40, nest: NEST_CAP, l1: 80, 'm3-hall': 80, [ESCAPE_COUNT]: ESCAPE_MAX_OWLS };
 
 /** A room's cap from ROOM_CAPS or the defaults. Every nest shares the `nest` entry, every sealed hollow the `escapes` one (a group: ESCAPE_MAX_OWLS); a party game's room (OP-314) holds its four seats, whatever ROOM_CAPS says. */
 export function roomCap(env: Env, roomId: string): number {
