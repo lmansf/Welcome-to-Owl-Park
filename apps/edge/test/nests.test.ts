@@ -161,6 +161,8 @@ describe('the rooms a socket may ask for', () => {
     expect(roomCap(env(), 'nest-k3x9q2ab')).toBe(NEST_CAP);
     expect(NEST_CAP).toBe(12);
     expect(roomCap(env(), 'hub')).toBe(80);
+    expect(roomCap(env(), 'm3-hall')).toBe(80);
+    expect(roomCap(env('{"m3-hall": 60}'), 'm3-hall')).toBe(60);
     // ROOM_CAPS sets every nest at once under `nest`; a nest's own id is not a key.
     expect(roomCap(env('{"nest": 6, "homes": 30}'), 'nest-k3x9q2ab')).toBe(6);
     expect(roomCap(env('{"nest": 6, "homes": 30}'), 'homes')).toBe(30);
