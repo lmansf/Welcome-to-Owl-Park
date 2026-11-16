@@ -1,24 +1,19 @@
 /**
- * The guardian's picture, cut for a head that turns (OP-359; behind `?guardian=1`).
+ * The guardian's lids and its carving (OP-359; behind `?guardian=1`).
  *
- * There is one painting of the guardian (art/guardian.png), in one piece. A head that turns needs a
- * head and a body, and eyes that blink need lids. Until an artist paints the guardian in parts, the
- * page makes them from the one painting, by rule:
+ * The guardian is painted in parts (OP-397, idolParts.ts): a head, a body, two wings and its bough,
+ * each its own picture, so its head turns and its wings open with nothing cut by rule. What is still
+ * made here, from the paintings:
  *
- * - the body is the painting with the head taken off above the neck line, and the feathers below the
- *   line carried on up under where the head was (mirrored about the line), so a head that has turned a
- *   little never shows a hole or a second head under it;
- * - the head is the painting above the neck line, fading out a little way below it, so it lies over
- *   the body with no edge. At rest the two together are the painting, pixel for pixel;
- * - a lid is the feathers of the brow over each eye, drawn down over it, with a dark line where it ends;
- * - the carving that stands on the rim while the guardian itself is at the heart is the painting in
- *   one tone of wood.
+ * - a lid is the feathers of the brow over each eye of the painted head, drawn down over it, with a
+ *   dark line where it ends;
+ * - the carving that stands on the rim while the guardian itself is at the heart is the whole
+ *   painting (art/guardian.webp) in one tone of wood.
  *
- * No image file is added, and an artist's parts replace all of this with files. Everything here works
- * on plain pixels, so it is unit-tested without a browser; guardianView.ts turns the results into textures.
+ * Everything here works on plain pixels, so it is unit-tested without a browser; guardianView.ts turns
+ * the results into textures.
  */
-import type { Rect } from '@owl-park/shared';
-import { GUARDIAN_ART, type Lids } from './guardian';
+import type { Lids } from './guardian';
 
 /** A picture as plain pixels: four bytes each (red, green, blue, how solid). */
 export interface Pixels {
@@ -27,77 +22,30 @@ export interface Pixels {
   data: Uint8ClampedArray;
 }
 
-/**
- * The neck line, in the painting's pixels: flat at `side` out at the head's two sides, dipping `dip`
- * under the chin, and past the head's width (`half` either side of the neck's middle) climbing away,
- * so the shoulders and what floats beside them stay the body's.
- */
-export const NECK = { half: 185, side: 338, dip: 54, lean: 1.5 } as const;
-
-/** Where the cut is at column `x`: the head is above this y, the body below. */
-export function neckLine(x: number): number {
-  const off = Math.abs(x - GUARDIAN_ART.neck.x);
-  const u = off / NECK.half;
-  return u <= 1 ? NECK.side + NECK.dip * (1 - u * u) : NECK.side - (off - NECK.half) * NECK.lean;
-}
-
-/** The head lies solid over the body to `solid` px below the line, and has faded out by `gone`. */
-export const HEAD_SKIRT = { solid: 6, gone: 26 } as const;
-/** The body is carried on up to `solid` px above the line, and has faded out by `gone`: as far as a turned head can uncover. */
-export const BODY_RISE = { solid: 22, gone: 36 } as const;
-
 function smooth(a: number, b: number, x: number): number {
   const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
 }
 
-/** How much of the head shows `d` px below the neck line (above it, `d` is under zero). */
-export function headShows(d: number): number {
-  return 1 - smooth(HEAD_SKIRT.solid, HEAD_SKIRT.gone, d);
-}
-
 /**
- * How much of the body shows `d` px below the neck line, at a column `off` px from the neck's middle.
- * Under the head the body is carried on up above the line; out toward the head's two sides it is
- * carried up less and less, and past them not at all: nothing of a shoulder is mirrored up into the air.
+ * An eye's opening (an ellipse), the row of brow feathers a lid is drawn from, and which side its beak
+ * is on (1: to its right). In the painted head's own pixels at 1x (art/guardian-head.webp, 272 x 281).
  */
-export function bodyShows(d: number, off = 0): number {
-  if (d >= 0) return 1;
-  const k = Math.max(0, Math.min(1, (1 - Math.abs(off) / NECK.half) / 0.25));
-  return k <= 0 ? 0 : smooth(-BODY_RISE.gone * k, -BODY_RISE.solid * k, d);
+export interface Eye {
+  x: number;
+  y: number;
+  rx: number;
+  ry: number;
+  brow: number;
+  inner: 1 | -1;
 }
+export const EYES: readonly [Eye, Eye] = [
+  { x: 101, y: 157, rx: 22.5, ry: 17, brow: 135, inner: 1 },
+  { x: 189, y: 157, rx: 20, ry: 16, brow: 136, inner: -1 },
+];
 
-/** The part of the painting the head's own picture is cut from: its ear tufts down to where its skirt ends. */
-export const HEAD_BOX: Rect = { x: 150, y: 20, w: 460, h: 420 };
-
-/** The body: the painting below the neck line, its feathers mirrored on up under where the head was. The painting's size. */
-export function cutBody(src: Pixels): Pixels {
-  const out = new Uint8ClampedArray(src.data.length);
-  const { width: w, height: h } = src;
-  for (let x = 0; x < w; x++) {
-    const line = neckLine(x);
-    for (let y = 0; y < h; y++) {
-      const d = y - line;
-      const shows = bodyShows(d, x - GUARDIAN_ART.neck.x);
-      if (shows <= 0) continue;
-      // Above the line: the pixel as far below it.
-      const from = d >= 0 ? y : Math.min(h - 1, Math.round(line - d));
-      const i = (y * w + x) * 4;
-      const j = (from * w + x) * 4;
-      out[i] = src.data[j]!;
-      out[i + 1] = src.data[j + 1]!;
-      out[i + 2] = src.data[j + 2]!;
-      out[i + 3] = Math.round(src.data[j + 3]! * shows);
-    }
-  }
-  return { width: w, height: h, data: out };
-}
-
-/** An eye's opening (an ellipse), the row of brow feathers a lid is drawn from, and which side its beak is on (1: to its right). */
-export const EYES = [
-  { x: 337, y: 258.5, rx: 32, ry: 25, brow: 224, inner: 1 },
-  { x: 460, y: 258.5, rx: 25.5, ry: 22.5, brow: 226, inner: -1 },
-] as const;
+/** The painted head's width at 1x, which EYES are measured in. */
+export const HEAD_W = 272;
 
 /** How a lid's colour is warmed from the brow's (red, green, blue). */
 const LID_WARMTH = [0.97, 0.88, 0.74] as const;
@@ -106,44 +54,38 @@ const LID_WARMTH = [0.97, 0.88, 0.74] as const;
 const LASH = { r: 27, g: 21, b: 36, half: 1.7 } as const;
 
 /** Where a lid ends at column `x`: half shut, a line across the eye leaning down toward the beak; shut, a curve bowed down like a sleeper's. */
-export function lidEdge(eye: (typeof EYES)[number], lids: Exclude<Lids, 'open'>, x: number): number {
+export function lidEdge(eye: Eye, lids: Exclude<Lids, 'open'>, x: number): number {
   const u = (x - eye.x) / eye.rx;
   if (lids === 'half') return eye.y - eye.ry * 0.08 + u * eye.rx * 0.1 * eye.inner;
   return eye.y + eye.ry * (0.16 + 0.32 * (1 - u * u)) + u * eye.rx * 0.05 * eye.inner;
 }
 
-/** The head: the painting above the neck line fading out below it, its lids as asked. HEAD_BOX's size. */
-export function cutHead(src: Pixels, lids: Lids): Pixels {
-  const { x: x0, y: y0, w, h } = HEAD_BOX;
-  const out = new Uint8ClampedArray(w * h * 4);
-  for (let x = 0; x < w; x++) {
-    const sx = x + x0;
-    if (sx < 0 || sx >= src.width) continue;
-    const line = neckLine(sx);
-    for (let y = 0; y < h; y++) {
-      const sy = y + y0;
-      if (sy < 0 || sy >= src.height) continue;
-      const shows = headShows(sy - line);
-      if (shows <= 0) continue;
-      const i = (y * w + x) * 4;
-      const j = (sy * src.width + sx) * 4;
-      out[i] = src.data[j]!;
-      out[i + 1] = src.data[j + 1]!;
-      out[i + 2] = src.data[j + 2]!;
-      out[i + 3] = Math.round(src.data[j + 3]! * shows);
-    }
-  }
-  if (lids !== 'open') for (const eye of EYES) drawLid(src, out, eye, lids);
-  return { width: w, height: h, data: out };
+/** An eye at `k` times its size: the head's picture may be drawn at twice its size (a dense screen's @2x). */
+function scaled(eye: Eye, k: number): Eye {
+  return { x: eye.x * k, y: eye.y * k, rx: eye.rx * k, ry: eye.ry * k, brow: eye.brow * k, inner: eye.inner };
+}
+
+/**
+ * The painted head with its lids as asked: a copy, with each eye's lid drawn over it. `head` is the
+ * head's picture at any size; the eyes are measured at 1x and scaled to it.
+ */
+export function lidded(head: Pixels, lids: Lids, base: readonly Eye[] = EYES): Pixels {
+  const out = new Uint8ClampedArray(head.data);
+  if (lids === 'open') return { width: head.width, height: head.height, data: out };
+  const k = head.width / HEAD_W;
+  const eyes = base.map((e) => scaled(e, k));
+  const lid = lidColour(head, eyes);
+  for (const eye of eyes) drawLid(out, head.width, head.height, eye, lids, lid);
+  return { width: head.width, height: head.height, data: out };
 }
 
 /** The colour of a lid: the brow feathers over the middle of both eyes, evened out, so the two lids are one colour and neither is striped. */
-function lidColour(src: Pixels): [number, number, number] {
+function lidColour(src: Pixels, eyes: readonly Eye[]): [number, number, number] {
   let r = 0;
   let g = 0;
   let b = 0;
   let n = 0;
-  for (const eye of EYES) {
+  for (const eye of eyes) {
     for (let dy = -2; dy <= 2; dy++) {
       for (let x = Math.round(eye.x - eye.rx * 0.6); x <= Math.round(eye.x + eye.rx * 0.6); x++) {
         const px = Math.max(0, Math.min(src.width - 1, x));
@@ -165,9 +107,7 @@ function lidColour(src: Pixels): [number, number, number] {
  * to the lid's edge, in shadow under the brow and rounder below it, and the dark line it ends in. Shut,
  * the lower lid closes the rest of the opening, so nothing of the eye shows.
  */
-function drawLid(src: Pixels, head: Uint8ClampedArray, eye: (typeof EYES)[number], lids: Exclude<Lids, 'open'>): void {
-  const { x: x0, y: y0, w } = HEAD_BOX;
-  const lid = lidColour(src);
+function drawLid(head: Uint8ClampedArray, w: number, h: number, eye: Eye, lids: Exclude<Lids, 'open'>, lid: readonly [number, number, number]): void {
   for (let sx = Math.floor(eye.x - eye.rx - 2); sx <= Math.ceil(eye.x + eye.rx + 2); sx++) {
     const edge = lidEdge(eye, lids, sx);
     const nx = (sx - eye.x) / eye.rx;
@@ -177,7 +117,8 @@ function drawLid(src: Pixels, head: Uint8ClampedArray, eye: (typeof EYES)[number
       // How far inside the eye's opening this pixel is, in pixels, about: the opening's edge is soft.
       const inside = Math.max(0, Math.min(1, (1 - r) * Math.min(eye.rx, eye.ry) + 0.5));
       if (inside <= 0) continue;
-      const i = ((sy - y0) * w + (sx - x0)) * 4;
+      if (sx < 0 || sy < 0 || sx >= w || sy >= h) continue;
+      const i = (sy * w + sx) * 4;
       if (head[i + 3] === 0) continue;
       const over = edge - sy;
       // The upper lid above its edge; shut, the lower lid below it.

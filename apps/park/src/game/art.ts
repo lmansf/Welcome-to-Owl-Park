@@ -9,8 +9,10 @@
  */
 import Phaser from 'phaser';
 import { EDGE_ART, FURNITURE, KIT_ART, edgePlaceholder, kitDrawPlan, kitFrames, isArcadeRoom, kitFilesOf, ROOM_H, ROOM_W, backgroundTiles, foregroundTiles, idolRealms, interactablesIn, isNestRoom, kitArtKeys, kitPlaceholder, seenFromSide, type RoomDef, type SpeciesId } from '@owl-park/shared';
+import { HALL_ROOM } from '@owl-park/shared/rooms';
 import { GAME_ART } from '../arcade/paint';
 import type { ParkConfig } from '../config';
+import { flagOn } from '../flags';
 import { COURSES, ROOMS, TREE_GROUND, roomFor } from '../rooms';
 import { DENSE_SCALE, FLIGHT_LAYERS, OWL_LAYERS, SPECIES_FLIGHT_LAYERS, SPECIES_LAYERS, isFlightLayer, isSpeciesLayer, rasterCandidates, rasterNames, roomScaleCap } from './artFiles';
 import { ART_BYTES, PUBLISHED_ART, versioned } from './publishedArt';
@@ -19,6 +21,7 @@ import { loadSvgTexture } from './svgLoader';
 import { boxable, paintSizeBox } from './sizeBoxes';
 import { fitTrialArt, setTrialBackdropVeil, trialFilesOf, updraftBitsKey } from './skinTrial';
 import { allLookKeys } from './artLooks';
+import { IDOL_PARTS, PARTS, partKey, partKeys, type IdolKey } from './idolParts';
 import { HEAD_KEYS, drawHeadShapes, headPlaceholderFor, isHeadKey } from './headTurn';
 
 export const ART_PATH = 'art/';
@@ -234,6 +237,7 @@ export const ART: Record<string, ArtSpec> = {
   'tree-l0-c2-play': { w: ROOM_W, h: ROOM_H, kind: 'room' },
   'tree-l0-c2-front': { w: ROOM_W, h: ROOM_H, kind: 'room' },
   'tree-l0-c2-fg': { w: ROOM_W, h: ROOM_H, kind: 'room' },
+  // The three idols (OP-397), painted as one family; each is in parts too (idolParts.ts, registered below).
   guardian: { w: 720, h: 820, kind: 'piece' },
   'robot-owl': { w: 900, h: 900, kind: 'piece' },
   // The stained-glass realm's idol, on the plinth of its west screen.
@@ -971,6 +975,11 @@ export const ART: Record<string, ArtSpec> = {
   ...Object.fromEntries(allLookKeys().map((key) => [key, { w: ROOM_W, h: ROOM_H, kind: 'room' as const }])),
 };
 
+// Each idol's parts (OP-397): a head, a body, two wings and what it stands on, at their places in idolParts.ts.
+for (const [idol, p] of Object.entries(IDOL_PARTS) as Array<[IdolKey, (typeof IDOL_PARTS)[IdolKey]]>) {
+  for (const part of PARTS) ART[partKey(idol, part)] = { w: p.parts[part].w, h: p.parts[part].h, kind: 'piece' };
+}
+
 export { FLIGHT_LAYERS, OWL_LAYERS, SPECIES_FLIGHT_LAYERS, SPECIES_LAYERS };
 
 /** The climb's pieces, loaded by its scene when a climb opens and released when it closes. */
@@ -1041,6 +1050,8 @@ export function roomArtKeys(roomId: string, room: RoomDef | undefined = roomFor(
   // A realm's idol, in the realm or in its Commons (`votesFor`), or each of several (the Great Hollow's, RoomDef.idols).
   const realms = room ? idolRealms(room) : [roomId];
   if (realms.includes('grove')) keys.push('guardian');
+  // The guardian alive at the heart of the Great Hollow (OP-359, behind ?guardian=1) moves in its painted parts (OP-397).
+  if (roomId === HALL_ROOM.id && flagOn('guardian')) keys.push(...partKeys('guardian'));
   if (realms.includes('market')) keys.push('robot-owl');
   if (realms.includes('glass')) keys.push('kit-glass-idol-owl');
   // A realm start's set pieces (OP-276).
