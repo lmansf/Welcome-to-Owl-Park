@@ -288,6 +288,7 @@
       "w": 720,
       "h": 820,
       "kind": "piece",
+      "format": "webp",
       "key_colour": "#00FF00",
       "with_2x": true
     },
@@ -295,6 +296,7 @@
       "w": 900,
       "h": 900,
       "kind": "piece",
+      "format": "webp",
       "key_colour": "#00FF00",
       "with_2x": true
     },
@@ -302,7 +304,113 @@
       "w": 520,
       "h": 416,
       "kind": "piece",
+      "format": "webp",
       "key_colour": "#00FF00",
+      "with_2x": true
+    },
+    "glass-idol-base": {
+      "w": 186,
+      "h": 86,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "glass-idol-body": {
+      "w": 151,
+      "h": 230,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "glass-idol-head": {
+      "w": 139,
+      "h": 128,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "glass-idol-wing-left": {
+      "w": 96,
+      "h": 226,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "glass-idol-wing-right": {
+      "w": 96,
+      "h": 226,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "guardian-base": {
+      "w": 373,
+      "h": 151,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "guardian-body": {
+      "w": 309,
+      "h": 463,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "guardian-head": {
+      "w": 272,
+      "h": 281,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "guardian-wing-left": {
+      "w": 177,
+      "h": 447,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "guardian-wing-right": {
+      "w": 177,
+      "h": 447,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "robot-owl-base": {
+      "w": 328,
+      "h": 286,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "robot-owl-body": {
+      "w": 373,
+      "h": 382,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "robot-owl-head": {
+      "w": 322,
+      "h": 283,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "robot-owl-wing-left": {
+      "w": 190,
+      "h": 398,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "robot-owl-wing-right": {
+      "w": 190,
+      "h": 397,
+      "kind": "piece",
+      "format": "webp",
       "with_2x": true
     },
     "ink-idol": {

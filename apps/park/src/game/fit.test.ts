@@ -29,10 +29,10 @@ describe('sprites placed by what they draw (OP-127)', () => {
     expect(solidTop('no-such-sprite')).toBe(0);
   });
 
-  it("hugs an idol's tap area round the idol, not its glow", () => {
-    // The stained-glass idol's glow fills its 520 px frame; the owl itself is 198 x 363 of it.
+  it("hugs an idol's tap area round the idol, not its frame", () => {
+    // The stained-glass idol stands in the middle of its 520 px frame, under half as wide as it (OP-397; its glow is the room's).
     const idol = SPRITES['glass-idol']!;
-    expect(idol.drawn![2]).toBeGreaterThan(450);
+    expect(idol.solid![2]).toBeLessThan(idol.size[0] / 2);
     const scale = 0.55; // room pixels per frame pixel
     const area = hitArea('glass-idol', scale)!;
     const [x, y, w, h] = idol.solid!;

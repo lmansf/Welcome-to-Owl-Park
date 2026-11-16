@@ -33,9 +33,10 @@ import { OWL_BODY } from './seeThrough';
 import type { Look } from './townView';
 
 /**
- * The painting (art/guardian.png) as it is measured, in its own pixels: where the owl stands in its
- * frame, where its head turns, and the boxes that hug what it draws (its head with its ear tufts, and
- * its body down to the bough), which are what an owl can be hidden behind.
+ * The guardian as painted (OP-397: art/guardian.webp, and its parts, idolParts.ts), measured in its
+ * frame's pixels: where the owl stands in its frame, where its head turns, and the boxes that hug what
+ * it draws (its head with its ear tufts, and its body and wings down to the bough), which are what an
+ * owl can be hidden behind.
  */
 export const GUARDIAN_ART = {
   key: 'guardian',
@@ -43,17 +44,17 @@ export const GUARDIAN_ART = {
   h: 820,
   /** The front of its bough, under its talons: its foot in the room, and its depth among the owls. */
   foot: { x: 360, y: 780 },
-  /** The middle of its neck: what its head turns about. */
-  neck: { x: 385, y: 372 },
+  /** The middle of its neck: what its head turns about (its head part's pivot). */
+  neck: { x: 360, y: 284 },
   /** Between its eyes: where it looks from. */
-  face: { x: 398, y: 255 },
+  face: { x: 369, y: 194 },
   /** The tip of its beak: where its hoot comes from. */
-  beak: { x: 400, y: 338 },
+  beak: { x: 373, y: 257 },
   /** The middle of its chest: where its glow sits. */
-  chest: { x: 372, y: 520 },
+  chest: { x: 360, y: 470 },
   boxes: [
-    { x: 205, y: 60, w: 352, h: 280 },
-    { x: 145, y: 338, w: 420, h: 442 },
+    { x: 226, y: 52, w: 268, h: 236 },
+    { x: 105, y: 288, w: 510, h: 520 },
   ],
 } as const;
 

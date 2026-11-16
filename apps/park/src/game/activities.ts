@@ -84,14 +84,14 @@ const TASKS_RETRY_MS = 5_000;
 const MAX_TIMER_MS = 6 * 60 * 60 * 1000;
 /**
  * The robot owl's eye lenses, and where a sung note sets off beside its head, in its sprite's own
- * pixels (robot-owl.png, 900 x 900): measured from the art, so they follow the sprite however it is
+ * pixels (robot-owl.webp, 900 x 900, as painted for OP-397): measured from the art, so they follow the sprite however it is
  * placed, scaled or bobbing, and a new robot needs only new points here.
  */
 const ROBOT_EYES: readonly Vec2[] = [
-  { x: 318, y: 190 },
-  { x: 477, y: 179 },
+  { x: 328, y: 193 },
+  { x: 478, y: 189 },
 ];
-const ROBOT_NOTE: Vec2 = { x: 660, y: 180 };
+const ROBOT_NOTE: Vec2 = { x: 650, y: 170 };
 /** And a colour for each note the tune uses. */
 const NOTE_TINTS = [0x00e5ff, 0xff2aa1, 0xffd36a, 0x8fe3a8];
 
