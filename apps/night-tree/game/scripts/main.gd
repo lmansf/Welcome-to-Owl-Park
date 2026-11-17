@@ -8,21 +8,22 @@ extends Node3D
 const SimC = preload("res://scripts/sim.gd")
 const Hud = preload("res://scripts/hud.gd")
 const Sfx = preload("res://scripts/sfx.gd")
+const Fx = preload("res://scripts/fx.gd")
 const CHUNK := 48.0
 const SAVE := "user://night-tree.json"
 
 ## What each realm's air looks like: background, fog, ambient light, moonlight.
 const MOODS := {
-	"tree": [Color("0a1830"), Color("16305a"), 0.006, Color("3a527e"), Color("9db8ff"), 0.85],
-	"hollow": [Color("120d0a"), Color("3a2414"), 0.012, Color("6a4a30"), Color("ffcf8a"), 0.55],
-	"clearing": [Color("0e1c34"), Color("2a4468"), 0.007, Color("4a5e80"), Color("ffd9a0"), 0.8],
-	"neon": [Color("0b0b18"), Color("2a1a52"), 0.008, Color("4a3f86"), Color("b6a8ff"), 0.6],
-	"circuit": [Color("05050c"), Color("120f2a"), 0.016, Color("2c2a52"), Color("8090ff"), 0.3],
-	"ink": [Color("1a2030"), Color("5a6276"), 0.012, Color("7a8090"), Color("e8ecf6"), 0.9],
-	"glass": [Color("0c1a38"), Color("27407a"), 0.006, Color("4c5c92"), Color("b8d0ff"), 0.85],
-	"tower": [Color("0a1430"), Color("2a3a7a"), 0.009, Color("56609a"), Color("c8d8ff"), 0.75],
-	"canopy": [Color("0a1a2a"), Color("1c4048"), 0.007, Color("3e6462"), Color("c4e6d4"), 0.9],
-	"roots": [Color("04070e"), Color("0e1a2c"), 0.02, Color("263448"), Color("7fc8d8"), 0.3],
+	"tree": [Color("0a1830"), Color("16305a"), 0.006, Color("3a527e"), Color("9db8ff"), 1.5],
+	"hollow": [Color("120d0a"), Color("3a2414"), 0.012, Color("6a4a30"), Color("ffcf8a"), 1.0],
+	"clearing": [Color("0e1c34"), Color("2a4468"), 0.007, Color("4a5e80"), Color("ffd9a0"), 1.45],
+	"neon": [Color("0b0b18"), Color("2a1a52"), 0.008, Color("4a3f86"), Color("b6a8ff"), 1.1],
+	"circuit": [Color("05050c"), Color("120f2a"), 0.016, Color("2c2a52"), Color("8090ff"), 0.65],
+	"ink": [Color("1a2030"), Color("5a6276"), 0.012, Color("7a8090"), Color("e8ecf6"), 1.55],
+	"glass": [Color("0c1a38"), Color("27407a"), 0.006, Color("4c5c92"), Color("b8d0ff"), 1.5],
+	"tower": [Color("0a1430"), Color("2a3a7a"), 0.009, Color("56609a"), Color("c8d8ff"), 1.35],
+	"canopy": [Color("0a1a2a"), Color("1c4048"), 0.007, Color("3e6462"), Color("c4e6d4"), 1.55],
+	"roots": [Color("04070e"), Color("0e1a2c"), 0.02, Color("263448"), Color("7fc8d8"), 0.65],
 }
 ## Props that shed light: asset -> [height of the flame, colour].
 const LAMPS := {
@@ -61,6 +62,7 @@ var lamp_lights: Array = []
 var lamp_timer := 0.0
 var hud
 var sfx
+var fx
 var acc := 0.0
 var mood := "tree"
 var mood_now: Array = []
@@ -89,12 +91,19 @@ func _ready() -> void:
 	sim = SimC.new(world, tuning, [])
 	sfx = Sfx.new()
 	add_child(sfx)
+	fx = Fx.new()
+	add_child(fx)
+	fx.halos_for(lamp_spots)
+	fx.air_for(world)
+	_vignette()
 	hud = Hud.new()
 	hud.touch = touch
 	add_child(hud)
 	_load_game()
 	_query()
 	hud.setup(world, sim)
+	if started:
+		hud.begin()
 	if not missing.is_empty():
 		print("missing assets: ", missing)
 	_dress(0.0)
@@ -235,12 +244,18 @@ func _owl() -> void:
 	owl.add_child(owl_rig)
 	var body := _copy("owl-great-horned")
 	if body != null:
+		body.scale *= 1.3
 		owl_rig.add_child(body)
+		# the hero carries a little light of its own, so it reads against any wall
+		var own := paint.duplicate()
+		own.set_shader_parameter("self_light", 0.22)
+		for mi in body.find_children("*", "MeshInstance3D", true, false):
+			mi.material_override = own
 		wing_l = body.get_node_or_null("owl-great-horned_wingL")
 		wing_r = body.get_node_or_null("owl-great-horned_wingR")
 	owl_light = OmniLight3D.new()
 	owl_light.light_color = Color("ffd9a0")
-	owl_light.light_energy = 1.1
+	owl_light.light_energy = 2.0
 	owl_light.omni_range = 9.0
 	owl_light.omni_attenuation = 1.4
 	owl_light.position = Vector3(0, 1.2, 1.8)
@@ -251,15 +266,19 @@ func _air() -> void:
 	env = Environment.new()
 	env.background_mode = Environment.BG_COLOR
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_energy = 1.0
+	env.ambient_light_energy = 1.9
 	env.fog_enabled = true
+	env.fog_mode = Environment.FOG_MODE_DEPTH  # the path stays clear; what lies behind it fades into the night
+	env.fog_depth_begin = 26.0
+	env.fog_depth_end = 150.0
+	env.fog_depth_curve = 0.55
 	env.fog_sky_affect = 0.0
 	env.glow_enabled = true
 	env.glow_intensity = 0.9
 	env.glow_bloom = 0.12
 	env.glow_hdr_threshold = 0.95
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = 1.15
+	env.tonemap_exposure = 1.45
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
@@ -269,7 +288,7 @@ func _air() -> void:
 	var fill := DirectionalLight3D.new()
 	fill.rotation_degrees = Vector3(-12, -38, 0)
 	fill.light_color = Color("ffd0a0")
-	fill.light_energy = 0.22
+	fill.light_energy = 0.5
 	add_child(fill)
 	camera = Camera3D.new()
 	camera.fov = tuning["camera"]["fov"]
@@ -288,10 +307,26 @@ func _air() -> void:
 	_apply_mood()
 
 
+func _vignette() -> void:
+	## The corners fall away into the night, so the eye stays with the owl.
+	var layer := CanvasLayer.new()
+	layer.layer = 0
+	var rect := ColorRect.new()
+	rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var sh := Shader.new()
+	sh.code = "shader_type canvas_item;\nvoid fragment() {\n\tvec2 d = (UV - vec2(0.5)) * vec2(1.0, 0.86);\n\tCOLOR = vec4(0.01, 0.02, 0.06, smoothstep(0.34, 0.86, length(d)) * 0.6);\n}\n"
+	var m := ShaderMaterial.new()
+	m.shader = sh
+	rect.material = m
+	layer.add_child(rect)
+	add_child(layer)
+
+
 func _apply_mood() -> void:
 	env.background_color = mood_now[0]
 	env.fog_light_color = mood_now[1]
-	env.fog_density = mood_now[2]
+	env.fog_density = clampf(mood_now[2] * 110.0, 0.0, 1.0)
 	env.ambient_light_color = mood_now[3]
 	moon.light_color = mood_now[4]
 	moon.light_energy = mood_now[5]
@@ -405,7 +440,13 @@ func _process(delta: float) -> void:
 
 
 func _event(e: String) -> void:
-	sfx.play(e.get_slice(":", 0))
+	var kind := e.get_slice(":", 0)
+	sfx.play(kind)
+	var feet := Vector3(sim.p["x"], sim.p["z"] + 0.1, 0.3)
+	if kind in ["jump", "land", "kick", "door", "paint", "crack"]:
+		fx.burst(kind, feet, sim.p["face"])
+	else:
+		fx.burst(kind, feet + Vector3(0, 0.55, 0), sim.p["face"])
 	if e == "jump" or e == "flap" or e == "kick" or e == "pogo":
 		flap_t = 0.32
 		squash = 0.25
@@ -507,6 +548,8 @@ func _dress(delta: float) -> void:
 		l.light_energy = lerpf(l.light_energy, (1.5 + 0.12 * sin(clock * 7.0 + l.position.x)) if on else 0.0, 1 - exp(-4 * delta))
 
 	_dress_entities(delta)
+	fx.refresh(sim, camera.position, mood, owl.position)
+	paint.set_shader_parameter("rim", (mood_now[4] as Color).lerp(mood_now[1], 0.4))
 	hud.refresh(sim, delta)
 
 

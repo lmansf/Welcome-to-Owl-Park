@@ -17,6 +17,8 @@ import numpy as np
 from .core import MATS, mat
 
 VPM = 16  # voxels per metre unless an asset asks for finer or coarser
+SUPER = 2  # every sculpt is worked at twice the asked resolution, so the skin comes out clean
+SUPER_CAP = 14_000_000  # unless the block would be larger than this many voxels
 STATS = {}  # asset mesh name -> triangles, for the budget report
 GLOW = 6.0  # the strongest glow; a colour's own emission is a fraction of it
 
@@ -69,12 +71,16 @@ class V:
     def __init__(self, lo, hi, vpm=VPM, open=""):
         """A block from lo to hi (metres). `open` names sides the sculpt runs off without a skin, so
         pieces tile: any of "x", "y", "z" for both ends of an axis, or "+y" style for one end."""
+        n1 = [math.ceil(b * vpm - 1e-6) - math.floor(a * vpm + 1e-6) for a, b in zip(lo, hi)]
+        self.q = SUPER if n1[0] * n1[1] * n1[2] * SUPER**3 <= SUPER_CAP else 1
+        self.asked = vpm
+        vpm = vpm * self.q
         self.vpm = vpm
-        self.u = 1.0 / vpm
+        self.u = 1.0 / self.asked  # one voxel of the asked resolution, for packs that measure in voxels
         self.open = open
-        U = self.u
-        self.o = np.array([math.floor(a * vpm + 1e-6) for a in lo])
-        n = [math.ceil(b * vpm - 1e-6) - int(o) for b, o in zip(hi, self.o)]
+        U = 1.0 / vpm
+        self.o = np.array([math.floor(a * self.asked + 1e-6) * self.q for a in lo])
+        n = [k * self.q for k in n1]
         self.g = np.zeros(n, np.uint8)
         ax = [(np.arange(n[i]) + self.o[i] + 0.5) * U for i in range(3)]
         self.X = ax[0][:, None, None]
@@ -172,7 +178,7 @@ class V:
         """Solid voxels with air within `depth` voxels along one direction (default: open to the sky)."""
         solid = self.g > 0
         out = np.zeros_like(solid)
-        for k in range(1, depth + 1):
+        for k in range(1, depth * self.q + 1):
             sh = np.zeros_like(solid)
             src = [slice(None)] * 3
             dst = [slice(None)] * 3
@@ -202,14 +208,16 @@ class V:
 
     def speckle(self, c, amount, seed=1, only="solid"):
         """Recolours a random share of the voxels: flecks, lichen, stars."""
-        r = np.random.default_rng(seed).random(self.g.shape)
+        r = np.random.default_rng(seed).random([k // self.q for k in self.g.shape])
+        for ax in range(3):
+            r = np.repeat(r, self.q, axis=ax)  # flecks stay the size of an asked voxel
         return self.fill(c, r < amount, only)
 
     def noise(self, scale, seed=1):
         """Smooth noise over the block, 0 to 1; `scale` is the size of a blob in metres."""
         rng = np.random.default_rng(seed)
         out = None
-        coords = [(np.arange(n) + o + 0.5) * self.u / scale for n, o in zip(self.g.shape, self.o)]
+        coords = [(np.arange(n) + o + 0.5) / self.vpm / scale for n, o in zip(self.g.shape, self.o)]
         idx = [np.floor(cd).astype(int) for cd in coords]
         fr = [cd - np.floor(cd) for cd in coords]
         fr = [f * f * (3 - 2 * f) for f in fr]
@@ -284,7 +292,11 @@ def _cells(f):
 
 def build_mesh(name, v, keep=0.5, relax=2, seed=None):
     g = v.g
-    U = v.u
+    U = 1.0 / v.vpm
+    sq = v.q
+    if sq > 1:
+        keep = min(1.0, keep * 1.7 / (sq * sq))  # the same sculpt at about 1.7 times the triangles
+        relax = relax * sq - (sq - 1)
     seed = (sum(ord(ch) * (i + 7) for i, ch in enumerate(name)) % 100000) if seed is None else seed
     # pad by one: air where the skin should close, a copy of the edge where the sculpt runs on
     pads = []
@@ -408,10 +420,11 @@ def build_mesh(name, v, keep=0.5, relax=2, seed=None):
             P = P + step
 
     # paint
-    occ = _blur(np.pad(s, 4, mode="edge").astype(np.float32), 2)[4:-4, 4:-4, 4:-4]
+    pad = 4 * sq
+    occ = _blur(np.pad(s, pad, mode="edge").astype(np.float32), 2 * sq)[pad:-pad, pad:-pad, pad:-pad]
     oc = _cells(occ)[active]
-    gz = _cells(np.gradient(occ, axis=2))[active]
-    gy = _cells(np.gradient(occ, axis=1))[active]
+    gz = _cells(np.gradient(occ, axis=2))[active] * sq
+    gy = _cells(np.gradient(occ, axis=1))[active] * sq
     rng = np.random.default_rng(seed)
     lat = rng.random((12, 12, 12)).astype(np.float32)
 
@@ -428,17 +441,29 @@ def build_mesh(name, v, keep=0.5, relax=2, seed=None):
                     out = out + w * lat[(i0[:, 0] + dx) % 12, (i0[:, 1] + dy) % 12, (i0[:, 2] + dz) % 12]
         return out
 
-    tone = 1 + 0.2 * (brush(1.1) - 0.5) + 0.14 * (brush(0.31) - 0.5) + 0.05 * (rng.random(nv) - 0.5)
+    b_big = brush(1.1)
+    b_mid = brush(0.31)
+    tone = 1 + 0.2 * (b_big - 0.5) + 0.14 * (b_mid - 0.5) + 0.05 * (rng.random(nv) - 0.5)
     crease = np.clip((oc - 0.5) * 2.2, -0.35, 1.0)  # above 0 in hollows, below on proud edges
-    shade = 1 - 0.55 * np.clip(crease, 0, 1) + 0.22 * np.clip(-crease, 0, 1)
+    shade = 1 - 0.55 * np.clip(crease, 0, 1) + 0.3 * np.clip(-crease, 0, 1)
     sky = np.clip(-gz * 9, -1, 1)  # +1 facing the sky
     front = np.clip(gy * 9, -1, 1)  # +1 facing the camera
     lit = shade * (1 + 0.16 * sky + 0.05 * front) * tone
+    if not v.open:
+        # a darker, damper foot grounds a thing; tiles are left even so they meet
+        zlo, zhi = P[:, 2].min(), P[:, 2].max()
+        if zhi - zlo > 0.6:
+            hgt = np.clip((P[:, 2] - zlo) / (zhi - zlo) / 0.3, 0, 1)
+            lit = lit * (0.84 + 0.16 * hgt * hgt * (3 - 2 * hgt))
     C = C * lit[:, None]
-    # shadows lean to the night's blue, sky-facing paint to the moon's cream
+    # brushed hue, not only value: the paint drifts warm and cool across a surface
+    drift = (brush(0.8) - 0.5)[:, None]
+    C = C * (1 + drift * np.array([0.14, 0.02, -0.16]))
+    # shadows lean to the night's blue, sky-facing paint to the moon's cream, proud edges catch light
     dark = np.clip(1 - shade, 0, 1)[:, None]
     C = C * (1 - dark * np.array([0.3, 0.16, -0.08]))
     C = C + np.clip(sky, 0, 1)[:, None] * np.array([0.02, 0.03, 0.05])
+    C = C + np.clip(-crease, 0, 0.35)[:, None] * np.array([0.05, 0.045, 0.03])
     # where voxels glow, the paint gives way to their own clean colour, and alpha carries the strength
     gk = np.clip(glow_k * np.clip(glow_v * 2.2, 0, 1), 0, 1)
     pure = (wsum / np.maximum(count, 1)[..., None])[active] * (0.94 + 0.12 * brush(0.4)[:, None])
@@ -465,8 +490,19 @@ def build_mesh(name, v, keep=0.5, relax=2, seed=None):
     if keep < 1 and len(Q) > 60:
         ob = bpy.data.objects.new(name + ".tmp", me)
         bpy.context.scene.collection.objects.link(ob)
+        # thin flat, evenly painted skin first: vertices where the paint or the glow changes are held
+        diff = np.abs(rgba[e0] - rgba[e1]).sum(axis=1)
+        edge = np.zeros(nv)
+        np.maximum.at(edge, e0, diff)
+        np.maximum.at(edge, e1, diff)
+        # ... and so are ridges, rims and thin parts, where thinning would crumple the form
+        wgt = 1.0 - 0.94 * np.clip(edge * 8.0 + np.abs(crease) * 1.5, 0, 1)
+        wgt[pinned] = 0.0
         vg = ob.vertex_groups.new(name="thin")
-        vg.add(np.flatnonzero(~pinned).tolist(), 1.0, "REPLACE")
+        for lvl in range(11):
+            pick = np.flatnonzero(np.round(wgt * 10) == lvl)
+            if len(pick) and lvl > 0:
+                vg.add(pick.tolist(), lvl / 10.0, "REPLACE")
         md = ob.modifiers.new("thin", "DECIMATE")
         md.ratio = keep
         md.vertex_group = "thin"

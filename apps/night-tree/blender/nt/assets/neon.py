@@ -231,12 +231,16 @@ def _robot_owl():
     yc = 2.7
     v = V((-2.5, 0.7, 0), (2.5, 4.8, 5.2), vpm=10)
     X, Y, Z = v.X, v.Y, v.Z
-    v.ball("chrome", (0, yc, 2.35), (2.1, 1.75, 2.6))
     ang = np.arctan2(X, -(Y - yc))
     row = np.floor(Z / 0.9)
     seam = (np.mod(Z, 0.9) < 0.1) | (np.mod(ang + row * 0.35, 0.7) < 0.07)
     bel = (X / 1.3) ** 2 + ((Z - 1.6) / 1.4) ** 2
     belly = (bel < 1) & (Y < yc)
+    # rounded plates: each swells from its seams; the breastplate is one smooth piece
+    swell = np.sqrt(np.abs(np.sin(np.mod(Z, 0.9) / 0.9 * math.pi) * np.sin(np.mod(ang + row * 0.35, 0.7) / 0.7 * math.pi)))
+    swell = np.where(belly, 1.0, swell)
+    q = np.sqrt((X / 2.1) ** 2 + ((Y - yc) / 1.75) ** 2 + ((Z - 2.35) / 2.6) ** 2)
+    v.fill("chrome", q <= 0.96 + 0.04 * swell)
     v.paint("stone", (v.noise(1.0, 4) > 0.6) & ~belly)
     v.paint("violet", seam & ~belly)
     v.paint("cream", belly)
@@ -264,9 +268,13 @@ def _robot_owl():
     # the head: round, no tufts; local to the neck so the game can turn and nod it
     h = V((-2.2, -1.9, -0.9), (2.2, 1.8, 2.5), vpm=10)
     X, Y, Z = h.X, h.Y, h.Z
-    h.ball("chrome", (0, 0, 0.85), (2.05, 1.65, 1.65))
+    hq = np.sqrt((X / 2.05) ** 2 + (Y / 1.65) ** 2 + ((Z - 0.85) / 1.65) ** 2)
+    ha = np.arctan2(X, -Y)
+    hrow = np.floor((Z + 0.15) / 0.55)
+    hsw = np.sqrt(np.abs(np.sin(np.mod(Z + 0.15, 0.55) / 0.55 * math.pi) * np.sin(np.mod(ha + hrow * 0.4, 0.8) / 0.8 * math.pi)))
+    h.fill("chrome", hq <= 0.965 + 0.035 * hsw)
     h.paint("stone", h.noise(1.0, 6) > 0.62)
-    h.paint("violet", (np.mod(Z + 0.15, 0.55) < 0.2) & ((Y > 0.2) | (Z > 1.75)))  # a barred crown
+    h.paint("violet", ((np.mod(Z + 0.15, 0.55) < 0.14) | (np.mod(ha + hrow * 0.4, 0.8) < 0.07)) & ((Y > -0.6) | (Z > 1.75)))  # a barred crown
     h.paint("violet", (Z < -0.45))
     for sx in (-1, 1):
         dd = np.sqrt((X - sx * 0.92) ** 2 + (Z - 0.85) ** 2)
@@ -578,25 +586,26 @@ def neon_arch():
 
 @asset("crate", "neon", "a 1 m crate; origin at the bottom centre")
 def crate():
-    v = V((-0.5, -0.5, 0), (0.5, 0.5, 1.0), vpm=16)
+    v = V((-0.5, -0.5, 0), (0.5, 0.5, 1.0), vpm=20)
     X, Y, Z = v.X, v.Y, v.Z
     v.box("wood_light", (-0.5, -0.5, 0), (0.5, 0.5, 1.0))
-    ex, ey, ez = abs(X) > 0.375, abs(Y) > 0.375, abs(Z - 0.5) > 0.375
+    ex, ey, ez = abs(X) > 0.35, abs(Y) > 0.35, abs(Z - 0.5) > 0.35
     edge = (ex & ey) | (ex & ez) | (ey & ez)
     inner = ~edge
-    # planks: grooves cut into the panels between the frame
-    v.fill(None, inner & ((abs(Y) > 0.44) | (abs(X) > 0.44) | (Z > 0.94)))
-    groove = (np.mod(Z, 0.25) < 0.0625) & ((abs(Y) > 0.375) | (abs(X) > 0.375)) | ((np.mod(X + 0.5, 0.25) < 0.0625) & (Z > 0.8))
-    v.paint("bark", inner & groove)
+    # planks set back between the frame
+    v.fill(None, inner & ((abs(Y) > 0.45) | (abs(X) > 0.45) | (Z > 0.95)))
+    gap = ((np.mod(Z - 0.05, 0.3) < 0.1) & (ex | ey)) | ((np.mod(X + 0.45, 0.3) < 0.1) & (Z > 0.8))
+    v.paint("bark", inner & gap)
     v.paint("wood", edge)
     v.paint("bark", edge & (v.noise(0.3, 3) > 0.62))
-    v.paint("wood", inner & (v.noise(0.35, 5) > 0.66), only="wood_light")
-    corner = ex & ey & ez
-    v.paint("chrome", corner)
+    v.paint("wood", inner & (v.noise(0.35, 5) > 0.6), only="wood_light")
+    # a brace across each side
+    v.fill("wood", (abs(Z - 0.5 - Y * 0.8) < 0.1) & ex & ~ey & ~ez)
     # a stencilled feather, lit
-    v.fill("neon_cyan_soft", (((X + 0.02 - 0.25 * (Z - 0.5)) / 0.1) ** 2 + ((Z - 0.5) / 0.24) ** 2 < 1) & (Y < -0.38) & (Y > -0.5))
-    v.fill("neon_magenta_soft", (abs(X + 0.02 - 0.25 * (Z - 0.5)) < 0.032) & (abs(Z - 0.46) < 0.3) & (Y < -0.38) & (Y > -0.5))
-    return v.done("crate", keep=0.3)
+    fx = X + 0.02 - 0.25 * (Z - 0.5)
+    v.fill("neon_cyan_soft", ((fx / 0.12) ** 2 + ((Z - 0.52) / 0.25) ** 2 < 1) & (Y < -0.35) & (Y > -0.5))
+    v.fill("neon_magenta_soft", (abs(fx) < 0.035) & (abs(Z - 0.47) < 0.32) & (Y < -0.35) & (Y > -0.5))
+    return v.done("crate", keep=0.2)
 
 
 @asset("awning", "neon", "a 3 m striped awning; hangs from z = 0, the wall edge at y = 0.5, sloping out to y = -0.5")
