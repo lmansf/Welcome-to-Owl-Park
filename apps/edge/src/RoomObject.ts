@@ -1132,6 +1132,11 @@ export class RoomObject extends DurableObject<Env> {
         if (!def || !snowsIn(def) || room.sessionOf(att.id) !== att.sid) return;
         room.snowball(att.id, frame.at);
         return;
+      case 'tag':
+        // Feather tag (OP-403): only the Party Grove plays it (Room.tag), whatever the page's flag says.
+        if (!room.admit(att.id) || room.sessionOf(att.id) !== att.sid) return;
+        room.tag(att.id, frame);
+        return;
       case 'say':
         // Every phrase is everyone's: no collection is needed to say one.
         if (!room.admit(att.id)) return;

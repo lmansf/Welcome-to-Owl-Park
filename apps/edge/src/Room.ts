@@ -40,6 +40,18 @@ import {
   distance,
   SNOWBALL_EVERY_MS,
   SNOWBALL_REACH,
+  TAG_ROOM,
+  TAG_SLACK,
+  inTagRing,
+  newTag,
+  tagAt,
+  tagJoin,
+  tagLeave,
+  tagPass,
+  tagTouches,
+  type ClientTag,
+  type TagRefusal,
+  type TagState,
   WALK_SPEED,
   EDGE_PROTOCOL_VERSION,
   CLOSE,
@@ -213,6 +225,8 @@ export class Room {
   readonly def: RoomDef;
   private readonly visitors = new Map<string, Visitor>();
   private readonly leavers = new Map<string, Leaver>();
+  /** Feather tag (OP-403, party/tag.ts): only in the Party Grove. Plain data, moved on by the clock wherever it is read. */
+  private tagGame: TagState | null = null;
   private readonly opts: RoomOptions;
   /** Shared interactables used up for now (leaf piles): id -> server ms when they are back. */
   private readonly objects = new Map<string, number>();
@@ -805,6 +819,61 @@ export class Room {
   }
 
   /**
+   * Feather tag in the Party Grove (OP-403): an owl steps into the tag ring (`join`, where the room has
+   * it standing in the ring, give or take TAG_SLACK), steps out (`leave`), passes the feather to an owl
+   * it touches (`pass`: it holds the feather, and the room has the two within TAG_REACH and TAG_SLACK,
+   * the owl touched still in the ring) or asks to see the game (`view`). Every change goes to everyone
+   * here; a refusal, or a view, to the asker alone. Whether the park plays it at all is the page's flag;
+   * the room only ever plays it in the Party Grove. Returns whether the game changed.
+   */
+  tag(id: string, f: ClientTag): boolean {
+    const v = this.visitors.get(id);
+    if (!v || this.def.id !== TAG_ROOM) return false;
+    const now = this.now();
+    const game = tagAt(this.tagGame ?? newTag(), now);
+    const refuse = (reason: TagRefusal, state: TagState) => (this.send(v, { t: 'tag', tag: state, refused: reason }), false);
+    const here = this.positionOf(id);
+    switch (f.op) {
+      case 'view':
+        this.send(v, { t: 'tag', tag: game });
+        return false;
+      case 'leave':
+        return this.setTag(tagLeave(game, id, now));
+      case 'join': {
+        if (!here || !inTagRing(here, TAG_SLACK)) return refuse('far', game);
+        const r = tagJoin(game, id, now, (n) => Math.floor(this.rnd() * n));
+        return r.ok ? this.setTag(r.state) : refuse(r.reason, r.state);
+      }
+      case 'pass': {
+        const at = f.at ?? '';
+        const there = this.positionOf(at);
+        // An owl touched that has walked out of the ring is out of the game: told to everyone, and no pass.
+        if (there && !inTagRing(there, TAG_SLACK) && game.players.includes(at)) {
+          this.setTag(tagLeave(game, at, now));
+          return refuse('not-player', this.tagGame ?? game);
+        }
+        if (!here || !there || !tagTouches(here, there, TAG_SLACK)) return refuse('far', game);
+        const r = tagPass(game, id, at, now);
+        return r.ok ? this.setTag(r.state) : refuse(r.reason, r.state);
+      }
+    }
+  }
+
+  /** Feather tag as it now stands, told to everyone here when it changed. */
+  private setTag(next: TagState): boolean {
+    const before = this.tagGame ?? newTag();
+    this.tagGame = next;
+    if (JSON.stringify(before) === JSON.stringify(next)) return false;
+    this.broadcast({ t: 'tag', tag: next });
+    return true;
+  }
+
+  /** Feather tag as the room keeps it (null before anyone played here), for the tests. */
+  tagNow(): TagState | null {
+    return this.tagGame;
+  }
+
+  /**
    * The owl's air state changed (OP-084): kept on the visitor, so a newcomer carries it on, and told
    * to the others with the room's time. Movement is state, not events: nothing is logged, and the
    * landing is never sent, since every page reckons it. Air the room cannot believe (not an air state,
@@ -980,5 +1049,7 @@ export class Room {
       if (oldest !== undefined) this.leavers.delete(oldest);
     }
     this.broadcast({ t: 'leave', id });
+    // Out of the room is out of feather tag (OP-403).
+    if (this.tagGame?.players.includes(id)) this.setTag(tagLeave(this.tagGame, id, this.now()));
   }
 }

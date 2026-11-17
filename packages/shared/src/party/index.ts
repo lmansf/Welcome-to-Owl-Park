@@ -11,3 +11,4 @@ export * from './branchBalance';
 export * from './game';
 export * from './words';
 export * from './ids';
+export * from './tag';

@@ -5,6 +5,19 @@ export interface ParkState {
   /** Whether the first snow falls in this room (OP-074, behind ?snow=1). */
   snow: boolean;
   snowballs: { thrown: number; landed: number; hits: string[] };
+  /** Feather tag in the Party Grove (OP-403, behind ?tag=1): the game as the page has it; null elsewhere or without the flag. */
+  tag: {
+    inRing: boolean;
+    phase: 'waiting' | 'countdown' | 'live' | 'over';
+    players: string[];
+    holder: string | null;
+    round: number;
+    left: string | null;
+    line: string;
+    passesAsked: number;
+    refused: string[];
+    server: boolean;
+  } | null;
   /** The owl walks this room as a spectator, as its welcome said (OP-191). */
   spectator: boolean;
   /** The dash (OP-224): held in a parkour course only, spent until the owl lands, and the dashes made in this room. */
