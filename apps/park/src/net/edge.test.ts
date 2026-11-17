@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CLOSE, RESTART_NOTICE, type PlayerState } from '@owl-park/shared';
+import { CLOSE, EDGE_PROTOCOL_VERSION, RESTART_NOTICE, type PlayerState, type Vec2, type Walk } from '@owl-park/shared';
 import { EdgeTransport } from './edge';
 import { EMOTE_SEND_EVERY_MS } from './budget';
 import type { RoomHandlers } from './transport';
@@ -245,5 +245,127 @@ describe('feather tag knows this owl by the room’s id for it (OP-403)', () => 
     socket.hear({ t: 'welcome', v: 1, id: 'room-owl-7', room: 'hub', now: Date.now(), cap: 80, you: { pos: { x: 100, y: 100 } }, owls: [], counts: {} });
     expect(conn.tag?.self()).toBe('room-owl-7');
     expect(conn.tag?.self()).not.toBe(SELF.id);
+  });
+});
+
+describe('a glide lane’s carry on the page (OP-287)', () => {
+  type Sent = { t: string; to?: Vec2; seq?: number; lane?: true };
+  const sent = (socket: FakeSocket) => socket.sent.map((t) => JSON.parse(t) as Sent).filter((f) => f.t === 'move' || f.t === 'dash');
+  const WEST = { x: 300, y: 880 };
+  const EAST = { x: 4300, y: 880 };
+  const LOOK = SELF.look;
+
+  /** A page the arcade has let in: its link, its socket, and what its scene is told. */
+  const inArcade = async (owls: unknown[] = []) => {
+    const park = new EdgeTransport('https://park.example');
+    const heard = { ...listening(), onSelfWalk: vi.fn<(walk: Walk) => void>() };
+    const conn = await park.join('arcade', SELF, heard);
+    const socket = FakeSocket.made[0]!;
+    socket.open();
+    socket.hear({ t: 'welcome', v: EDGE_PROTOCOL_VERSION, id: 'me', room: 'arcade', now: Date.now(), cap: 80, you: { pos: WEST }, owls, counts: {} });
+    expect(heard.statuses.at(-1)).toBe('online');
+    return { conn, socket, heard };
+  };
+  /** The scene's own walk as it sends it: a lane's carry says so. */
+  const walk = (to: Vec2, pace: Pick<Walk, 'dash' | 'lane'> = {}) => ({ t: 'move' as const, id: 'local', walk: { from: WEST, to, startedAt: Date.now(), ...pace } });
+  /** The room's echo of the page's newest move. */
+  const echo = (socket: FakeSocket, to: Vec2, pace: Pick<Walk, 'dash' | 'lane'> = {}) => socket.hear({ t: 'move', id: 'me', from: WEST, to, at: Date.now(), seq: sent(socket).at(-1)!.seq, ...pace });
+
+  it('asks the room for the lane’s pace on the carry’s move, and on no other', async () => {
+    const { conn, socket } = await inArcade();
+    conn.send(walk(EAST, { lane: true }));
+    conn.send(walk({ x: 900, y: 700 }));
+    conn.send(walk({ x: 600, y: 900 }, { dash: true }));
+    expect(sent(socket)).toEqual([
+      { t: 'move', to: EAST, seq: 1, lane: true },
+      { t: 'move', to: { x: 900, y: 700 }, seq: 2 },
+      { t: 'dash', to: { x: 600, y: 900 }, seq: 3 },
+    ]);
+    expect(sent(socket)[1]).not.toHaveProperty('lane');
+    expect(sent(socket)[2]).not.toHaveProperty('lane');
+  });
+
+  it('takes the room’s echo of the walk it set off on as said: a carry, a walk or a dash starts nothing again', async () => {
+    const { conn, socket, heard } = await inArcade();
+    conn.send(walk(EAST, { lane: true }));
+    echo(socket, EAST, { lane: true });
+    conn.send(walk({ x: 900, y: 700 }));
+    echo(socket, { x: 900, y: 700 });
+    conn.send(walk({ x: 600, y: 900 }, { dash: true }));
+    echo(socket, { x: 600, y: 900 }, { dash: true });
+    expect(heard.onSelfWalk).not.toHaveBeenCalled();
+  });
+
+  it('hands the scene the walk the room gave when a carry was asked for and a walk’s pace was given', async () => {
+    const { conn, socket, heard } = await inArcade();
+    conn.send(walk(EAST, { lane: true }));
+    echo(socket, EAST);
+    expect(heard.onSelfWalk).toHaveBeenCalledTimes(1);
+    const given = heard.onSelfWalk.mock.calls[0]![0];
+    expect(given).toEqual({ from: WEST, to: EAST, startedAt: Date.now() });
+    expect(given).not.toHaveProperty('lane');
+  });
+
+  it('hands the scene where the room ends a carry short, another owl resting at the lane’s end, still at the lane’s pace', async () => {
+    const { conn, socket, heard } = await inArcade();
+    const short = { x: EAST.x - 26, y: EAST.y };
+    conn.send(walk(EAST, { lane: true }));
+    echo(socket, short, { lane: true });
+    expect(heard.onSelfWalk).toHaveBeenCalledTimes(1);
+    expect(heard.onSelfWalk.mock.calls[0]![0]).toEqual({ from: WEST, to: short, startedAt: Date.now(), lane: true });
+  });
+
+  it('keeps a carry a carry while it waits for the move budget, and when it is sent again for want of an echo', async () => {
+    const { conn, socket } = await inArcade();
+    // The budget's burst spent on three walks: the carry asked for next has to wait its turn.
+    for (const x of [400, 500, 600]) conn.send(walk({ x, y: 880 }));
+    conn.send(walk(EAST, { lane: true }));
+    expect(sent(socket)).toHaveLength(3);
+    await vi.advanceTimersByTimeAsync(700);
+    expect(sent(socket)).toHaveLength(4);
+    expect(sent(socket)[3]).toEqual({ t: 'move', to: EAST, seq: 4, lane: true });
+    // No echo comes: the one resend is the same move, a carry still.
+    await vi.advanceTimersByTimeAsync(1_500);
+    expect(sent(socket)).toHaveLength(5);
+    expect(sent(socket)[4]).toEqual(sent(socket)[3]);
+  });
+
+  it('sends the newest of the moves that waited: a tap in a waiting carry’s place is a walk, a carry in a waiting walk’s place a carry', async () => {
+    const { conn, socket } = await inArcade();
+    for (const x of [400, 500, 600]) conn.send(walk({ x, y: 880 }));
+    conn.send(walk(EAST, { lane: true }));
+    conn.send(walk({ x: 900, y: 700 }));
+    await vi.advanceTimersByTimeAsync(700);
+    expect(sent(socket)).toHaveLength(4);
+    expect(sent(socket)[3]).toEqual({ t: 'move', to: { x: 900, y: 700 }, seq: 4 });
+    expect(sent(socket)[3]).not.toHaveProperty('lane');
+    // The budget is spent again: a walk waits, and the carry asked for after it goes in its place.
+    conn.send(walk({ x: 500, y: 880 }));
+    conn.send(walk(EAST, { lane: true }));
+    expect(sent(socket)).toHaveLength(4);
+    await vi.advanceTimersByTimeAsync(700);
+    expect(sent(socket)).toHaveLength(5);
+    expect(sent(socket)[4]).toEqual({ t: 'move', to: EAST, seq: 5, lane: true });
+  });
+
+  it('draws another owl’s carry at the lane’s pace: in a move, in a newcomer’s walk and in the welcome’s', async () => {
+    const at = Date.now();
+    const carried = { id: 'rider', look: LOOK, pos: WEST, walk: { from: WEST, to: EAST, at, lane: true } };
+    const { socket, heard } = await inArcade([carried]);
+    const first = vi.mocked(heard.onPeerState).mock.calls[0]![0];
+    expect(first.walk).toMatchObject({ from: WEST, to: EAST, lane: true });
+    socket.hear({ t: 'enter', owl: { ...carried, id: 'late' } });
+    expect(vi.mocked(heard.onPeerState).mock.calls[1]![0]).toMatchObject({ id: 'late', walk: { lane: true } });
+    socket.hear({ t: 'move', id: 'rider', from: EAST, to: WEST, at, lane: true });
+    socket.hear({ t: 'move', id: 'rider', from: WEST, to: { x: 900, y: 700 }, at });
+    socket.hear({ t: 'move', id: 'rider', from: WEST, to: { x: 600, y: 900 }, at, dash: true });
+    const moves = vi.mocked(heard.onPeerMove).mock.calls.map(([id, w]) => ({ id, lane: w.lane, dash: w.dash, to: w.to }));
+    expect(moves).toEqual([
+      { id: 'rider', lane: true, dash: undefined, to: WEST },
+      { id: 'rider', lane: undefined, dash: undefined, to: { x: 900, y: 700 } },
+      { id: 'rider', lane: undefined, dash: true, to: { x: 600, y: 900 } },
+    ]);
+    // A walk that is no carry says nothing of a lane, so it is timed at a walk's pace.
+    expect(vi.mocked(heard.onPeerMove).mock.calls[1]![1]).not.toHaveProperty('lane');
   });
 });

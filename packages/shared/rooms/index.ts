@@ -1649,10 +1649,12 @@ ROOMS['arcade'] = growToPlaza(ROOMS['arcade']!, {
  * owl comes in to the far end and back: a held glide near it is caught and carried along, so the long
  * walk between the three cabinets is a ride. It starts where an owl that dived in comes down (`from-dive`),
  * so a dive held on into a glide is carried straight on. The tunnel's mouth stands at the doorway's inner edge, so
- * the whole of it is in the room.
+ * the whole of it is in the room. The lane reaches 70 px to each side of its line: the floor's edge
+ * comes within 72 px of the line at the first cabinet's front, and a lane's reach is floor all over
+ * (moverProblems), so a carry from anywhere in it goes straight to the lane's end.
  */
 export const ARCADE_TUNNEL: KnotTunnel = { id: 'roots-up', door: 'to-market', mouth: { x: 120, y: 750 } };
-export const ARCADE_LANE: GlideLane = { id: 'cabinet-row', a: { x: 300, y: 880 }, b: { x: 4300, y: 880 }, z: 150, r: 80 };
+export const ARCADE_LANE: GlideLane = { id: 'cabinet-row', a: { x: 300, y: 880 }, b: { x: 4300, y: 880 }, z: 150, r: 70 };
 ROOMS['arcade'] = {
   ...ROOMS['arcade']!,
   // Where an owl that dived down the Great Hollow's knot hole comes down (HALL_KNOT_HOLE.lands): on the

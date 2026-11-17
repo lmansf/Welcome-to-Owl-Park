@@ -5,6 +5,7 @@
  * hatch or leaf pile at an edge can always be brought out from under them: in a room seen from the
  * side (OP-278) and in one seen from above, whose floor runs to the bottom of the screen (OP-292).
  */
+import { WALK_SPEED } from '@owl-park/shared';
 
 /** How far the HUD's controls reach in from the top and the bottom of the screen, in CSS px. */
 export interface CoveredEdges {
@@ -70,3 +71,17 @@ export function followLead(roomH: number, sideView: boolean, viewH: number, scre
 
 /** The share of the view the camera centres above the owl in a tall room seen from above. */
 export const FOLLOW_LEAD = 0.2;
+
+/** The share of the way to the owl the camera goes each frame in a room seen from above (the engine's follow). */
+export const FOLLOW_EASE = 0.12;
+
+/**
+ * That share for an owl going at `pace` (room px a second). The follow goes a share of the way each
+ * frame, so an owl on the move stays ahead of the middle of the view by its frame's walk times
+ * (1 - share) / share: at a walk's share an owl carried at twice a walk's pace (a glide lane, OP-287)
+ * would be twice as far ahead, and on a slow phone near the edge of the view. This is the share that
+ * keeps it as far ahead as a walking owl is.
+ */
+export function followEaseAt(pace: number): number {
+  return 1 / (1 + ((1 - FOLLOW_EASE) / FOLLOW_EASE) * (WALK_SPEED / pace));
+}

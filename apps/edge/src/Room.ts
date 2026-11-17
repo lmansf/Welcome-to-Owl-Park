@@ -53,6 +53,7 @@ import {
   type TagRefusal,
   type TagState,
   WALK_SPEED,
+  LANE_SPEED,
   EDGE_PROTOCOL_VERSION,
   CLOSE,
   DASH_LAND_SLACK_MS,
@@ -64,6 +65,8 @@ import {
   thermalHolds,
   thermalTop,
   laneHolds,
+  laneCarrying,
+  laneInto,
   laneTop,
   LIFTED,
   landDash,
@@ -76,6 +79,7 @@ import {
   type AirAt,
   type Logger,
   type ClientMove,
+  type GlideLane,
   type OwlLook,
   type OwlSnapshot,
   type Polygon,
@@ -236,6 +240,8 @@ export class Room {
   /** The air that holds an owl up here: the updrafts, and the wind currents at their heights (wind.ts). */
   private readonly lifts: Updraft[];
   private readonly anyFooting: Polygon[];
+  /** The fastest an owl crosses this room without a dash: a walk's pace, or a glide lane's where the room has one (OP-287). */
+  private readonly fastest: number;
 
   constructor(def: RoomDef, opts: RoomOptions) {
     this.def = def;
@@ -245,6 +251,7 @@ export class Room {
     this.standing = standingRanges(def);
     this.lifts = liftColumns(def);
     this.anyFooting = footing(def, Number.POSITIVE_INFINITY).walkable;
+    this.fastest = def.movers?.lanes?.length ? LANE_SPEED : WALK_SPEED;
   }
 
   get id(): string {
@@ -312,7 +319,8 @@ export class Room {
   /** Where the visitor is right now, finishing any walk that has run its course. */
   private currentPos(v: Visitor): Vec2 {
     if (!v.st.walk) return v.st.pos;
-    const { pos, done } = positionAlongWalk({ from: v.st.walk.from, to: v.st.walk.to, startedAt: v.st.walk.at, ...(v.st.walk.dash ? { dash: true as const } : {}) }, this.now());
+    const pace = { ...(v.st.walk.dash ? { dash: true as const } : {}), ...(v.st.walk.lane ? { lane: true as const } : {}) };
+    const { pos, done } = positionAlongWalk({ from: v.st.walk.from, to: v.st.walk.to, startedAt: v.st.walk.at, ...pace }, this.now());
     if (done) {
       v.st.pos = v.st.walk.to;
       v.st.walk = null;
@@ -464,8 +472,9 @@ export class Room {
       const nearSpawn = distance(told, spawn) <= LIMITS.resumeRadius;
       // Back soon after it left: near where it left, or as far from there as it could have walked
       // since (a page walks on while its connection is down, and comes back where its owl is, OP-138).
+      // In a room with a glide lane that is as far as a lane could have carried it (OP-287).
       const away = recent === undefined ? Infinity : this.now() - recent.leftAt;
-      const nearLeave = recent !== undefined && away <= LIMITS.leaverMemoryMs && distance(told, recent.pos) <= LIMITS.resumeRadius + (WALK_SPEED * away) / 1000;
+      const nearLeave = recent !== undefined && away <= LIMITS.leaverMemoryMs && distance(told, recent.pos) <= LIMITS.resumeRadius + (this.fastest * away) / 1000;
       if (nearSpawn || nearLeave) {
         refused = false;
         if (!this.occupied(told)) pos = told;
@@ -593,7 +602,8 @@ export class Room {
       if (this.strike(v)) v.peer.close(CLOSE.RATE_LIMITED, 'too many moves');
       return;
     }
-    const from = this.currentPos(v);
+    const here = this.currentPos(v);
+    const from = msg.lane ? this.laneStart(v, here, msg.to) : here;
     // The page has the owl's height and the footing for it (OP-084): a walk may go wherever an owl can be at some height.
     const to = resolveTarget(from, msg.to, this.anyFooting);
     // Aimed off every floor here: walked as far as the floor goes, as any walk is, and said (OP-149).
@@ -614,7 +624,10 @@ export class Room {
       return;
     }
     const at = this.now();
-    v.st.walk = { from, to: target, at };
+    // Asked for as a glide lane's carry (movers.ts, OP-287): at the lane's pace where the room itself holds the
+    // owl up on that lane, and a walk as any other anywhere else, which the echo says.
+    const pace = msg.lane && this.onLane(v, from, target) ? { lane: true as const } : {};
+    v.st.walk = { from, to: target, at, ...pace };
     v.st.pos = from;
     // An owl that walks is awake, for everyone, whatever its page said last (OP-126).
     const woke = v.st.asleep === true;
@@ -622,9 +635,53 @@ export class Room {
     delete v.sleptAt;
     v.peer.persist?.(v.st);
     if (woke) this.broadcast({ t: 'rest', id, asleep: false }, id);
-    const frame: ServerFrame = { t: 'move', id, from, to: target, at };
+    const frame: ServerFrame = { t: 'move', id, from, to: target, at, ...pace };
     this.broadcast(frame, id);
     this.send(v, { ...frame, seq: msg.seq });
+  }
+
+  /**
+   * The glide lane a walk of the visitor's is the carry of (movers.ts, OP-287): the room has the owl held up
+   * at that lane's height, as its page last told it and the room took it, and the walk begins and ends within
+   * that lane's reach, with the room's slack for latency.
+   */
+  private carrying(v: Visitor, from: Vec2, to: Vec2): GlideLane | undefined {
+    const air = v.st.air;
+    return air?.s === LIFTED ? laneCarrying(this.def.movers?.lanes, from, to, air.h!, LIMITS.reachSlackPx) : undefined;
+  }
+
+  /** Whether a walk of the visitor's is a glide lane's carry (carrying). */
+  private onLane(v: Visitor, from: Vec2, to: Vec2): boolean {
+    return this.carrying(v, from, to) !== undefined;
+  }
+
+  /**
+   * Where a walk asked for as a lane's carry starts (movers.ts, OP-287): where the room has the owl, and, for
+   * an owl it holds up on that lane from just outside the lane's reach, the nearest spot inside the reach (in
+   * whole pixels, as all the room's places are). The room's place for an owl can be a moment behind its page's,
+   * as frames come early or late, and the page's owl was inside the reach when the lane caught it. A lane's
+   * reach is floor all over (moverProblems), so from inside it the floor's edge stops no carry short of where
+   * it was asked to go.
+   */
+  private laneStart(v: Visitor, here: Vec2, to: Vec2): Vec2 {
+    const lane = this.carrying(v, here, to);
+    if (!lane) return here;
+    const start = laneInto(lane, here, 1);
+    return { x: Math.round(start.x), y: Math.round(start.y) };
+  }
+
+  /**
+   * A lane's carry that is still under way as the owl leaves the lane's air: the rest of it is walked at a
+   * walk's pace, as the others are told. Nothing goes to the owl's own page, which let go of the lane itself.
+   */
+  private offLane(id: string, v: Visitor): void {
+    const from = this.currentPos(v);
+    const walk = v.st.walk;
+    if (!walk) return; // the carry had run its course
+    const at = this.now();
+    v.st.walk = { from, to: walk.to, at };
+    v.st.pos = from;
+    this.broadcast({ t: 'move', id, from, to: walk.to, at }, id);
   }
 
   /**
@@ -901,12 +958,8 @@ export class Room {
     // at its height (wind.ts), inside a thermal of a room seen from above, rising to its top (thermal.ts), or
     // beside a glide lane of such a room, held at its height (movers.ts, OP-287).
     const at = air.s === LIFTED ? this.currentPos(v) : null;
-    if (
-      at &&
-      !liftHolds(this.lifts, at.x, air.h!, now, LIMITS.reachSlackPx) &&
-      !thermalHolds(this.def.thermals, at, air.h!, LIMITS.reachSlackPx) &&
-      !laneHolds(this.def.movers?.lanes, at, air.h!, LIMITS.reachSlackPx)
-    ) {
+    const onLane = at !== null && laneHolds(this.def.movers?.lanes, at, air.h!, LIMITS.reachSlackPx);
+    if (at && !onLane && !liftHolds(this.lifts, at.x, air.h!, now, LIMITS.reachSlackPx) && !thermalHolds(this.def.thermals, at, air.h!, LIMITS.reachSlackPx)) {
       this.opts.rejected?.(id, 'lift');
       return false;
     }
@@ -920,6 +973,8 @@ export class Room {
     // On the floor the owl has no air to keep; on a perch it is told, and kept, as standing up there.
     if (air.s === GROUNDED && air.z === 0) delete v.st.air;
     else v.st.air = { ...air, at: now };
+    // A lane's carry keeps the lane's pace only while a lane holds the owl up (movers.ts, OP-287).
+    if (v.st.walk?.lane && !onLane) this.offLane(id, v);
     // An owl that jumps is awake, for everyone (OP-126).
     const woke = v.st.asleep === true;
     delete v.st.asleep;

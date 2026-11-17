@@ -14,6 +14,25 @@ async function visitor(browser: Browser, params: Record<string, string> = {}, vi
   return page;
 }
 
+/** A visitor whose page keeps the kind of every frame it sends the room server (`move`, `air` and the rest), in order. */
+async function countedVisitor(browser: Browser, params: Record<string, string>): Promise<Page> {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await ctx.addInitScript(() => {
+    const kinds: string[] = [];
+    (window as unknown as { sentKinds: string[] }).sentKinds = kinds;
+    const send = WebSocket.prototype.send;
+    WebSocket.prototype.send = function (this: WebSocket, data: Parameters<WebSocket['send']>[0]): void {
+      if (typeof data === 'string' && data.startsWith('{')) kinds.push((JSON.parse(data) as { t?: string }).t ?? '');
+      send.call(this, data);
+    };
+  });
+  const page = await ctx.newPage();
+  await openPark(page, { transport: 'edge', ...params });
+  return page;
+}
+/** How many moves a counted visitor's page has told the room server so far. */
+const movesSent = (page: Page) => page.evaluate(() => (window as unknown as { sentKinds: string[] }).sentKinds.filter((t) => t === 'move').length);
+
 /**
  * A page for an owl made on this device on an earlier visit: the home screen has Play for it, which goes
  * to its own nest (the free way in for a new owl does not: it lands in the Treetop Commons, OP-363).
@@ -583,7 +602,7 @@ test.describe('room server', () => {
     for (const page of [a, b]) await page.context().close();
   });
 
-  test('a glide lane’s rider is held up for the room server: another owl, with no flag of its own, sees it carried along at the lane’s height (OP-287)', async ({ browser }) => {
+  test('a glide lane’s rider is held up for the room server and carried at the lane’s own pace: another owl, with no flag of its own, sees it carried along at the lane’s height, twice as fast as a walk (OP-287)', async ({ browser }) => {
     test.slow(); // live parks drawn with software WebGL on CI runners, and a ride of some seconds
     const watcher = await visitor(browser, { room: 'arcade' });
     // The rider comes in where an owl that dived down the knot hole does: the room sets an arrival down a
@@ -595,17 +614,59 @@ test.describe('room server', () => {
     // Jump held where an owl comes in, under the lane: caught, and carried for the far end.
     await rider.keyboard.down('Space');
     await expect.poll(async () => (await state(rider)).air.s, { timeout: 10_000, intervals: [50] }).toBe(3);
+    // The room answered the carry at the lane's pace (520 room px a second, a walk's 260): the rider's page
+    // keeps it, and the other page, which knows nothing of the flag, is told it too.
+    await expect.poll(async () => (await state(rider)).movers?.pace ?? 0, { timeout: 10_000, intervals: [50] }).toBe(520);
+    await expect.poll(async () => (await state(watcher)).peers[0]?.pace ?? 0, { timeout: 15_000, intervals: [50] }).toBe(520);
     // The room took it lifted (it holds a lifted owl only beside a lane, at the lane's height) and walks it
     // along as any walk: the other page sees it up there, and well along the lane.
     await expect.poll(async () => (await state(watcher)).peers[0]?.height ?? 0, { timeout: 15_000 }).toBe(150);
     await expect.poll(async () => (await state(watcher)).peers[0]?.pos.x ?? 0, { timeout: 30_000 }).toBeGreaterThan(from.x + 400);
     expect((await state(watcher)).peers[0]?.height).toBe(150);
+    // Still the one walk the lane started: the room's answer was no reason for the page to ask again.
+    expect((await state(rider)).movers).toMatchObject({ laneRides: 1, carries: 1, pace: 520 });
     // Let go: down on the floor for the other page too, where the rider stands.
     await rider.keyboard.up('Space');
     await expect.poll(async () => (await state(watcher)).peers[0]?.height ?? -1, { timeout: 10_000 }).toBe(0);
     await expect.poll(async () => (await state(rider)).air.s, { timeout: 10_000 }).toBe(0);
     await expect.poll(async () => dist((await state(watcher)).peers[0]!.pos, (await state(rider)).pos), { timeout: 15_000 }).toBeLessThan(8);
     for (const page of [watcher, rider]) await page.context().close();
+  });
+
+  test('a glide lane’s rider heading for an end another owl stands on is set down a walk’s spacing short of it by the room’s one answer, with two moves told for the walk and the ride and not one for every step of it (OP-287)', async ({ browser }) => {
+    test.slow(); // live parks drawn with software WebGL on CI runners
+    const end = { x: 300, y: 880 }; // the lane's west end, and where an owl that dived down the knot hole comes in
+    const stander = await visitor(browser, { room: 'arcade', spawn: 'from-dive' });
+    await stander.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), end);
+    await expect.poll(async () => { const s = await state(stander); return !s.walking && dist(s.pos, end) < 4; }, { timeout: 15_000 }).toBe(true);
+    const rider = await countedVisitor(browser, { room: 'arcade', spawn: 'from-dive', movers: '1' });
+    await expect.poll(async () => (await state(stander)).peers.length, { timeout: 15_000 }).toBe(1);
+    // East along the lane's line, and stood there until the page's allowance of moves is whole again.
+    const east = { x: 900, y: 880 };
+    await rider.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), east);
+    await expect.poll(async () => { const s = await state(rider); return !s.walking && dist(s.pos, east) < 6; }, { timeout: 20_000 }).toBe(true);
+    await rider.waitForTimeout(2500);
+    const told = await movesSent(rider);
+    // A walk back west, and Jump held on the way: caught heading for the end the other owl stands on.
+    await rider.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), { x: 500, y: 880 });
+    await rider.keyboard.down('Space');
+    await expect.poll(async () => (await state(rider)).movers?.laneRides ?? 0, { timeout: 10_000, intervals: [50] }).toBe(1);
+    // The room ends a walk aimed at a standing owl 26 px short of it. That answer is the ride's end: the lane
+    // sets the owl down there, and asks the room for nothing more.
+    await expect.poll(async () => (await state(rider)).movers?.laneTo ?? 'set down', { timeout: 20_000 }).toBe('set down');
+    await expect.poll(async () => (await state(rider)).air.s, { timeout: 15_000 }).toBe(0);
+    await rider.keyboard.up('Space');
+    const down = await state(rider);
+    expect(down.walking).toBe(false);
+    expect(down.movers).toMatchObject({ laneRides: 1, carries: 1 });
+    expect(down.movers?.rode).toMatchObject({ id: 'cabinet-row', fast: true });
+    const gap = dist(down.pos, (await state(stander)).pos);
+    expect(gap).toBeGreaterThan(20);
+    expect(gap).toBeLessThan(34);
+    expect((await movesSent(rider)) - told).toBe(2);
+    // And both pages have the rider in the same place.
+    await expect.poll(async () => dist((await state(stander)).peers[0]!.pos, (await state(rider)).pos), { timeout: 15_000 }).toBeLessThan(8);
+    for (const page of [stander, rider]) await page.context().close();
   });
 
   test('a dive down a storey of a course is a change of room and a fall for the room server: another owl, with no flag of its own, sees the diver come in up in the air and land (OP-287)', async ({ browser }) => {

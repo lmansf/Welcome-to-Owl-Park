@@ -9,3 +9,11 @@ patchedDependencies:
 overrides:
   # Miniflare's development HTTP client: remove once the pinned Wrangler resolves a patched version.
   'miniflare>undici': 7.30.1
+
+auditConfig:
+  # picomatch's ReDoS advisory: no patched version exists yet (4.0.7 is the newest; checked 2026-11-17).
+  # It is in the build and test tools only (vite, vitest), whose patterns come from this repository's own
+  # config, and in nothing a visitor or the Worker runs: `pnpm audit --prod` is clean.
+  # Remove this entry once a patched picomatch is out and the lockfile has it.
+  ignoreGhsas:
+    - GHSA-fc5q-39xc-vjpf

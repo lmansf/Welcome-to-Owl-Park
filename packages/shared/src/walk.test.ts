@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { WALK_SPEED, facing, followsOn, positionAlongWalk, walkDurationMs } from './walk';
+import { AIR_DASH_SPEED } from './dash';
+import { LANE_SPEED, WALK_SPEED, facing, followsOn, positionAlongWalk, walkDurationMs, walkSpeed } from './walk';
 
 describe('walks', () => {
   const walk = { from: { x: 0, y: 0 }, to: { x: WALK_SPEED, y: 0 }, startedAt: 1000 };
@@ -24,6 +25,19 @@ describe('walks', () => {
     expect(followsOn(walk, on, 2000)).toBe(false);
     expect(followsOn(walk, { ...on, from: { x: 100, y: 0 } }, 1900)).toBe(false);
     expect(followsOn(null, on, 1900)).toBe(false);
+  });
+  it('a glide lane’s carry goes at twice a walk’s pace, for the own owl, the room’s copy and every other page’s (OP-287)', () => {
+    expect(LANE_SPEED).toBe(WALK_SPEED * 2);
+    expect(walkSpeed({})).toBe(WALK_SPEED);
+    expect(walkSpeed({ lane: true })).toBe(LANE_SPEED);
+    // A dash is a dash whatever else the walk says.
+    expect(walkSpeed({ dash: true })).toBe(AIR_DASH_SPEED);
+    expect(walkSpeed({ dash: true, lane: true })).toBe(AIR_DASH_SPEED);
+    // The same stretch in half the time.
+    const carry = { ...walk, lane: true as const };
+    expect(positionAlongWalk(carry, 1250).pos.x).toBeCloseTo(WALK_SPEED / 2);
+    expect(positionAlongWalk(carry, 1500)).toEqual({ pos: { x: WALK_SPEED, y: 0 }, done: true });
+    expect(positionAlongWalk(walk, 1500).done).toBe(false);
   });
   it('faces the direction of travel', () => {
     expect(facing(walk)).toBe(1);
