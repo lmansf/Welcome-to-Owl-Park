@@ -1,0 +1,11 @@
+# Built from the scripts in blender/: the library, the map scene, renders, the web export
+build/
+# Generated into the Godot project by blender/export_library.py and export_world.py
+game/world/library.glb
+game/world/library.glb.import
+game/world/world.json
+game/world/tuning.json
+game/tests/parity.json
+game/.godot/
+*.import
+*.uid

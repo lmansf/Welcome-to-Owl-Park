@@ -1,0 +1,20 @@
+{
+  "hz": 120,
+  "owl": { "halfWidth": 0.3, "height": 0.9 },
+  "run": { "speed": 8, "groundAccel": 90, "airAccel": 60, "friction": 110, "airDrag": 25 },
+  "jump": { "speed": 21, "cut": 8, "gravity": 58, "maxFall": 27, "coyote": 0.09, "buffer": 0.1 },
+  "flap": { "speed": 18 },
+  "glide": { "fall": 2.6, "liftAccel": 40 },
+  "dash": { "speed": 24, "time": 0.16, "cooldown": 0.3 },
+  "kick": { "x": 11, "z": 19, "lock": 0.15, "slide": 3, "grace": 0.1 },
+  "pogo": { "speed": 19 },
+  "panes": 5,
+  "invuln": 1.2,
+  "drop": 0.22,
+  "frail": { "delay": 0.45, "respawn": 4 },
+  "reach": { "pickup": 0.9, "bench": 1.3, "shrine": 1.2 },
+  "camera": {
+    "fov": 35, "distance": 22, "lookAhead": 2.6, "lookEase": 3, "followX": 7, "followZ": 5, "fallZ": 11,
+    "windowUp": 2.2, "windowDown": 0.6, "rise": 1.6, "zoomEase": 2
+  }
+}
