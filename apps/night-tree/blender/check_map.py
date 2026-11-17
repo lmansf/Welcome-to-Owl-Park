@@ -113,8 +113,11 @@ def stage(n):
 
 def main():
     world = build_world()
+    results = {}
     with multiprocessing.Pool(min(5, os.cpu_count() or 1)) as pool:
-        results = dict(pool.map(stage, range(5)))
+        for n, f in pool.imap_unordered(stage, range(5)):
+            results[n] = f
+            print(f"stage {n} searched: {f['states']} states, {f['seconds']} s, guardians {sorted(f['shrines'])}", flush=True)
     ok = True
     for n in range(5):
         f = results[n]

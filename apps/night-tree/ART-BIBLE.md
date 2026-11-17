@@ -39,6 +39,12 @@ Value plan for a screen, darkest to lightest: far backdrop (dark, cool, low cont
 backdrop / the ground and platforms (mid, readable top edge) / props / the owl and pick-ups / light
 sources. Tops of things the owl can stand on are always a step lighter than their sides.
 
+The game enforces this with three held-back versions of the one paint (`game/scripts/main.gd`,
+`_layer`): the mass under the ground (`fill-*`) and the wall behind the path (`*-wall`, `facade`)
+are darkened, greyed a little and lose most of their glow; scenery nine metres or more behind the
+path keeps its colour but glows less. Sculpt and paint those at full strength and let the layer
+hold them back; do not pre-darken them in the asset.
+
 ## 3. Shape language
 
 - **Big, medium, small.** Every asset has one dominant mass, two or three secondary forms, and a

@@ -74,6 +74,7 @@ func _ready() -> void:
 			e.initial_velocity_max = (spec[6] as Vector3).length()
 			e.gravity = spec[7]
 			e.emitting = false
+			e.visible = false
 			e.preprocess = spec[2]
 			if spec[0] == "leaf":
 				e.angular_velocity_min = -220.0
@@ -260,11 +261,21 @@ func burst(kind: String, at: Vector3, facing: int = 1) -> void:
 	e.emitting = true
 
 
+func _put_away(e: CPUParticles3D) -> void:
+	if not e.emitting:
+		e.visible = false
+
+
 func refresh(sim, cam_pos: Vector3, now_mood: String, owl_pos: Vector3) -> void:
 	if now_mood != mood:
 		for m in ambient:
 			for e in ambient[m]:
 				e.emitting = m == now_mood
+				if m == now_mood:
+					e.visible = true
+				elif e.visible:
+					# let the old air drift out, then put it away (an idle emitter still draws its parked motes)
+					get_tree().create_timer(e.lifetime).timeout.connect(_put_away.bind(e))
 		mood = now_mood
 	for m in ambient:
 		for e in ambient[m]:

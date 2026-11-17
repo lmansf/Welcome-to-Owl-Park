@@ -56,7 +56,9 @@ class W:
                 nx, nz = w // size, h // size
                 for i in range(nx):
                     for j in range(nz):
-                        self.prop(f"fill-{theme}-{size}", x0 + i * size, z0 + j * size)
+                        x, z = x0 + i * size, z0 + j * size
+                        look = "b" if size >= 4 and (x * 7 + z * 13 + x // 5) % 3 == 0 else ""
+                        self.prop(f"fill-{theme}-{size}{look}", x, z)
                 self._tile(theme, x0 + nx * size, z0, x1, z0 + nz * size)
                 self._tile(theme, x0, z0 + nz * size, x1, z1)
                 return
@@ -76,7 +78,7 @@ class W:
                 k = 0
                 while x < x1:
                     cx = min(x, x1 - 2) if x1 - x0 >= 2 else x0 - 0.5
-                    self.prop(f"cap-{theme}-{'ab'[(k + x0) % 2]}", cx + 1, z1)
+                    self.prop(f"cap-{theme}-{'abcd'[(k * 7 + x0 * 3 + z1 * 5 + (k * k) % 3) % 4]}", cx + 1, z1)
                     x += 2
                     k += 1
         return self

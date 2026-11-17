@@ -23,7 +23,7 @@ const MOODS := {
 	"glass": [Color("0c1a38"), Color("27407a"), 0.006, Color("4c5c92"), Color("b8d0ff"), 1.5],
 	"tower": [Color("0a1430"), Color("2a3a7a"), 0.009, Color("56609a"), Color("c8d8ff"), 1.35],
 	"canopy": [Color("0a1a2a"), Color("1c4048"), 0.007, Color("3e6462"), Color("c4e6d4"), 1.55],
-	"roots": [Color("04070e"), Color("0e1a2c"), 0.02, Color("263448"), Color("7fc8d8"), 0.65],
+	"roots": [Color("060b16"), Color("12243a"), 0.014, Color("3c5068"), Color("8fd8e0"), 1.05],
 }
 ## Props that shed light: asset -> [height of the flame, colour].
 const LAMPS := {
@@ -48,6 +48,7 @@ var sim
 var lib := {}
 var parts_cache := {}
 var paint: ShaderMaterial
+var layers := {}
 var owl: Node3D
 var owl_rig: Node3D
 var wing_l: Node3D
@@ -83,6 +84,14 @@ func _ready() -> void:
 	tuning = JSON.parse_string(FileAccess.get_file_as_string("res://world/tuning.json"))
 	paint = ShaderMaterial.new()
 	paint.shader = load("res://shaders/paint.gdshader")
+	# the value plan (ART-BIBLE 2): the same paint, held back for what is not the subject of the picture
+	for spec in [["fill", 0.62, 0.3, 0.25, 0.06], ["wall", 0.55, 0.35, 0.3, 0.05], ["far", 0.9, 0.6, 0.1, 0.0]]:
+		var m: ShaderMaterial = paint.duplicate()
+		m.set_shader_parameter("tint", Color(spec[1], spec[1], spec[1]))
+		m.set_shader_parameter("fade", spec[2])
+		m.set_shader_parameter("mute", spec[3])
+		m.set_shader_parameter("rim_strength", spec[4])
+		layers[spec[0]] = m
 	_library()
 	_air()
 	_decor()
@@ -207,7 +216,22 @@ func _decor() -> void:
 			mm.set_instance_transform(i, xs[i])
 		var mi := MultiMeshInstance3D.new()
 		mi.multimesh = mm
+		var layer := _layer(k.get_slice("|", 0), (xs[0] as Transform3D).origin.z)
+		if layer != "" and mm.mesh.get_surface_count() == 1:
+			mi.material_override = layers[layer]
 		holder.add_child(mi)
+
+
+## Which part of the picture an asset belongs to: the mass under the ground, the wall behind the
+## path, the far scenery, or (the default) the things the eye should go to.
+func _layer(asset: String, z: float) -> String:
+	if asset.begins_with("fill-"):
+		return "fill"
+	if asset.ends_with("-wall") or asset == "facade":
+		return "wall"
+	if z <= -9.0 and not (asset.begins_with("star") or asset.begins_with("moon") or asset == "shooting-star"):
+		return "far"
+	return ""
 
 
 func _copy(asset: String) -> Node3D:
@@ -443,6 +467,8 @@ func _event(e: String) -> void:
 	var kind := e.get_slice(":", 0)
 	sfx.play(kind)
 	var feet := Vector3(sim.p["x"], sim.p["z"] + 0.1, 0.3)
+	if clock < 1.0:
+		return  # waking on a bench is not an arrival: no sparkle on the first frame
 	if kind in ["jump", "land", "kick", "door", "paint", "crack"]:
 		fx.burst(kind, feet, sim.p["face"])
 	else:
@@ -549,7 +575,10 @@ func _dress(delta: float) -> void:
 
 	_dress_entities(delta)
 	fx.refresh(sim, camera.position, mood, owl.position)
-	paint.set_shader_parameter("rim", (mood_now[4] as Color).lerp(mood_now[1], 0.4))
+	var rim: Color = (mood_now[4] as Color).lerp(mood_now[1], 0.4)
+	paint.set_shader_parameter("rim", rim)
+	for m in layers.values():
+		m.set_shader_parameter("rim", rim)
 	hud.refresh(sim, delta)
 
 
