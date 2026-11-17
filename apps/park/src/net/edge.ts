@@ -2,6 +2,7 @@ import {
   CLOSE,
   EDGE_PROTOCOL_VERSION,
   HEARTBEAT_FRAME,
+  isTagState,
   HEARTBEAT_INTERVAL_MS,
   STUMP_ROOM,
   VOTABLE_REALMS,
@@ -801,6 +802,10 @@ export class EdgeTransport implements ParkTransport {
         case 'party':
           handlers.onParty?.(f);
           break;
+        case 'tag':
+          // Feather tag (OP-403): its times stay on the room's clock; the page reads them with serverNow.
+          if (isTagState(f.tag)) handlers.onTag?.(f);
+          break;
         case 'restart':
           if (typeof f.words === 'string' && f.words) handlers.onRestartNotice?.(f.words);
           break;
@@ -1186,6 +1191,11 @@ export class EdgeTransport implements ParkTransport {
       // The party game (OP-314): the room answers with `stump` and `party` frames, heard by the handlers.
       party: {
         send: (op, more = {}) => sendFrame({ t: 'party', op, r: ++lastR, ...more } as ClientFrame),
+      },
+      // Feather tag (OP-403): the room answers and pushes with `tag` frames, heard by the handlers.
+      tag: {
+        send: (op, at) => sendFrame(op === 'pass' && at ? { t: 'tag', op, at } : { t: 'tag', op }),
+        self: () => selfId,
       },
       send(msg: ParkMessage) {
         switch (msg.t) {

@@ -234,3 +234,16 @@ describe('a press while the room is out of reach (OP-406, OP-407)', () => {
     expect(answer).toBeNull();
   });
 });
+
+describe('feather tag knows this owl by the room’s id for it (OP-403)', () => {
+  it('is no one before the welcome, and the welcome’s id after it, not the id the page made', async () => {
+    const park = new EdgeTransport('https://park.example');
+    const conn = await park.join('hub', SELF, listening());
+    const socket = FakeSocket.made[0]!;
+    expect(conn.tag?.self()).toBeNull();
+    socket.open();
+    socket.hear({ t: 'welcome', v: 1, id: 'room-owl-7', room: 'hub', now: Date.now(), cap: 80, you: { pos: { x: 100, y: 100 } }, owls: [], counts: {} });
+    expect(conn.tag?.self()).toBe('room-owl-7');
+    expect(conn.tag?.self()).not.toBe(SELF.id);
+  });
+});

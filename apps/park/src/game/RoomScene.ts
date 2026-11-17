@@ -160,6 +160,7 @@ import {
   voteRealmAt,
   FROM_STUMP_SPAWN,
   STUMP_ROOM,
+  TAG_ROOM,
   isPartyRoom,
   throughGate as walkedThroughGate,
   eggBubble,
@@ -194,6 +195,7 @@ import type { Opener } from '../ui/checkout';
 import { earlyPreview } from '../ui/preview';
 import { ActivityLayer } from './activities';
 import { PartyLayer } from './partyLayer';
+import { TagLayer, type TagDebug } from './tagLayer';
 import { flagOn } from '../flags';
 import { LOOK_EMOTE } from './headTurn';
 import { addAmbience, addSetPieces, ensureFxTextures, type SetPieces } from './ambience';
@@ -673,6 +675,8 @@ export class RoomScene extends Phaser.Scene {
   private play: ActivityLayer | null = null;
   /** The party game (OP-314), behind the friends preview: the Old Stump here, or a game's own room. */
   private party: PartyLayer | null = null;
+  /** Feather tag in the Party Grove (OP-403): only there, seen from above, and only behind `?tag=1` (flags.ts). */
+  private tag: TagLayer | null = null;
   /** The arcade's cabinets, score wall and runs, in the arcade only. */
   private arcade: Arcade | null = null;
   /** The stained-glass climb from its portal, in the glass realm only. */
@@ -1375,6 +1379,16 @@ export class RoomScene extends Phaser.Scene {
       });
     }
 
+    if (flagOn('tag') && room.id === TAG_ROOM && !this.sideView()) {
+      this.tag = new TagLayer({
+        scene: this,
+        hudRoot: () => document.getElementById('hud'),
+        toast: (m, ms) => this.hud.toast(m, ms),
+        me: () => this.playerId,
+        posOf: (id) => (id === this.playerId ? { ...this.me.pos } : this.peers.get(id)?.pos ?? null),
+      });
+    }
+
     this.setupCamera();
     this.setupInput();
     this.openPainter();
@@ -1454,6 +1468,7 @@ export class RoomScene extends Phaser.Scene {
     // At what a tap asked for: nothing left for a jump to carry on to (OP-084).
     if (finished && this.walkGoal && distance(this.walkGoal, this.me.pos) < 3) this.walkGoal = null;
     this.posOverlay?.frame(this.me.pos, now, this.room.id);
+    this.tag?.update(now);
     this.seeThrough?.frame(this.me.pos, this.flier.air.z);
     this.guardian?.frame(now, this.owlsSeen());
     this.frameGuardianCam(now);
@@ -1588,6 +1603,7 @@ export class RoomScene extends Phaser.Scene {
       onStump: (f) => live() && this.party?.onStump(f),
       onParty: (f) => live() && this.party?.onParty(f),
       onPartyClosed: () => live() && this.party?.onClosed(),
+      onTag: (f) => live() && this.tag?.onTag(f),
       onPeerSay: (id, n) => {
         if (!live()) return;
         const owl = this.peers.get(id);
@@ -1632,6 +1648,7 @@ export class RoomScene extends Phaser.Scene {
     if (this.hollow) void this.hollow.connected();
     if (isStreetRoom(this.room.id)) void this.askStreet();
     this.party?.attach(conn);
+    this.tag?.attach(conn);
     // Arriving here counts for quests that ask for a visit (the room server counts it on its own).
     this.link?.note({ kind: 'visit', room: this.room.id });
     void this.refreshBoard();
@@ -1861,6 +1878,9 @@ export class RoomScene extends Phaser.Scene {
       // In the snow a tap on another owl throws a snowball at it (OP-074), when it is near enough.
       const target = this.snowing ? this.owlAt({ x: world.x, y: world.y }) : null;
       if (target && this.throwSnowball(target)) return;
+      // In feather tag a tap on the owl this one touches passes the feather to it (OP-403).
+      const tagged = this.tag ? this.owlAt({ x: world.x, y: world.y }) : null;
+      if (tagged && this.tag?.tap(tagged)) return;
       // A tap on a thing to use out on a plaza's floor walks the owl over and uses it (a bird bath, mushrooms, a telescope, a shiny thing).
       const thing = this.thingAt({ x: world.x, y: world.y });
       if (thing) {
@@ -2723,10 +2743,13 @@ export class RoomScene extends Phaser.Scene {
     sideCam: { lead: number; level: number; x: number; y: number } | null;
     /** The painted egg (OP-261): where the own owl's egg is drawn (null without one), and what tapping an egg last said. */
     egg: { at: Vec2 | null; said: string | null };
+    /** Feather tag in the Party Grove (OP-403, behind ?tag=1): the game as this page has it; null elsewhere or without the flag. */
+    tag: TagDebug | null;
   } | null {
     if (!this.built) return null;
     return {
       egg: { at: this.me.eggPos(), said: this.eggSaid },
+      tag: this.tag?.state() ?? null,
       snow: this.snowing,
       snowballs: { ...this.snowballs, hits: [...this.snowballs.hits] },
       sounds: this.sfx.heard().slice(-16),
@@ -2908,6 +2931,7 @@ export class RoomScene extends Phaser.Scene {
     // Lanterns, fishing and the robot owl's game where the owl stands.
     if (this.play) out.push(...this.play.actions(pos));
     if (this.party) out.push(...this.party.actions(pos));
+    if (this.tag) out.push(...this.tag.actions(pos));
     return out;
   }
 
@@ -4456,6 +4480,8 @@ export class RoomScene extends Phaser.Scene {
     this.play = null;
     this.party?.destroy();
     this.party = null;
+    this.tag?.destroy();
+    this.tag = null;
     this.arcade?.destroy();
     this.arcade = null;
     this.climb?.destroy();

@@ -1,4 +1,4 @@
-import type { PartyKey, PartyOp, ServerParty, ServerStump } from '@owl-park/shared';
+import type { PartyKey, PartyOp, ServerParty, ServerStump, ServerTag, TagOp } from '@owl-park/shared';
 import type { Air, ClosedView, EscapeAct, FeedbackDraft, LineStatus, OwlAccount, OwlLook, OwlPicture, ParkMessage, PlayerState, PortraitLook, PuzzleSymbol, RealmsSettings, ReferralRefusal, ReferralView, ServerEscape, Vec2, Walk } from '@owl-park/shared';
 import type { ActivityLink, ActivityPushes, CourseLink, NestLink, NestPushes, QuestLink, QuestPushes } from '../collect/service';
 import type { TicketLink } from './ticketLinks';
@@ -71,6 +71,18 @@ export interface RoomHandlers extends QuestPushes, ActivityPushes, NestPushes {
   onParty?(frame: ServerParty): void;
   /** The party game's room turned this owl away, or its game is over (OP-314): back to the Party Grove. */
   onPartyClosed?(): void;
+  /** Feather tag in the Party Grove (OP-403): the game as it now stands, or why the room turned this owl's frame down. */
+  onTag?(frame: ServerTag): void;
+}
+
+/** Feather tag (OP-403) through the room server: step in, step out, pass the feather, or ask for the game. */
+export interface TagLink {
+  send(op: TagOp, at?: string): void;
+  /**
+   * This owl's id as the room server knows it (from its welcome), null before one: the game's players
+   * are the room's ids, which need not be the id the page made for itself.
+   */
+  self(): string | null;
 }
 
 /** The party game (OP-314) through the room server: what a page asks at the stump and in a game. */
@@ -109,6 +121,8 @@ export interface RoomConnection {
   renew?(): void;
   /** The party game (OP-314): only the room server runs it. */
   party?: PartyLink;
+  /** Feather tag (OP-403): only the room server runs it. */
+  tag?: TagLink;
 }
 
 /**

@@ -50,6 +50,7 @@ import type { Air } from './flight';
 import type { CoursePaid, CourseRefusal, CourseView } from './coursebook';
 import { PUZZLE_SYMBOLS, type PuzzleSymbol, type PuzzleView } from './puzzles';
 import { PARTY_KEYS, type PartyKey, type PartyLook, type PartyView } from './party/game';
+import type { TagRefusal, TagState } from './party/tag';
 import { isEmoteId, isId, isLook, isObj, isVec2 } from './validate';
 
 /** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests, 8: prewritten chat, 9: the arcade, 10: the stained-glass climb and the realms switch, 11: owls asleep, 12: flight, 13: travel from the map, 14: owls standing on perches, 15: spectators, 16: closed for setup, 17: the courses and the dash, 18: the triple jump), so a stale page reloads. */
@@ -189,6 +190,18 @@ export interface ClientSnowball {
   t: 'snowball';
   /** The owl thrown at. */
   at: string;
+}
+/**
+ * Feather tag in the Party Grove (OP-403, party/tag.ts): `join` as the owl steps into the tag ring,
+ * `leave` as it steps out, `pass` the feather to the owl `at` it touched, `view` to be sent the game.
+ */
+export type TagOp = 'join' | 'leave' | 'pass' | 'view';
+export const TAG_OPS: readonly TagOp[] = ['join', 'leave', 'pass', 'view'];
+export interface ClientTag {
+  t: 'tag';
+  op: TagOp;
+  /** For `pass`: the owl touched. */
+  at?: string;
 }
 /** Say a prewritten phrase to everyone in the room: its number in the phrase list (phrases.ts). */
 export interface ClientSay {
@@ -332,7 +345,7 @@ export interface ClientParty {
   v?: number;
 }
 
-export type ClientFrame = ClientParty | ClientDash | ClientCourse | ClientHello | ClientMove | ClientLook | ClientBye | ClientRest | ClientAir | ClientEmote | ClientSnowball | ClientSay | ClientQuests | ClientTalk | ClientQuestAction | ClientUse | ClientGather | ClientAct | ClientStreet | ClientNest | ClientAdmit | ClientPuzzle | ClientEscape;
+export type ClientFrame = ClientParty | ClientDash | ClientCourse | ClientHello | ClientMove | ClientLook | ClientBye | ClientRest | ClientAir | ClientEmote | ClientSnowball | ClientTag | ClientSay | ClientQuests | ClientTalk | ClientQuestAction | ClientUse | ClientGather | ClientAct | ClientStreet | ClientNest | ClientAdmit | ClientPuzzle | ClientEscape;
 
 // ---- server -> client ----
 export interface ServerWelcome {
@@ -417,6 +430,16 @@ export interface ServerSnowball {
   t: 'snowball';
   id: string;
   at: string;
+}
+/**
+ * Feather tag in the Party Grove (OP-403): the game as it now stands, sent to every owl in the room when
+ * it changes, and to an owl that asked; `refused` says why the room turned down that owl's own frame.
+ * Its times are on the room server's clock.
+ */
+export interface ServerTag {
+  t: 'tag';
+  tag: TagState;
+  refused?: TagRefusal;
 }
 /** An owl said a prewritten phrase (its number; the page shows the phrase in a bubble above the owl). */
 export interface ServerSay {
@@ -711,6 +734,7 @@ export type ServerFrame =
   | ServerFull
   | ServerEmote
   | ServerSnowball
+  | ServerTag
   | ServerSay
   | ServerQuests
   | ServerHandIn
@@ -814,6 +838,12 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
       return isEmoteId(v['e']) ? { t: 'emote', e: v['e'] } : null;
     case 'snowball':
       return isId(v['at']) ? { t: 'snowball', at: v['at'] } : null;
+    case 'tag': {
+      const op = v['op'];
+      if (typeof op !== 'string' || !(TAG_OPS as readonly string[]).includes(op)) return null;
+      if (op === 'pass') return isId(v['at']) ? { t: 'tag', op, at: v['at'] } : null;
+      return { t: 'tag', op: op as TagOp };
+    }
     case 'say': {
       // A whole number in range; whether the phrase list has it is the room's to decide.
       const n = v['n'];
@@ -924,7 +954,7 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
   }
 }
 
-const SERVER_FRAME_TYPES = new Set(['escape', 'stump', 'party', 'puzzle', 'welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'snowball', 'say', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'wall', 'closed', 'notice', 'restart', 'realms', 'shares', 'rest', 'air', 'admitted', 'course']);
+const SERVER_FRAME_TYPES = new Set(['escape', 'stump', 'party', 'puzzle', 'welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'snowball', 'tag', 'say', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'wall', 'closed', 'notice', 'restart', 'realms', 'shares', 'rest', 'air', 'admitted', 'course']);
 
 /** Loose check for server frames on the client (a trusted source, but never crash on garbage). */
 export function parseServerFrame(text: string): ServerFrame | null {
