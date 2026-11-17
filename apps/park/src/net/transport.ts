@@ -78,6 +78,11 @@ export interface RoomHandlers extends QuestPushes, ActivityPushes, NestPushes {
 /** Feather tag (OP-403) through the room server: step in, step out, pass the feather, or ask for the game. */
 export interface TagLink {
   send(op: TagOp, at?: string): void;
+  /**
+   * This owl's id as the room server knows it (from its welcome), null before one: the game's players
+   * are the room's ids, which need not be the id the page made for itself.
+   */
+  self(): string | null;
 }
 
 /** The party game (OP-314) through the room server: what a page asks at the stump and in a game. */

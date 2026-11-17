@@ -1195,6 +1195,7 @@ export class EdgeTransport implements ParkTransport {
       // Feather tag (OP-403): the room answers and pushes with `tag` frames, heard by the handlers.
       tag: {
         send: (op, at) => sendFrame(op === 'pass' && at ? { t: 'tag', op, at } : { t: 'tag', op }),
+        self: () => selfId,
       },
       send(msg: ParkMessage) {
         switch (msg.t) {

@@ -151,14 +151,27 @@ export class TagLayer {
     this.lookedAt = 0;
   }
 
+  /**
+   * This owl's id in the game: the room server's id for it once it has said hello (the game's players
+   * are the room's ids), the page's own before that.
+   */
+  private me(): string {
+    return this.conn?.tag?.self() ?? this.o.me();
+  }
+
+  /** Where an owl in the game stands: this owl by either of its ids, another by the room's id for it. */
+  private posOf(id: string): Vec2 | null {
+    return this.o.posOf(id === this.me() ? this.o.me() : id);
+  }
+
   private mine(g: TagState): boolean {
-    return g.players.includes(this.o.me());
+    return g.players.includes(this.me());
   }
 
   /** Called every frame: steps in and out of the game, passes the feather on a touch, and shows it all. */
   update(time: number): void {
-    const me = this.o.me();
-    const pos = this.o.posOf(me);
+    const me = this.me();
+    const pos = this.posOf(me);
     const now = this.now();
     const g = tagAt(this.game, now);
     if (pos && time - this.lookedAt >= LOOK_EVERY_MS) {
@@ -197,7 +210,7 @@ export class TagLayer {
     let bestD = Infinity;
     for (const id of g.players) {
       if (id === me || (g.from === id && now - g.passedAt < TAG_BACK_MS)) continue;
-      const p = this.o.posOf(id);
+      const p = this.posOf(id);
       if (!p || !tagTouches(pos, p)) continue;
       const d = Math.hypot(p.x - pos.x, p.y - pos.y);
       if (d < bestD) {
@@ -216,13 +229,13 @@ export class TagLayer {
 
   /** A tap on another owl: the feather passes to it, if this owl holds it and they touch. */
   tap(id: string): boolean {
-    const me = this.o.me();
-    const pos = this.o.posOf(me);
+    const me = this.me();
+    const pos = this.posOf(me);
     const now = this.now();
     const g = tagAt(this.game, now);
     if (!pos || id === me || g.holder !== me || tagPhase(g, now) !== 'live') return false;
     if (g.from === id && now - g.passedAt < TAG_BACK_MS) return false;
-    const p = this.o.posOf(id);
+    const p = this.posOf(id);
     if (!p || !g.players.includes(id) || !tagTouches(pos, p)) return false;
     this.pass(id);
     return true;
@@ -230,7 +243,7 @@ export class TagLayer {
 
   /** What the owl can do: pass the feather, holding it and touching another owl. */
   actions(pos: Vec2): TagAction[] {
-    const me = this.o.me();
+    const me = this.me();
     const now = this.now();
     const target = this.touching(tagAt(this.game, now), me, pos, now);
     return target ? [{ id: 'tag:pass', label: TAG_WORDS.pass, run: () => this.pass(target) }] : [];
@@ -262,7 +275,7 @@ export class TagLayer {
     // The feather over the head of whoever holds it, from the countdown on; over the one left holding it once the round is over.
     const phase = tagPhase(g, now);
     const who = phase === 'over' ? g.left : phase === 'waiting' ? null : g.holder;
-    const at = who ? this.o.posOf(who) : null;
+    const at = who ? this.posOf(who) : null;
     if (at) {
       const bob = Math.sin(now / 180) * 4;
       this.feather.setPosition(at.x + 18, at.y - 96 + bob).setVisible(true);
@@ -300,7 +313,7 @@ export class TagLayer {
   state(): TagDebug {
     const now = this.now();
     const g = tagAt(this.game, now);
-    const pos = this.o.posOf(this.o.me());
+    const pos = this.posOf(this.me());
     return {
       inRing: pos ? inTagRing(pos) : false,
       phase: tagPhase(g, now),
