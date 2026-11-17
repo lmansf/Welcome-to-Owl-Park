@@ -334,7 +334,7 @@ def park_gate():
 
 @asset("trunk-wall", "tree", "the tree's inner wall: a 10 x 10 m backdrop panel (x -5..5, z 0..10, y 0..1); tiles left-right and up-down")
 def trunk_wall():
-    v = V((-5, 0, 0), (5, 1, 10), vpm=4, open="xz")
+    v = V((-5, 0, 0), (5, 1, 10), vpm=8, open="xz")
     X, Y, Z = v.X, v.Y, v.Z
     wob = 0.55 * np.sin(TAU * Z / 10 + 1.0) + 0.3 * np.sin(TAU * 3 * Z / 10 + 2.2) + 0.25 * np.sin(TAU * (2 * Z + X) / 10)
     ridge = np.abs(np.sin(math.pi * 7 * X / 10 + wob))  # seven ridges across, wandering as they climb
@@ -352,7 +352,7 @@ def trunk_wall():
     for d in kd:
         v.paint("bark", (d > 0.6) & (d < 1.15))
         v.paint("navy_deep", d < 0.6)
-    return _fin(v, "trunk-wall", BACKDROP + 300, relax=3)
+    return v.done_tris("trunk-wall", 9000, relax=3)
 
 
 @asset("hollow-window", "tree", "a small lit hollow, 1 m wide, to dot over trunk-wall; origin at its centre, sits at y 0..0.4 proud of the wall behind")
@@ -1117,7 +1117,7 @@ def cave_rock_b():
 
 @asset("cave-wall", "roots", "the under-tree's wall of stone and root: a 10 x 10 m backdrop panel (x -5..5, z 0..10, y 0..1); tiles left-right and up-down")
 def cave_wall():
-    v = V((-5, 0, 0), (5, 1, 10), vpm=4, open="xz")
+    v = V((-5, 0, 0), (5, 1, 10), vpm=8, open="xz")
     X, Y, Z = v.X, v.Y, v.Z
     pn = _pnoise(v, 11, terms=9)
     pn2 = _pnoise(v, 14, terms=8, kmax=5)
@@ -1136,7 +1136,7 @@ def cave_wall():
         wdt = 0.36 + 0.1 * np.sin(TAU * 2 * Z / 10 + ph)
         v.fill(c, (abs(dx) < wdt) & (Y > 0.05 + 0.5 * (dx / wdt) ** 2))
         v.paint("wood", (abs(dx) < wdt * 0.5) & (np.mod(Z, 2.5) < 0.6), only=c)
-    return _fin(v, "cave-wall", BACKDROP + 300, relax=3)
+    return v.done_tris("cave-wall", 9000, relax=3)
 
 
 def _shard(v, c, p0, p1, r, twist=0.0):

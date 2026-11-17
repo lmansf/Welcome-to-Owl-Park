@@ -77,7 +77,7 @@ def glass_column():
 
 @asset("glass-wall", "glass", "backdrop wall of leaded panes, 10 m by 10 m, 1 m thick (y 0 to 1); tiles in x and z")
 def glass_wall():
-    v = V((-5, 0, 0), (5, 1, 10), vpm=4, open="xz")
+    v = V((-5, 0, 0), (5, 1, 10), vpm=8, open="xz")
     X, Y, Z = v.X, v.Y, v.Z
     P = 2.5
     la, lb = np.mod(X + Z, P), np.mod(X - Z, P)
@@ -95,7 +95,7 @@ def glass_wall():
     _pick(v, _hash(j8, i8, 12), (Y > 0.25) & (Y < 0.5) & jewel, cols=("amber_glass", "glass_blue", "rose", "mint", "lilac"))
     v.fill("lead", (Y < 0.5) & lat)
     v.paint("gold", (Y < 0.25) & (la < 0.5) & (lb < 0.5))
-    return v.done("glass-wall", keep=0.1, relax=1)
+    return v.done_tris("glass-wall", 9000, relax=1)
 
 
 @asset("glass-balcony", "glass", "balcony 6 m wide, top at z = 0, 0.5 m thick, 2 m deep; railing along the back")

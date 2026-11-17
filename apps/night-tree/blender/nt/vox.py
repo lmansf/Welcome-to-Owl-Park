@@ -17,6 +17,7 @@ import numpy as np
 from .core import MATS, mat
 
 VPM = 16  # voxels per metre unless an asset asks for finer or coarser
+DETAIL = 2.4  # how much more of every prop's skin is kept than its author first asked for
 SUPER = 2  # every sculpt is worked at twice the asked resolution, so the skin comes out clean
 SUPER_CAP = 14_000_000  # unless the block would be larger than this many voxels
 STATS = {}  # asset mesh name -> triangles, for the budget report
@@ -242,12 +243,26 @@ class V:
 
     # ---- skinning ---------------------------------------------------------------------------------
 
-    def done(self, name, loc=(0, 0, 0), keep=0.5, relax=2, seed=None):
-        """Skins and paints the sculpt. `keep` is the share of triangles left after thinning."""
+    def done(self, name, loc=(0, 0, 0), keep=0.5, relax=2, seed=None, exact=False):
+        """Skins and paints the sculpt. `keep` is the share of triangles left after thinning; unless
+        `exact`, it is raised by DETAIL (the review found the first budgets melted small forms)."""
+        if not exact:
+            keep = min(1.0, keep * DETAIL)
         me = build_mesh(name, self, keep, relax, seed)
         ob = bpy.data.objects.new(name, me)
         ob.location = loc
         return ob
+
+
+def _done_tris(self, name, tris, relax=2, **kw):
+    """Like done, thinned to about `tris` triangles whatever the sculpt's size."""
+    s = np.pad(self.g > 0, 1).astype(np.int8)
+    faces = sum(int((np.diff(s, axis=a) != 0).sum()) for a in range(3))
+    return self.done(name, keep=float(np.clip(tris / max(2 * faces, 1), 0.02, 1.0)), relax=relax, exact=True, **kw)
+
+
+V.done_tris = _done_tris
+WALL_TRIS = 9000  # the wall behind the path fills most of a screen: its painting must survive the thinning
 
 
 def paint_material(name="nt_paint"):

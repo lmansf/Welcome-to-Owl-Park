@@ -130,7 +130,7 @@ def _plat(theme, part):
         if part in "mn":
             v.path("lead", [(0, 0, -0.38), (0.0, 0, -0.62), (0.06, 0, -0.78)], 0.06, 0.03)
             v.ball("amber_glass", (0.06, 0, -0.86), 0.075)
-    return v.done(f"plat-{theme}-{part}", keep=0.6)
+    return v.done(f"plat-{theme}-{part}", keep=0.6, exact=True)
 
 
 def _cap(theme, var):
@@ -185,13 +185,13 @@ def _cap(theme, var):
         if var in "bd":
             v.path("lead", [(0, -2.2, -0.6), (0, -2.26, -0.95), (0.08, -2.2, -1.12)], 0.08, 0.04)
             v.ball("amber_glass", (0.08, -2.2, -1.2), 0.1)
-    return v.done(f"cap-{theme}-{var}", keep=0.6)
+    return v.done(f"cap-{theme}-{var}", keep=0.6, exact=True)
 
 
 def _fill(theme, size, var=""):
     top, body, deep, accent, glow = THEMES[theme]
     seed = sum(map(ord, theme)) + size + (37 if var else 0)
-    vpm = 4 if size >= 4 else 8
+    vpm = 8
     v = V((0, -2, 0), (size, 2, size), vpm=vpm, open="+y")
     X, Y, Z = v.X, v.Y, v.Z
     n = v.noise(1.7, seed)
@@ -244,7 +244,7 @@ def _fill(theme, size, var=""):
         v.paint(body, (n > 0.46) & ~strata)
         v.paint(top, (n2 > 0.66) & (n > 0.5))
         v.paint("wood" if theme == "clearing" else accent, (v.noise(0.9, seed + 5) > 0.72) & (Y < -1.2))
-    return v.done(f"fill-{theme}-{size}{var}", keep=0.34 if size >= 4 else 0.24, relax=1)
+    return v.done_tris(f"fill-{theme}-{size}{var}", {8: 7000, 4: 3000, 2: 1200, 1: 500}[size], relax=1)
 
 
 for _t in THEMES:

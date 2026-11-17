@@ -655,7 +655,7 @@ def _windows(X, Z):
 
 @asset("facade", "neon", "backdrop wall panel, 10 m square and 1 m thick (y 0 to 1); tiles in x and z")
 def facade():
-    v = V((-5, 0, 0), (5, 1, 10), vpm=4, open="xz")
+    v = V((-5, 0, 0), (5, 1, 10), vpm=8, open="xz")
     X, Y, Z = v.X, v.Y, v.Z
     v.fill("neon_dark", Y > 0.25)
     v.paint("neon_plum", v.noise(2.0, 3) > 0.42)
@@ -673,7 +673,7 @@ def facade():
         v.fill(colour, here)
         if (c + r) % 2 == 0:  # someone is in: an owl against the light
             v.fill("neon_dark", here & (abs(lx) < 0.25) & (lz < 1.5))
-    return v.done("facade", keep=0.125, relax=1)
+    return v.done_tris("facade", 9000, relax=1)
 
 
 def _skyline(name, seed, towers):
@@ -986,7 +986,7 @@ def spark_post():
 
 @asset("circuit-wall", "circuit", "backdrop wall panel for the blackout, 10 m square and 1 m thick (y 0 to 1): dead screens and cable runs; tiles in x and z")
 def circuit_wall():
-    v = V((-5, 0, 0), (5, 1, 10), vpm=4, open="xz")
+    v = V((-5, 0, 0), (5, 1, 10), vpm=8, open="xz")
     X, Y, Z = v.X, v.Y, v.Z
     v.fill("neon_dark", Y > 0.25)
     v.paint("navy_deep", v.noise(2.0, 3) > 0.45)
@@ -1010,4 +1010,4 @@ def circuit_wall():
     for bx, bz in ((-0.125, 4.875), (4.625, 0.375), (4.625, 9.625), (-0.125, 9.625)):  # junction boxes where runs cross
         v.fill("chrome", (abs(X - bx) < 0.5) & (abs(Z - bz) < 0.5) & (Y < 0.75))
         v.fill("neon_tube_off", (abs(X - bx) < 0.25) & (abs(Z - bz) < 0.25) & (Y < 0.5))
-    return v.done("circuit-wall", keep=0.125, relax=1)
+    return v.done_tris("circuit-wall", 9000, relax=1)

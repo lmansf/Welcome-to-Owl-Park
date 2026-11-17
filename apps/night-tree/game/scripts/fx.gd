@@ -75,6 +75,8 @@ func _ready() -> void:
 			e.gravity = spec[7]
 			e.emitting = false
 			e.visible = false
+			# every mote lives its whole life: one that dies early waits at the emitter's middle, in view
+			e.lifetime_randomness = 0.0
 			e.preprocess = spec[2]
 			if spec[0] == "leaf":
 				e.angular_velocity_min = -220.0

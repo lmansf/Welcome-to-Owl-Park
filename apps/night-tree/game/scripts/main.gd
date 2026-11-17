@@ -227,7 +227,7 @@ func _decor() -> void:
 func _layer(asset: String, z: float) -> String:
 	if asset.begins_with("fill-"):
 		return "fill"
-	if asset.ends_with("-wall") or asset == "facade":
+	if asset.ends_with("-wall") or asset.ends_with("-wall-b") or asset.begins_with("facade"):
 		return "wall"
 	if z <= -9.0 and not (asset.begins_with("star") or asset.begins_with("moon") or asset == "shooting-star"):
 		return "far"
@@ -424,6 +424,19 @@ func _query() -> void:
 		sim.p["benchX"] = float(args["x"])
 		sim.p["benchZ"] = float(args["z"])
 	demo = args.has("demo")
+	if args.has("hide"):  # for finding out what draws something: ?hide=fx, hud, halos, ambient, owl
+		var what: String = args["hide"]
+		fx.visible = what != "fx"
+		hud.visible = what != "hud"
+		owl.visible = what != "owl"
+		if what == "halos" and fx.halos != null:
+			fx.halos.visible = false
+		if what == "ambient":
+			for m in fx.ambient:
+				for e in fx.ambient[m]:
+					e.amount = 1
+					e.scale_amount_max = 0.01
+					e.scale_amount_min = 0.01
 	if args.has("x") or demo:
 		started = true
 

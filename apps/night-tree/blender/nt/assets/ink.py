@@ -25,6 +25,11 @@ TAU = 2 * math.pi
 # ---- helpers ------------------------------------------------------------------------------------
 
 
+# The wall behind the path fills most of every screen: it gets a finer sculpt and far more triangles
+# than a far backdrop, so its painting survives the thinning.
+WALL = 9000
+
+
 def _fin(v, name, tris, relax=2):
     """Skins the sculpt, thinned to about `tris` triangles whatever its size."""
     s = np.pad(v.g > 0, 1).astype(np.int8)
@@ -342,9 +347,9 @@ def brush_stone():
     v.rod("wood_light", (-0.43, 0.2, 0.935), (0.16, -0.06, 0.95), 0.05)
     v.rod("seal_red", (-0.43, 0.2, 0.935), (-0.33, 0.156, 0.938), 0.056)
     v.rod("ink", (0.08, -0.025, 0.948), (0.17, -0.065, 0.95), 0.056)
-    v.rod("paper", (0.16, -0.06, 0.95), (0.44, -0.2, 0.9), 0.07, 0.016, flat=False)
+    v.rod("paper", (0.16, -0.06, 0.95), (0.4, -0.18, 0.9), 0.07, 0.04, flat=False)
     v.paint("ink", (X > 0.3) & (Z > 0.84) & (Y < 0.0), only="paper")
-    return _fin(v, "brush-stone", 1500)
+    return _fin(v, "brush-stone", 2600)
 
 
 @asset("painted-bridge", "ink", "one 2 m piece of a bridge painted by the owl: a wet brush stroke, top at z = 0; tiles in x")
@@ -536,7 +541,7 @@ def ink_mountain_b():
 
 @asset("ink-wall", "ink", "backdrop panel 10 x 10 m, 1 m thick (y 0 to 1): cream paper, grey washes, a few strokes; tiles in x and z")
 def ink_wall():
-    v = V((-5, 0, 0), (5, 1, 10), vpm=4, open="xz")
+    v = V((-5, 0, 0), (5, 1, 10), vpm=8, open="xz")
     X, Y, Z = v.X, v.Y, v.Z
     n = v.noise(1.6, 5)
     # the paper lies half way back; washes lie on it and ink on them, so each keeps its edge
@@ -559,7 +564,34 @@ def ink_wall():
         for sd in (-1, 1):
             _blade(v, "ink", (bx, 0.25, bz), (bx + sd * 0.8, 0.25, bz + 0.45), 0.26)
     v.box("seal_red", (3.5, 0, 0.75), (4.25, 0.6, 1.5))
-    return _fin(v, "ink-wall", 1000, relax=1)
+    return v.done_tris("ink-wall", 26000, relax=3)  # flat paper shows every large triangle
+
+
+@asset("ink-wall-b", "ink", "a second scroll for the ink wall, same size and edges: a mountain in wash, a red sun, a pine")
+def ink_wall_b():
+    v = V((-5, 0, 0), (5, 1, 10), vpm=8, open="xz")
+    X, Y, Z = v.X, v.Y, v.Z
+    n = v.noise(1.6, 9)
+    v.fill("paper", Y > 0.5)
+    inner = (abs(X) < 4.6) & (Z > 0.4) & (Z < 9.6)
+    # the mountain: a pale wash with a darker shoulder under the ridge, and mist left as bare paper
+    peak = 7.4 - 0.95 * abs(X + 0.8) + 0.35 * np.sin(X * 2.6) + 0.5 * (n - 0.5)
+    foot = 2.3 + 0.3 * np.sin(X * 0.8 + 1)
+    mist = abs(Z - (4.1 + 0.3 * np.sin(X * 0.9))) < 0.32 + 0.2 * n
+    hill = (Z < peak) & (Z > foot) & inner & ~mist
+    v.fill("wash_pale", hill & (Y > 0.25))
+    v.fill("ink_grey", hill & (Z > peak - 0.55 - 0.5 * n) & (X < -0.6) & (Y > 0.25))
+    v.fill("ink", hill & (Z > peak - 0.16) & (Y > 0.12))
+    # a far ridge behind it, and the sun
+    far = (Z < 5.6 - 0.5 * abs(X - 3.2) + 0.3 * n) & (Z > 4.6) & (X > 1.4) & inner
+    v.fill("dusk", far & (Y > 0.3), only="paper")
+    v.fill("seal_red", ((X - 2.9) ** 2 + (Z - 8.1) ** 2 < 0.75**2) & (Y > 0.2))
+    # the near bank, one dry stroke, and a pine leaning out of it
+    v.fill("ink", (abs(Z - (1.5 + 0.25 * np.sin(X * 0.8))) < 0.38 * np.clip(np.minimum(X + 4.5, 3.2 - X) / 1.4, 0, 1) ** 0.5) & (X > -4.5) & (X < 3.2) & (Y > 0.0))
+    _blade(v, "ink", (-3.5, 0.2, 1.4), (-2.9, 0.2, 5.2), 0.2, power=0.5)
+    for z, w, lean in ((3.1, 1.5, 0.2), (4.0, 1.2, -0.15), (4.8, 0.8, 0.1)):
+        _blade(v, "ink", (-3.2 - w + lean, 0.15, z - 0.1), (-3.1 + w + lean, 0.15, z + 0.15), 0.28)
+    return v.done_tris("ink-wall-b", 26000, relax=3)
 
 
 @asset("stone-lantern", "ink", "a garden stone lantern, 2 m, lit")
@@ -569,7 +601,7 @@ def stone_lantern():
     R = np.sqrt(X**2 + Y**2)
     n = v.noise(0.3, 4)
     v.fill("ink_grey", (R < 0.52 - 0.5 * Z) & (Z < 0.24))
-    v.rod("ink_grey", (0.02, 0, 0.2), (-0.01, 0, 1.0), 0.2, 0.15)
+    v.rod("ink_grey", (0.02, 0, 0.2), (-0.01, 0, 1.0), 0.24, 0.19)
     v.ball("ink_grey", (0, 0, 0.6), (0.23, 0.23, 0.14))
     v.fill("ink_grey", (R < 0.2 + 0.26 * np.clip((Z - 0.9) / 0.14, 0, 1)) & (Z > 0.9) & (Z < 1.12))
     for sx in (-1, 1):
@@ -587,7 +619,7 @@ def stone_lantern():
     v.top("wash_pale", 2, only="ink_grey")
     v.paint("moss", (v.noise(0.22, 8) > 0.68) & (Z > 1.6), only="wash_pale")
     v.paint("dusk", (v.noise(0.4, 9) > 0.66) & (Z < 1.0), only="ink_grey")
-    return _fin(v, "stone-lantern", 1500)
+    return _fin(v, "stone-lantern", 3200)
 
 
 @asset("garden-bridge", "ink", "a red arched garden bridge 6 m wide, the arch 1.5 m high; decoration behind the path")
@@ -782,11 +814,11 @@ def leaf_curtain():
 
 @asset("canopy-wall", "canopy", "backdrop panel 10 x 10 m, 1 m thick (y 0 to 1): dense dark foliage with gaps of dusk sky; tiles in x and z")
 def canopy_wall():
-    v = V((-5, 0, 0), (5, 1, 10), vpm=4, open="xz")
+    v = V((-5, 0, 0), (5, 1, 10), vpm=8, open="xz")
     X, Y, Z = v.X, v.Y, v.Z
     n = v.noise(1.5, 7)
     n2 = v.noise(1.0, 8)
-    inner = (abs(X) < 4.6) & (Z > 0.4) & (Z < 9.6)
+    inner = (abs(X) < 4.86) & (Z > 0.14) & (Z < 9.86)  # clumps stop just short of the edge the panels share
     # dark leaves half way back, with clumps billowing forward in two steps
     v.fill("leaf_dark", Y > 0.5)
     v.fill("leaf_dark", (Y > 0.25) & (n2 > 0.47) & inner)
@@ -810,7 +842,7 @@ def canopy_wall():
     for _ in range(8):  # fireflies among the leaves
         x, z = rng.uniform(-4.2, 4.2), rng.uniform(0.8, 9.2)
         v.fill("gold_soft", (abs(X - x) < 0.13) & (abs(Z - z) < 0.13) & (Y > 0.25), only="air")
-    return _fin(v, "canopy-wall", 1000, relax=1)
+    return v.done_tris("canopy-wall", WALL, relax=1)
 
 
 @asset("nest-big", "canopy", "a 3 m nest with three eggs")

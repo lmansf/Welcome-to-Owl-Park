@@ -86,13 +86,22 @@ hold them back; do not pre-darken them in the asset.
 
 ## 6. Budgets
 
-| Kind | Triangles | Sculpt |
+These are the numbers an author asks for. The first review found them too tight (thin forms melted,
+painted detail smeared), so the skinner keeps `DETAIL` (2.4) times as much (`nt/vox.py`); ask in
+these terms and let it scale.
+
+| Kind | Triangles asked | Sculpt |
 | --- | --- | --- |
 | Pick-up, small prop | 600 to 1,500 | `vpm=32` under 1.5 m |
 | Prop | up to 2,000 | `vpm=16` |
 | Landmark, guardian | up to 5,000 | `vpm=12` to `16` |
-| Backdrop panel, far scenery | up to 1,200 | `vpm=4` to `8` |
+| Far scenery | up to 1,200 | `vpm=4` to `8` |
 | The owl | about 7,000 | `vpm=32` |
+| Wall panel behind the path (10 m) | 9,000 exactly (`done_tris`); flat paper 26,000 | `vpm=8` |
+| Ground fill, 8 / 4 / 2 / 1 m | 7,000 / 3,000 / 1,200 / 500 exactly | `vpm=8` |
+
+Vertex paint needs vertices: a painted mark smaller than the triangles around it is lost. Walls come
+in two looks (`<name>` and `<name>-b`, a mirror or a second painting) that the map scatters.
 
 ## 7. Review checklist
 

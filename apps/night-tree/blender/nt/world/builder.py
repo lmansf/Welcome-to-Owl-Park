@@ -36,13 +36,17 @@ class W:
 
     def backdrop(self, asset, x0, z0, x1, z1, y=2.2):
         """Tiles a 10 m backdrop panel over a rectangle (snapped outward to whole panels)."""
-        x = x0
+        x, i = x0, 0
         while x < x1:
-            z = z0
+            z, j = z0, 0
             while z < z1:
-                self.prop(asset, x + PANEL / 2, z, y)
+                # every wall has a second look ("-b"); scatter the two so no row or column repeats
+                second = ((i * 73856093) ^ (j * 19349663) ^ (i * j * 83492791)) % 5 in (1, 2)
+                self.prop(asset + ("-b" if second else ""), x + PANEL / 2, z, y)
                 z += PANEL
+                j += 1
             x += PANEL
+            i += 1
         return self
 
     # ---- ground -----------------------------------------------------------------------------------
