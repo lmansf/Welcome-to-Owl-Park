@@ -5,9 +5,19 @@ import type { Vec2, Walk } from './protocol';
 /** Owl walking speed in room pixels per second (rooms are 1600 px wide). */
 export const WALK_SPEED = 260;
 
-/** The pace a walk goes at: the walk's, or a dash's (OP-224, dash.ts) for a walk that is one. */
-export function walkSpeed(walk: Pick<Walk, 'dash'>): number {
-  return walk.dash ? AIR_DASH_SPEED : WALK_SPEED;
+/**
+ * The pace a glide lane carries an owl at (OP-287, movers.ts): twice a walk's, so a long crossing ridden
+ * takes half the time of walking it.
+ */
+export const LANE_SPEED = WALK_SPEED * 2;
+
+/**
+ * The pace a walk goes at: the walk's, a dash's (OP-224, dash.ts) for a walk that is one, or a glide
+ * lane's for its carry (OP-287). The own owl, the room's copy and every other page's follow this one rule.
+ */
+export function walkSpeed(walk: Pick<Walk, 'dash' | 'lane'>): number {
+  if (walk.dash) return AIR_DASH_SPEED;
+  return walk.lane ? LANE_SPEED : WALK_SPEED;
 }
 
 export function walkDurationMs(from: Vec2, to: Vec2, speed = WALK_SPEED): number {

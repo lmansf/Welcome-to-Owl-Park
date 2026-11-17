@@ -34,6 +34,12 @@
  * at the Old Stump in the Party Grove `stump` (watch the seats), `sit`, `stand` and `start`, answered
  * and pushed with `stump`; in a game's own room (`party-<id>`) `in`, an owl's input, and `view`, the
  * game as it stands, pushed as `party`. A room nobody invited the owl into closes with 4019.
+ *
+ * The glide lane's pace (OP-287, movers.ts) adds `lane` to a `move`, sent only by a page with the movers
+ * on: the walk is a lane's carry, at the lane's pace (walkSpeed). The room takes it so only for an owl it
+ * holds up on that lane and says `lane` on the move it tells; asked for anywhere else it is a walk as any
+ * other. No new version: a room server that does not know the word walks the owl at a walk's pace, and
+ * its echo, which does not say `lane`, puts the page right.
  */
 import type { QuizZone, TaskView } from './activities';
 import { isArcadeGame, type ArcadeGame, type GameWall, type OwnBests, type RunPaid } from './arcade';
@@ -112,6 +118,8 @@ export interface ServerWalk {
   at: number;
   /** A dash (OP-224): walked at the dash's pace (walkSpeed). */
   dash?: true;
+  /** A glide lane's carry (OP-287): walked at the lane's pace (walkSpeed). */
+  lane?: true;
 }
 
 export interface OwlSnapshot {
@@ -151,6 +159,8 @@ export interface ClientMove {
   t: 'move';
   to: Vec2;
   seq: number;
+  /** Asked for as a glide lane's carry (OP-287): at the lane's pace, if the room holds the owl up on that lane. */
+  lane?: true;
 }
 /** A dash (OP-224, dash.ts): toward `to`, at the dash's pace; the room checks it as walks and flight are checked, and echoes it with `seq` as a move. */
 export interface ClientDash {
@@ -386,6 +396,8 @@ export interface ServerMove {
   seq?: number;
   /** A dash (OP-224): walked at the dash's pace. */
   dash?: true;
+  /** A glide lane's carry (OP-287): walked at the lane's pace. */
+  lane?: true;
 }
 export interface ServerLook {
   t: 'look';
@@ -821,7 +833,8 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
     }
     case 'move': {
       if (!isVec2(v['to']) || typeof v['seq'] !== 'number' || !Number.isInteger(v['seq']) || v['seq'] < 0 || v['seq'] > 1e9) return null;
-      return { t: 'move', to: { x: Math.round(v['to'].x), y: Math.round(v['to'].y) }, seq: v['seq'] };
+      if (v['lane'] !== undefined && v['lane'] !== true) return null;
+      return { t: 'move', to: { x: Math.round(v['to'].x), y: Math.round(v['to'].y) }, seq: v['seq'], ...(v['lane'] === true ? { lane: true as const } : {}) };
     }
     case 'look': {
       if (!isLook(v['look'])) return null;

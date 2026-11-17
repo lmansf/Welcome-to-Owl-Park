@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { dist, openPark, state, walkToDoor } from './helpers';
+import { dist, openGround, openPark, settleCamera, state, tapRoomPoint, walkToDoor } from './helpers';
 
 /**
  * The movers (OP-287), behind the `movers` flag, on this device: where the Great Hollow has a hatch in
@@ -15,6 +15,13 @@ const PLAIN = { keeper: '1', newmap: '1' };
 const FROM_UNDER = { x: 2226, y: 1886 };
 /** The arcade's glide lane (ARCADE_LANE): its ends and the height it holds a glide at. */
 const LANE = { a: { x: 300, y: 880 }, b: { x: 4300, y: 880 }, z: 150 };
+/** How far to either side of its line the lane catches a glide (ARCADE_LANE's `r`), in room px. */
+const LANE_REACH = 70;
+/** The pace a lane carries an owl at (LANE_SPEED, twice a walk's) and a walk's own (WALK_SPEED), in room px a second. */
+const LANE_PACE = 520;
+const WALK_PACE = 260;
+/** The share of the way to the owl the camera's follow goes each frame: at a walk (FOLLOW_EASE), and on the lane (followEaseAt). */
+const EASE = { walk: 0.12, lane: 3 / 14 };
 
 type Seen = { room: string; z: number; vz: number; s: number; diving: string | null };
 
@@ -110,32 +117,46 @@ test.describe('the movers, behind their flag (OP-287)', () => {
     await page.screenshot({ path: 'e2e-screenshots/movers-arcade-lane.png' });
   });
 
-  test('Jump held under the glide lane is caught and carried the length of the arcade, set down at the far end by the lane itself, and carried back from there', async ({ page }) => {
-    test.slow(); // the whole lane at a walk's pace, a quarter of a minute, and a runner a third as fast
+  test('Jump held under the glide lane is caught and carried the length of the arcade in one walk at the lane’s own pace, twice a walk’s, set down at the far end by the lane itself, and carried back from there', async ({ page }) => {
+    test.slow(); // two rides along the lane, on a runner that draws a third as fast
     await openPark(page, { room: 'arcade', spawn: 'from-dive', ...MOVERS });
     const { pos: start, flown: { n: took } } = await state(page);
     await page.keyboard.down('Space');
     // Caught: lifted (3), held at the lane's height, and heading for the far end with no walking key pressed.
     await expect.poll(async () => (await state(page)).air.s, { timeout: 10_000, intervals: [50] }).toBe(3);
     await expect.poll(async () => (await state(page)).air.z, { timeout: 5_000 }).toBe(LANE.z);
-    expect((await state(page)).movers).toMatchObject({ laneRides: 1, laneTo: LANE.b });
+    // Carried: one walk for the far end, at the lane's pace.
+    await expect.poll(async () => (await state(page)).movers?.pace ?? 0, { timeout: 5_000, intervals: [50] }).toBe(LANE_PACE);
+    expect((await state(page)).movers).toMatchObject({ laneRides: 1, laneTo: LANE.b, carries: 1 });
     await expect.poll(async () => (await state(page)).pos.x, { timeout: 20_000 }).toBeGreaterThan(start.x + 500);
-    expect((await state(page)).air).toMatchObject({ s: 3, z: LANE.z });
+    const riding = await state(page);
+    expect(riding.air).toMatchObject({ s: 3, z: LANE.z });
+    // Still the one walk, and the camera's follow given the share of the way a frame that keeps this pace in view.
+    expect(riding.movers).toMatchObject({ pace: LANE_PACE, carries: 1 });
+    expect(riding.movers?.ease).toBeCloseTo(EASE.lane, 6);
     await page.screenshot({ path: 'e2e-screenshots/movers-lane-ride.png' });
     // All the way: at the far end the lane lets go by itself, Jump still held, and the owl glides down onto the floor there.
-    await expect.poll(async () => (await state(page)).movers?.laneTo ?? 'set down', { timeout: 60_000 }).toBe('set down');
+    await expect.poll(async () => (await state(page)).movers?.laneTo ?? 'set down', { timeout: 30_000 }).toBe('set down');
     await expect.poll(async () => (await state(page)).air.s, { timeout: 15_000 }).toBe(0);
     await page.keyboard.up('Space');
     const far = await state(page);
     expect(dist(far.pos, LANE.b)).toBeLessThan(10);
-    expect(far.movers?.laneRides).toBe(1);
+    expect(far.movers).toMatchObject({ laneRides: 1, carries: 1, pace: 0 });
+    expect(far.movers?.ease).toBeCloseTo(EASE.walk, 6);
+    // The ride by the flight's own record of it: the lane's whole length, at the lane's pace and not a walk's
+    // (0.52 room px a millisecond against 0.26), however few frames of it this device drew.
+    const rode = far.movers?.rode ?? { id: '', px: 0, ms: 1, fast: false };
+    expect(rode).toMatchObject({ id: 'cabinet-row', fast: true });
+    expect(rode.px).toBeGreaterThan(3900);
+    expect(rode.px / rode.ms).toBeGreaterThan(0.45);
     // One flight from end to end by the flight's own count, lifted by the lane, and at no step of it over the lane's height.
     expect(far.flown).toMatchObject({ n: took + 1, lifted: true });
     expect(far.flown.peak).toBeLessThanOrEqual(LANE.z + 0.5);
-    // And back: a held jump at this end is carried for the other.
+    // And back: a held jump at this end is carried for the other, in one walk more.
     await page.keyboard.down('Space');
     await expect.poll(async () => (await state(page)).air.s, { timeout: 10_000, intervals: [50] }).toBe(3);
-    expect((await state(page)).movers).toMatchObject({ laneRides: 2, laneTo: LANE.a });
+    await expect.poll(async () => (await state(page)).movers?.carries ?? 0, { timeout: 5_000, intervals: [50] }).toBe(2);
+    expect((await state(page)).movers).toMatchObject({ laneRides: 2, laneTo: LANE.a, pace: LANE_PACE });
     await expect.poll(async () => (await state(page)).pos.x, { timeout: 20_000 }).toBeLessThan(LANE.b.x - 300);
     // Let go in the middle of the room: out of the air where it is, and no further.
     await page.keyboard.up('Space');
@@ -143,6 +164,85 @@ test.describe('the movers, behind their flag (OP-287)', () => {
     const off = (await state(page)).pos;
     await page.waitForTimeout(600);
     expect(dist((await state(page)).pos, off)).toBeLessThan(4);
+  });
+
+  test('a push back along the lane turns a ride round in one walk, a push the way it goes asks nothing more of it, and a push straight across is the owl’s own way out', async ({ page }) => {
+    await openPark(page, { room: 'arcade', spawn: 'from-dive', ...MOVERS });
+    await page.keyboard.down('Space');
+    await expect.poll(async () => (await state(page)).movers?.pace ?? 0, { timeout: 15_000, intervals: [50] }).toBe(LANE_PACE);
+    await expect.poll(async () => (await state(page)).pos.x, { timeout: 20_000, intervals: [50] }).toBeGreaterThan(1500);
+    // Back along the lane: the same ride, turned for the other end in one walk more, still at the lane's pace.
+    await page.keyboard.down('ArrowLeft');
+    await expect.poll(async () => (await state(page)).movers?.laneTo ?? null, { timeout: 5_000, intervals: [50] }).toEqual(LANE.a);
+    // Held on, the way the lane now goes: no walk more.
+    await expect.poll(async () => (await state(page)).pos.x, { timeout: 10_000, intervals: [50] }).toBeLessThan(1200);
+    expect((await state(page)).movers).toMatchObject({ laneRides: 1, carries: 2, pace: LANE_PACE, laneTo: LANE.a });
+    await page.keyboard.up('ArrowLeft');
+    // And round again.
+    await page.keyboard.down('ArrowRight');
+    await expect.poll(async () => (await state(page)).movers?.laneTo ?? null, { timeout: 5_000, intervals: [50] }).toEqual(LANE.b);
+    expect((await state(page)).movers).toMatchObject({ laneRides: 1, carries: 3, pace: LANE_PACE });
+    await page.keyboard.up('ArrowRight');
+    // Straight across: the keys have the owl. It walks out from under the lane at a walk's pace, straight
+    // south, and the lane does not take it back on the way.
+    await page.keyboard.down('ArrowDown');
+    await expect.poll(async () => (await state(page)).movers?.pace ?? 0, { timeout: 5_000, intervals: [50] }).toBe(WALK_PACE);
+    const out = (await state(page)).pos;
+    await expect.poll(async () => (await state(page)).pos.y, { timeout: 15_000 }).toBeGreaterThan(LANE.a.y + LANE_REACH + 40);
+    const clear = await state(page);
+    expect(Math.abs(clear.pos.x - out.x)).toBeLessThan(40);
+    expect(clear.movers).toMatchObject({ laneRides: 1, carries: 3, laneTo: null });
+    expect(clear.air.s).not.toBe(3);
+    await page.keyboard.up('ArrowDown');
+    await page.keyboard.up('Space');
+    await expect.poll(async () => (await state(page)).air.s, { timeout: 10_000 }).toBe(0);
+  });
+
+  test('a tap on the floor during a ride starts no walk for the lane to take back, and a tap walks the owl again once Jump is let go', async ({ page }) => {
+    await openPark(page, { room: 'arcade', spawn: 'from-dive', ...MOVERS });
+    await page.keyboard.down('Space');
+    await expect.poll(async () => (await state(page)).movers?.pace ?? 0, { timeout: 15_000, intervals: [50] }).toBe(LANE_PACE);
+    await expect.poll(async () => (await state(page)).pos.x, { timeout: 20_000, intervals: [50] }).toBeGreaterThan(600);
+    // Open floor south of the lane, ahead of the owl: a tap there is a walk at any other time.
+    const at = (await state(page)).pos;
+    const ahead = await openGround(page, [{ x: at.x + 200, y: at.y + 150 }, { x: at.x + 100, y: at.y + 150 }, { x: at.x + 200, y: at.y + 90 }]);
+    await tapRoomPoint(page, ahead.x, ahead.y);
+    await page.waitForTimeout(400);
+    const riding = await state(page);
+    expect(riding.air.s).toBe(3);
+    expect(riding.movers).toMatchObject({ laneRides: 1, carries: 1, pace: LANE_PACE, laneTo: LANE.b });
+    // Jump let go: down where it is, standing. Now the same tap walks it, at a walk's pace.
+    await page.keyboard.up('Space');
+    await expect.poll(async () => (await state(page)).air.s, { timeout: 10_000 }).toBe(0);
+    await expect.poll(async () => (await state(page)).walking, { timeout: 5_000 }).toBe(false);
+    await settleCamera(page);
+    const down = (await state(page)).pos;
+    const back = await openGround(page, [{ x: down.x - 200, y: down.y + 150 }, { x: down.x - 120, y: down.y + 150 }, { x: down.x - 200, y: down.y + 90 }]);
+    await tapRoomPoint(page, back.x, back.y);
+    await expect.poll(async () => (await state(page)).movers?.pace ?? 0, { timeout: 5_000, intervals: [50] }).toBe(WALK_PACE);
+    await expect.poll(async () => (await state(page)).walking, { timeout: 15_000 }).toBe(false);
+    const stood = await state(page);
+    expect(dist(stood.pos, back)).toBeLessThan(12);
+    expect(stood.movers).toMatchObject({ laneRides: 1, carries: 1 });
+  });
+
+  test('an owl come in by the arcade’s own way stands on the very rim of the lane’s catch: Jump held there is caught too, and the one walk for the far end goes clear of the first cabinet’s corner', async ({ page }) => {
+    await openPark(page, { room: 'arcade', ...MOVERS });
+    // The room's default spawn: as far north of the lane's line as its catch reaches, to the pixel.
+    const start = (await state(page)).pos;
+    expect(start.x).toBeGreaterThanOrEqual(LANE.a.x);
+    expect(start.y).toBe(LANE.a.y - LANE_REACH);
+    await page.keyboard.down('Space');
+    await expect.poll(async () => (await state(page)).air.s, { timeout: 10_000, intervals: [50] }).toBe(3);
+    await expect.poll(async () => (await state(page)).movers?.pace ?? 0, { timeout: 5_000, intervals: [50] }).toBe(LANE_PACE);
+    // Aimed all the way to the far end: the floor's corner by the first cabinet, 72 px north of the lane's line, is no stop on the way.
+    expect((await state(page)).movers).toMatchObject({ laneRides: 1, carries: 1, laneTo: LANE.b });
+    await expect.poll(async () => (await state(page)).pos.x, { timeout: 20_000, intervals: [50] }).toBeGreaterThan(1000);
+    const past = await state(page);
+    expect(past.air).toMatchObject({ s: 3, z: LANE.z });
+    expect(past.movers).toMatchObject({ laneRides: 1, carries: 1, pace: LANE_PACE, laneTo: LANE.b });
+    await page.keyboard.up('Space');
+    await expect.poll(async () => (await state(page)).air.s, { timeout: 10_000 }).toBe(0);
   });
 
   test('the arcade’s way up is a tunnel: in at the mouth, and up out of the Great Hollow’s floor with a hop', async ({ page }) => {

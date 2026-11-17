@@ -520,10 +520,11 @@ export class EdgeTransport implements ParkTransport {
     /** Our id as the server knows it (from the pass), which differs from the scene's local id. */
     let selfId: string | null = null;
     const knownPeers = new Set<string>();
-    const pending = new Map<number, { to: Vec2; timer: ReturnType<typeof setTimeout>; resent: boolean }>();
+    /** Moves sent and not yet echoed, by their number: where each was sent to, and whether as a glide lane's carry (OP-287). */
+    const pending = new Map<number, { to: Vec2; lane: boolean; timer: ReturnType<typeof setTimeout>; resent: boolean }>();
     /** Moves wait here while the budget is spent; a newer one replaces the one waiting. */
     const budget = new MoveBudget(Date.now());
-    let queued: Vec2 | null = null;
+    let queued: { to: Vec2; lane: boolean } | null = null;
     /** Emotes go at most one per EMOTE_SEND_EVERY_MS; sooner ones never leave the page (OP-210). */
     const emoteGate = new EmoteGate();
     /** Emotes dropped for coming too fast since the page's log last said so. */
@@ -544,7 +545,7 @@ export class EdgeTransport implements ParkTransport {
       for (const ready of readyWaiters.splice(0)) ready(false);
     };
 
-    const toLocalWalk = (w: { from: Vec2; to: Vec2; at: number; dash?: true }): Walk => ({ from: w.from, to: w.to, startedAt: w.at - offset + RENDER_DELAY_MS, ...(w.dash ? { dash: true as const } : {}) });
+    const toLocalWalk = (w: RoomWalk): Walk => ({ from: w.from, to: w.to, startedAt: w.at - offset + RENDER_DELAY_MS, ...paceOf(w) });
     /** A time on the room's clock as remote owls are drawn on this page's (an air state's, OP-084). */
     const toLocalAt = (at: number): number => at - offset + RENDER_DELAY_MS;
     /** Board times are on the server clock; the HUD counts down on this device's. */
@@ -613,7 +614,7 @@ export class EdgeTransport implements ParkTransport {
       budget.take(Date.now());
       seq += 1;
       const mine = seq;
-      pending.set(mine, { to, timer: setTimeout(() => pending.delete(mine), ECHO_TIMEOUT_MS), resent: true });
+      pending.set(mine, { to, lane: false, timer: setTimeout(() => pending.delete(mine), ECHO_TIMEOUT_MS), resent: true });
       sendFrame({ t: 'dash', to, seq: mine });
     };
     /** Send the waiting move as soon as the budget allows. */
@@ -628,11 +629,12 @@ export class EdgeTransport implements ParkTransport {
         return;
       }
       budget.take(Date.now());
-      const to = queued;
+      const { to, lane } = queued;
       queued = null;
       seq += 1;
       const mine = seq;
-      const frame: ClientFrame = { t: 'move', to, seq: mine };
+      // A glide lane's carry asks for the lane's pace; the room says in its echo whether it gave it (OP-287).
+      const frame: ClientFrame = { t: 'move', to, seq: mine, ...(lane ? { lane: true as const } : {}) };
       clearPending(); // older moves are superseded: no resends, and their echoes are ignored
       const arm = (): ReturnType<typeof setTimeout> =>
         setTimeout(() => {
@@ -646,7 +648,7 @@ export class EdgeTransport implements ParkTransport {
           p.timer = arm();
           sendFrame(frame);
         }, ECHO_TIMEOUT_MS);
-      pending.set(mine, { to, timer: arm(), resent: false });
+      pending.set(mine, { to, lane, timer: arm(), resent: false });
       sendFrame(frame);
     };
 
@@ -714,12 +716,13 @@ export class EdgeTransport implements ParkTransport {
           if (f.id === selfId) {
             handlers.onSelfEcho?.(f.from, f.to);
             if (f.seq !== undefined) {
-              const predicted = pending.get(f.seq)?.to;
+              const sent = pending.get(f.seq);
               clearPending(f.seq);
               // Only the newest move may correct our walk: the echo of a superseded one is stale.
               const newest = f.seq === seq && !queued;
-              const differs = !predicted || Math.hypot(predicted.x - f.to.x, predicted.y - f.to.y) > 2;
-              if (newest && differs) handlers.onSelfWalk?.({ from: f.from, to: f.to, startedAt: Date.now(), ...(f.dash ? { dash: true as const } : {}) });
+              // Another walk than the one the page set off on: it ends elsewhere, or a lane's carry was not given.
+              const differs = !sent || Math.hypot(sent.to.x - f.to.x, sent.to.y - f.to.y) > 2 || sent.lane !== (f.lane === true);
+              if (newest && differs) handlers.onSelfWalk?.({ from: f.from, to: f.to, startedAt: Date.now(), ...paceOf(f) });
             }
             break;
           }
@@ -1204,7 +1207,7 @@ export class EdgeTransport implements ParkTransport {
               sendDash({ x: Math.round(msg.walk.to.x), y: Math.round(msg.walk.to.y) });
               break;
             }
-            queued = { x: Math.round(msg.walk.to.x), y: Math.round(msg.walk.to.y) };
+            queued = { to: { x: Math.round(msg.walk.to.x), y: Math.round(msg.walk.to.y) }, lane: msg.walk.lane === true };
             flushMove();
             break;
           case 'state':
@@ -1290,6 +1293,12 @@ export class EdgeTransport implements ParkTransport {
   }
 }
 
-function fromSnapshot(o: OwlSnapshot, toLocalWalk: (w: { from: Vec2; to: Vec2; at: number; dash?: true }) => Walk, toLocalAt: (at: number) => number): PlayerState {
+/** A walk as the room tells it: on the room's clock, at a walk's pace unless it says a dash's or a glide lane's. */
+type RoomWalk = { from: Vec2; to: Vec2; at: number; dash?: true; lane?: true };
+
+/** The pace a walk from the room says, as the page's walk keeps it. */
+const paceOf = (w: { dash?: true; lane?: true }): Pick<Walk, 'dash' | 'lane'> => ({ ...(w.dash ? { dash: true as const } : {}), ...(w.lane ? { lane: true as const } : {}) });
+
+function fromSnapshot(o: OwlSnapshot, toLocalWalk: (w: RoomWalk) => Walk, toLocalAt: (at: number) => number): PlayerState {
   return { id: o.id, look: o.look, pos: o.pos, walk: o.walk ? toLocalWalk(o.walk) : null, ...(o.asleep ? { asleep: true } : {}), ...(o.air ? { air: { ...o.air, at: toLocalAt(o.air.at) } } : {}), v: 1 };
 }
