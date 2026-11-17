@@ -26,15 +26,15 @@ const BURSTS := {
 	"flap": ["leaf", 5, 0.8, 0.16, Color("e9d9b8"), Color("8a6a45"), 1.0, 2.6, 70, Vector3(0, -3.0, 0), Vector3.DOWN],
 	"dash": ["glow", 14, 0.32, 0.2, Color("ffe9b0"), Color("ffd36a"), 0.3, 1.6, 30, Vector3.ZERO, Vector3.LEFT],
 	"kick": ["dust", 8, 0.4, 0.2, Color(0.9, 0.9, 0.95, 0.5), Color(0.9, 0.9, 1, 0), 1.0, 2.6, 60, Vector3(0, -1, 0), Vector3.LEFT],
-	"pogo": ["glow", 12, 0.4, 0.16, Color("ff8ab0"), Color("fff2c0"), 2.0, 4.5, 80, Vector3(0, -6, 0), Vector3.UP],
+	"pogo": ["glow", 10, 0.4, 0.1, Color("ff8ab0"), Color("fff2c0"), 2.0, 4.5, 80, Vector3(0, -6, 0), Vector3.UP],
 	"feather": ["glow", 16, 0.8, 0.18, Color("ffd36a"), Color("fff6d8"), 1.0, 3.2, 180, Vector3(0, 1.5, 0), Vector3.UP],
 	"relic": ["glow", 34, 1.3, 0.22, Color("fff6d8"), Color("ffd36a"), 1.5, 5.0, 180, Vector3(0, 2.0, 0), Vector3.UP],
 	"grant": ["glow", 70, 2.2, 0.26, Color("f6f1e3"), Color("ffd36a"), 1.0, 6.5, 40, Vector3(0, 2.5, 0), Vector3.UP],
 	"bench": ["glow", 18, 1.6, 0.16, Color("ffcf7a"), Color("fff2c0"), 0.3, 1.2, 180, Vector3(0, 1.0, 0), Vector3.UP],
-	"hurt": ["shard", 12, 0.7, 0.2, Color("9fd0ff"), Color("a3202f"), 2.0, 5.5, 180, Vector3(0, -9, 0), Vector3.UP],
-	"faint": ["shard", 26, 1.0, 0.24, Color("cdb0ff"), Color("1f4a9c"), 2.0, 7.0, 180, Vector3(0, -9, 0), Vector3.UP],
+	"hurt": ["shard", 10, 0.6, 0.085, Color("9fd0ff"), Color("a3202f"), 2.0, 5.5, 180, Vector3(0, -9, 0), Vector3.UP],
+	"faint": ["shard", 22, 0.9, 0.1, Color("cdb0ff"), Color("1f4a9c"), 2.0, 7.0, 180, Vector3(0, -9, 0), Vector3.UP],
 	"paint": ["dust", 16, 0.6, 0.3, Color(0.05, 0.05, 0.07, 0.8), Color(0.05, 0.05, 0.07, 0), 1.0, 4.0, 60, Vector3(0, -5, 0), Vector3.UP],
-	"crack": ["shard", 8, 0.6, 0.16, Color("dff0ff"), Color("9fd0ff"), 1.0, 3.0, 120, Vector3(0, -9, 0), Vector3.UP],
+	"crack": ["shard", 8, 0.6, 0.08, Color("dff0ff"), Color("9fd0ff"), 1.0, 3.0, 120, Vector3(0, -9, 0), Vector3.UP],
 	"door": ["dust", 18, 0.9, 0.3, Color(0.85, 0.75, 0.6, 0.5), Color(0.8, 0.7, 0.6, 0), 0.6, 2.2, 90, Vector3(0, 0.3, 0), Vector3.UP],
 	"won": ["glow", 120, 3.5, 0.3, Color("ffd36a"), Color("ffffff"), 2.0, 9.0, 180, Vector3(0, 1.0, 0), Vector3.UP],
 }
@@ -57,7 +57,7 @@ func _ready() -> void:
 	quad = QuadMesh.new()
 	quad.size = Vector2.ONE
 	var soft := _radial([Color(1, 1, 1, 1), Color(1, 1, 1, 0.55), Color(1, 1, 1, 0.12), Color(1, 1, 1, 0)], [0.0, 0.25, 0.6, 1.0])
-	var flake := _radial([Color(1, 1, 1, 1), Color(1, 1, 1, 1), Color(1, 1, 1, 0)], [0.0, 0.62, 0.75])
+	var flake := _radial([Color(1, 1, 1, 0.9), Color(1, 1, 1, 0.7), Color(1, 1, 1, 0)], [0.0, 0.45, 0.8])
 	looks["glow"] = _material(soft, true)
 	looks["dust"] = _material(soft, false)
 	looks["leaf"] = _material(flake, false)

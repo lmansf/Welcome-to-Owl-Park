@@ -537,42 +537,40 @@ def keeper_stall():
 
 @asset("thorn-bed", "hazards", "a briar tangle, 2 m wide, 0.5 m tall, 2 m deep; tiles in x")
 def thorn_bed():
-    v = V((-1, -1, 0), (1, 1, 0.5), open="x")
+    v = V((-1, -1, 0), (1, 1, 0.5), vpm=32, open="x")
     X, Y, Z = v.X, v.Y, v.Z
     pi = math.pi
-    # the ground it grows from; every wave has a whole number of turns in 2 m so the ends meet
-    bump = 0.11 + 0.04 * np.sin(pi * X * 2 + Y * 3) + 0.03 * np.sin(pi * X * 3 - Y * 5 + 1)
+    # a low dark mound of briar; every wave has a whole number of turns in 2 m so the ends meet
+    bump = 0.12 + 0.04 * np.sin(pi * X * 2 + Y * 3) + 0.03 * np.sin(pi * X * 3 - Y * 5 + 1)
     bump = np.maximum(bump * np.clip((1.02 - np.abs(Y)) / 0.3, 0.45, 1), 0.07)
     v.fill("bark_dark", Z < bump)
-    v.paint("leaf_dark", np.sin(pi * X * 3 + Y * 5) > 0.3)
+    v.paint("thorn", np.sin(pi * X * 3 + Y * 5) > 0.7)
+    v.paint("leaf_dark", np.sin(pi * X * 4 - Y * 6 + 2) > 0.75)
+    # a few fat stems arching over it
     rng = np.random.default_rng(11)
+    for i in range(5):
+        x0, y0 = -1 + (i + rng.uniform(0.3, 0.7)) * 2 / 5, (-0.6, 0.5, -0.1, 0.7, -0.75)[i]
+        dx = rng.uniform(0.5, 0.8) * (1 if i % 2 else -1)
+        pts = [(x0, y0, 0.06), (x0 + dx * 0.3, y0 + 0.1, 0.25), (x0 + dx * 0.75, y0 - 0.1, 0.22), (x0 + dx, y0, 0.06)]
+        for sh in (-2, 0, 2):
+            v.path("thorn", [(x + sh, y, z) for x, y, z in pts], 0.07, 0.06)
+    # the thorns: plain cones, wide at the foot, in three staggered rows, so the bed reads as teeth
     spikes = []
-    for i in range(9):
-        x0, y0 = -1 + (i + rng.uniform(0.2, 0.8)) * 2 / 9, (-0.8, 0.1, 0.75, -0.3, 0.5, -0.65, 0.3, -0.1, 0.8)[i]
-        dx = rng.uniform(0.6, 1.0) * (1 if i % 2 else -1)
-        y1 = float(np.clip(y0 + rng.uniform(-0.6, 0.6), -0.85, 0.85))
-        hgt = rng.uniform(0.24, 0.36)
-        pts = [(x0, y0, 0.05), (x0 + dx * 0.25, y0 + (y1 - y0) * 0.25, hgt), (x0 + dx * 0.7, y0 + (y1 - y0) * 0.7, hgt * 0.9), (x0 + dx, y1, 0.05)]
-        for f in (0.15, 0.5, 0.85):  # thorns stand up along the arch of each stem
-            a, b = pts[1], pts[2]
-            p = tuple(a[k] + (b[k] - a[k]) * f for k in range(3))
-            tip = (p[0] + rng.uniform(-0.1, 0.1), float(np.clip(p[1] + rng.uniform(-0.12, 0.12), -0.93, 0.93)), min(p[2] + rng.uniform(0.14, 0.2), 0.47))
-            spikes.append((p, tip, 0.06))
+    for row, (y, n, h) in enumerate(((-0.62, 7, 0.44), (0.0, 6, 0.36), (0.62, 7, 0.4))):
+        for k in range(n):
+            x = -1 + (k + 0.5 + 0.22 * (row % 2) + rng.uniform(-0.12, 0.12)) * 2 / n
+            top = h * rng.uniform(0.8, 1.0)
+            spikes.append(((x, y + rng.uniform(-0.12, 0.12), 0.06), (x + rng.uniform(-0.09, 0.09), y + rng.uniform(-0.08, 0.08), min(top, 0.47))))
+    for foot, tip in spikes:
         for sh in (-2, 0, 2):
-            v.path("thorn", [(x + sh, y, z) for x, y, z in pts], 0.085, 0.07)
-    for x, y in ((-0.72, -0.5), (0.3, -0.72), (0.82, 0.25), (-0.2, 0.55), (-0.45, -0.05), (0.55, 0.72), (0.1, -0.2)):  # the tallest reach the full half metre
-        spikes.append(((x, y, 0.05), (x + 0.06, y, 0.47), 0.085))
-    for p, tip, r in spikes:
+            v.rod("thorn", (foot[0] + sh, foot[1], foot[2]), (tip[0] + sh, tip[1], tip[2]), 0.1, 0.022, flat=False)
+    # each thorn runs from briar red at the foot to a lit tip
+    for foot, tip in spikes:
         for sh in (-2, 0, 2):
-            v.rod("thorn", (p[0] + sh, p[1], p[2]), (tip[0] + sh, tip[1], tip[2]), r, 0.035, flat=False)
-    # the stems are dark, bark mottled into the briar red, so the tips are what glows
-    v.paint("bark_dark", (np.sin(pi * X * 5 + Y * 7 + Z * 9) > -0.1) & (Z < 0.3), only="thorn")
-    v.paint("violet", (np.sin(pi * X * 4 - Y * 9 + Z * 5) > 0.8), only="thorn")
-    for p, tip, r in spikes:
-        for sh in (-2, 0, 2):
-            v.ball("thorn_tip", (tip[0] + sh, tip[1], tip[2]), 0.06)
-    return v.done("thorn-bed", keep=0.19)
-
+            d = np.sqrt((X - tip[0] - sh) ** 2 + (Y - tip[1]) ** 2 + (Z - tip[2]) ** 2)
+            v.paint("rose", (d < 0.11) & (Z > 0.2), only="thorn")
+            v.paint("thorn_tip", d < 0.05, only=["thorn", "rose"])
+    return v.done_tris("thorn-bed", 5000)
 
 
 @asset("lamp-moth", "hazards", "a moth drawn to lamps, 0.6 m across; origin at the body, the wings flap from their roots")
