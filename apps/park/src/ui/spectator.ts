@@ -130,6 +130,18 @@ export function createOfferPacer(now: () => number = Date.now): OfferPacer {
 }
 
 /** What the HUD's badge shows: nothing for a visitor; for a spectator its words and the Get a Day Ticket button. */
+/** The registry key for a guest's welcome still to say (OP-291): set at the turnstiles, said once the badge shows. */
+export const GUEST_IN = 'guestInPending';
+
+/**
+ * The guest's welcome (OP-291, QA sweep D18): it points to the "Just looking" badge's button up top, so it
+ * is said once the room server has made the owl a spectator and the badge shows, not at the turnstiles
+ * where no such button is drawn yet. Null while there is nothing to say.
+ */
+export function guestWelcome(pending: boolean, spectator: boolean): string | null {
+  return pending && spectator ? SPECTATOR_WORDS.guestIn : null;
+}
+
 export function badgeView(spectator: boolean): { shown: boolean; label: string; button: string } {
   return { shown: spectator, label: SPECTATOR_WORDS.badge, button: SPECTATOR_WORDS.get };
 }

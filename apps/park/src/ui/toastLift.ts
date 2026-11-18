@@ -5,6 +5,9 @@
  * over the arcade's chip, hiding the words a newcomer is meant to read (QA walk, Nov 14). The chips
  * stay where they point; the tips go up above any chip they would cover, and back down once it is gone.
  *
+ * The visitor's own owl counts as one more chip (OP-291, QA sweep D14): an owl arriving at the bottom
+ * of the entrance plaza or the treehouse clearing stood behind a tip, so the tips go up above it too.
+ *
  * Pure, on rects in screen px, so it is unit-tested; the HUD measures and asks it.
  */
 
@@ -43,4 +46,17 @@ export function toastLift(column: Box, chips: readonly Box[], top = 0, gap = TOA
     }
   }
   return Math.max(0, Math.min(lift, column.top - top));
+}
+
+/** Half the width kept clear around the owl's feet, in screen px (a room owl is about 90 px wide drawn). */
+export const OWL_HALF_W = 48;
+
+/**
+ * The box the visitor's own owl takes on the screen (OP-291), from its feet and the top of its head in
+ * CSS px, for the tips to stay clear of; null for an owl off the screen or not drawn.
+ */
+export function owlBox(owl: { x: number; y: number; top: number } | null, screen: { w: number; h: number }): Box | null {
+  if (!owl || owl.y <= owl.top) return null;
+  if (owl.x < 0 || owl.x > screen.w || owl.y < 0 || owl.top > screen.h) return null;
+  return { left: owl.x - OWL_HALF_W, right: owl.x + OWL_HALF_W, top: owl.top, bottom: owl.y };
 }

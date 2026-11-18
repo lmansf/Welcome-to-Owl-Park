@@ -193,7 +193,7 @@ import type { LoadScreen } from '../ui/loader';
 import type { PreviewFrame } from '../ui/owlBuilder';
 import { PASS_AFTER_DAY_TICKET, gateCard, gateRefusal, offerOnce, type FreePassOffer } from '../ui/tickets';
 import { PET_SWAP_MS, PET_SWAP_WORDS, canSwapPet, nextPet, ownedPets, swapWords } from '../ui/petSwap';
-import { SPECTATOR_WORDS, createOfferPacer, createOnceHint, turnstileWay, type OfferPacer } from '../ui/spectator';
+import { GUEST_IN, SPECTATOR_WORDS, createOfferPacer, createOnceHint, guestWelcome, turnstileWay, type OfferPacer } from '../ui/spectator';
 import type { Opener } from '../ui/checkout';
 import { earlyPreview } from '../ui/preview';
 import { ActivityLayer } from './activities';
@@ -1509,11 +1509,21 @@ export class RoomScene extends Phaser.Scene {
     this.seeThrough?.frame(this.me.pos, this.flier.air.z);
     this.guardian?.frame(now, this.owlsSeen());
     this.frameGuardianCam(now);
-    // On a touch screen the thumbstick goes quiet while the owl is under it (OP-349): told a few times a second.
-    if (TOUCH_SCREEN && now - this.owlToldAt > 180) {
+    // On a touch screen the thumbstick goes quiet while the owl is under it (OP-349), and on every screen the
+    // tips at the bottom go up above the owl rather than over it (OP-291): told a few times a second.
+    if (now - this.owlToldAt > 180) {
       this.owlToldAt = now;
       const v = this.cameras.main.worldView;
-      this.hud.setOwlAt(v.width > 0 ? { x: ((this.me.x - v.x) / v.width) * window.innerWidth, y: ((this.me.y - this.me.flightHeight() - v.y) / v.height) * window.innerHeight } : null);
+      const up = this.me.flightHeight();
+      this.hud.setOwlAt(
+        v.width > 0
+          ? {
+              x: ((this.me.x - v.x) / v.width) * window.innerWidth,
+              y: ((this.me.y - up - v.y) / v.height) * window.innerHeight,
+              top: ((this.me.y + this.me.crown() - up - v.y) / v.height) * window.innerHeight,
+            }
+          : null,
+      );
     }
     // Where in the tree the owl is, on the computer's minimap (OP-213); none out of the tree.
     this.hud.setTreeSpot(this.sideView() ? { room: this.room.id, x: this.me.pos.x } : null);
@@ -4290,6 +4300,9 @@ export class RoomScene extends Phaser.Scene {
     this.spectator = on;
     this.registry.set('spectator', on);
     this.hud.setSpectator(on);
+    const welcome = guestWelcome(this.registry.get(GUEST_IN) === true, on);
+    if (welcome) this.hud.toast(welcome, 4500);
+    if (welcome || !on) this.registry.set(GUEST_IN, false);
     if (on && !was) {
       this.showBoard(this.quests.board);
       void this.refreshBoard();
@@ -4482,7 +4495,8 @@ export class RoomScene extends Phaser.Scene {
         guest: () => {
           if (!here()) return;
           this.pieces.gate?.react();
-          this.hud.toast(SPECTATOR_WORDS.guestIn, 4500);
+          // Its welcome points to the badge's button, so it waits for the badge (OP-291, setSpectator).
+          this.registry.set(GUEST_IN, true);
           goIn(700);
         },
         stay: () => {
