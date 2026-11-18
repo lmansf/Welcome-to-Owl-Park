@@ -1100,3 +1100,23 @@ test('a shared quiz result opens as that owl’s own page, and any other owl goe
   expect(other.status()).toBe(302);
   expect(other.headers()['location']).toBe('/');
 });
+
+test('a shared activity opens as that place’s own page, its Play button the park’s front door, and any other goes to the front page (OP-392)', async ({ request, page }) => {
+  const res = await request.get('/play/arcade', { maxRedirects: 0 });
+  expect(res.status()).toBe(200);
+  expect(res.headers()['content-type']).toContain('text/html');
+  const html = await res.text();
+  expect(html).toContain('data-activity="arcade"');
+  expect(html).toContain('og-image.jpg');
+  expect(html).toContain('<a class="play" href="/?go=arcade">');
+  expect(html).not.toMatch(/<script/i);
+  const other = await request.get('/play/dragon', { maxRedirects: 0 });
+  expect(other.status()).toBe(302);
+  expect(other.headers()['location']).toBe('/');
+  // Its button opens the park at its front door: the home screen, not a room past the turnstiles.
+  await page.goto('/play/arcade?golink=1');
+  await page.locator('a.play').click();
+  await expect(page).toHaveURL(/\/\?go=arcade&golink=1$/);
+  await page.waitForFunction(() => window.owlPark?.home?.().shown === true, null, { timeout: 20_000 });
+  await expect(page.getByText('Your link goes to the arcade, past the turnstiles.')).toBeVisible();
+});
