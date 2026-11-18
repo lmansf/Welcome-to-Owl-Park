@@ -50,6 +50,10 @@ export const SPECTATOR_WORDS = {
   keep: 'A Day Ticket lets you keep what you win.',
   /** The end of a game that would have earned nothing anyway. */
   noFeathers: 'With a Day Ticket, games earn feathers.',
+  /** Through the turnstiles the first time for an owl that came in by Play free now (OP-421): it chose free already, so no question and no ticket here. */
+  freeIn: 'Welcome in! Follow the feathers to the next place to fly.',
+  /** That owl's first glide off the Great Hollow's roots, a moment after the room says so (OP-421): the Day Ticket's first word to it. */
+  freeLater: 'Want to keep what you win? A Day Ticket does that, from the button up top.',
 } as const;
 
 const feathersOf = (n: number) => `${n} feather${n === 1 ? '' : 's'}`;
@@ -91,6 +95,21 @@ export function turnstileWay(scan: ScanReply, entry: Entry): TurnstileWay {
   const refusal = gateRefusal(scan.reason, scan.kind);
   if (scan.reason === 'offline' || !entry.spectators) return { go: 'back', line: refusal.line, sale: refusal.buy };
   return refusal.buy ? { go: 'spectate', line: SPECTATOR_WORDS.turnstile, sale: true } : { go: 'spectate', line: refusal.line, sale: false };
+}
+
+/** The game registry's mark for an owl that came in by Play free now and has not been through the turnstiles yet (OP-421). */
+export const CAME_FREE = 'cameFree';
+/** The registry's mark for that owl once through: the Day Ticket's first word waits for its first glide (OP-421). */
+export const TICKET_AFTER_GLIDE = 'ticketAfterGlide';
+
+/**
+ * Whether the turnstiles ask their question (OP-198, gatePrompt.ts) of this owl (OP-421). An owl that
+ * came in by the home screen's Play free now chose free already: on its first time through, the
+ * turnstiles let it on in as a guest with no question and no Day Ticket line, and the ticket's first
+ * word to it waits for its first glide. Every other owl without a ticket is asked as before.
+ */
+export function asksAtGate(way: TurnstileWay, cameFree: boolean): boolean {
+  return way.go === 'spectate' && way.sale && !cameFree;
 }
 
 /**

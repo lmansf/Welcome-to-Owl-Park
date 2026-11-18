@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BAND_COUNT, BAND_FEATHERS, runFeathers } from '@owl-park/shared';
 import type { Entry, ScanReply } from '../net';
-import { FULL_OFFER_EVERY_MS, SPECTATOR_WORDS, arcadeWouldEarn, badgeView, climbWouldEarn, createOfferPacer, createOnceHint, createSpectatorBadge, endOfGameLine, guestWelcome, turnstileWay, wouldHaveEarned } from './spectator';
+import { FULL_OFFER_EVERY_MS, SPECTATOR_WORDS, arcadeWouldEarn, asksAtGate, badgeView, climbWouldEarn, createOfferPacer, createOnceHint, createSpectatorBadge, endOfGameLine, guestWelcome, turnstileWay, wouldHaveEarned } from './spectator';
 import { gateRefusal } from './tickets';
 
 /** Just enough of a page for the badge to be drawn without a browser. */
@@ -144,6 +144,28 @@ describe('a free guest’s word on leaf piles (OP-243)', () => {
     expect(hint.say()).toBe('With a Day Ticket, leaf piles can turn up feathers.');
     expect(hint.say()).toBeNull();
     expect(hint.say()).toBeNull();
+  });
+});
+
+describe('the turnstiles for an owl that came in by Play free now (OP-421)', () => {
+  const ticketGate: Entry = { gate: 'ticket', admitted: false, spectators: true };
+  const none = { ok: false, reason: 'none' } as ScanReply;
+  it('ask nothing of it the first time through: it chose free already', () => {
+    const way = turnstileWay(none, ticketGate);
+    expect(way).toEqual({ go: 'spectate', line: SPECTATOR_WORDS.turnstile, sale: true });
+    expect(asksAtGate(way, true)).toBe(false);
+  });
+  it('ask every other owl without a ticket, as before (OP-198)', () => {
+    expect(asksAtGate(turnstileWay(none, ticketGate), false)).toBe(true);
+  });
+  it('never ask where there is nothing to ask: a ticket that went through, an open gate, or a refusal with no sale', () => {
+    expect(asksAtGate({ go: 'in' }, false)).toBe(false);
+    expect(asksAtGate({ go: 'spectate', line: 'held', sale: false }, false)).toBe(false);
+    expect(asksAtGate({ go: 'back', line: 'offline', sale: true }, false)).toBe(false);
+  });
+  it('say no ticket on the way in, and the Day Ticket only after its first glide', () => {
+    expect(SPECTATOR_WORDS.freeIn).not.toMatch(/ticket/i);
+    expect(SPECTATOR_WORDS.freeLater).toMatch(/Day Ticket/);
   });
 });
 

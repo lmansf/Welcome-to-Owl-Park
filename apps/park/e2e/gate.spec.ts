@@ -1,6 +1,6 @@
 import { devices, type APIRequestContext, type Browser, type BrowserContextOptions, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { E2E_ADMIN_KEY, GATE_ASK, STORE_CARD, enterAsGuest, settleCamera, state, toScreen, walkAndStop, walkToDoor } from './helpers';
+import { E2E_ADMIN_KEY, GATE_ASK, STORE_CARD, dist, enterAsGuest, settleCamera, state, toScreen, walkAndStop, walkToDoor } from './helpers';
 
 /**
  * The opening switch (OP-067) through the room server: the keepers flip the front gate with the
@@ -186,4 +186,62 @@ test.describe('the opening switch (OP-067)', () => {
     await expect(holder.locator('[data-spectator].show')).toHaveCount(0);
     await holder.context().close();
   });
+
+  for (const [name, device] of [
+    ['a computer', COMPUTER],
+    ['a phone', PHONE],
+  ] as const) {
+    test(`on ${name}: Play free now from a fresh browser, a first flight in the moonbeam inside a minute and a half, then on through the turnstiles as a guest with no question and no ticket line (OP-421)`, async ({ browser, request }) => {
+      test.slow(); // a live park drawn with software WebGL on CI runners, a rise and a walk through two rooms
+      await pastTheClose((await flip(request, 'ticket'))['closedAt'] as number);
+      const page = await (await browser.newContext(device)).newPage();
+      await page.goto('/?transport=edge');
+      // Everything the park says, and whether the turnstiles' question ever shows, from the press on.
+      await page.waitForFunction(() => window.owlPark?.home?.().shown === true, null, { timeout: 20_000 });
+      await page.evaluate(() => {
+        const w = window as unknown as { seen: string[]; asked: boolean };
+        w.seen = [];
+        w.asked = false;
+        const look = () => {
+          for (const el of document.querySelectorAll('#hud [data-toasts] > *')) {
+            const words = (el.textContent ?? '').trim();
+            if (words && !w.seen.includes(words)) w.seen.push(words);
+          }
+          const ask = document.querySelector<HTMLElement>('[data-gate-ask=""]');
+          if (ask && ask.offsetParent !== null) w.asked = true;
+        };
+        new MutationObserver(look).observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true });
+        look();
+      });
+      const seen = () => page.evaluate(() => (window as unknown as { seen: string[] }).seen);
+      const asked = () => page.evaluate(() => (window as unknown as { asked: boolean }).asked);
+      const pressed = Date.now();
+      const free = page.locator('[data-home-btn="guest"]');
+      if (device === PHONE) await free.tap();
+      else await free.click();
+      await expect.poll(async () => (await state(page)).room, { timeout: 25_000 }).toBe('lobby');
+      // The first glide: into the moonbeam's light, Jump held, carried up, and down again.
+      const beam = (await state(page)).thermals.find((t) => t.id === 'commons')!;
+      await page.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), { x: beam.x, y: beam.y });
+      await expect.poll(async () => { const s = await state(page); return !s.walking && dist(s.pos, beam) < 30; }, { timeout: 30_000 }).toBe(true);
+      await page.keyboard.down('Space');
+      await expect.poll(async () => (await state(page)).air.z, { timeout: 20_000 }).toBeGreaterThan(200);
+      await page.keyboard.up('Space');
+      await expect.poll(async () => (await state(page)).firstRise, { timeout: 40_000 }).toBe(true);
+      const flown = Date.now() - pressed;
+      test.info().annotations.push({ type: 'first flight', description: `${(flown / 1000).toFixed(1)} s from Play free now to a finished first flight` });
+      expect(flown).toBeLessThan(90_000);
+      // On through the turnstiles, with the gate taking tickets: in as a guest, with no question on the way.
+      await walkToDoor(page, 'gate');
+      await expect.poll(async () => (await state(page)).room, { timeout: 25_000 }).toBe('hub');
+      await expect.poll(async () => (await state(page)).spectator, { timeout: 15_000 }).toBe(true);
+      await expect.poll(seen, { timeout: 10_000 }).toContain('Welcome in! Follow the feathers to the next place to fly.');
+      expect(await asked()).toBe(false);
+      await expect(page.locator(GATE_ASK)).toBeHidden();
+      await expect(page.locator(STORE_CARD)).toBeHidden();
+      // Nothing said on the way in named a ticket.
+      expect((await seen()).filter((words) => /ticket/i.test(words))).toEqual([]);
+      await page.context().close();
+    });
+  }
 });
