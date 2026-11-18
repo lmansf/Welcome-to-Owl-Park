@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { INTERACTABLES, LEAF_PILES_A_ROOM, LEAF_PILES_IN_THE_HOLLOW, LEAF_RESPAWN_MS } from './interactables';
+import { pointInPolygon } from './geometry';
 import { ROOM_H } from './room';
-import { ARCADE_PLAZA, GLASS_PLAZA, GROVE_PLAZA, HOMES_PLAZA, HUB_PLAZA, INK_PLAZA, LOBBY_PLAZA, MARKET_PLAZA } from '../rooms/index';
+import { ARCADE_PLAZA, GLASS_PLAZA, GROVE_PLAZA, HOMES_PLAZA, HUB_PLAZA, INK_PLAZA, LOBBY_PLAZA, MARKET_PLAZA, getRoom } from '../rooms/index';
 
 const piles = INTERACTABLES.filter((i) => i.kind === 'leaf-pile');
 const PLAZAS: Record<string, { front: number; rings: readonly { x: number; y: number }[] }> = {
@@ -28,6 +29,17 @@ describe("leaf piles where the wind would leave them (OP-417, the owner's Nov 14
       // Up on a perch, or back in the painting, is not out on the plaza's floor.
       if (!plaza || p.top || p.pos.y < ROOM_H) continue;
       for (const r of plaza.rings) expect(Math.hypot(p.pos.x - r.x, p.pos.y - r.y), `${p.id} by the ring at ${r.x}`).toBeGreaterThan(500);
+    }
+  });
+
+  it('lays every pile in the treehouse clearing on its walkable floor, off every perch, where an owl seen from above walks to it (OP-423)', () => {
+    const grove = getRoom('grove')!;
+    const here = piles.filter((p) => p.room === 'grove');
+    expect(here.map((p) => p.id).sort()).toEqual(['grove-leaves-2', 'grove-leaves-hut', 'grove-leaves-porch']);
+    for (const p of here) {
+      expect(p.top, p.id).toBeUndefined();
+      expect(grove.walkable.some((poly) => pointInPolygon(p.pos, poly)), `${p.id} on the floor`).toBe(true);
+      for (const perch of grove.perches ?? []) expect(pointInPolygon(p.pos, perch.area), `${p.id} under ${perch.id}`).toBe(false);
     }
   });
 

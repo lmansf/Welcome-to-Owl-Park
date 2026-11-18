@@ -356,8 +356,7 @@ export const ROOMS: Record<string, RoomDef> = {
     // The porch is also a jump and the second flap straight from the floor (tier 2). The left tree's
     // treehouse is across the gap from the loft, past the rope bridge, and only a glide gets there (tier
     // 3). The rope bridge stays painted, not a perch, so the treehouse stays the glide's.
-    // TODO-DOCS (OP-084): docs/ACTIVITIES.md: the grove's treetop walk (the ladder to the porch's leaf
-    // pile and the loft, and the glide to the far treehouse's), beside the hub's bench and beam.
+    // Its leaf piles lie on the floor at the trees' feet, not up here (OP-423, interactables.ts).
     perches: [
       {
         id: 'grove-log',
