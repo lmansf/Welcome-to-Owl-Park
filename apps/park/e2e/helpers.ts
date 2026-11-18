@@ -231,6 +231,8 @@ export const E2E_STORE = {
   token: 'e2e-only-store-token-not-a-secret',
   webhookKey: 'e2e-only-webhook-key-not-a-secret',
   passCode: 'E2E-OPENING-NIGHT',
+  /** The store code that takes the whole Day Ticket off for a friend (REFERRAL_CODE). */
+  referralCode: 'E2E-FRIEND-FREE',
   /** The store's ticket page the room server's client is built with (where checkout goes when the park cannot make an owl's cart link, OP-180). */
   ticketsUrl: 'https://owl-e2e.myshopify.com/collections/tickets',
   /** The store's page the gift shop's door opens, in the room server's client. */

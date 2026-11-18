@@ -13,6 +13,8 @@ const EDGE_VARS = {
   SHOPIFY_WEBHOOK_SECRET: E2E_STORE.webhookKey,
   SHOPIFY_TEST_ORIGIN: E2E_STORE.origin,
   OPENING_PASS_CODE: E2E_STORE.passCode,
+  // Bring a friend's free Day Ticket (OP-056): its store code set, as on the live park, so the card offers it (OP-420).
+  REFERRAL_CODE: E2E_STORE.referralCode,
   ACCOUNTS: 'on',
   // Spectators (OP-191) on, as the owner may switch them on: an owl without a ticket walks on past the
   // turnstiles as a spectator (spectator.spec.ts), which the gate's, turnstiles' and checkout's tests follow.

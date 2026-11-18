@@ -291,6 +291,9 @@ test.describe('bringing a friend (OP-056), a preview with ?friends=1', () => {
     const card = bea.getByRole('dialog', { name: 'Menu' }).locator('[data-referral]');
     await expect(card.getByText('Welcome, friend!')).toBeVisible({ timeout: 15_000 });
     await expect(card.locator('[data-offer="friend"]')).toBeVisible();
+    // Free tickets are open (the store's code is set): the button is there at once, with no reload (OP-420).
+    await expect(card.getByRole('button', { name: 'Get my free ticket' })).toBeVisible();
+    await expect(card.getByText('Free tickets open soon')).toHaveCount(0);
     await expect(card.locator('input[name="friend-code"]')).toHaveCount(0);
     await alice.context().close();
     await bea.context().close();
