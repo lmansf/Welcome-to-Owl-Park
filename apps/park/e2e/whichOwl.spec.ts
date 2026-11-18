@@ -187,6 +187,8 @@ test.describe('which owl are you (OP-076)', () => {
     await expect(page.locator('[data-wo-keep]')).toBeFocused();
     // A first run's one primary button says where it goes (OP-367).
     await expect(page.locator('[data-wo-keep]')).toHaveText('Play as this owl');
+    // Share my owl stays behind its flag (OP-392).
+    await expect(page.locator('[data-wo-share]')).toHaveCount(0);
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-which-owl-reveal.png` });
 
     // Play as this owl: into the owl's own nest, as the owl the quiz found, with no Play step on the home screen.
@@ -196,6 +198,34 @@ test.describe('which owl are you (OP-076)', () => {
     const s = await state(page);
     expect(s.look.species).toBe(species);
     expect(s.look.body).toBe('#3E6B48');
+  });
+
+  test('Share my owl, behind its flag, shares the address of that owl’s own page and nothing else (OP-392)', async ({ page, isMobile }) => {
+    // The device's share sheet, recorded: a real one would open the phone's own picker.
+    await page.addInitScript(() => {
+      const sent: unknown[] = [];
+      (window as unknown as { sharedOwls: unknown[] }).sharedOwls = sent;
+      Object.defineProperty(navigator, 'share', { configurable: true, value: async (d: unknown) => void sent.push(d) });
+    });
+    await openHome(page, '&share=1');
+    await startQuiz(page, isMobile);
+    await tap(page, '[data-wo-colours="moss"]', isMobile);
+    const result = page.locator('[data-wo-result]');
+    await expect(result).toBeVisible();
+    const nature = (await result.getAttribute('data-wo-nature'))!;
+    const share = page.locator('[data-wo-share]');
+    await expect(share).toHaveText('Share my owl');
+    await expect.poll(() => share.evaluate((b) => getComputedStyle(b).opacity)).toBe('1');
+    await tap(page, '[data-wo-share]', isMobile);
+    await expect(share).toHaveAttribute('data-wo-shared', 'shared');
+    const sent = await page.evaluate(() => (window as unknown as { sharedOwls: { title: string; text: string; url: string }[] }).sharedOwls);
+    expect(sent).toHaveLength(1);
+    const url = new URL(sent[0]!.url);
+    expect(url.pathname).toBe(`/owl/${nature}`);
+    expect(url.search).toBe('');
+    expect(sent[0]!.text).toMatch(/^I'm an? .+ in Owl Park! Which owl are you\?$/);
+    // Sharing changes nothing: the reveal stays, and Play as this owl still goes on.
+    await expect(page.locator('[data-wo-keep]')).toBeVisible();
   });
 
   test('Not me? Try again draws a fresh set, and Make it yours opens the builder on the result', async ({ page, isMobile }) => {

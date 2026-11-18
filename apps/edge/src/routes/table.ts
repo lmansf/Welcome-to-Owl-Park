@@ -3,12 +3,13 @@
  * path up here (`router.ts`) after the front door and the rate limits; a path no route matches is a
  * static asset. Each handler answers its own methods, OPTIONS included.
  */
-import { RIBBON_WORDS } from '@owl-park/shared';
+import { OWL_SHARE_PREFIX, RIBBON_WORDS } from '@owl-park/shared';
 import { capacityPage } from '../capacityPage';
 import { feedbackPage } from '../feedbackPage';
 import { gatePage } from '../gatePage';
 import { CSP_REPORT_PATH } from '../guard';
 import { openingPage } from '../openingPage';
+import { owlPage } from '../owlPage';
 import { account } from './account';
 import { referral } from './referral';
 import { adminCapacity, adminClimb, adminCollectLog, adminGate, adminGrant, adminKeeper, adminOpening, adminPing, adminRestart, adminStore, adminTickets } from './admin';
@@ -86,6 +87,8 @@ export const ROUTES: readonly Route[] = [
 
   // ---- Google Search Console's ownership check (OP-393) ----
   { path: GOOGLE_VERIFY_PATH, handle: googleVerification },
+  // A shareable quiz result (OP-392): one page for each kind of owl the quiz gives.
+  { prefix: OWL_SHARE_PREFIX, handle: ({ url }) => owlPage(url) },
 
   // ---- The rooms ----
   { path: '/api/health', handle: healthRoute },
