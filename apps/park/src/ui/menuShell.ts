@@ -87,6 +87,17 @@ const CSS = `
 #hud .menu-shell .mtabs{flex:none;display:flex;gap:2px;padding:0 6px;border-bottom:2px solid color-mix(in srgb,var(--m-frame) 45%,transparent)}
 #hud .menu-shell .mtab{position:relative;flex:1 1 0;min-width:max-content;min-height:calc(var(--m-target) + 18px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px 4px 9px;margin:0;background:transparent;border:0;border-radius:var(--m-tab-radius) var(--m-tab-radius) 0 0;font-weight:500;white-space:nowrap}
 #hud .menu-shell .mtab svg{width:26px;height:26px}
+/* Large text (OP-386): at 150 and 200% the Menu takes the screen's height, the title shares its row with
+   Close and Feedback has the row under them (its words wrap), and the tabs keep their words in a strip
+   that scrolls sideways, the chosen tab always in view. At 100% none of this applies. */
+#hud:is([data-text="150"],[data-text="200"]) .menu-shell{height:min(calc(100dvh/var(--vz,1) - 16px),600px)}
+#hud:is([data-text="150"],[data-text="200"]) .menu-shell .mhead{flex-wrap:wrap;row-gap:4px;padding:4px 10px}
+#hud:is([data-text="150"],[data-text="200"]) .menu-shell .mtitle{order:0;flex:1 1 0}
+#hud:is([data-text="150"],[data-text="200"]) .menu-shell .mhead h2{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#hud:is([data-text="150"],[data-text="200"]) .menu-shell .x{order:1;flex:none}
+#hud:is([data-text="150"],[data-text="200"]) .menu-shell .mhead .mfeedback{order:2;flex:1 0 100%;min-width:0;justify-content:center;white-space:normal;text-align:center}
+#hud:is([data-text="150"],[data-text="200"]) .menu-shell .mtabs{overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;scrollbar-width:thin}
+#hud:is([data-text="150"],[data-text="200"]) .menu-shell .mtab{flex:0 0 auto;padding:6px 12px 9px}
 #hud .menu-shell .mtab .i1{fill:var(--m-icon-main);stroke:var(--m-icon-main)}
 #hud .menu-shell .mtab .i2{fill:var(--m-icon-accent);opacity:.55}
 #hud .menu-shell .mtab[aria-selected=true]{font-weight:800;background:color-mix(in srgb,var(--m-raised) 70%,transparent)}
@@ -328,6 +339,12 @@ export function createMenuShell(root: HTMLElement, tabs: readonly MenuTab[], opt
     for (const [tid, b] of tabButtons) {
       b.setAttribute('aria-selected', String(tid === id));
       b.tabIndex = tid === id ? 0 : -1;
+    }
+    // In the sideways strip of large text (OP-386) the chosen tab is scrolled into view.
+    const chosen = tabButtons.get(id);
+    if (chosen && nav.scrollWidth > nav.clientWidth) {
+      const left = chosen.getBoundingClientRect().left - nav.getBoundingClientRect().left + nav.scrollLeft;
+      nav.scrollLeft = Math.max(0, left - (nav.clientWidth - chosen.offsetWidth) / 2);
     }
     panel.setAttribute('aria-labelledby', `menu-tab-${id}`);
     panel.dataset['panel'] = id;
