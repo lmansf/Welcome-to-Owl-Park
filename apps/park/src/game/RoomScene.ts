@@ -670,6 +670,8 @@ export class RoomScene extends Phaser.Scene {
   private roomHas: Vec2 | null = null;
   /** Where the owl came into this room. */
   private arrivedAt: Vec2 = { x: 0, y: 0 };
+  /** Where a walk there stops short of a course's hazard (OP-422): on arriving there, the jump hint shows. */
+  private edgeHint: Vec2 | null = null;
   /** The position overlay (OP-138, `?pos=1`), once the keepers' key checks out. */
   private posOverlay: PosOverlay | null = null;
   private tasks!: TaskState;
@@ -1353,6 +1355,7 @@ export class RoomScene extends Phaser.Scene {
     this.me.slopeUnder = this.slopeBelow;
     this.me.calm = () => this.calm();
     this.arrivedAt = { ...spawn };
+    this.edgeHint = null;
     // Come in to stand before the mirror (Play, OP-105), the owl faces it.
     if (this.mirror && this.registry.get('spawnName') === 'mirror') this.me.face(NEST_MIRROR.x < spawn.x ? -1 : 1);
     this.addResidents();
@@ -1469,6 +1472,11 @@ export class RoomScene extends Phaser.Scene {
     if (finished && this.wayTo && this.walkOn()) finished = false;
     // At what a tap asked for: nothing left for a jump to carry on to (OP-084).
     if (finished && this.walkGoal && distance(this.walkGoal, this.me.pos) < 3) this.walkGoal = null;
+    // A walk there that stopped short of a hazard (OP-422): arrived at the edge, the hint; walked off elsewhere, none.
+    if (this.edgeHint && !this.me.walking) {
+      if (distance(this.edgeHint, this.me.pos) < 8) this.sayJumpHere();
+      this.edgeHint = null;
+    }
     this.posOverlay?.frame(this.me.pos, now, this.room.id);
     this.tag?.update(now);
     this.seeThrough?.frame(this.me.pos, this.flier.air.z);
@@ -2082,13 +2090,19 @@ export class RoomScene extends Phaser.Scene {
       const from = { ...this.me.pos };
       const stop = walkStopsShort(this.room, from, snapToWalkable(aim, this.footingNow().walkable), this.flier.air.z);
       if (stop) {
-        if (distance(stop, from) >= 3) this.walkTo(stop);
-        this.hud.toast(TOUCH_SCREEN ? COURSE_WORDS.jumpHere.touch : COURSE_WORDS.jumpHere.keys, 3500);
+        // Said where it is needed: at the edge, once there, not at the start of a long walk (gone before the owl arrives).
+        if (distance(stop, from) >= 3 && this.walkTo(stop)) this.edgeHint = stop;
+        else this.sayJumpHere();
         return;
       }
     }
     // Already standing in it (a side view, OP-212): a tap on it goes through, as one walked to would.
     if (!this.walkTo(aim)) this.tapIntoDoorway(aim);
+  }
+
+  /** At a hazard's edge in a course (OP-422): a jump crosses. */
+  private sayJumpHere(): void {
+    this.hud.toast(TOUCH_SCREEN ? COURSE_WORDS.jumpHere.touch : COURSE_WORDS.jumpHere.keys, 3500);
   }
 
   /** The Menu's ways out from here: leaving inside the park, going home anywhere but the owl's own nest. */
