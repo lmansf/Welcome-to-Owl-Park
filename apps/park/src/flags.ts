@@ -26,6 +26,7 @@ export const FLAGS = {
   desk: { param: 'desk', note: 'The vote desk in the Great Hollow: each realm’s share of this month’s Realm Vote, in percents, moving as owls vote' },
   look: { param: 'look', note: 'Look around: an emote every owl has, its head turning on its own through front, three-quarter, side and back while the body stays still' },
   snow: { param: 'snow', note: 'The first snow (OP-074): snow falling in every room open to the sky and lying thin on the floors seen from above, drawn in code' },
+  bowl: { param: 'bowl', note: 'Pinecone bowling in the Party Grove (OP-403): its six pins and the pinecone in code, three rolls a game at the head of the lane, played on this page' },
   tag: { param: 'tag', note: 'Feather tag in the Party Grove (OP-403): its game spaces as size boxes, and tag for 2 to 8 owls in the ring, played on the room server' },
 } as const satisfies Record<string, FlagSpec>;
 

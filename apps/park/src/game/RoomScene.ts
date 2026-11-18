@@ -196,6 +196,7 @@ import { earlyPreview } from '../ui/preview';
 import { ActivityLayer } from './activities';
 import { PartyLayer } from './partyLayer';
 import { TagLayer, type TagDebug } from './tagLayer';
+import { BowlLayer, type BowlDebug } from './bowlLayer';
 import { flagOn } from '../flags';
 import { LOOK_EMOTE } from './headTurn';
 import { addAmbience, addSetPieces, ensureFxTextures, type SetPieces } from './ambience';
@@ -677,6 +678,7 @@ export class RoomScene extends Phaser.Scene {
   private party: PartyLayer | null = null;
   /** Feather tag in the Party Grove (OP-403): only there, seen from above, and only behind `?tag=1` (flags.ts). */
   private tag: TagLayer | null = null;
+  private bowl: BowlLayer | null = null;
   /** The arcade's cabinets, score wall and runs, in the arcade only. */
   private arcade: Arcade | null = null;
   /** The stained-glass climb from its portal, in the glass realm only. */
@@ -1388,6 +1390,14 @@ export class RoomScene extends Phaser.Scene {
         posOf: (id) => (id === this.playerId ? { ...this.me.pos } : this.peers.get(id)?.pos ?? null),
       });
     }
+    if (flagOn('bowl') && room.id === TAG_ROOM && !this.sideView()) {
+      this.bowl = new BowlLayer({
+        scene: this,
+        hudRoot: () => document.getElementById('hud'),
+        myPos: () => ({ ...this.me.pos }),
+        drawLane: !this.tag,
+      });
+    }
 
     this.setupCamera();
     this.setupInput();
@@ -1469,6 +1479,7 @@ export class RoomScene extends Phaser.Scene {
     if (finished && this.walkGoal && distance(this.walkGoal, this.me.pos) < 3) this.walkGoal = null;
     this.posOverlay?.frame(this.me.pos, now, this.room.id);
     this.tag?.update(now);
+    this.bowl?.update(now);
     this.seeThrough?.frame(this.me.pos, this.flier.air.z);
     this.guardian?.frame(now, this.owlsSeen());
     this.frameGuardianCam(now);
@@ -2745,11 +2756,13 @@ export class RoomScene extends Phaser.Scene {
     egg: { at: Vec2 | null; said: string | null };
     /** Feather tag in the Party Grove (OP-403, behind ?tag=1): the game as this page has it; null elsewhere or without the flag. */
     tag: TagDebug | null;
+    bowl: BowlDebug | null;
   } | null {
     if (!this.built) return null;
     return {
       egg: { at: this.me.eggPos(), said: this.eggSaid },
       tag: this.tag?.state() ?? null,
+      bowl: this.bowl?.state() ?? null,
       snow: this.snowing,
       snowballs: { ...this.snowballs, hits: [...this.snowballs.hits] },
       sounds: this.sfx.heard().slice(-16),
@@ -2932,6 +2945,7 @@ export class RoomScene extends Phaser.Scene {
     if (this.play) out.push(...this.play.actions(pos));
     if (this.party) out.push(...this.party.actions(pos));
     if (this.tag) out.push(...this.tag.actions(pos));
+    if (this.bowl) out.push(...this.bowl.actions(pos));
     return out;
   }
 
@@ -4482,6 +4496,8 @@ export class RoomScene extends Phaser.Scene {
     this.party = null;
     this.tag?.destroy();
     this.tag = null;
+    this.bowl?.destroy();
+    this.bowl = null;
     this.arcade?.destroy();
     this.arcade = null;
     this.climb?.destroy();

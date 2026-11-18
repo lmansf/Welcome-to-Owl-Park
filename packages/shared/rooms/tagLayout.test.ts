@@ -4,6 +4,7 @@ import { isWalkable } from '../src/geometry';
 import { npcsIn } from '../src/npcs';
 import { BOWLING_LANE, TAG_RING, TAG_ROOM, inTagRing } from '../src/party/tag';
 import { STUMP_AT, STUMP_REACH } from '../src/party/ids';
+import { BOWL_REACH, BOWL_SPOT, atBowlSpot } from '../src/party/bowling';
 import { getRoom } from './index';
 
 /**
@@ -56,5 +57,17 @@ describe('the Party Grove’s game spaces (OP-403)', () => {
     }
     expect(inLane(STUMP_AT, STUMP_REACH)).toBe(false);
     expect(inTagRing(STUMP_AT, STUMP_REACH)).toBe(false);
+  });
+
+  it('the spot where an owl stands to bowl is open floor, clear of the ring, the Old Stump and the doorways', () => {
+    expect(isWalkable(BOWL_SPOT, room.walkable)).toBe(true);
+    for (let a = 0; a < 2 * Math.PI; a += Math.PI / 8) {
+      const p = { x: BOWL_SPOT.x + Math.cos(a) * BOWL_REACH * 0.6, y: BOWL_SPOT.y + Math.sin(a) * BOWL_REACH * 0.6 };
+      expect(inTagRing(p, 40)).toBe(false);
+      expect(isWalkable(p, room.walkable), `${p.x},${p.y}`).toBe(true);
+    }
+    expect(Math.hypot(BOWL_SPOT.x - STUMP_AT.x, BOWL_SPOT.y - STUMP_AT.y)).toBeGreaterThan(BOWL_REACH + STUMP_REACH);
+    for (const d of room.doors) expect(atBowlSpot({ x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2 }), d.id).toBe(false);
+    for (const [id, p] of Object.entries(room.spawns)) expect(atBowlSpot(p), id).toBe(false);
   });
 });
