@@ -75,10 +75,10 @@ test.describe('perches (OP-084)', () => {
     expect((await where(page)).y).toBeCloseTo(800, 0);
   });
 
-  test('the Party Grove’s leaf pile lies on the floor at the root bench’s foot: walked to, it shows its prompt at every width; up on the bench or the beam it is out of reach, and flopped into from the floor (OP-414)', async ({ page, isMobile }) => {
+  test('the Party Grove’s leaf pile lies on the floor past the root bench’s east end: walked to, it shows its prompt at every width; up on the bench or the beam it is out of reach, and flopped into from the floor (OP-414)', async ({ page, isMobile }) => {
     test.slow(); // the walk across the hub, at each width
     const PILE = 'hub-leaves-beam';
-    const AT_PILE = { x: 930, y: 765 };
+    const AT_PILE = { x: 1440, y: 770 };
     // A computer at the QA walk's two widths; a phone at its own.
     const sizes = isMobile ? [null] : [{ width: 1440, height: 900 }, { width: 1024, height: 768 }];
     for (const [i, size] of sizes.entries()) {
@@ -92,7 +92,7 @@ test.describe('perches (OP-084)', () => {
       await expect.poll(async () => (await state(page)).promptShown, { timeout: 10_000 }).toBe(touch ? 'Flop into the leaves' : 'E: Flop into the leaves');
       await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-party-grove-pile-${size?.width ?? 'phone'}.png` });
       if (i < sizes.length - 1) continue;
-      // Up on the bench just behind it: not on offer from up there.
+      // Up on the bench beside it: not on offer from up there.
       await upOnBench(page);
       expect((await state(page)).actions).not.toContain(`use:${PILE}`);
       // A jump and the second flap at its top: up on the beam, as before, and still not on offer.

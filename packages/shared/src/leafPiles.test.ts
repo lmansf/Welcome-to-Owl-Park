@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { INTERACTABLES, LEAF_PILES_A_ROOM, LEAF_PILES_IN_THE_HOLLOW, LEAF_RESPAWN_MS } from './interactables';
+import { INTERACTABLES, KIND_RULES, LEAF_PILES_A_ROOM, LEAF_PILES_IN_THE_HOLLOW, LEAF_RESPAWN_MS } from './interactables';
+import { LANTERN_FLOOR, LANTERN_ROOM } from './activities';
 import { pointInPolygon } from './geometry';
 import { ROOM_H } from './room';
 import { ARCADE_PLAZA, GLASS_PLAZA, GROVE_PLAZA, HOMES_PLAZA, HUB_PLAZA, INK_PLAZA, LOBBY_PLAZA, MARKET_PLAZA, getRoom } from '../rooms/index';
@@ -41,6 +42,17 @@ describe("leaf piles where the wind would leave them (OP-417, the owner's Nov 14
       expect(p.top, p.id).toBeUndefined();
       expect(room.walkable.some((poly) => pointInPolygon(p.pos, poly)), `${p.id} on the floor`).toBe(true);
       for (const perch of room.perches ?? []) expect(pointInPolygon(p.pos, perch.area), `${p.id} under ${perch.id}`).toBe(false);
+    }
+  });
+
+  it('lays no pile within reach of the floor under the lantern beam, where an owl comes to light a lantern (OP-414)', () => {
+    const reach = KIND_RULES['leaf-pile'].reach;
+    const f = LANTERN_FLOOR;
+    for (const p of piles.filter((q) => q.room === LANTERN_ROOM && !q.top)) {
+      // The nearest point of the lantern floor to the pile.
+      const dx = Math.max(f.x - p.pos.x, 0, p.pos.x - (f.x + f.w));
+      const dy = Math.max(f.y - p.pos.y, 0, p.pos.y - (f.y + f.h));
+      expect(Math.hypot(dx, dy), p.id).toBeGreaterThan(reach);
     }
   });
 
