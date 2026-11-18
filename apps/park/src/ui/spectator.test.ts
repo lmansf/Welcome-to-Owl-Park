@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BAND_COUNT, BAND_FEATHERS, runFeathers } from '@owl-park/shared';
 import type { Entry, ScanReply } from '../net';
-import { FULL_OFFER_EVERY_MS, SPECTATOR_WORDS, arcadeWouldEarn, badgeView, climbWouldEarn, createOfferPacer, createOnceHint, createSpectatorBadge, endOfGameLine, turnstileWay, wouldHaveEarned } from './spectator';
+import { FULL_OFFER_EVERY_MS, SPECTATOR_WORDS, arcadeWouldEarn, badgeView, climbWouldEarn, createOfferPacer, createOnceHint, createSpectatorBadge, endOfGameLine, guestWelcome, turnstileWay, wouldHaveEarned } from './spectator';
 import { gateRefusal } from './tickets';
 
 /** Just enough of a page for the badge to be drawn without a browser. */
@@ -144,5 +144,19 @@ describe('a free guest’s word on leaf piles (OP-243)', () => {
     expect(hint.say()).toBe('With a Day Ticket, leaf piles can turn up feathers.');
     expect(hint.say()).toBeNull();
     expect(hint.say()).toBeNull();
+  });
+});
+
+describe('the guest’s welcome waits for the badge it points to (OP-291, QA sweep D18)', () => {
+  it('is said once the owl is a spectator, so the badge’s button up top is drawn', () => {
+    expect(guestWelcome(true, true)).toBe(SPECTATOR_WORDS.guestIn);
+    expect(SPECTATOR_WORDS.guestIn).toContain('button up top');
+    expect(badgeView(true)).toMatchObject({ shown: true, button: SPECTATOR_WORDS.get });
+  });
+
+  it('says nothing while the owl is not a spectator (no badge), or with no guest entry waiting', () => {
+    expect(guestWelcome(true, false)).toBeNull();
+    expect(guestWelcome(false, true)).toBeNull();
+    expect(badgeView(false).shown).toBe(false);
   });
 });

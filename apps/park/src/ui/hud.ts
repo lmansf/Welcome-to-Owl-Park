@@ -39,7 +39,7 @@ import { createGatePrompt, type GateAsk } from './gatePrompt';
 import { SPECTATOR_WORDS, createSpectatorBadge } from './spectator';
 import { watchTopStack } from './topStack';
 import { createTurnPhone } from './turnPhone';
-import { toastLift } from './toastLift';
+import { owlBox, toastLift, type Box } from './toastLift';
 
 /** The highest the tips go, lifted clear of the chips (OP-415): under the bar along the top. */
 const TOASTS_TOP = 64;
@@ -263,10 +263,11 @@ export interface Hud {
   /** The off-screen hint chips; an empty list clears them. */
   setHints(hints: HudHint[]): void;
   /**
-   * Where the visitor's own owl's feet are on the screen (CSS px), or null for nowhere (OP-349): the
-   * thumbstick goes quiet while the owl is under it (joystick.ts, underStick).
+   * Where the visitor's own owl's feet (and the top of its head) are on the screen (CSS px), or null for
+   * nowhere (OP-349): the thumbstick goes quiet while the owl is under it (joystick.ts, underStick), and
+   * the tips at the bottom go up above it rather than over it (OP-291, toastLift.ts).
    */
-  setOwlAt(feet: { x: number; y: number } | null): void;
+  setOwlAt(feet: { x: number; y: number; top?: number } | null): void;
   /**
    * The room is fading out, or the next is not in yet (OP-346): what the HUD shows of the room itself
    * (a course's strip, the actions where the owl stands) fades with it. The Menu and the counters stay.
@@ -541,6 +542,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   const actionsEl = $<HTMLElement>('[data-actions]');
   const hintsEl = $<HTMLElement>('[data-hints]');
   const hintEls = new Map<string, HTMLButtonElement>();
+  /** Where the visitor's own owl stands on the screen, for the tips to stay clear of (OP-291). */
+  let owlAt: Box | null = null;
   let hintCb: ((id: string) => void) | null = null;
   const nestWelcome = $<HTMLButtonElement>('[data-nest-welcome]');
   nestWelcome.querySelector('b')!.textContent = NEST_WORDS.welcome;
@@ -996,7 +999,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     const lift = parseFloat(toasts.style.getPropertyValue('--toasts-lift')) || 0;
     const r = toasts.getBoundingClientRect();
     const column = { left: r.left, right: r.right, top: r.top + lift, bottom: r.bottom + lift };
-    const chips = [...hintEls.values()].map((el) => el.getBoundingClientRect());
+    const chips: Box[] = [...hintEls.values()].map((el) => el.getBoundingClientRect());
+    if (owlAt) chips.push(owlAt);
     const next = toasts.childElementCount ? toastLift(column, chips, TOASTS_TOP) : 0;
     if (Math.abs(next - lift) >= 0.5) toasts.style.setProperty('--toasts-lift', `${next.toFixed(1)}px`);
   };
@@ -1388,6 +1392,9 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       document.documentElement.classList.toggle('room-dark', on);
     },
     setOwlAt(feet) {
+      const was = owlAt;
+      owlAt = feet && feet.top !== undefined ? owlBox({ x: feet.x, y: feet.y, top: feet.top }, { w: window.innerWidth, h: window.innerHeight }) : null;
+      if (toasts.childElementCount && (was?.left !== owlAt?.left || was?.top !== owlAt?.top)) liftToasts();
       const el = root.querySelector<HTMLElement>('.stick');
       if (!el) return;
       const box = el.getBoundingClientRect();
