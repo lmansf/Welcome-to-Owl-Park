@@ -17,6 +17,8 @@ export interface ParkState {
     passesAsked: number;
     refused: string[];
     server: boolean;
+    /** Where Pip stands in the ring while standing in for a missing player (OP-426, behind ?standin=1). */
+    standIn: { x: number; y: number } | null;
   } | null;
   /** Pinecone bowling in the Party Grove (OP-403, behind ?bowl=1): this page's game; null elsewhere or without the flag. */
   bowl: {

@@ -87,7 +87,7 @@ export interface TagLink {
 
 /** The party game (OP-314) through the room server: what a page asks at the stump and in a game. */
 export interface PartyLink {
-  send(op: PartyOp, more?: { bots?: boolean; k?: PartyKey; v?: number }): void;
+  send(op: PartyOp, more?: { bots?: boolean; standin?: boolean; k?: PartyKey; v?: number }): void;
 }
 
 /** The sealed hollow's steps (OP-310), checked by the room server; the answer's times on this page's clock. */

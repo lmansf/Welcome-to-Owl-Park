@@ -1389,6 +1389,7 @@ export class RoomScene extends Phaser.Scene {
         walkTo: (p) => void this.walkTo(p),
         goTo: (to) => void this.goTo(to, 'default', { room: this.room.id, spawn: FROM_STUMP_SPAWN }),
         back: () => void this.goTo(STUMP_ROOM, FROM_STUMP_SPAWN, undefined),
+        standIn: flagOn('standin'),
       });
     }
 
@@ -1399,6 +1400,9 @@ export class RoomScene extends Phaser.Scene {
         toast: (m, ms) => this.hud.toast(m, ms),
         me: () => this.playerId,
         posOf: (id) => (id === this.playerId ? { ...this.me.pos } : this.peers.get(id)?.pos ?? null),
+        // Never a one-owl game (OP-426): Pip, the grove's lantern keeper, steps in for a lone owl.
+        askStandIn: flagOn('standin'),
+        standIn: (id, pos) => this.npcs.get(id.replace(/^npc:/, ''))?.standIn(pos),
       });
     }
     if (flagOn('bowl') && room.id === TAG_ROOM && !this.sideView()) {
@@ -2956,7 +2960,8 @@ export class RoomScene extends Phaser.Scene {
     for (const npc of this.npcs.values()) {
       const d = distance(pos, npc.def.pos);
       npc.lookAt(d <= NPC_LOOK_PX ? pos.x : null);
-      if (d <= NPC_TALK_RADIUS && d < best) {
+      // An owl out playing (OP-426, Pip standing in at feather tag) is not at its spot to talk to.
+      if (d <= NPC_TALK_RADIUS && d < best && !npc.standingIn) {
         nearest = npc;
         best = d;
       }
