@@ -247,3 +247,43 @@ describe('feather tag knows this owl by the room’s id for it (OP-403)', () => 
     expect(conn.tag?.self()).not.toBe(SELF.id);
   });
 });
+
+describe('a free guest let in by its ticket (OP-264)', () => {
+  const WELCOME = { t: 'welcome', v: 1, id: 'room-owl-7', room: 'hub', now: 0, cap: 80, you: { pos: { x: 100, y: 100 } }, owls: [], counts: {}, spectator: true };
+  it('tells the room its look again once admitted, so what a guest’s look held back from others shows', async () => {
+    const park = new EdgeTransport('https://park.example');
+    const handlers = { ...listening(), onSpectator: vi.fn() };
+    const conn = await park.join('hub', SELF, handlers);
+    const socket = FakeSocket.made[0]!;
+    socket.open();
+    socket.hear(WELCOME);
+    const look = { ...SELF.look, wear: { pet: 'rainbow-bunny~0' } };
+    conn.track({ ...SELF, look });
+    // The guest bought a Day Ticket: its pass is now an admitted one.
+    expect(await park.tickets.scan()).toMatchObject({ ok: true });
+    const sent = () => socket.sent.map((t) => JSON.parse(t) as { t: string; r?: number; look?: unknown });
+    const admitting = conn.admit!();
+    await vi.advanceTimersByTimeAsync(0);
+    const ask = sent().find((f) => f.t === 'admit')!;
+    expect(sent().filter((f) => f.t === 'look')).toEqual([]);
+    socket.hear({ t: 'admitted', r: ask.r, ok: true });
+    expect(await admitting).toBe(true);
+    expect(sent().filter((f) => f.t === 'look')).toEqual([{ t: 'look', look }]);
+    expect(handlers.onSpectator).toHaveBeenCalledWith(false);
+  });
+
+  it('says nothing more when the room would not take the pass', async () => {
+    const park = new EdgeTransport('https://park.example');
+    const conn = await park.join('hub', SELF, listening());
+    const socket = FakeSocket.made[0]!;
+    socket.open();
+    socket.hear(WELCOME);
+    expect(await park.tickets.scan()).toMatchObject({ ok: true });
+    const admitting = conn.admit!();
+    await vi.advanceTimersByTimeAsync(0);
+    const ask = socket.sent.map((t) => JSON.parse(t) as { t: string; r?: number }).find((f) => f.t === 'admit')!;
+    socket.hear({ t: 'admitted', r: ask.r, ok: false, reason: 'pass' });
+    expect(await admitting).toBe(false);
+    expect(socket.sent.map((t) => JSON.parse(t) as { t: string }).filter((f) => f.t === 'look')).toEqual([]);
+  });
+});

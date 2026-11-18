@@ -42,6 +42,7 @@ import {
   isStreetRoom,
   distance,
   filterOwnedWear,
+  guestLookForOthers,
   getInteractable,
   getNpc,
   getQuest,
@@ -204,6 +205,11 @@ type Earned = PlayResult & { practice?: true };
 function withoutPledge(look: OwlLook): OwlLook {
   const { pledge: _pledge, ...rest } = look;
   return rest;
+}
+
+/** The look a spectator shows others: no pledge (OP-191), and no painted egg or rainbow bunny until it has a ticket (OP-264). */
+function spectatorLook(look: OwlLook): OwlLook {
+  return guestLookForOthers(withoutPledge(look));
 }
 
 /** Whether the ticket that let a socket's owl in has run out by now (OP-237). */
@@ -2232,7 +2238,7 @@ export class RoomObject extends DurableObject<Env> {
    * something the cache does not know.
    */
   private vetLook(att: Attachment, asked: OwlLook): { look: OwlLook; recheck: boolean } {
-    const look = att.spec ? withoutPledge(asked) : asked;
+    const look = att.spec ? spectatorLook(asked) : asked;
     if (!look.wear) return { look, recheck: false };
     if (!att.cid) return { look: withoutWear(look), recheck: false };
     const cached = this.owned.get(att.cid);
@@ -2248,7 +2254,8 @@ export class RoomObject extends DurableObject<Env> {
     if (!entry) return;
     const room = this.rooms.get(att.room);
     if (!room || room.sessionOf(att.id) !== att.sid) return;
-    const look = withWear(att.spec ? withoutPledge(requested) : requested, filterOwnedWear(requested.wear, entry.set));
+    const asked = att.spec ? spectatorLook(requested) : requested;
+    const look = withWear(asked, filterOwnedWear(asked.wear, entry.set));
     const current = room.lookOf(att.id);
     if (current && JSON.stringify(current) !== JSON.stringify(look)) room.look(att.id, look, true);
     this.rememberEquipped(att, look.wear);

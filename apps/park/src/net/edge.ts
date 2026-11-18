@@ -1263,7 +1263,11 @@ export class EdgeTransport implements ParkTransport {
         if (!pass?.adm) return false;
         const f = await request({ t: 'admit', pass: pass.pass });
         const ok = f?.t === 'admitted' && f.ok;
-        if (ok) handlers.onSpectator?.(false);
+        if (ok) {
+          // The look again, now as a visitor's: what a free guest's look held back from others shows (OP-264).
+          sendFrame({ t: 'look', look: current.look });
+          handlers.onSpectator?.(false);
+        }
         return ok;
       },
       renew() {

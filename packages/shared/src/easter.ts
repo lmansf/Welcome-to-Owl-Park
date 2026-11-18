@@ -6,8 +6,30 @@
  * Nov 3: "Players should gain the bunny, and keep the egg").
  */
 
+import type { OwlLook } from './protocol';
+
 export const EGG_VARIANT = 'painted-egg~0';
 export const BUNNY_VARIANT = 'rainbow-bunny~0';
+
+/**
+ * A free guest's egg and bunny (OP-264, the free guest rules of PR 84): kept in its collection and drawn
+ * on its own page, but held back from what every other owl is shown until it has a ticket. The room
+ * server takes the pet off the look it passes on; once a ticket lets the owl in, the look goes out whole.
+ */
+export const GUEST_HIDDEN_ITEMS: readonly string[] = ['painted-egg', 'rainbow-bunny'];
+
+/** Whether a worn variant is one a free guest's look holds back from others (OP-264). */
+export function hiddenForGuests(variant: string | undefined): boolean {
+  return variant !== undefined && GUEST_HIDDEN_ITEMS.includes(variant.split('~')[0]!);
+}
+
+/** A free guest's look as other owls see it (OP-264): without the egg or the bunny as its pet. */
+export function guestLookForOthers(look: OwlLook): OwlLook {
+  if (!hiddenForGuests(look.wear?.pet)) return look;
+  const { pet: _pet, ...wear } = look.wear!;
+  const { wear: _wear, ...rest } = look;
+  return Object.keys(wear).length ? { ...rest, wear } : rest;
+}
 
 /**
  * When every egg hatches: midnight park time (Eastern, daylight time by then) as Easter Sunday,

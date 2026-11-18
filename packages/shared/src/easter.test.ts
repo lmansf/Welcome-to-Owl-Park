@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryCollectionStore, CollectionBook } from './book';
 import { allVariants, isRewardVariant, parseVariant } from './collectibles';
-import { BUNNY_VARIANT, EASTER_HATCH_AT, EGG_VARIANT, eggBubble, eggTilt, eggWobble, hatchGrants } from './easter';
+import { BUNNY_VARIANT, EASTER_HATCH_AT, EGG_VARIANT, eggBubble, eggTilt, eggWobble, guestLookForOthers, hatchGrants, hiddenForGuests } from './easter';
 
 const DAY = 24 * 60 * 60 * 1000;
 const HOUR = 60 * 60 * 1000;
@@ -85,5 +85,23 @@ describe('the painted egg and the Easter hatch (OP-261, OP-262)', () => {
     expect(book.owned('late', 'UTC', late)).toEqual(expect.arrayContaining([EGG_VARIANT, BUNNY_VARIANT]));
     // Never had the egg: nothing.
     expect(book.owned('plain', 'UTC', EASTER_HATCH_AT + DAY)).not.toContain(BUNNY_VARIANT);
+  });
+});
+
+describe('a free guest’s egg and bunny, as other owls see it (OP-264)', () => {
+  const LOOK = { body: '#3E6B48', belly: '#F6F1E3', accent: '#C9A227' };
+
+  it('takes the egg or the bunny off a guest’s look, and nothing else', () => {
+    expect(guestLookForOthers({ ...LOOK, wear: { head: 'leaf-crown~0', pet: EGG_VARIANT } })).toEqual({ ...LOOK, wear: { head: 'leaf-crown~0' } });
+    expect(guestLookForOthers({ ...LOOK, wear: { pet: BUNNY_VARIANT } })).toEqual(LOOK);
+    expect(guestLookForOthers({ ...LOOK, wear: { pet: 'hedgehog~0' } })).toEqual({ ...LOOK, wear: { pet: 'hedgehog~0' } });
+    expect(guestLookForOthers(LOOK)).toEqual(LOOK);
+  });
+
+  it('holds back only the egg and the bunny, every colourway', () => {
+    expect(hiddenForGuests(EGG_VARIANT)).toBe(true);
+    expect(hiddenForGuests(BUNNY_VARIANT)).toBe(true);
+    expect(hiddenForGuests('hedgehog~0')).toBe(false);
+    expect(hiddenForGuests(undefined)).toBe(false);
   });
 });

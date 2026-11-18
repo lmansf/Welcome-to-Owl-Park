@@ -2273,6 +2273,35 @@ describe('spectators in the room object (OP-191)', () => {
     await send(obj, visitor, { t: 'admit', pass: await pass({}), r: 1 });
     expect(await answered(visitor, 1)).toEqual({ t: 'admitted', r: 1, ok: true });
   });
+
+  it('holds a free guest’s painted egg and rainbow bunny back from other owls until its ticket lets it in, and shows the rest (OP-264)', async () => {
+    (collections as unknown as { owned: () => Promise<string[]> }).owned = async () => ['painted-egg~0', 'rainbow-bunny~0', 'leaf-crown~0'];
+    const key = 'spectator-tests-signing-key-0123456789';
+    const obj = roomObject(undefined, { PASS_SIGNING_KEY: key });
+    const holder = connect('hub', 'v_holder', OWNER);
+    await send(obj, holder, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: { ...LOOK, wear: { pet: 'painted-egg~0' } } });
+    await settle();
+    const ws = await spectator(obj, 'hub', { ...LOOK, wear: { head: 'leaf-crown~0', pet: 'painted-egg~0' } });
+    await settle();
+    // Others see the guest without its egg; what else it wears shows.
+    const seen = () => holder.of('enter').concat().reverse().find((f) => f.owl.id === SPEC_ID)?.owl.look;
+    const latest = () => holder.of('look').filter((f) => f.id === SPEC_ID).at(-1)?.look ?? seen();
+    expect(latest()?.wear).toEqual({ head: 'leaf-crown~0' });
+    // A ticket holder's egg shows to the guest as ever.
+    expect(ws.last('welcome')!.owls.find((o) => o.id === 'v_holder')?.look.wear?.pet).toBe('painted-egg~0');
+    // Swapped to the bunny: still held back.
+    await send(obj, ws, { t: 'look', look: { ...LOOK, wear: { pet: 'rainbow-bunny~0' } } });
+    await settle();
+    expect(latest()).not.toHaveProperty('wear');
+    // Its ticket goes through; the page tells the room its look again, and the bunny shows to everyone.
+    collections.spectators.delete(SPEC);
+    const now = Math.floor(clock / 1000);
+    await send(obj, ws, { t: 'admit', pass: await mintPass(key, { id: SPEC_ID, cid: SPEC, adm: true, iat: now, exp: now + 3600 }), r: 1 });
+    expect(await answered(ws, 1)).toEqual({ t: 'admitted', r: 1, ok: true });
+    await send(obj, ws, { t: 'look', look: { ...LOOK, wear: { pet: 'rainbow-bunny~0' } } });
+    await settle();
+    expect(latest()?.wear).toEqual({ pet: 'rainbow-bunny~0' });
+  });
 });
 
 describe('a parkour course in the room object (OP-224)', () => {
