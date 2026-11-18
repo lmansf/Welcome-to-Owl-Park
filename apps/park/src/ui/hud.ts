@@ -695,7 +695,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
             questDot.hidden = true;
           }
           if (!questUi) return void panel.append(Object.assign(document.createElement('p'), { className: 'mnote', textContent: 'Your quests show here once you are in the park.' }));
-          // A spectator's quests and today's tasks are locked (OP-191): the Day Ticket instead.
+          // A spectator's quests and today's tasks are locked (OP-191), but for the one a guest may do (OP-428):
+          // which that is, the Day Ticket for the rest, and the journal with the guest's quest under them.
           if (spectator) {
             const get = Object.assign(document.createElement('button'), { type: 'button', textContent: SPECTATOR_WORDS.get });
             get.dataset['spectatorGet'] = 'quests';
@@ -703,7 +704,9 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
               closeScreens();
               getTicket?.(SPECTATOR_WORDS.locked);
             });
-            return void panel.append(Object.assign(document.createElement('p'), { className: 'mnote', textContent: `${SPECTATOR_WORDS.locked} ${GATE_WORDS.buy}` }), get);
+            const journal = document.createElement('div');
+            panel.append(Object.assign(document.createElement('p'), { className: 'mnote', textContent: `${SPECTATOR_WORDS.guestQuests} ${GATE_WORDS.buy}` }), get, journal);
+            return void questUi.mountJournal(journal, () => menu.isOpen() && menu.tab() === 'quests');
           }
           questUi.mountJournal(panel, () => menu.isOpen() && menu.tab() === 'quests');
         },
@@ -1266,6 +1269,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       spectator = on;
       loadRewards?.();
       badge.set(on);
+      questUi?.setGuest(on);
       if (on) shop?.close();
       menu.refresh();
     },
