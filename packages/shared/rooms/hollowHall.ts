@@ -10,7 +10,7 @@
  * the front, the ink-wash realm's course gate, and the glass realm's doorway. A way with nothing behind
  * it yet (the ink-wash realm's doorway, the glass realm's course gate) is no doorway at all: the tree has
  * grown over it (OP-337, HALL_GROWN). Each Commons' idol stands on its base between its two ways, over its Realm Vote spot,
- * and its plaza, where its moonbeam falls, lies out toward the middle. Every open way has a sign on the
+ * and its plaza, round its worn ring, lies out toward the middle. Every open way has a sign on the
  * floor in front of it naming where it leads, so a ten year old finds the Party Grove without a map.
  *
  * TODO-DOCS (OP-337): docs/MAP.md's notes on `m3-hall` gain its ways round the rim as they are now: nine
@@ -38,7 +38,7 @@ import {
   HALL_W,
   HALL_HEART,
   HALL_LEAVES,
-  HALL_MOONBEAMS,
+  HALL_RINGS,
   HALL_WAYS,
   RIM_LENGTH,
   RUN_Y,
@@ -464,9 +464,9 @@ const ROOT_PIECES: RoomPiece[] = ROOT_RUNS.flatMap((run) =>
   ),
 );
 
-/** Each plaza's worn ring round its moonbeam, and the heart's (edges.ts: walked across, drawn on the floor). */
-export const HALL_EDGES: readonly EdgePlacement[] = HALL_MOONBEAMS.map((m) => ({
-  id: `ring-${m.id.replace('moonbeam-', '')}`,
+/** Each plaza's worn ring, and the heart's (edges.ts: walked across, drawn on the floor). */
+export const HALL_EDGES: readonly EdgePlacement[] = HALL_RINGS.map((m) => ({
+  id: `ring-${m.id}`,
   key: 'edge-hall-plaza-ring',
   x: m.pos.x - 380,
   y: m.pos.y - 190,
@@ -595,8 +595,8 @@ export const HALL_ROOM: RoomDef = {
   kit: HALL_KIT,
 };
 
-/** The leaf piles and moonbeams (interactables.ts) are src/hollowOval.ts's: HALL_LEAVES, HALL_MOONBEAMS. */
-export { HALL_LEAVES, HALL_MOONBEAMS };
+/** The leaf piles (interactables.ts) and the plaza rings are src/hollowOval.ts's: HALL_LEAVES, HALL_RINGS. */
+export { HALL_LEAVES, HALL_RINGS };
 
 /** The idols' anchors (ANCHORS), under the names the scene draws each realm's idol at. */
 export const HALL_ANCHORS: Record<string, Vec2> = {

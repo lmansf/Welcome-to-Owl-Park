@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { doorTarget } from '../src/doorways';
 import { pointInPolygon } from '../src/geometry';
-import { GROWN_BASE, GROWN_WAYS, HALL_SCALE, HALL_WAYS, RIM_LENGTH, WAY_STEP, rimAt } from '../src/hollowOval';
+import { GROWN_BASE, GROWN_WAYS, HALL_RINGS, HALL_SCALE, HALL_WAYS, RIM_LENGTH, WAY_STEP, rimAt } from '../src/hollowOval';
 import { INTERACTABLES } from '../src/interactables';
+import { npcsIn } from '../src/npcs';
 import { kitProblems } from '../src/kit';
 import { KIT_ART } from '../src/kitArt';
 import { GLIDE_SLOPE, MAX_AIR_Z } from '../src/flight';
@@ -265,7 +266,7 @@ describe('the Great Hollow (Nov 7; an oval, Nov 8)', () => {
     for (const p of piles) expect(onFloor(p.pos), p.id).toBe(true);
   });
 
-  it('gives each Commons a plaza a crowd of 80 owls can gather in, with its moonbeam in the middle', () => {
+  it('gives each Commons a plaza a crowd of 80 owls can gather in, with its worn ring in the middle', () => {
     for (const c of HALL_COMMONS) {
       const at = plazaAt(c.level);
       let floor = 0;
@@ -273,13 +274,13 @@ describe('the Great Hollow (Nov 7; an oval, Nov 8)', () => {
         for (let y = at.y - 700; y <= at.y + 700; y += 20) if (Math.hypot(x - at.x, y - at.y) <= 700 && onFloor({ x, y })) floor += 400;
       expect(floor / OWL_ROOM_PX2, c.level).toBeGreaterThanOrEqual(80);
       expect(
-        INTERACTABLES.some((t) => t.room === HALL_ID && t.kind === 'moonbeam' && t.pos.x === at.x && t.pos.y === at.y),
+        HALL_RINGS.some((r) => r.pos.x === at.x && r.pos.y === at.y),
         c.level,
       ).toBe(true);
     }
   });
 
-  it('gives every stretch of the floor something close by to do: a doorway, an idol, a moonbeam, a leaf pile or a root to climb', () => {
+  it('gives every stretch of the floor something close by to do: a doorway, an idol, a leaf pile, a root to climb, an owl to talk to or the warm air at the heart', () => {
     const things = [
       ...INTERACTABLES.filter((t) => t.room === HALL_ID).map((t) => t.pos),
       ...(hall.perches ?? []).map((p) => ({
@@ -287,8 +288,10 @@ describe('the Great Hollow (Nov 7; an oval, Nov 8)', () => {
         y: p.area.reduce((a, q) => a + q.y, 0) / p.area.length,
       })),
       ...hall.doors.map((d) => d.marker ?? { x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2 }),
+      ...(hall.thermals ?? []).map((t) => t.pos),
+      // An owl to talk to counts, as it does in every room (fill.test.ts): each Commons' quest owl stands by its plaza.
+      ...npcsIn(HALL_ID).map((n) => n.pos),
     ];
-    expect(INTERACTABLES.filter((t) => t.room === HALL_ID && t.kind === 'moonbeam')).toHaveLength(HALL_COMMONS.length + 1);
     for (let x = 40; x < HALL_W; x += 40)
       for (let y = 40; y < hall.size.h; y += 40) {
         if (!onFloor({ x, y })) continue;
@@ -360,7 +363,7 @@ describe('the Great Hollow, sized for the park that is open (OP-339)', () => {
 });
 
 describe('the thermal at the Great Hollow’s heart (OP-340)', () => {
-  const heart = INTERACTABLES.find((t) => t.id === 'm3-hall-moonbeam-heart')!.pos;
+  const heart = HALL_RINGS.find((r) => r.id === 'heart')!.pos;
 
   it('rises where the heart’s moonbeam falls, a column an owl can stand in, on open floor', () => {
     expect(hall.thermals).toEqual([HEART_THERMAL]);
@@ -450,8 +453,7 @@ describe('the Great Hollow’s root runs (OP-308)', () => {
         return { id: q.id, x0: q.x - a.w / 2, x1: q.x + a.w / 2, y0: q.y - a.h, y1: q.y + RUN_HALF * 2 };
       });
     const things = [
-      // A moonbeam is a ring of light across its whole plaza: a root at its rim hides none of it.
-      ...INTERACTABLES.filter((i) => i.room === HALL_ID && i.kind !== 'moonbeam').map((i) => ({ id: i.id, ...i.pos })),
+      ...INTERACTABLES.filter((i) => i.room === HALL_ID).map((i) => ({ id: i.id, ...i.pos })),
       ...(hall.spots ?? []).map((s, i) => ({ id: `spot-${i}`, ...s })),
       // A spawn up on a root's own top (the stump the first flight's test glides from, OP-347) stands on the art, not behind it.
       ...Object.entries(hall.spawns)

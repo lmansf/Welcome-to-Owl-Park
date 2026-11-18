@@ -105,8 +105,7 @@ describe("things to do out on the plazas' floors (Nov 8: stuff around the room, 
     const room = getRoom(id)!;
     const mine = new Set(FLOOR_INTERACTABLES.map((i) => i.id));
     const things = [
-      // A moonbeam is a ring of light: a scene at its rim hides none of it.
-      ...interactablesIn(id).filter((i) => !mine.has(i.id) && i.kind !== 'moonbeam').map((i) => ({ id: i.id, ...i.pos })),
+      ...interactablesIn(id).filter((i) => !mine.has(i.id)).map((i) => ({ id: i.id, ...i.pos })),
       ...Object.entries(room.spawns).map(([name, p]) => ({ id: name, ...p })),
       ...room.doors.map((d) => ({ id: d.id, x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2 })),
       ...npcsIn(id).map((n) => ({ id: n.id, ...n.pos })),

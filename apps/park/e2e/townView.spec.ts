@@ -177,7 +177,7 @@ test.describe('the Great Hollow’s camera rests the same however the owl came b
     await holdTheClock(page);
     await openHeld(page, { room: 'm3-hall', newmap: '1' });
     const before = await heldStandingAt(page, SPOT);
-    const beam = (await stateNow(page)).objects.find((o) => o.id === 'm3-hall-moonbeam-heart')!;
+    const beam = (await stateNow(page)).thermals.find((t) => t.id === 'heart')!;
     const atHeart = await heldStandingAt(page, { x: beam.x, y: beam.y });
 
     // Jump held in the rising air and let go on the way up: the camera draws back, and the owl comes down where it rose.

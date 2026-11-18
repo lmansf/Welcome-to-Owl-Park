@@ -2,16 +2,26 @@
  * Things owls can use in the rooms, and the small items quests ask them to gather. Two sorts of
  * interactable: shared ones with state the whole room sees (a leaf pile vanishes for everyone
  * when someone flops into it, then grows back), and plain ones that only count toward quests
- * (browsing a stall, basking in the moonbeam). The room server checks reach and state.
+ * (browsing a stall, looking through a telescope). The room server checks reach and state.
+ *
+ * No prop does two unrelated jobs (the owner's rule, Nov 18): the moonbeams were a thing to bask in
+ * and, at the Great Hollow's heart and in the Treetop Commons, the light the warm air rises in. They
+ * are only the rising air's light now (thermal.ts, drawn by the park), and there is no basking.
+ *
+ * TODO-DOCS (Nov 18, no basking): docs/QUESTS.md's interactables table loses the moonbeam row; its
+ * templates list says stargaze for bask (a look through the Party Grove's telescope), and the quests
+ * that basked ask for the telescope, a leaf pile (Volt) or a flap (Lumen) instead; the Great Hollow gains
+ * a fifth leaf pile by the trunk's door and the arcade's vending machine stands toward its east ring.
+ * docs/GLOSSARY.md's Interactable and docs/ARCHITECTURE.md's spectator notes drop "the moonbeam".
  */
-import { HALL_LEAVES, HALL_MOONBEAMS } from './hollowOval';
+import { HALL_LEAVES } from './hollowOval';
 import type { Raised } from './perches';
 import { FLOOR_INTERACTABLES } from './plazaFloor';
 import type { Vec2 } from './protocol';
 import { START_LEAVES, START_STALL } from './realmStart';
 
-/** Leaf piles, stalls and moonbeams; and out on the plazas' floors (plazaFloor.ts), bird baths, mushrooms, telescopes and shiny things. */
-export type InteractableKind = 'leaf-pile' | 'stall' | 'moonbeam' | 'bird-bath' | 'mushroom' | 'telescope' | 'shiny';
+/** Leaf piles and stalls; and out on the plazas' floors (plazaFloor.ts), bird baths, mushrooms, telescopes and shiny things. */
+export type InteractableKind = 'leaf-pile' | 'stall' | 'bird-bath' | 'mushroom' | 'telescope' | 'shiny';
 
 /** A thing to use; one with a `top` sits up on that perch (OP-084), and only an owl standing on it reaches it. */
 export interface InteractableDef extends Raised {
@@ -43,7 +53,6 @@ export interface KindRules {
 export const KIND_RULES: Readonly<Record<InteractableKind, KindRules>> = {
   'leaf-pile': { label: 'Flop into the leaves', noun: 'leaf pile', plural: 'leaf piles', verb: 'Flop into', reach: 90, shared: true },
   stall: { label: 'Browse the stall', noun: 'market stall', plural: 'market stalls', verb: 'Browse', reach: 110, shared: false },
-  moonbeam: { label: 'Bask in the moonbeam', noun: 'moonbeam', plural: 'moonbeams', verb: 'Bask in', reach: 120, shared: false },
   'bird-bath': { label: 'Splash in the bird bath', noun: 'bird bath', plural: 'bird baths', verb: 'Splash in', reach: 110, shared: false },
   mushroom: { label: 'Bounce on the mushrooms', noun: 'mushroom patch', plural: 'mushroom patches', verb: 'Bounce on', reach: 100, shared: false },
   telescope: { label: 'Look through the telescope', noun: 'telescope', plural: 'telescopes', verb: 'Look through', reach: 110, shared: false },
@@ -83,9 +92,8 @@ export const INTERACTABLES: readonly InteractableDef[] = [
   { id: 'm3-ground-leaves-roof', kind: 'leaf-pile', room: 'm3-ground', pos: { x: 3900, y: 770 }, top: 350 },
   // The Great Hollow (hollowOval.ts): leaves blown in at the knothole drift round the oval's rim, two
   // in each Commons either side of its plaza, and more by the ways at the back and front and round the
-  // heart; a moonbeam falls in each plaza and at the heart, so no stretch of the floor is an empty walk.
+  // heart, so no stretch of the floor is an empty walk.
   ...HALL_LEAVES.map((l): InteractableDef => ({ id: `m3-hall-${l.id}`, kind: 'leaf-pile', room: 'm3-hall', pos: { ...l.pos } })),
-  ...HALL_MOONBEAMS.map((m): InteractableDef => ({ id: `m3-hall-${m.id}`, kind: 'moonbeam', room: 'm3-hall', pos: { ...m.pos } })),
   // A realm's start (OP-276, realmStart.ts): the wind off its course blows leaves in at the way on, and
   // they pile against the trading nest, where an owl can browse what the realm has.
   { id: 'glass-leaves-start', kind: 'leaf-pile', room: 'glass', pos: { ...START_LEAVES } },
@@ -93,7 +101,6 @@ export const INTERACTABLES: readonly InteractableDef[] = [
   { id: 'market-stall-1', kind: 'stall', room: 'market', pos: { x: 400, y: 705 } },
   { id: 'market-stall-2', kind: 'stall', room: 'market', pos: { x: 640, y: 705 } },
   { id: 'market-stall-3', kind: 'stall', room: 'market', pos: { x: 780, y: 705 } },
-  { id: 'hub-moonbeam', kind: 'moonbeam', room: 'hub', pos: { x: 2400, y: 690 } },
   // The Treetop Commons (OP-306, OP-417): leaves blown off the lantern trees settle under the bench by the
   // balustrade and at the foot of the ticket booth, and nowhere out on the open cobbles. A free guest's flop
   // turns up nothing (OP-243).
@@ -105,39 +112,23 @@ export const INTERACTABLES: readonly InteractableDef[] = [
   { id: 'arcade-leaves-stair', kind: 'leaf-pile', room: 'arcade', pos: { x: 150, y: 850 } },
   { id: 'arcade-leaves-pillar', kind: 'leaf-pile', room: 'arcade', pos: { x: 1250, y: 780 } },
   { id: 'arcade-leaves-scoreboard', kind: 'leaf-pile', room: 'arcade', pos: { x: 2550, y: 790 } },
-  // The Treetop Commons' plaza (Nov 8): a moonbeam in its middle where a crowd gathers.
-  { id: 'lobby-moonbeam', kind: 'moonbeam', room: 'lobby', pos: { x: 1600, y: 1110 } },
-  // The arcade hall's floor (Nov 8): a moonbeam through a skylight over each of its two gathering rings.
-  { id: 'arcade-moonbeam-west', kind: 'moonbeam', room: 'arcade', pos: { x: 1200, y: 1110 } },
-  { id: 'arcade-moonbeam-east', kind: 'moonbeam', room: 'arcade', pos: { x: 3600, y: 1110 } },
-  // The lane under the nests, grown into a plaza (Nov 8): a moonbeam in its ring, leaves blown under the banks and along its front.
-  { id: 'homes-moonbeam', kind: 'moonbeam', room: 'homes', pos: { x: 2300, y: 1110 } },
+  // The lane under the nests, grown into a plaza (Nov 8): leaves blown under the banks and along its front.
   { id: 'homes-leaves-bank', kind: 'leaf-pile', room: 'homes', pos: { x: 560, y: 1080 } },
   { id: 'homes-leaves-mound', kind: 'leaf-pile', room: 'homes', pos: { x: 1250, y: 1240 } },
   { id: 'homes-leaves-front', kind: 'leaf-pile', room: 'homes', pos: { x: 2950, y: 1220 } },
-  // The night market's street (Nov 8): a moonbeam through the lights over each puddle ring, leaves washed to its kerbs.
-  { id: 'market-moonbeam-west', kind: 'moonbeam', room: 'market', pos: { x: 900, y: 1110 } },
-  { id: 'market-moonbeam-east', kind: 'moonbeam', room: 'market', pos: { x: 2400, y: 1110 } },
+  // The night market's street (Nov 8): leaves washed to its kerbs.
   { id: 'market-leaves-west', kind: 'leaf-pile', room: 'market', pos: { x: 260, y: 1230 } },
   { id: 'market-leaves-middle', kind: 'leaf-pile', room: 'market', pos: { x: 1650, y: 1240 } },
   { id: 'market-leaves-east', kind: 'leaf-pile', room: 'market', pos: { x: 3000, y: 1230 } },
-  // The glass street (Nov 8): a moonbeam on its ring of glass tiles, leaves caught at the lanterns' feet.
-  { id: 'glass-moonbeam', kind: 'moonbeam', room: 'glass', pos: { x: 800, y: 1260 } },
-  // The ink garden (OP-402): its moonbeam in the plaza's ring, the leaves blown in through the moon gate,
-  // against the wall at the east end and in the west corner (OP-417: none out in the plaza's middle).
-  { id: 'ink-moonbeam', kind: 'moonbeam', room: 'ink', pos: { x: 1600, y: 1110 } },
+  // The ink garden (OP-402): the leaves blown in through the moon gate, against the wall at the east end
+  // and in the west corner (OP-417: none out in the plaza's middle).
   { id: 'ink-leaves-gate', kind: 'leaf-pile', room: 'ink', pos: { x: 2560, y: 820 } },
   { id: 'ink-leaves-east', kind: 'leaf-pile', room: 'ink', pos: { x: 3040, y: 840 } },
   { id: 'ink-leaves-west', kind: 'leaf-pile', room: 'ink', pos: { x: 420, y: 1110 } },
+  // The glass street (Nov 8): leaves caught at the lanterns' feet.
   { id: 'glass-leaves-lantern-west', kind: 'leaf-pile', room: 'glass', pos: { x: 230, y: 1010 } },
   { id: 'glass-leaves-lantern-east', kind: 'leaf-pile', room: 'glass', pos: { x: 1380, y: 1010 } },
-  // The grove's clearing (Nov 8): a moonbeam through the canopy over each of its three rings.
-  { id: 'grove-moonbeam-west', kind: 'moonbeam', room: 'grove', pos: { x: 900, y: 1060 } },
-  { id: 'grove-moonbeam-middle', kind: 'moonbeam', room: 'grove', pos: { x: 2600, y: 1060 } },
-  { id: 'grove-moonbeam-east', kind: 'moonbeam', room: 'grove', pos: { x: 3900, y: 1060 } },
-  // The Party Grove's plaza (Nov 8): a moonbeam over each of its two rings, either side of the way back into the trunk, and leaves blown into its east corner.
-  { id: 'hub-moonbeam-west', kind: 'moonbeam', room: 'hub', pos: { x: 1150, y: 1060 } },
-  { id: 'hub-moonbeam-east', kind: 'moonbeam', room: 'hub', pos: { x: 3650, y: 1060 } },
+  // The Party Grove's plaza (Nov 8): leaves blown into its east corner.
   { id: 'hub-leaves-plaza-east', kind: 'leaf-pile', room: 'hub', pos: { x: 4480, y: 1140 } },
   // Out on the plazas' floors (Nov 8): a few little scenes in each, things to splash in, bounce on, look through and pick up.
   ...FLOOR_INTERACTABLES,

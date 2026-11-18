@@ -13,7 +13,7 @@ describe('the vote desk in the Great Hollow (OP-288)', () => {
   /** The floor the desk's board and foot take, with an owl's room either side. */
   const footprint: Rect = { x: box.x - 40, y: box.y, w: box.w + 80, h: box.h + 60 };
 
-  it('stands in the hall, off the heart’s rising air, the moonbeams, the leaf piles and where owls arrive', () => {
+  it('stands in the hall, off the heart’s rising air, the leaf piles and where owls arrive', () => {
     expect(VOTE_DESK_ROOM).toBe('m3-hall');
     for (const t of HALL_ROOM.thermals ?? []) expect(fromBox(t.pos, footprint), t.id).toBeGreaterThan(t.r + 60);
     for (const thing of interactablesIn('m3-hall')) expect(fromBox(thing.pos, footprint), thing.id).toBeGreaterThan(120);

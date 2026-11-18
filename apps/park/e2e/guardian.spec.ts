@@ -78,7 +78,7 @@ test.describe('the guardian at the heart of the Great Hollow (OP-359, behind ?gu
     await openHallWithGuardian(page);
     await until(page, 'its eyes opening', async () => (await now(page)).guardian!.lids === 'open');
     let s = await now(page);
-    const beam = s.objects.find((o) => o.id === 'm3-hall-moonbeam-heart')!;
+    const beam = s.thermals.find((t) => t.id === 'heart')!;
     const g = s.guardian!;
     // The heart's light and rising air are at its chest: behind it, by where its foot stands.
     expect(beam.y).toBeLessThan(g.at.y);

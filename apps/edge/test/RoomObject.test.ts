@@ -13,6 +13,7 @@ import {
   ESCAPE_PLACES,
   GROUNDED,
   escapeLayout,
+  getInteractable,
   payEscape,
   CollectionBook,
   CourseBook,
@@ -2071,12 +2072,16 @@ describe('spectators in the room object (OP-191)', () => {
     expect(eventsOf(cap.lines)).not.toContain('spectator_refused');
   });
 
-  it('lets it bask in the moonbeam as anyone does, counting for nothing (OP-243)', async () => {
+  // The Party Grove's telescope, out on its plaza's floor (plazaFloor.ts): a thing anyone may use that counts toward no feather.
+  const SCOPE = 'hub-stars-telescope';
+  const scopeAt = () => getInteractable(SCOPE)!.pos;
+
+  it('lets it look through the telescope as anyone does, counting for nothing (OP-243)', async () => {
     const obj = roomObject();
     const ws = await spectator(obj, 'hub');
     await settle();
-    await walk(obj, ws, floor(ws), { x: 2400, y: 800 });
-    await send(obj, ws, { t: 'use', target: 'hub-moonbeam', r: 1 });
+    await walk(obj, ws, floor(ws), scopeAt());
+    await send(obj, ws, { t: 'use', target: SCOPE, r: 1 });
     await settle();
     expect(ws.of('useResult')).toEqual([{ t: 'useResult', r: 1, ok: true, feathers: 0, total: -1, updates: [], practice: true }]);
     expect(ws.of('used')).toEqual([]);
@@ -2091,9 +2096,9 @@ describe('spectators in the room object (OP-191)', () => {
     await send(obj, ws, { t: 'use', target: 'hub-leaves-1', r: 1 });
     await settle();
     expect(ws.of('refused')).toEqual([{ t: 'refused', r: 1, reason: 'far' }]);
-    await walk(obj, ws, { x: 2400, y: 800 });
-    await send(obj, ws, { t: 'use', target: 'hub-moonbeam', r: 2 });
-    await send(obj, ws, { t: 'use', target: 'hub-moonbeam', r: 3 });
+    await walk(obj, ws, scopeAt());
+    await send(obj, ws, { t: 'use', target: SCOPE, r: 2 });
+    await send(obj, ws, { t: 'use', target: SCOPE, r: 3 });
     await settle();
     expect(ws.of('useResult').map((f) => f.r)).toEqual([2]);
     expect(ws.of('refused').find((f) => f.r === 3)).toEqual({ t: 'refused', r: 3, reason: 'busy' });

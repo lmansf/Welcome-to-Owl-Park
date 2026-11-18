@@ -152,6 +152,8 @@ export interface ParkState {
   /** NPC owls, the quest marker each shows, and whether its '!' says the visitor can talk to it now (OP-114). */
   npcs: Array<{ id: string; x: number; y: number; mark: string | null; approach: boolean }>;
   objects: Array<{ id: string; kind: string; x: number; y: number; top: number; here: boolean }>;
+  /** The room's thermals (thermal.ts): where its warm air rises, in the light drawn there. */
+  thermals: Array<{ id: string; x: number; y: number; r: number; top: number }>;
   items: Array<{ quest: string; n: number; kind: string; x: number; y: number; top: number }>;
   actions: string[];
   /** Seen from the side (the tree, OP-212): the doorway the owl stands in that up would take it through, its up arrow shown. */

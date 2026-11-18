@@ -1576,7 +1576,7 @@ ROOMS['m3-cave'] = newMapLevel('m3-cave', 'l0-arcade', { 'to-l0': at('m3-under',
 // gather. Each painted common room runs on below its painting into a plaza: the Treetop Commons in
 // front of the turnstiles, and the arcade hall in front of its cabinets.
 
-/** Where the plazas' floors end, their gathering spots' middles (each a moonbeam in a worn ring). */
+/** Where the plazas' floors end, their gathering spots' middles (each a worn ring; the Treetop Commons' has the light its warm air rises in). */
 export const LOBBY_PLAZA = { front: 1335, rings: [{ x: 1600, y: 1110 }] } as const;
 export const ARCADE_PLAZA = { front: 1335, rings: [{ x: 1200, y: 1110 }, { x: 3600, y: 1110 }] } as const;
 export const HOMES_PLAZA = { front: 1335, rings: [{ x: 2300, y: 1110 }] } as const;

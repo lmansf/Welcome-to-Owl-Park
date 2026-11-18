@@ -489,8 +489,9 @@ test.describe('the prompt at the owl (OP-344)', () => {
   test('what an owl can do where it stands shows at its own feet, with the key on a computer, and goes when it talks or walks off', async ({ page }) => {
     await openPark(page);
     const touch = await page.evaluate(() => matchMedia('(pointer: coarse)').matches);
-    // At the way in the owl stands in the moonbeam: the prompt says what Interact does there.
-    await expect.poll(async () => (await state(page)).promptShown, { timeout: 10_000 }).toBe(touch ? 'Bask in the moonbeam' : 'E: Bask in the moonbeam');
+    // At the leaves just inside the tree: the prompt says what Interact does there.
+    await walkAndStop(page, 1930, 820);
+    await expect.poll(async () => (await state(page)).promptShown, { timeout: 10_000 }).toBe(touch ? 'Flop into the leaves' : 'E: Flop into the leaves');
     // Out on the open floor nothing is in reach: no prompt.
     await walkAndStop(page, 2600, 880);
     await expect.poll(async () => (await state(page)).promptShown, { timeout: 10_000 }).toBeNull();

@@ -516,7 +516,7 @@ async function questProgressRow(salt: string, d: QuestProgressData): Promise<Que
 /**
  * What an owl did in play that the room stays and quest steps do not show (OP-304): a parkour run
  * begun, a bench or a part reached in it, a fall (with where, so the owner can see the spots that
- * catch owls), a clear (with its time), and a thing used (a leaf pile, a stall, the moonbeam). A run
+ * catch owls), a clear (with its time), and a thing used (a leaf pile, a stall, a telescope). A run
  * that is begun and never cleared is a quit: the owner's views tell it from these rows.
  */
 export type PlayEventKind = 'course_start' | 'course_bench' | 'course_part' | 'course_fall' | 'course_clear' | 'interact';
