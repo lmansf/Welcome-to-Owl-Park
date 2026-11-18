@@ -244,14 +244,15 @@ a tier 1 perch (`docs/TESTING.md`). A thing up on a perch (its `top`) is in reac
 perch, and a thing on the floor only from the floor.
 
 - **The hub** (the west wing's back wall): the root bench under the lantern beam, a jump up (tier 1,
-  `hub-bench`), and the beam itself, a jump and the flap up from the bench (tier 2, `hub-beam`). A
-  leaf pile waits on the beam.
+  `hub-bench`), and the beam itself, a jump and the flap up from the bench (tier 2, `hub-beam`). The
+  leaf pile blown off the beam lies on the floor past the bench's east end, since the Party Grove is
+  seen from above, and clear of the floor under the beam, so standing there offers a lantern (OP-414).
 - **The grove's treetop walk** (the east wing): the fallen log on the lawn, a jump up; the ladder up
-  the middle tree, a rung halfway and the porch at its top, a jump each, with a leaf pile on the
-  porch; from the porch the loft's deck, a jump more. All single jumps (tier 1); the porch is also a
-  jump and the flap straight from the floor. The far treehouse on the left tree is across the gap from
-  the loft, past the painted rope bridge, and only a glide gets there (tier 3, `grove-hut`); a leaf
-  pile waits in it.
+  the middle tree, a rung halfway and the porch at its top, a jump each; from the porch the loft's
+  deck, a jump more. All single jumps (tier 1); the porch is also a jump and the flap straight from the
+  floor. The far treehouse on the left tree is across the gap from the loft, past the painted rope
+  bridge, and only a glide gets there (tier 3, `grove-hut`). The clearing is seen from above, so its
+  leaf piles lie on its floor, at the feet of the two trees (OP-423), where an owl walks to them.
 - **The market's rooftops**: on the west screen the stall row's roof, a jump up from the curb all
   along it, and along it the neon signboards at its east end; the feather shop's roof at the giant
   robot owl's feet, a jump up from the curb right of the shop's door; on the east screen the stalls'

@@ -764,9 +764,9 @@ describe('perches (OP-084)', () => {
         expect(groundAt(room.perches, p, top), `${room.id} ${name}`).toBe(top);
       }
     }
-    // The hub's first: two quest spots on the bench, a leaf pile on the beam.
+    // The hub's first: two quest spots on the bench. Its leaf pile is on the floor now (OP-414); the stairs' piles are up on perches.
     expect(ROOMS['hub']!.spots?.filter((s) => s.top === 80)).toHaveLength(2);
-    expect(INTERACTABLES.find((t) => t.id === 'hub-leaves-beam')?.top).toBe(264);
+    expect(INTERACTABLES.find((t) => t.id === 'm3-stair-2-leaves-lookout')?.top).toBe(431);
   });
 
   it("the hub's bench is a jump up from the floor, and the lantern beam a jump and the second flap up from the bench", () => {

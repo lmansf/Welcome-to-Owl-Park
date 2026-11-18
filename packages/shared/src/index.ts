@@ -62,6 +62,7 @@ export * from './accounts';
 export * from './referrals';
 export * from './log';
 export * from './whichOwl';
+export * from './owlShare';
 export * from './kit';
 export * from './kitArt';
 export * from './edges';

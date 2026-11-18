@@ -18,9 +18,11 @@
  * TODO-DOCS (OP-365): docs/QUIZ-ART.md says the game draws the dashed box for every visitor; it
  * draws it with `?paint=1` or `?keeper=1` in the address, and word cards otherwise.
  */
-import { COLOUR_SETS, QUIZ_ART_SIZE, WHICH_OWL_WORDS as W, drawCards, getSpecies, natureDef, natureOf, quizLook, type ColourSetId, type Nature, type OwlLook, type QuizAnswer, type QuizCard } from '@owl-park/shared';
+import { COLOUR_SETS, OWL_SHARE_WORDS, QUIZ_ART_SIZE, WHICH_OWL_WORDS as W, drawCards, getSpecies, natureDef, natureOf, quizLook, type ColourSetId, type Nature, type OwlLook, type QuizAnswer, type QuizCard } from '@owl-park/shared';
 import { PUBLISHED_ART, versioned } from '../game/publishedArt';
+import { flagOn } from '../flags';
 import { createModal } from './modal';
+import { shareOwl, type ShareDevice } from './shareOwl';
 import type { PreviewFrame } from './owlBuilder';
 
 /**
@@ -315,6 +317,21 @@ export function createWhichOwlScreen(root: HTMLElement): WhichOwlScreen {
     const again = button(W.again, 'ghost', { woAgain: '' });
     again.addEventListener('click', () => begin(false));
     actions.append(keep, makeBtn, again);
+    // Share my owl (OP-392), behind its flag: a link to this owl's own page, nothing personal with it.
+    if (flagOn('share')) {
+      const share = button(OWL_SHARE_WORDS.share, 'ghost', { woShare: '' });
+      share.addEventListener('click', () => {
+        const device = globalThis.navigator as unknown as ShareDevice;
+        void shareOwl(def, globalThis.location.origin, {
+          share: typeof device.share === 'function' ? device.share.bind(device) : undefined,
+          clipboard: device.clipboard,
+        }).then((how) => {
+          if (how === 'copied') share.textContent = OWL_SHARE_WORDS.copied;
+          share.dataset['woShared'] = how;
+        });
+      });
+      actions.append(share);
+    }
     // The owl glides in first (about a second); its name and the words follow, one after another.
     [line, you, name, about, fact, enjoy, actions].forEach((w, i) => {
       w.classList.add('wo-later');

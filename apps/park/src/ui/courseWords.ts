@@ -59,6 +59,8 @@ export const COURSE_WORDS = {
   featherFound: 'Lost feather found',
   /** A bench reached: a fall comes back here. */
   bench: 'Checkpoint',
+  /** A walk there stopped at a hazard's edge (OP-422): only a jump crosses, by what this device plays with. */
+  jumpHere: { keys: 'Jump here to cross: press Space.', touch: 'Jump here to cross: tap Jump.' },
   /** A fall: the owl is back at its bench, or at the way it came in (OP-343). */
   fell: 'Back to your last checkpoint',
   /** A shortcut opened from its far side. */

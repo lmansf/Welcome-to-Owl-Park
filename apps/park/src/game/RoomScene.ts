@@ -112,6 +112,7 @@ import {
   dashRefusal,
   holdsDash,
   courseOfRoom,
+  walkStopsShort,
   endsCourse,
   placeShown,
   airOut,
@@ -175,6 +176,7 @@ import type { ParkConfig } from '../config';
 import { saveLook } from '../identity';
 import { OPEN_ENTRY, type ConnectionStatus, type Entry, type ParkTransport, type RoomConnection, type RoomHandlers, type ScanReply, type WalletEntry } from '../net';
 import type { Ribbon } from '../ui/ribbon';
+import { COURSE_WORDS } from '../ui/courseWords';
 import { openPosOverlay, type PosOverlay } from '../ui/posOverlay';
 import { keeperToken } from '../net/keeper';
 import type { EscapeLink } from '../net/transport';
@@ -260,6 +262,7 @@ import { drawEdges } from './edgeView';
 import { drawSkirts } from './plazaSkirt';
 import { setVignette } from './vignette';
 import { ROOM_DOWN } from './roomDown';
+import { MOTION, motion } from '../calmMotion';
 
 export interface RoomStart {
   room: string;
@@ -296,9 +299,9 @@ const THERMAL_WORDS = 'Warm air rises here. Jump and keep holding to ride it up.
 /** How far a tap may drift before it counts as a drag (game pixels). */
 const TAP_SLOP = 16;
 /** How long the room fades out on the way to another. */
-const LEAVE_FADE_MS = 220;
+const LEAVE_FADE_MS: number = MOTION.roomFadeOut.full;
 /** How long a room fades in as it comes in. The opening look (townView.ts) counts its time from the end of it. */
-const ROOM_FADE_IN_MS = 350;
+const ROOM_FADE_IN_MS: number = MOTION.roomFadeIn.full;
 /** How long the room takes to come back after a fall in a course blinks it dark (OP-343). */
 const FALL_BLINK_MS = 260;
 /** The registry's word that the nightly restart sent the owl home (OP-181): the home screen says so once. */
@@ -669,6 +672,8 @@ export class RoomScene extends Phaser.Scene {
   private roomHas: Vec2 | null = null;
   /** Where the owl came into this room. */
   private arrivedAt: Vec2 = { x: 0, y: 0 };
+  /** Where a walk there stops short of a course's hazard (OP-422): on arriving there, the jump hint shows. */
+  private edgeHint: Vec2 | null = null;
   /** The position overlay (OP-138, `?pos=1`), once the keepers' key checks out. */
   private posOverlay: PosOverlay | null = null;
   private tasks!: TaskState;
@@ -679,6 +684,9 @@ export class RoomScene extends Phaser.Scene {
   /** Feather tag in the Party Grove (OP-403): only there, seen from above, and only behind `?tag=1` (flags.ts). */
   private tag: TagLayer | null = null;
   private bowl: BowlLayer | null = null;
+  /** How long this room faded in, and out once it was left (OP-375): shorter in calm motion. */
+  private fadeInMs = 0;
+  private fadeOutMs: number | null = null;
   /** The arcade's cabinets, score wall and runs, in the arcade only. */
   private arcade: Arcade | null = null;
   /** The stained-glass climb from its portal, in the glass realm only. */
@@ -1353,6 +1361,7 @@ export class RoomScene extends Phaser.Scene {
     this.me.slopeUnder = this.slopeBelow;
     this.me.calm = () => this.calm();
     this.arrivedAt = { ...spawn };
+    this.edgeHint = null;
     // Come in to stand before the mirror (Play, OP-105), the owl faces it.
     if (this.mirror && this.registry.get('spawnName') === 'mirror') this.me.face(NEST_MIRROR.x < spawn.x ? -1 : 1);
     this.addResidents();
@@ -1438,7 +1447,9 @@ export class RoomScene extends Phaser.Scene {
     this.hud.setRoomDark(false);
     // An owl that came by a mover (OP-287) is in the air as the room comes up, and a hop is over in a third of
     // a second: the room comes up in about half its time, so the hop and the fall are seen and not only their end.
-    this.cameras.main.fadeIn(this.cameBy ? MOVER_FADE_IN_MS : ROOM_FADE_IN_MS, 12, 30, 54);
+    // In calm motion (OP-375, calmMotion.ts) the room comes up in a third of the time.
+    this.fadeInMs = this.cameBy ? (this.calm() ? MOTION.moverFadeIn.calm : MOVER_FADE_IN_MS) : motion('roomFadeIn', this.calm());
+    this.cameras.main.fadeIn(this.fadeInMs, 12, 30, 54);
     this.built = true;
     this.startOpening(this.registry.get('spawnName') as string | undefined);
     // The guardian sees the visitor's own owl come in (OP-359), counted from when the room has faded in: by the
@@ -1477,6 +1488,11 @@ export class RoomScene extends Phaser.Scene {
     if (finished && this.wayTo && this.walkOn()) finished = false;
     // At what a tap asked for: nothing left for a jump to carry on to (OP-084).
     if (finished && this.walkGoal && distance(this.walkGoal, this.me.pos) < 3) this.walkGoal = null;
+    // A walk there that stopped short of a hazard (OP-422): arrived at the edge, the hint; walked off elsewhere, none.
+    if (this.edgeHint && !this.me.walking) {
+      if (distance(this.edgeHint, this.me.pos) < 8) this.sayJumpHere();
+      this.edgeHint = null;
+    }
     this.posOverlay?.frame(this.me.pos, now, this.room.id);
     this.tag?.update(now);
     this.bowl?.update(now);
@@ -2085,8 +2101,25 @@ export class RoomScene extends Phaser.Scene {
     if (!this.built || this.leaving || !door) return;
     this.pendingVote = false;
     const aim = { x: door.rect.x + door.rect.w / 2, y: door.rect.y + door.rect.h / 2 };
+    // In a course, a walk there stops at the edge of the first pit or thorns on the way, never in them,
+    // and says that a jump crosses (OP-422): a kid moving by taps would otherwise walk in, be put back, and loop.
+    if (this.sideView() && this.room.course) {
+      const from = { ...this.me.pos };
+      const stop = walkStopsShort(this.room, from, snapToWalkable(aim, this.footingNow().walkable), this.flier.air.z);
+      if (stop) {
+        // Said where it is needed: at the edge, once there, not at the start of a long walk (gone before the owl arrives).
+        if (distance(stop, from) >= 3 && this.walkTo(stop)) this.edgeHint = stop;
+        else this.sayJumpHere();
+        return;
+      }
+    }
     // Already standing in it (a side view, OP-212): a tap on it goes through, as one walked to would.
     if (!this.walkTo(aim)) this.tapIntoDoorway(aim);
+  }
+
+  /** At a hazard's edge in a course (OP-422): a jump crosses. */
+  private sayJumpHere(): void {
+    this.hud.toast(TOUCH_SCREEN ? COURSE_WORDS.jumpHere.touch : COURSE_WORDS.jumpHere.keys, 3500);
   }
 
   /** The Menu's ways out from here: leaving inside the park, going home anywhere but the owl's own nest. */
@@ -2757,12 +2790,15 @@ export class RoomScene extends Phaser.Scene {
     /** Feather tag in the Party Grove (OP-403, behind ?tag=1): the game as this page has it; null elsewhere or without the flag. */
     tag: TagDebug | null;
     bowl: BowlDebug | null;
+    /** Calm motion (OP-375): whether it is on, and how long this room faded in and (once left) out, in ms. */
+    motion: { calm: boolean; fadeInMs: number; fadeOutMs: number | null };
   } | null {
     if (!this.built) return null;
     return {
       egg: { at: this.me.eggPos(), said: this.eggSaid },
       tag: this.tag?.state() ?? null,
       bowl: this.bowl?.state() ?? null,
+      motion: { calm: this.calm(), fadeInMs: this.fadeInMs, fadeOutMs: this.fadeOutMs },
       snow: this.snowing,
       snowballs: { ...this.snowballs, hits: [...this.snowballs.hits] },
       sounds: this.sfx.heard().slice(-16),
@@ -4442,7 +4478,9 @@ export class RoomScene extends Phaser.Scene {
     this.hud.setRoomDark(true);
     this.me.walk = null;
     for (const npc of this.npcs.values()) npc.setApproach(false, true);
-    this.cameras.main.fadeOut(fadeMs, 12, 30, 54);
+    // In calm motion (OP-375) no fade out is longer than a blink.
+    this.fadeOutMs = this.calm() ? Math.min(fadeMs, MOTION.roomFadeOut.calm) : fadeMs;
+    this.cameras.main.fadeOut(this.fadeOutMs, 12, 30, 54);
     await new Promise<void>((r) => this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => r()));
     await this.teardown();
     return true;
@@ -4767,7 +4805,10 @@ export class RoomScene extends Phaser.Scene {
   private lookAtSpot(): void {
     if (!this.decorating || !this.decor) return;
     const f = this.decor.focusOf(this.decorSpot);
-    this.cameras.main.pan(f.x, f.y, 380, 'Sine.easeInOut', true);
+    // In calm motion (OP-375) the camera is there at once instead of gliding.
+    const ms = motion('nestPan', this.calm());
+    if (ms > 0) this.cameras.main.pan(f.x, f.y, ms, 'Sine.easeInOut', true);
+    else this.cameras.main.centerOn(f.x, f.y);
   }
 
   private async placePiece(spot: NestSpotId, item: string | null): Promise<void> {

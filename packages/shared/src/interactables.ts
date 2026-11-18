@@ -54,14 +54,17 @@ export const KIND_RULES: Readonly<Record<InteractableKind, KindRules>> = {
 export const INTERACTABLES: readonly InteractableDef[] = [
   // Leaves blow in through the storybook arch and pile up just inside the great tree...
   { id: 'hub-leaves-1', kind: 'leaf-pile', room: 'hub', pos: { x: 1930, y: 820 } },
-  // ...and some up on the lantern beam in the west wing, a jump and the second flap from the root bench (OP-084).
-  { id: 'hub-leaves-beam', kind: 'leaf-pile', room: 'hub', pos: { x: 930, y: 696 }, top: 264 },
+  // ...and some blown off the lantern beam in the west wing to the floor past the root bench's east end. The Party
+  // Grove is seen from above (plaza.ts), so the pile that sat up on the beam read as one no owl could reach (OP-414);
+  // it lies clear of the floor under the beam, so an owl there is offered a lantern, not the leaves.
+  { id: 'hub-leaves-beam', kind: 'leaf-pile', room: 'hub', pos: { x: 1440, y: 770 } },
   // ...and drift against the roots at the foot of the tree outside, past its doorway (OP-417: three piles a room, each where the wind would leave it).
   { id: 'grove-leaves-2', kind: 'leaf-pile', room: 'grove', pos: { x: 2890, y: 845 } },
-  // ...and up in the east wing's treehouses (OP-084): on the porch, at the top of the ladder, and on
-  // the left tree's treehouse, which only a glide from the loft reaches (the glide's small extra).
-  { id: 'grove-leaves-porch', kind: 'leaf-pile', room: 'grove', pos: { x: 4290, y: 708 }, top: 218 },
-  { id: 'grove-leaves-hut', kind: 'leaf-pile', room: 'grove', pos: { x: 3645, y: 696 }, top: 345 },
+  // ...and drift off the east wing's treehouses to the foot of their trees: under the porch, at the
+  // ladder's foot, and under the left tree's treehouse. The clearing is seen from above (plaza.ts), so a
+  // pile up on a platform read as one no owl could reach (OP-423); down here each is on the walk's floor.
+  { id: 'grove-leaves-porch', kind: 'leaf-pile', room: 'grove', pos: { x: 4300, y: 740 } },
+  { id: 'grove-leaves-hut', kind: 'leaf-pile', room: 'grove', pos: { x: 3645, y: 725 } },
   // The new map's stairs (map 3): leaves fall down the tree and come to rest where each way runs out, so
   // every climb and every far end of a boardwalk has a pile to flop into. Pip's stair quest asks for three.
   // On the high boardwalk the wind chime's draught sweeps them east past the coloured door, against the last rope post.
