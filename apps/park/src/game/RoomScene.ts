@@ -192,7 +192,7 @@ import { alongTheFloor, holdsUp, type Keys } from '../ui/keyboard';
 import type { LoadScreen } from '../ui/loader';
 import type { PreviewFrame } from '../ui/owlBuilder';
 import { PASS_AFTER_DAY_TICKET, gateCard, gateRefusal, offerOnce, type FreePassOffer } from '../ui/tickets';
-import { SPECTATOR_WORDS, createOfferPacer, createOnceHint, turnstileWay, type OfferPacer } from '../ui/spectator';
+import { CAME_FREE, SPECTATOR_WORDS, TICKET_AFTER_GLIDE, asksAtGate, createOfferPacer, createOnceHint, turnstileWay, type OfferPacer } from '../ui/spectator';
 import type { Opener } from '../ui/checkout';
 import { earlyPreview } from '../ui/preview';
 import { ActivityLayer } from './activities';
@@ -2224,6 +2224,14 @@ export class RoomScene extends Phaser.Scene {
     triedDoors().add(this.room.id, FIRST_FLIGHT_MARK);
     triedDoors().add(this.room.id, ROOTS_SPOT);
     this.hud.toast(HALL_WORDS.flown, 4200);
+    // A guest that came in by Play free now hears of the Day Ticket only now, once the room has said so (OP-421).
+    if (this.registry.get(TICKET_AFTER_GLIDE) === true) {
+      this.registry.set(TICKET_AFTER_GLIDE, false);
+      const gen = this.gen;
+      this.time.delayedCall(4600, () => {
+        if (gen === this.gen && !this.leaving && this.spectator) this.hud.toast(SPECTATOR_WORDS.freeLater, 5000);
+      });
+    }
     this.sfx.play('bench');
     this.layTrail();
   }
@@ -4425,7 +4433,18 @@ export class RoomScene extends Phaser.Scene {
       stepBack();
       return;
     }
-    if (way.go === 'spectate' && way.sale && this.transport.tickets) {
+    // Came in by Play free now and not through yet (OP-421): it chose free already, so on in as a guest with
+    // no question and no ticket line; the Day Ticket's first word waits for its first glide.
+    const cameFree = this.registry.get(CAME_FREE) === true;
+    if (cameFree && way.go === 'spectate' && way.sale && this.transport.tickets) {
+      this.registry.set(CAME_FREE, false);
+      this.registry.set(TICKET_AFTER_GLIDE, true);
+      this.pieces.gate?.react();
+      this.hud.toast(SPECTATOR_WORDS.freeIn, 4500);
+      goIn(700);
+      return;
+    }
+    if (asksAtGate(way, cameFree) && way.go === 'spectate' && this.transport.tickets) {
       // OP-198: the owl stands in the turnstile while they ask: buy a Day Ticket (back out, the sale, and in
       // by itself once it has come, OP-190), or enter as a guest (a spectator, OP-191); neither steps it back out.
       const gen = this.gen;

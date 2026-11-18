@@ -38,6 +38,7 @@ import { keepHudCalm } from './calmMotion';
 import { keepHudText } from './textSize';
 import { guardZoom } from './ui/noZoom';
 import { activityLink, linkedActivity } from './ui/activityLink';
+import { CAME_FREE } from './ui/spectator';
 
 // HeyCatch analytics (heycatch.ai/agents.md): once, at module scope, before anything else runs, so the
 // page's visits and clicks and the reserved short links (/a to /z, /0 to /9) are seen from the first
@@ -664,6 +665,8 @@ const home = createHomeScreen(document.getElementById('hud') as HTMLElement, {
   lookAround: () => {
     if (!atHome || loggedIn) return;
     cameToLook = true;
+    // It chose free: the turnstiles let it on in as a guest the first time, with no question (OP-421).
+    game.registry.set(CAME_FREE, true);
     loggedIn = true;
     startCollection();
     void refreshWallet();
