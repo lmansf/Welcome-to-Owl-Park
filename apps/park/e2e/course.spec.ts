@@ -155,21 +155,22 @@ test.describe('the parkour courses (OP-224)', () => {
       { room: 'brush-1', on: 'to-rain', pit: 580 },
       { room: 'circuit-1', on: 'to-cut', pit: 1800 },
     ];
-    // A computer at the QA walk's two widths; a phone at its own.
-    const sizes = isMobile ? [null] : [{ width: 1440, height: 900 }, { width: 1024, height: 768 }];
+    // A computer at the QA walk's two widths; a phone held on its side, as a course asks (held upright, its card covers the chip).
+    const sizes = isMobile ? [{ width: 915, height: 412 }] : [{ width: 1440, height: 900 }, { width: 1024, height: 768 }];
     for (const size of sizes) {
-      if (size) await page.setViewportSize(size);
+      await page.setViewportSize(size);
       for (const c of courses) {
         await openPark(page, { room: c.room, spawn: 'from-gate', kit: '1' });
         const touch = await page.evaluate(() => matchMedia('(pointer: coarse)').matches);
+        await expect(page.locator('[data-turn-phone]')).toBeHidden();
         const chip = page.locator(`[data-hint="${c.on}"]`);
         await expect(chip).toHaveText('Next part');
         await chip.click();
         await expect.poll(async () => (await state(page)).walking, { timeout: 15_000, intervals: [50] }).toBe(false);
         // Stood at the edge, on the floor, not put back: the walk never reached the hazard.
         const s = await state(page);
-        expect(s.pos.x, `${c.room} at ${size?.width ?? 'phone'}`).toBeLessThan(c.pit);
-        expect(s.pos.x, `${c.room} at ${size?.width ?? 'phone'}`).toBeGreaterThan(c.pit - 60);
+        expect(s.pos.x, `${c.room} at ${size.width}`).toBeLessThan(c.pit);
+        expect(s.pos.x, `${c.room} at ${size.width}`).toBeGreaterThan(c.pit - 60);
         expect(s.air.z).toBe(0);
         expect(s.course?.falls ?? 0).toBe(0);
         await expect(page.locator('[data-toasts]')).toContainText(touch ? 'Jump here to cross: tap Jump.' : 'Jump here to cross: press Space.');
@@ -180,7 +181,7 @@ test.describe('the parkour courses (OP-224)', () => {
         expect(again.pos.x).toBeLessThan(c.pit);
         expect(again.course?.falls ?? 0).toBe(0);
       }
-      await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-walk-there-edge-${size?.width ?? 'phone'}.png` });
+      await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-walk-there-edge-${size.width}.png` });
     }
   });
 
