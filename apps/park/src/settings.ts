@@ -5,7 +5,7 @@
 export interface Settings {
   /** The thumbstick on touch screens; without it the owl walks where the floor is tapped. */
   thumbstick: boolean;
-  /** Calm motion: no drifting fireflies, gold dust or neon rain. On by default when the device asks for less motion. */
+  /** Calm motion: softer fades, and no flashes, shakes, camera glides or drifting sparkles (calmMotion.ts lists them). On by default when the device asks for less motion. */
   calm: boolean;
   /** "Show what owls say": the bubbles of prewritten phrases over the owls. */
   bubbles: boolean;

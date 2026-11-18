@@ -28,6 +28,8 @@ export interface ParkState {
     line: string;
     games: number;
   } | null;
+  /** Calm motion (OP-375): whether it is on, and how long this room faded in and (once left) out, in ms. */
+  motion: { calm: boolean; fadeInMs: number; fadeOutMs: number | null };
   /** The owl walks this room as a spectator, as its welcome said (OP-191). */
   spectator: boolean;
   /** The dash (OP-224): held in a parkour course only, spent until the owl lands, and the dashes made in this room. */
