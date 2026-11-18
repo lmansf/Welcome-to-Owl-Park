@@ -30,7 +30,7 @@ const CSS = `
 #hud .turn-phone{position:fixed;inset:0;z-index:35;display:none;align-items:center;justify-content:center;pointer-events:auto;touch-action:none;background:rgba(6,14,28,.94)}
 #hud .turn-phone.open{display:flex}
 #hud.at-home .turn-phone.open{display:none}
-#hud .turn-phone .card{display:flex;flex-direction:column;align-items:center;gap:12px;width:min(320px,calc(100vw - 32px));padding:20px 16px;text-align:center;color:#F6F1E3}
+#hud .turn-phone .card{display:flex;flex-direction:column;align-items:center;gap:12px;width:min(320px,calc(calc(100vw/var(--vz,1)) - 32px));padding:20px 16px;text-align:center;color:#F6F1E3}
 #hud .turn-phone svg{width:104px;height:104px}
 #hud .turn-phone h2{margin:0;font-size:21px;line-height:1.3}
 `;

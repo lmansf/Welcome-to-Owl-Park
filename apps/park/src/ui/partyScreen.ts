@@ -63,7 +63,7 @@ const CSS = `
 #hud .party .card{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:16px;text-align:center;background:rgba(12,30,54,.86)}
 #hud .party .card h2{margin:0;font-size:26px}
 #hud .party .card p{margin:0;max-width:520px}
-#hud .party .card ol{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;min-width:min(360px,90vw)}
+#hud .party .card ol{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;min-width:min(360px,calc(90vw/var(--vz,1)))}
 #hud .party .card li{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:12px;background:rgba(246,241,227,.07)}
 #hud .party .card li .grow{flex:1;text-align:left}
 #hud .party .card li canvas{width:30px;height:30px}

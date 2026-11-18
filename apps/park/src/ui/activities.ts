@@ -43,7 +43,7 @@ export interface ActivityCards {
 const ZONE_TINTS: Record<QuizZone, string> = { a: '#9FE8FF', b: '#FFD36A', c: '#FF8CC6' };
 
 const CSS = `
-#hud .cards{display:flex;flex-direction:column;gap:8px;margin-top:8px;width:min(380px,calc(100vw - 24px))}
+#hud .cards{display:flex;flex-direction:column;gap:8px;margin-top:8px;width:min(380px,calc(calc(100vw/var(--vz,1)) - 24px))}
 @media (min-width:761px){#hud .cards{position:absolute;margin:0;top:calc(max(10px,env(safe-area-inset-top)) + 52px);right:max(12px,env(safe-area-inset-right))}}
 @media (max-width:760px){#hud.playing .tracker.show{display:none}}
 #hud .play-card{pointer-events:auto;background:rgba(12,30,54,.9);border:1px solid rgba(246,241,227,.18);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;box-shadow:0 6px 24px rgba(0,0,0,.45);backdrop-filter:blur(6px);animation:hud-in .25s ease-out}

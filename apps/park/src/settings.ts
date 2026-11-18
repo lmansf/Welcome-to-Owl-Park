@@ -13,15 +13,29 @@ export interface Settings {
   sound: boolean;
   /** The feather trail (OP-307): feathers toward a doorway not tried yet, and a glint on each such doorway. On by default. */
   trail: boolean;
+  /** Text size (OP-386): the HUD, the Menu and every panel drawn this much larger, in percent. Pinch zoom stays off (OP-104). */
+  text: TextSize;
 }
+
+/** The text sizes offered: as made, half again, and twice. */
+export const TEXT_SIZES = [100, 150, 200] as const;
+export type TextSize = (typeof TEXT_SIZES)[number];
+
+function isTextSize(v: unknown): v is TextSize {
+  return typeof v === 'number' && (TEXT_SIZES as readonly number[]).includes(v);
+}
+
+/** The settings that are on or off. */
+type Switch = Exclude<keyof Settings, 'text'>;
+const SWITCHES: readonly Switch[] = ['thumbstick', 'calm', 'bubbles', 'sound', 'trail'];
 
 export const SETTINGS_KEY = 'owl-park:settings';
 
 export function defaultSettings(reducedMotion: boolean): Settings {
-  return { thumbstick: true, calm: reducedMotion, bubbles: true, sound: true, trail: true };
+  return { thumbstick: true, calm: reducedMotion, bubbles: true, sound: true, trail: true, text: 100 };
 }
 
-/** Settings from what storage holds: each one a boolean, else its default. Anything else is dropped. */
+/** Settings from what storage holds: each switch a boolean and the text size one of TEXT_SIZES, else its default. Anything else is dropped. */
 export function parseSettings(raw: string | null, reducedMotion: boolean): Settings {
   const out = defaultSettings(reducedMotion);
   let v: unknown = null;
@@ -32,7 +46,8 @@ export function parseSettings(raw: string | null, reducedMotion: boolean): Setti
   }
   if (!v || typeof v !== 'object' || Array.isArray(v)) return out;
   const o = v as Record<string, unknown>;
-  for (const k of Object.keys(out) as Array<keyof Settings>) if (typeof o[k] === 'boolean') out[k] = o[k];
+  for (const k of SWITCHES) if (typeof o[k] === 'boolean') out[k] = o[k];
+  if (isTextSize(o['text'])) out.text = o['text'];
   return out;
 }
 
@@ -61,7 +76,8 @@ export class SettingsStore {
 
   set(patch: Partial<Settings>): void {
     const next = { ...this.value };
-    for (const k of Object.keys(next) as Array<keyof Settings>) if (typeof patch[k] === 'boolean') next[k] = patch[k];
+    for (const k of SWITCHES) if (typeof patch[k] === 'boolean') next[k] = patch[k];
+    if (isTextSize(patch.text)) next.text = patch.text;
     if ((Object.keys(next) as Array<keyof Settings>).every((k) => next[k] === this.value[k])) return;
     this.value = next;
     try {

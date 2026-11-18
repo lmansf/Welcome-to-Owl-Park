@@ -113,7 +113,7 @@ export function goOn(go: StoreGo, open: Opener, link: LinkMaker = storeLink): vo
 }
 
 const CSS = `
-#hud .layer .modal.store-ask{width:min(360px,calc(100vw - 32px));align-items:center;text-align:center;gap:16px;padding:22px 18px 18px;background-color:var(--m-surface);background-image:var(--m-grain);background-size:360px 150px;color:var(--m-text);border:2px solid var(--m-frame);border-radius:var(--m-radius);box-shadow:var(--m-shadow);font-size:var(--m-body);line-height:1.4}
+#hud .layer .modal.store-ask{width:min(360px,calc(calc(100vw/var(--vz,1)) - 32px));align-items:center;text-align:center;gap:16px;padding:22px 18px 18px;background-color:var(--m-surface);background-image:var(--m-grain);background-size:360px 150px;color:var(--m-text);border:2px solid var(--m-frame);border-radius:var(--m-radius);box-shadow:var(--m-shadow);font-size:var(--m-body);line-height:1.4}
 #hud .modal.store-ask:focus{outline:none}
 #hud .store-ask .says{display:flex;flex-direction:column;gap:8px}
 #hud .store-ask .says[hidden]{display:none}

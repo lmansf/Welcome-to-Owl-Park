@@ -133,7 +133,7 @@ export function badgeView(spectator: boolean): { shown: boolean; label: string; 
 }
 
 const CSS = `
-#hud .spectator{position:relative;z-index:9;margin-top:8px;width:max-content;max-width:calc(100vw - 24px);display:none;align-items:center;gap:8px;padding:4px 4px 4px 12px;border-radius:999px;
+#hud .spectator{position:relative;z-index:9;margin-top:8px;width:max-content;max-width:calc(calc(100vw/var(--vz,1)) - 24px);display:none;align-items:center;gap:8px;padding:4px 4px 4px 12px;border-radius:999px;
   background:rgba(12,30,54,.86);border:1px dashed rgba(255,211,106,.7);color:#FFD36A;font-size:13px;font-weight:700;pointer-events:auto;box-shadow:0 4px 14px rgba(0,0,0,.4)}
 #hud .spectator.show{display:flex}
 #hud .spectator button{min-height:36px;padding:6px 12px;font-size:13px}

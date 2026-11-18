@@ -46,7 +46,7 @@ export function settle(a: Pick<GateAsk, 'buy' | 'guest' | 'stay'>, choice: GateC
 }
 
 const CSS = `
-#hud .layer .modal.gate-ask{width:min(360px,calc(100vw - 32px));align-items:center;text-align:center;gap:14px;padding:22px 18px 18px;background-color:var(--m-surface);background-image:var(--m-grain);background-size:360px 150px;color:var(--m-text);border:2px solid var(--m-frame);border-radius:var(--m-radius);box-shadow:var(--m-shadow);font-size:var(--m-body);line-height:1.4}
+#hud .layer .modal.gate-ask{width:min(360px,calc(calc(100vw/var(--vz,1)) - 32px));align-items:center;text-align:center;gap:14px;padding:22px 18px 18px;background-color:var(--m-surface);background-image:var(--m-grain);background-size:360px 150px;color:var(--m-text);border:2px solid var(--m-frame);border-radius:var(--m-radius);box-shadow:var(--m-shadow);font-size:var(--m-body);line-height:1.4}
 #hud .modal.gate-ask:focus{outline:none}
 #hud .gate-ask .say{margin:0;font-size:var(--m-heading);font-weight:800}
 #hud .gate-ask .note{margin:0;font-size:calc(var(--m-body) * .88);opacity:.9}

@@ -72,7 +72,7 @@ const CSS = `
 #hud .menu-layer{position:fixed;inset:0;z-index:20;display:none;pointer-events:auto;align-items:center;justify-content:center}
 #hud .menu-layer.open{display:flex}
 #hud .menu-layer .menu-scrim{position:absolute;inset:0;background:var(--m-scrim);animation:menu-fade var(--m-motion) var(--m-easing)}
-#hud .menu-shell{position:relative;display:flex;flex-direction:column;width:min(560px,calc(100vw - 24px));height:min(70dvh,600px);background-color:var(--m-surface);background-image:var(--m-grain);background-size:360px 150px;color:var(--m-text);border:2px solid var(--m-frame);border-radius:var(--m-radius);box-shadow:var(--m-shadow);font-size:var(--m-body);line-height:1.4;overflow:hidden;animation:menu-pop var(--m-motion) var(--m-easing)}
+#hud .menu-shell{position:relative;display:flex;flex-direction:column;width:min(560px,calc(calc(100vw/var(--vz,1)) - 24px));height:min(calc(70dvh/var(--vz,1)),600px);background-color:var(--m-surface);background-image:var(--m-grain);background-size:360px 150px;color:var(--m-text);border:2px solid var(--m-frame);border-radius:var(--m-radius);box-shadow:var(--m-shadow);font-size:var(--m-body);line-height:1.4;overflow:hidden;animation:menu-pop var(--m-motion) var(--m-easing)}
 #hud .menu-shell .branch{flex:none;height:18px;background:var(--m-branch) repeat-x center top/400px 18px;pointer-events:none}
 #hud .menu-shell .grab{display:none}
 #hud .menu-shell .mhead{flex:none;display:flex;align-items:center;gap:10px;padding:0 12px 0 18px;min-height:var(--m-target)}
@@ -176,7 +176,7 @@ const CSS = `
 @keyframes menu-drop{from{opacity:1;transform:none}to{opacity:0;transform:translateY(12px) scale(.98)}}
 @media (max-width:600px){
   #hud .menu-layer{align-items:flex-end}
-  #hud .menu-shell{width:100vw;height:70dvh;border-radius:var(--m-radius) var(--m-radius) 0 0;border-bottom:0;animation-name:menu-rise}
+  #hud .menu-shell{width:calc(100vw/var(--vz,1));height:calc(70dvh/var(--vz,1));border-radius:var(--m-radius) var(--m-radius) 0 0;border-bottom:0;animation-name:menu-rise}
   #hud .menu-layer.closing .menu-shell{animation-name:menu-sink}
   #hud .menu-shell .grab{display:block;flex:none;width:44px;height:5px;margin:2px auto 0;border-radius:3px;background:color-mix(in srgb,var(--m-frame) 70%,transparent)}
   #hud .menu-shell .mpanel{padding-bottom:max(18px,env(safe-area-inset-bottom))}

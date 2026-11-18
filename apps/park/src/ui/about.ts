@@ -206,7 +206,7 @@ export interface InfoScreens {
 }
 
 const CSS = `
-#hud .modal.info{width:min(520px,calc(100vw - 24px));gap:14px}
+#hud .modal.info{width:min(520px,calc(calc(100vw/var(--vz,1)) - 24px));gap:14px}
 #hud .info .i-part h3{margin:0 0 4px;font-size:16px;color:#FFD36A}
 #hud .info .i-part p{margin:0 0 6px;font-size:15px;line-height:1.45}
 #hud .info .i-part[data-faq] p:nth-of-type(odd){margin:10px 0 2px;font-weight:700}
