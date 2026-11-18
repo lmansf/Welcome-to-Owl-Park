@@ -192,6 +192,7 @@ import { alongTheFloor, holdsUp, type Keys } from '../ui/keyboard';
 import type { LoadScreen } from '../ui/loader';
 import type { PreviewFrame } from '../ui/owlBuilder';
 import { PASS_AFTER_DAY_TICKET, gateCard, gateRefusal, offerOnce, type FreePassOffer } from '../ui/tickets';
+import { PET_SWAP_MS, PET_SWAP_WORDS, canSwapPet, nextPet, ownedPets, swapWords } from '../ui/petSwap';
 import { SPECTATOR_WORDS, createOfferPacer, createOnceHint, turnstileWay, type OfferPacer } from '../ui/spectator';
 import type { Opener } from '../ui/checkout';
 import { earlyPreview } from '../ui/preview';
@@ -585,6 +586,9 @@ export class RoomScene extends Phaser.Scene {
   private bubbles: SpeechBubbles | null = null;
   /** What tapping a painted egg last said here (OP-261). */
   private eggSaid: string | null = null;
+  /** Swap pet (OP-263): whether it is on, and until when it is offered after a tap on the own pet. */
+  private readonly petSwapOn = flagOn('petswap');
+  private swapUntil = 0;
   /** The feather trail toward a doorway not tried yet (OP-307), and whether Settings has it on; none in a course. */
   private trail: FeatherTrail | null = null;
   private trailOn = true;
@@ -1902,6 +1906,8 @@ export class RoomScene extends Phaser.Scene {
       this.pendingVote = false; // a new destination cancels a walk to the idol
       this.errand = null; // ...or to an NPC or a leaf pile
       const world = this.cameras.main.getWorldPoint(p.x, p.y);
+      // A tap on the own owl's pet, with two pets or more to swap between, offers Swap pet (OP-263).
+      if (this.offerPetSwap({ x: world.x, y: world.y })) return;
       // A tap on a painted egg, the own owl's or another's, says when it hatches (OP-261).
       if (this.tapEgg({ x: world.x, y: world.y })) return;
       // In the snow a tap on another owl throws a snowball at it (OP-074), when it is near enough.
@@ -1934,6 +1940,30 @@ export class RoomScene extends Phaser.Scene {
     this.eggSaid = words;
     if (!this.bubbles?.note(owl, words, this.time.now)) this.hud.toast(words, 3000);
     return true;
+  }
+
+  /** The pets the own owl holds, in catalogue order. */
+  private myPets(): string[] {
+    return ownedPets(this.collection.inv?.owned ?? []);
+  }
+
+  /**
+   * A tap on the own owl's pet (OP-263, `?petswap=1`): with two pets or more, Swap pet joins the owl's
+   * actions for a few seconds (an egg still says when it hatches). False when it is not that, so the tap goes on.
+   */
+  private offerPetSwap(p: Vec2): boolean {
+    if (!this.petSwapOn || !this.me.petAt(p) || !canSwapPet(this.myPets())) return false;
+    this.swapUntil = Date.now() + PET_SWAP_MS;
+    this.tapEgg(p);
+    return true;
+  }
+
+  /** Swap pet: on with the next pet the owl holds, or none; a wardrobe change like any other. */
+  private swapPet(): void {
+    const next = nextPet(this.myPets(), this.look.wear?.pet);
+    if (!this.equip('pet', next)) return;
+    this.swapUntil = Date.now() + PET_SWAP_MS;
+    this.hud.toast(swapWords(next), 2500);
   }
 
   /** The thing to use out on a plaza's floor under a tap, if any: the nearest whose art or spot it is on. */
@@ -2791,6 +2821,8 @@ export class RoomScene extends Phaser.Scene {
     sideCam: { lead: number; level: number; x: number; y: number } | null;
     /** The painted egg (OP-261): where the own owl's egg is drawn (null without one), and what tapping an egg last said. */
     egg: { at: Vec2 | null; said: string | null };
+    /** Where the own owl's pet is drawn (OP-263), whatever pet it is; null without one. */
+    pet: Vec2 | null;
     /** Feather tag in the Party Grove (OP-403, behind ?tag=1): the game as this page has it; null elsewhere or without the flag. */
     tag: TagDebug | null;
     bowl: BowlDebug | null;
@@ -2800,6 +2832,7 @@ export class RoomScene extends Phaser.Scene {
     if (!this.built) return null;
     return {
       egg: { at: this.me.eggPos(), said: this.eggSaid },
+      pet: this.me.petPos(),
       tag: this.tag?.state() ?? null,
       bowl: this.bowl?.state() ?? null,
       motion: { calm: this.calm(), fadeInMs: this.fadeInMs, fadeOutMs: this.fadeOutMs },
@@ -2988,6 +3021,7 @@ export class RoomScene extends Phaser.Scene {
     if (this.party) out.push(...this.party.actions(pos));
     if (this.tag) out.push(...this.tag.actions(pos));
     if (this.bowl) out.push(...this.bowl.actions(pos));
+    if (Date.now() < this.swapUntil && canSwapPet(this.myPets())) out.push({ id: 'pet:swap', label: PET_SWAP_WORDS.swap, run: () => this.swapPet() });
     return out;
   }
 

@@ -432,6 +432,16 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     return !!this.pet?.isEgg && this.pet.contains(p);
   }
 
+  /** Whether a room point is on this owl's pet as drawn, whatever pet it is (OP-263, Swap pet). */
+  petAt(p: { x: number; y: number }): boolean {
+    return !!this.pet && this.pet.contains(p);
+  }
+
+  /** Where this owl's pet is drawn (the middle of it), or null without one. */
+  petPos(): { x: number; y: number } | null {
+    return this.pet ? this.pet.middle() : null;
+  }
+
   /** Where this owl's painted egg is drawn (the middle of it), or null without one. */
   eggPos(): { x: number; y: number } | null {
     return this.pet?.isEgg ? this.pet.middle() : null;
