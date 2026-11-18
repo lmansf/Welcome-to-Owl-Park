@@ -1,6 +1,6 @@
 import { analytics } from '@heycatch/sdk';
 import Phaser from 'phaser';
-import { LEFT_PARK_SPAWN, LOBBY_ROOM, RESTART_HOME, SETUP_WORDS, TICKET_ENDED_HOME, TREE_STREET_ROOM, nestRoomId, parseVariant, putOn, type BuyResult, type ClosedView, type GiftResult, type Inventory, type LineStatus, type OwlLook, type PuzzleView, type QuestBoard, type ShopView, type TaskView } from '@owl-park/shared';
+import { LEFT_PARK_SPAWN, LOBBY_ROOM, RESTART_HOME, SETUP_WORDS, TICKET_ENDED_HOME, TREE_STREET_ROOM, nestRoomId, parseVariant, putOn, type BuyResult, type ClosedView, type GiftResult, type Inventory, type LineStatus, type OwlLook, type PuzzleView, type QuestBoard, type ShopView, type TaskView, type TravelState, ACTIVITY_SHARE_WORDS } from '@owl-park/shared';
 import { createCollections } from './collect';
 import { QuestState } from './collect/quests';
 import { CollectionState } from './collect/state';
@@ -37,6 +37,7 @@ import { deviceSettings } from './settings';
 import { keepHudCalm } from './calmMotion';
 import { keepHudText } from './textSize';
 import { guardZoom } from './ui/noZoom';
+import { activityLink, linkedActivity } from './ui/activityLink';
 
 // HeyCatch analytics (heycatch.ai/agents.md): once, at module scope, before anything else runs, so the
 // page's visits and clicks and the reserved short links (/a to /z, /0 to /9) are seen from the first
@@ -743,6 +744,29 @@ game.events.on(HOME_SHOWN, () => {
     hud.toast(setup, 8000);
   }
 });
+
+// ---- arriving by an activity link (OP-392, behind `golink`): in the usual way, then on to the place ----
+// The address names no room, so the home screen, the line, Play and the turnstiles all come first; the
+// owl is flown on only once the park's travel state has it through the turnstiles (ui/activityLink.ts).
+const goLink = (() => {
+  const activity = linkedActivity(globalThis.location?.search ?? '');
+  if (!activity) return null;
+  return activityLink(activity, {
+    walking: walkingMap,
+    travel: (place) => roomScene()?.travel(place) ?? 'busy',
+    toast: (message, ms) => hud.toast(message, ms),
+    later: (fn, ms) => void setTimeout(fn, ms),
+  });
+})();
+if (goLink) {
+  game.registry.events.on('setdata', (_parent: unknown, key: string, value: TravelState) => {
+    if (key === 'travel') goLink.onTravel(value);
+  });
+  game.registry.events.on('changedata-travel', (_parent: unknown, value: TravelState) => goLink.onTravel(value));
+  game.events.on(HOME_SHOWN, () => {
+    if (goLink.pending()) home.note(ACTIVITY_SHARE_WORDS.home(goLink.activity));
+  });
+}
 // The Say wheel says a phrase here and for everyone in the room.
 hud.onSay((n) => roomScene()?.say(n) ?? false);
 // Every Get a Day Ticket a spectator sees (OP-191): the turnstiles' sale, from the room the owl is in.
