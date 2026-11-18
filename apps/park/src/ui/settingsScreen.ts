@@ -129,7 +129,7 @@ export function settingsRows(store: SettingsStore, redraw: () => void, feedback:
       h('Sound'),
       toggle('sound', 'Sounds', 'Your owl’s wings and landings, bells, feathers and doorways.'),
       h('Motion'),
-      toggle('calm', 'Calm motion', 'No drifting fireflies, gold dust or neon rain.'),
+      toggle('calm', 'Calm motion', 'Softer fades, and no flashes, shakes or drifting sparkles.'),
     );
     if (document.fullscreenEnabled) {
       const full = buttonRow('Full screen', 'The park fills the whole screen. Esc or the browser’s own button leaves it.', document.fullscreenElement ? 'Leave' : 'Go full screen', () => {
