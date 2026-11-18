@@ -18,6 +18,16 @@ export interface ParkState {
     refused: string[];
     server: boolean;
   } | null;
+  /** Pinecone bowling in the Party Grove (OP-403, behind ?bowl=1): this page's game; null elsewhere or without the flag. */
+  bowl: {
+    phase: 'idle' | 'aiming' | 'rolling' | 'settling';
+    atSpot: boolean;
+    rolls: number[];
+    score: number;
+    standing: number[];
+    line: string;
+    games: number;
+  } | null;
   /** The owl walks this room as a spectator, as its welcome said (OP-191). */
   spectator: boolean;
   /** The dash (OP-224): held in a parkour course only, spent until the owl lands, and the dashes made in this room. */
