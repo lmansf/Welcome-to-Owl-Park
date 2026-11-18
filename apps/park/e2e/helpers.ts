@@ -132,6 +132,7 @@ export interface ParkState {
   /** The side camera (OP-351): its lead (room px, to the right is positive), the height it holds and where it looks; null in a room seen from above. */
   sideCam: { lead: number; level: number; x: number; y: number } | null;
   egg: { at: { x: number; y: number } | null; said: string | null };
+  pet: { x: number; y: number } | null;
   trail: { feathers: Array<{ x: number; y: number }>; glints: string[]; on: boolean } | null;
   floorShown: boolean;
   /** How many pieces shaping the room's edges seen from above were drawn (edges.ts). */

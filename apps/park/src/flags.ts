@@ -27,6 +27,7 @@ export const FLAGS = {
   look: { param: 'look', note: 'Look around: an emote every owl has, its head turning on its own through front, three-quarter, side and back while the body stays still' },
   snow: { param: 'snow', note: 'The first snow (OP-074): snow falling in every room open to the sky and lying thin on the floors seen from above, drawn in code' },
   bowl: { param: 'bowl', note: 'Pinecone bowling in the Party Grove (OP-403): its six pins and the pinecone in code, three rolls a game at the head of the lane, played on this page' },
+  petswap: { param: 'petswap', note: 'Swap pet (OP-263): a tap on your own pet, with two pets or more, offers Swap pet for a few seconds, cycling your pets and no pet' },
   tag: { param: 'tag', note: 'Feather tag in the Party Grove (OP-403): its game spaces as size boxes, and tag for 2 to 8 owls in the ring, played on the room server' },
   standin: { param: 'standin', note: 'Never a one-owl game (OP-426): an owl alone in the tag ring, or alone at the Old Stump, plays with a park owl (Pip in feather tag) until another owl comes' },
   share: { param: 'share', note: 'Share my owl (OP-392): a button on the Which owl are you result that shares a link to that owl’s own page' },
