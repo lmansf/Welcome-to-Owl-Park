@@ -764,7 +764,7 @@ test.describe('room server', () => {
     for (const page of [a, b, c]) await page.context().close();
   });
 
-  test('a leaf pile up on the lantern beam is flopped into from the beam through the room server, and stays gone for a newcomer (OP-084)', async ({ browser }) => {
+  test('the Party Grove’s leaf pile past the root bench’s east end is out of reach from the bench and flopped into from the floor through the room server, and stays gone for a newcomer (OP-084, OP-414)', async ({ browser }) => {
     test.slow(); // a live park drawn with software WebGL on CI runners, and the walk across the hub
     const a = await visitor(browser);
     await walkAndStop(a, 900, 760);
@@ -774,11 +774,12 @@ test.describe('room server', () => {
     await a.waitForTimeout(320);
     await a.keyboard.up('Space');
     await expect.poll(async () => { const s = await state(a); return [s.air.s, s.air.z]; }, { timeout: 5_000, intervals: [50] }).toEqual([0, 80]);
-    // On the bench below it, the pile is not on offer; a jump and the flap put the owl up on the beam by it.
+    // On the bench, the pile is not on offer: it lies on the floor past the bench's end.
     expect((await state(a)).actions).not.toContain('use:hub-leaves-beam');
-    await jumpFlapGlide(a, 250);
-    await expect.poll(async () => { const s = await state(a); return [s.air.s, s.air.z]; }, { timeout: 5_000, intervals: [50] }).toEqual([0, 264]);
-    // The room server checks the owl stands up there, and takes the flop.
+    // Off the front of the seat and back to the pile on the floor: the room server checks the owl stands there, and takes the flop.
+    await a.evaluate(() => window.owlPark.walkTo(900, 800));
+    await expect.poll(async () => { const s = await state(a); return [s.air.s, s.air.z, s.walking]; }, { timeout: 10_000, intervals: [50] }).toEqual([0, 0, false]);
+    await walkAndStop(a, 1440, 770);
     await doAction(a, 'use:hub-leaves-beam');
     await expect.poll(async () => (await state(a)).objects.find((o) => o.id === 'hub-leaves-beam')?.here, { timeout: 15_000 }).toBe(false);
     const b = await visitor(browser);

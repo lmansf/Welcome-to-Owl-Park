@@ -3,8 +3,10 @@ import { doAction, holdSpace, jumpFlapGlide, openPark, settleCamera, state, step
 
 /**
  * Perches (OP-084): what an owl can land on above the floor. The hub's west wing has the first two,
- * along its back wall: the root bench, a jump up from the floor, and the lantern beam above it; the
- * grove's east wing has the treetop walk (the ladder, the porch, the loft and the far treehouse); the
+ * along its back wall: the root bench, a jump up from the floor, and the lantern beam above it, with the
+ * leaf pile blown off the beam down at the bench's foot since the Party Grove is seen from above (OP-414); the
+ * grove's east wing has the treetop walk (the ladder, the porch, the loft and the far treehouse), with its
+ * leaf piles down on the clearing's floor at the trees' feet since the clearing is seen from above (OP-423); the
  * market has its rooftops (the stall row and its signboards, the shop's roof, the plaza's stalls, the
  * big tent and the food stall).
  * These run on the local transport, tab to tab; the room server's side is in edge.spec.ts.
@@ -73,33 +75,46 @@ test.describe('perches (OP-084)', () => {
     expect((await where(page)).y).toBeCloseTo(800, 0);
   });
 
-  test('a leaf pile up on the lantern beam is out of reach from the bench below it, and flopped into from the beam', async ({ page }) => {
-    test.slow(); // the walk across the hub
-    await openPark(page);
-    await upOnBench(page);
-    // Right under the beam's pile, standing on the bench: no flop on offer.
-    await page.evaluate(() => window.owlPark.walkTo(930, 696));
-    await expect.poll(async () => (await where(page)).walking, { intervals: [50] }).toBe(false);
-    expect((await state(page)).actions).not.toContain('use:hub-leaves-beam');
-    // A jump and the second flap at its top: up on the beam, and the pile is in reach.
-    await jumpFlapGlide(page, 250);
-    await expect.poll(async () => { const w = await where(page); return [w.s, w.z]; }, { timeout: 5_000, intervals: [50] }).toEqual([0, 264]);
-    await doAction(page, 'use:hub-leaves-beam');
-    await expect.poll(async () => (await state(page)).objects.find((o) => o.id === 'hub-leaves-beam')?.here, { timeout: 15_000 }).toBe(false);
-    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-perch-leaves.png` });
+  test('the Party Grove’s leaf pile lies on the floor past the root bench’s east end: walked to, it shows its prompt at every width; up on the bench or the beam it is out of reach, and flopped into from the floor (OP-414)', async ({ page, isMobile }) => {
+    test.slow(); // the walk across the hub, at each width
+    const PILE = 'hub-leaves-beam';
+    const AT_PILE = { x: 1440, y: 770 };
+    // A computer at the QA walk's two widths; a phone at its own.
+    const sizes = isMobile ? [null] : [{ width: 1440, height: 900 }, { width: 1024, height: 768 }];
+    for (const [i, size] of sizes.entries()) {
+      if (size) await page.setViewportSize(size);
+      await openPark(page);
+      const touch = await page.evaluate(() => matchMedia('(pointer: coarse)').matches);
+      // Walked to across the floor, nothing to climb: the prompt says what Interact does here.
+      await walkAndStop(page, AT_PILE.x, AT_PILE.y);
+      expect((await where(page)).z).toBe(0);
+      await expect.poll(async () => (await state(page)).actions, { timeout: 10_000 }).toContain(`use:${PILE}`);
+      await expect.poll(async () => (await state(page)).promptShown, { timeout: 10_000 }).toBe(touch ? 'Flop into the leaves' : 'E: Flop into the leaves');
+      await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-party-grove-pile-${size?.width ?? 'phone'}.png` });
+      if (i < sizes.length - 1) continue;
+      // Up on the bench beside it: not on offer from up there.
+      await upOnBench(page);
+      expect((await state(page)).actions).not.toContain(`use:${PILE}`);
+      // A jump and the second flap at its top: up on the beam, as before, and still not on offer.
+      await jumpFlapGlide(page, 250);
+      await expect.poll(async () => { const w = await where(page); return [w.s, w.z]; }, { timeout: 5_000, intervals: [50] }).toEqual([0, 264]);
+      expect((await state(page)).actions).not.toContain(`use:${PILE}`);
+      await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-perch-beam.png` });
+      // Walked off the front, down on the floor, and back to the pile: a flop.
+      await page.evaluate(() => window.owlPark.walkTo(900, 800));
+      await expect.poll(async () => { const w = await where(page); return [w.s, w.z, w.walking]; }, { timeout: 10_000, intervals: [50] }).toEqual([0, 0, false]);
+      await walkAndStop(page, AT_PILE.x, AT_PILE.y);
+      await doAction(page, `use:${PILE}`);
+      await expect.poll(async () => (await state(page)).objects.find((o) => o.id === PILE)?.here, { timeout: 15_000 }).toBe(false);
+    }
   });
 
-  test('the grove’s treetop walk: up the ladder by single jumps to the porch’s leaf pile and on to the loft, and a glide across to the far treehouse’s', async ({ page }) => {
+  test('the grove’s treetop walk: up the ladder by single jumps to the porch and on to the loft, and a glide across to the far treehouse', async ({ page }) => {
     test.slow(); // the walk across the grove, and five flights
     await openPark(page, { room: 'grove' });
-    // Along the floor (below the doorway to the hub) to the east wing, and right under the porch's
-    // leaf pile: out of reach from the floor.
+    // Along the floor (below the doorway to the hub) to the east wing, and to the foot of the ladder up the middle tree.
     await walkAndStop(page, 2950, 868);
     await walkAndStop(page, 3120, 720);
-    await walkAndStop(page, 4200, 740);
-    await walkAndStop(page, 4290, 712);
-    expect((await state(page)).actions).not.toContain('use:grove-leaves-porch');
-    // To the foot of the ladder up the middle tree.
     await walkAndStop(page, 4200, 740);
     await walkAndStop(page, 4101, 711);
     // A jump: on a rung of the ladder, halfway up; a jump more, on the porch at its top.
@@ -111,8 +126,6 @@ test.describe('perches (OP-084)', () => {
     await page.evaluate(() => window.owlPark.walkTo(4290, 708));
     await expect.poll(async () => (await where(page)).walking, { intervals: [50] }).toBe(false);
     expect((await where(page)).z).toBe(218);
-    await doAction(page, 'use:grove-leaves-porch');
-    await expect.poll(async () => (await state(page)).objects.find((o) => o.id === 'grove-leaves-porch')?.here, { timeout: 15_000 }).toBe(false);
     // A jump more from the porch's end by the trunk: on the loft's deck.
     await page.evaluate(() => window.owlPark.walkTo(4125, 705));
     await expect.poll(async () => (await where(page)).walking, { intervals: [50] }).toBe(false);
@@ -125,9 +138,40 @@ test.describe('perches (OP-084)', () => {
     await jumpFlapGlide(page, 2_500, TO_THE_TOP);
     await page.evaluate(() => window.owlPark.walkTo(3645, 696));
     await standsAt(page, 345);
-    await doAction(page, 'use:grove-leaves-hut');
-    await expect.poll(async () => (await state(page)).objects.find((o) => o.id === 'grove-leaves-hut')?.here, { timeout: 15_000 }).toBe(false);
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-perch-hut.png` });
+  });
+
+  test('every leaf pile in the treehouse clearing is on its floor: walked to from the doorway, each shows its prompt and is flopped into, at every width (OP-423)', async ({ page, isMobile }) => {
+    test.slow(); // the walk across the clearing, at each width
+    // A computer at the QA walk's two widths; a phone at its own.
+    const sizes = isMobile ? [null] : [{ width: 1440, height: 900 }, { width: 1024, height: 768 }];
+    // The way along the floor, west to east (owls walk in straight lines): each pile, and the turns between.
+    const way: Array<{ x: number; y: number; pile?: string }> = [
+      { x: 2950, y: 868 },
+      { x: 2890, y: 845, pile: 'grove-leaves-2' },
+      { x: 3120, y: 720 },
+      { x: 3645, y: 725, pile: 'grove-leaves-hut' },
+      { x: 4200, y: 745 },
+      { x: 4300, y: 740, pile: 'grove-leaves-porch' },
+    ];
+    for (const [i, size] of sizes.entries()) {
+      if (size) await page.setViewportSize(size);
+      await openPark(page, { room: 'grove' });
+      const touch = await page.evaluate(() => matchMedia('(pointer: coarse)').matches);
+      const last = i === sizes.length - 1;
+      for (const stop of way) {
+        await walkAndStop(page, stop.x, stop.y);
+        if (!stop.pile) continue;
+        // Stood on the floor beside it, nothing to climb: the prompt says what Interact does here.
+        expect((await where(page)).z, stop.pile).toBe(0);
+        await expect.poll(async () => (await state(page)).actions, { timeout: 10_000 }).toContain(`use:${stop.pile}`);
+        await expect.poll(async () => (await state(page)).promptShown, { timeout: 10_000 }).toBe(touch ? 'Flop into the leaves' : 'E: Flop into the leaves');
+        if (!last) continue;
+        await doAction(page, `use:${stop.pile}`);
+        await expect.poll(async () => (await state(page)).objects.find((o) => o.id === stop.pile)?.here, { timeout: 15_000 }).toBe(false);
+      }
+      await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-clearing-piles-${size?.width ?? 'phone'}.png` });
+    }
   });
 
   test('the market’s stall row: a jump up from the curb onto its roof, along it onto the signboards, and the feather shop’s roof at the robot owl’s feet', async ({ page }) => {
