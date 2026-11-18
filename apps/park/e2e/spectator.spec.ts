@@ -284,8 +284,8 @@ test.describe('spectators (OP-191)', () => {
     const bramble = page.locator('.dialogue[data-npc="bramble"]');
     await expect(bramble).toBeVisible({ timeout: 15_000 });
     const offer = bramble.locator('[data-offer="story-welcome"]');
-    await expect(offer).toContainText('Reward: Leaf Crown');
-    await expect(offer).not.toContainText('feathers');
+    // The reward line is the crown alone: no feathers for a guest (Bramble's own "New feathers!" is a greeting).
+    await expect(offer.locator('.meta')).toHaveText('Reward: Leaf Crown');
     await offer.getByRole('button', { name: 'Take it on' }).click();
     await expect.poll(step, { timeout: 15_000 }).toBe(0);
     await expect(page.locator(STORE_CARD)).toBeHidden();
