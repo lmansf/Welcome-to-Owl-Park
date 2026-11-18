@@ -147,6 +147,44 @@ test.describe('the parkour courses (OP-224)', () => {
     await expect(page.locator('[data-hint="to-commons"]')).toHaveText('To the Great Hollow');
   });
 
+  test('the Next part chip walks the owl to the first hazard’s edge, never into it, and says a jump crosses, in every course at every width (OP-422)', async ({ page, isMobile }) => {
+    test.slow(); // three courses, at each width
+    // Each course's first room: its way on, and where its first pit starts.
+    const courses = [
+      { room: 'canopy-1', on: 'to-trunk', pit: 2000 },
+      { room: 'brush-1', on: 'to-rain', pit: 580 },
+      { room: 'circuit-1', on: 'to-cut', pit: 1800 },
+    ];
+    // A computer at the QA walk's two widths; a phone held on its side, as a course asks (held upright, its card covers the chip).
+    const sizes = isMobile ? [{ width: 915, height: 412 }] : [{ width: 1440, height: 900 }, { width: 1024, height: 768 }];
+    for (const size of sizes) {
+      await page.setViewportSize(size);
+      for (const c of courses) {
+        await openPark(page, { room: c.room, spawn: 'from-gate', kit: '1' });
+        const touch = await page.evaluate(() => matchMedia('(pointer: coarse)').matches);
+        await expect(page.locator('[data-turn-phone]')).toBeHidden();
+        const chip = page.locator(`[data-hint="${c.on}"]`);
+        await expect(chip).toHaveText('Next part');
+        await chip.click();
+        await expect.poll(async () => (await state(page)).walking, { timeout: 15_000, intervals: [50] }).toBe(false);
+        // Stood at the edge, on the floor, not put back: the walk never reached the hazard.
+        const s = await state(page);
+        expect(s.pos.x, `${c.room} at ${size.width}`).toBeLessThan(c.pit);
+        expect(s.pos.x, `${c.room} at ${size.width}`).toBeGreaterThan(c.pit - 60);
+        expect(s.air.z).toBe(0);
+        expect(s.course?.falls ?? 0).toBe(0);
+        await expect(page.locator('[data-toasts]')).toContainText(touch ? 'Jump here to cross: tap Jump.' : 'Jump here to cross: press Space.');
+        // Pressed again from the edge: it stays at the edge and says so again, rather than walking in.
+        await chip.click();
+        await page.waitForTimeout(600);
+        const again = await state(page);
+        expect(again.pos.x).toBeLessThan(c.pit);
+        expect(again.course?.falls ?? 0).toBe(0);
+      }
+      await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-walk-there-edge-${size.width}.png` });
+    }
+  });
+
   test('the objective strip counts the bells and the lost feathers; the dash is a course’s alone', async ({ page, isMobile }) => {
     await openPark(page, { room: 'trail-1' });
     const strip = page.locator('[data-objective]');
