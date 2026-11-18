@@ -5,11 +5,15 @@
  *
  * The room server keeps the seats and the games; this layer asks it (`party` frames through the room's
  * connection) and shows what it says. Without the room server (the local park) the stump says so.
+ *
+ * Never a one-owl game (OP-426, `?standin=1`): an owl that has sat alone for a few seconds may start
+ * anyway, and Pip the lantern keeper, a park owl, takes the second seat.
  */
 import Phaser from 'phaser';
 import {
   PARTY_MIN_OWLS,
   PARTY_SEATS,
+  PARTY_STANDIN_WAIT_MS,
   PARTY_WORDS,
   SEAT_SIZE,
   STUMP_AT,
@@ -38,6 +42,8 @@ export interface PartyLayerOpts {
   /** Into a game's room, or back to the Party Grove in front of the stump. */
   goTo(room: string): void;
   back(): void;
+  /** Whether an owl alone at the stump may play with Pip (OP-426). */
+  standIn?: boolean;
 }
 
 export interface PartyAction {
@@ -70,6 +76,9 @@ export class PartyLayer {
   private screen: PartyScreen | null = null;
   private going = false;
   private waitTimer: ReturnType<typeof setTimeout> | null = null;
+  /** When this owl sat down, by this page's clock; and the timer that shows Pip's offer once it has sat long enough. */
+  private satAt = 0;
+  private pipTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly inGame: boolean;
 
   constructor(private readonly o: PartyLayerOpts) {
@@ -118,10 +127,10 @@ export class PartyLayer {
     return [{ id: 'party:sit', label: PARTY_WORDS.sit, run: () => this.ask('sit') }];
   }
 
-  private ask(op: 'sit' | 'stand' | 'start', bots = false): void {
+  private ask(op: 'sit' | 'stand' | 'start', bots = false, standin = false): void {
     const party = this.conn?.party;
     if (!party) return this.o.toast(PARTY_WORDS.noServer, 4000);
-    party.send(op, op === 'start' ? { bots } : {});
+    party.send(op, op === 'start' ? { bots, ...(standin ? { standin } : {}) } : {});
     if (this.waitTimer) clearTimeout(this.waitTimer);
     this.waitTimer = setTimeout(() => this.o.toast(PARTY_WORDS.notAnswering, 3500), 6000);
   }
@@ -141,6 +150,7 @@ export class PartyLayer {
     }
     const seat = this.mySeat();
     if (seat !== null && before === null) {
+      this.satAt = Date.now();
       const p = STUMP_SEATS[seat];
       if (p) this.o.walkTo({ x: p.x, y: p.y + 4 });
     }
@@ -174,20 +184,29 @@ export class PartyLayer {
     }
     const seated = v.seats.filter((s) => s !== null).length;
     const starter = v.starter === seat;
-    const line = v.closing ? PARTY_WORDS.closing : seated < PARTY_MIN_OWLS ? PARTY_WORDS.waitMore : starter ? '' : PARTY_WORDS.waitStarter;
+    // Alone at the stump: after a few seconds Pip offers to play (OP-426).
+    const alone = !!this.o.standIn && starter && seated === 1 && !v.closing;
+    const left = this.satAt + PARTY_STANDIN_WAIT_MS + 200 - Date.now();
+    const withPip = alone && left <= 0;
+    if (this.pipTimer) clearTimeout(this.pipTimer);
+    this.pipTimer = alone && !withPip ? setTimeout(() => this.renderCard(), left) : null;
+    const few = seated < PARTY_MIN_OWLS && !withPip;
+    const line = v.closing ? PARTY_WORDS.closing : withPip ? PARTY_WORDS.standIn : seated < PARTY_MIN_OWLS ? PARTY_WORDS.waitMore : starter ? '' : PARTY_WORDS.waitStarter;
     this.card.innerHTML = `
       <header><b>${PARTY_WORDS.stump}</b></header>
       <div class="seats">${v.seats
         .map((s, i) => `<div class="seat${s ? ' taken' : ''}" data-seat="${i}">${s ? `<i style="background:${s.look.body}"></i>${i === seat ? 'You' : `Owl ${i + 1}`}` : `Seat ${i + 1}`}</div>`)
         .join('')}</div>
       <div class="line" data-line>${line}</div>
-      <div class="row">${starter ? `<button data-start ${seated < PARTY_MIN_OWLS || v.closing ? 'disabled' : ''}>${PARTY_WORDS.start}</button>` : ''}${starter && seated < PARTY_SEATS ? `<button data-fill ${seated < PARTY_MIN_OWLS || v.closing ? 'disabled' : ''}>${PARTY_WORDS.fill}</button>` : ''}<button class="ghost" data-stand>${PARTY_WORDS.stand}</button></div>`;
-    this.card.querySelector('[data-start]')?.addEventListener('click', () => this.ask('start', false));
-    this.card.querySelector('[data-fill]')?.addEventListener('click', () => this.ask('start', true));
+      <div class="row">${starter ? `<button data-start ${few || v.closing ? 'disabled' : ''}>${withPip ? PARTY_WORDS.withPip : PARTY_WORDS.start}</button>` : ''}${starter && seated < PARTY_SEATS ? `<button data-fill ${few || v.closing ? 'disabled' : ''}>${PARTY_WORDS.fill}</button>` : ''}<button class="ghost" data-stand>${PARTY_WORDS.stand}</button></div>`;
+    this.card.querySelector('[data-start]')?.addEventListener('click', () => this.ask('start', false, withPip));
+    this.card.querySelector('[data-fill]')?.addEventListener('click', () => this.ask('start', true, withPip));
     this.card.querySelector('[data-stand]')?.addEventListener('click', () => this.ask('stand'));
   }
 
   private closeCard(): void {
+    if (this.pipTimer) clearTimeout(this.pipTimer);
+    this.pipTimer = null;
     this.card?.remove();
     this.card = null;
   }

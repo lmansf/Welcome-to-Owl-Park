@@ -29,6 +29,8 @@ import { PARTY_WORDS } from './words';
 
 export const PARTY_SEATS = 4;
 export const PARTY_MIN_OWLS = 2;
+/** Never a one-owl game (OP-426): an owl that has sat alone at the stump this long may start with Pip, a park owl, in the second seat. */
+export const PARTY_STANDIN_WAIT_MS = 5000;
 export const PARTY_ROUNDS = 8;
 /** The minigames the owner picked for the first build (Nov 8), as they come round. */
 export const PARTY_MINIGAMES: readonly MinigameId[] = ['updraft-race', 'head-turn', 'feather-fall', 'perch-pairs', 'branch-balance', 'hoot-echo'];

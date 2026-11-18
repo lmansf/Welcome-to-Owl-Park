@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { cameraView, dist, frames, openGround, openPark, settleCamera, state, tapRoomPoint, toScreen, waitForArrival, walkAndStop, walkToDoor } from './helpers';
+import { actionButton, cameraView, dist, frames, openGround, openPark, settleCamera, state, tapRoomPoint, toScreen, waitForArrival, walkAndStop, walkToDoor } from './helpers';
 
 /** A finger drawn down the screen from (x, y), `by` pixels, in a few steps, then lifted. */
 async function swipeDown(page: Page, x: number, y: number, by: number): Promise<void> {
@@ -909,5 +909,89 @@ test.describe('the painted egg (OP-261)', () => {
     const after = await state(page);
     expect(after.walking).toBe(false);
     expect(dist(after.pos, before)).toBeLessThan(2);
+  });
+});
+
+test.describe('Swap pet (OP-263, behind ?petswap=1)', () => {
+  /** A collection holding these pets, as if a code and the hatch had given them, kept the way the local mode keeps one. */
+  async function withPets(page: Page, cid: string, pets: string[]): Promise<void> {
+    await page.addInitScript(
+      ({ id, pets }) => {
+        const key = `owl-park:collection:${id}`;
+        if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ collectors: [], owned: pets.map((p) => [id, p, 'granted', 0]) }));
+      },
+      { id: cid, pets },
+    );
+  }
+
+  async function tapPet(page: Page, isMobile: boolean): Promise<void> {
+    await settleCamera(page);
+    const at = (await state(page)).pet!;
+    const p = await toScreen(page, at.x, at.y);
+    if (isMobile) await page.touchscreen.tap(p.x, p.y);
+    else await page.mouse.click(p.x, p.y);
+  }
+
+  const wornPet = async (page: Page) => (await state(page)).look.wear?.pet ?? null;
+
+  test('an owl with the egg and the bunny taps its pet and swaps egg, bunny, no pet, egg, and the choice lasts a reload', async ({ page, isMobile }) => {
+    const cid = 'e2e-pet-swap';
+    await withPets(page, cid, ['painted-egg~0', 'rainbow-bunny~0']);
+    const open = () => openPark(page, { collector: cid, tz: 'UTC', room: 'hub', petswap: '1' });
+    await open();
+    await expect.poll(() => page.evaluate(() => window.owlPark.equip('painted-egg~0'))).toBe(true);
+    await expect.poll(async () => (await state(page)).pet).not.toBeNull();
+    expect((await state(page)).actions).not.toContain('pet:swap');
+    await tapPet(page, isMobile);
+    // The egg still says when it hatches, and Swap pet is offered beside it.
+    await expect.poll(async () => (await state(page)).egg.said).toMatch(/^Hatches in \d+ days$/);
+    await expect.poll(async () => (await state(page)).actions).toContain('pet:swap');
+    expect((await state(page)).walking).toBe(false);
+    const swap = actionButton(page, 'pet:swap');
+    await swap.first().click();
+    await expect.poll(() => wornPet(page)).toBe('rainbow-bunny~0');
+    await expect(page.locator('[data-toasts]')).toContainText('Rainbow Bunny is walking with you now');
+    await swap.first().click();
+    await expect.poll(() => wornPet(page)).toBeNull();
+    // From no pet the presses go round every pet the owl holds (every owl also holds the park’s Halloween
+    // Bat), each once, and come back to the egg.
+    const held = await page.evaluate(() => (window.owlPark.collection()?.owned ?? []).filter((v) => /^(painted-egg|rainbow-bunny|bat)~/.test(v)));
+    expect(held).toEqual(expect.arrayContaining(['painted-egg~0', 'rainbow-bunny~0']));
+    const seen: string[] = [];
+    for (let i = 0; i < held.length && !seen.includes('painted-egg~0'); i++) {
+      const was = await wornPet(page);
+      await swap.first().click();
+      await expect.poll(() => wornPet(page)).not.toBe(was);
+      const now = (await wornPet(page))!;
+      expect(held).toContain(now);
+      expect(seen).not.toContain(now);
+      seen.push(now);
+    }
+    expect(seen).toContain('painted-egg~0');
+    await expect.poll(() => wornPet(page)).toBe('painted-egg~0');
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-pet-swap.png` });
+    // Swapped to the bunny, the page is opened again: the bunny is still on.
+    await swap.first().click();
+    await expect.poll(() => wornPet(page)).toBe('rainbow-bunny~0');
+    await open();
+    await expect.poll(() => wornPet(page)).toBe('rainbow-bunny~0');
+    // Swap pet goes away by itself after a few seconds.
+    await tapPet(page, isMobile);
+    await expect.poll(async () => (await state(page)).actions).toContain('pet:swap');
+    await expect.poll(async () => (await state(page)).actions, { timeout: 10_000 }).not.toContain('pet:swap');
+  });
+
+  test('a new owl, whose one pet is the park’s Bat, is offered no Swap pet when it taps it', async ({ page, isMobile }) => {
+    const cid = 'e2e-pet-swap-one';
+    // Nothing but what every owl is given: the starter pieces and the Halloween Bat, its one pet.
+    await withPets(page, cid, []);
+    await openPark(page, { collector: cid, tz: 'UTC', room: 'hub', petswap: '1' });
+    await expect.poll(() => page.evaluate(() => (window.owlPark.collection()?.owned ?? []).includes('bat~0'))).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.owlPark.equip('bat~0'))).toBe(true);
+    await expect.poll(async () => (await state(page)).pet).not.toBeNull();
+    await tapPet(page, isMobile);
+    await page.waitForTimeout(500);
+    expect((await state(page)).actions).not.toContain('pet:swap');
+    expect(await wornPet(page)).toBe('bat~0');
   });
 });

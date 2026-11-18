@@ -192,6 +192,7 @@ import { alongTheFloor, holdsUp, type Keys } from '../ui/keyboard';
 import type { LoadScreen } from '../ui/loader';
 import type { PreviewFrame } from '../ui/owlBuilder';
 import { PASS_AFTER_DAY_TICKET, gateCard, gateRefusal, offerOnce, type FreePassOffer } from '../ui/tickets';
+import { PET_SWAP_MS, PET_SWAP_WORDS, canSwapPet, nextPet, ownedPets, swapWords } from '../ui/petSwap';
 import { GUEST_IN, SPECTATOR_WORDS, createOfferPacer, createOnceHint, guestWelcome, turnstileWay, type OfferPacer } from '../ui/spectator';
 import type { Opener } from '../ui/checkout';
 import { earlyPreview } from '../ui/preview';
@@ -585,6 +586,9 @@ export class RoomScene extends Phaser.Scene {
   private bubbles: SpeechBubbles | null = null;
   /** What tapping a painted egg last said here (OP-261). */
   private eggSaid: string | null = null;
+  /** Swap pet (OP-263): whether it is on, and until when it is offered after a tap on the own pet. */
+  private readonly petSwapOn = flagOn('petswap');
+  private swapUntil = 0;
   /** The feather trail toward a doorway not tried yet (OP-307), and whether Settings has it on; none in a course. */
   private trail: FeatherTrail | null = null;
   private trailOn = true;
@@ -1389,6 +1393,7 @@ export class RoomScene extends Phaser.Scene {
         walkTo: (p) => void this.walkTo(p),
         goTo: (to) => void this.goTo(to, 'default', { room: this.room.id, spawn: FROM_STUMP_SPAWN }),
         back: () => void this.goTo(STUMP_ROOM, FROM_STUMP_SPAWN, undefined),
+        standIn: flagOn('standin'),
       });
     }
 
@@ -1399,6 +1404,9 @@ export class RoomScene extends Phaser.Scene {
         toast: (m, ms) => this.hud.toast(m, ms),
         me: () => this.playerId,
         posOf: (id) => (id === this.playerId ? { ...this.me.pos } : this.peers.get(id)?.pos ?? null),
+        // Never a one-owl game (OP-426): Pip, the grove's lantern keeper, steps in for a lone owl.
+        askStandIn: flagOn('standin'),
+        standIn: (id, pos) => this.npcs.get(id.replace(/^npc:/, ''))?.standIn(pos),
       });
     }
     if (flagOn('bowl') && room.id === TAG_ROOM && !this.sideView()) {
@@ -1912,6 +1920,8 @@ export class RoomScene extends Phaser.Scene {
       this.pendingVote = false; // a new destination cancels a walk to the idol
       this.errand = null; // ...or to an NPC or a leaf pile
       const world = this.cameras.main.getWorldPoint(p.x, p.y);
+      // A tap on the own owl's pet, with two pets or more to swap between, offers Swap pet (OP-263).
+      if (this.offerPetSwap({ x: world.x, y: world.y })) return;
       // A tap on a painted egg, the own owl's or another's, says when it hatches (OP-261).
       if (this.tapEgg({ x: world.x, y: world.y })) return;
       // In the snow a tap on another owl throws a snowball at it (OP-074), when it is near enough.
@@ -1944,6 +1954,30 @@ export class RoomScene extends Phaser.Scene {
     this.eggSaid = words;
     if (!this.bubbles?.note(owl, words, this.time.now)) this.hud.toast(words, 3000);
     return true;
+  }
+
+  /** The pets the own owl holds, in catalogue order. */
+  private myPets(): string[] {
+    return ownedPets(this.collection.inv?.owned ?? []);
+  }
+
+  /**
+   * A tap on the own owl's pet (OP-263, `?petswap=1`): with two pets or more, Swap pet joins the owl's
+   * actions for a few seconds (an egg still says when it hatches). False when it is not that, so the tap goes on.
+   */
+  private offerPetSwap(p: Vec2): boolean {
+    if (!this.petSwapOn || !this.me.petAt(p) || !canSwapPet(this.myPets())) return false;
+    this.swapUntil = Date.now() + PET_SWAP_MS;
+    this.tapEgg(p);
+    return true;
+  }
+
+  /** Swap pet: on with the next pet the owl holds, or none; a wardrobe change like any other. */
+  private swapPet(): void {
+    const next = nextPet(this.myPets(), this.look.wear?.pet);
+    if (!this.equip('pet', next)) return;
+    this.swapUntil = Date.now() + PET_SWAP_MS;
+    this.hud.toast(swapWords(next), 2500);
   }
 
   /** The thing to use out on a plaza's floor under a tap, if any: the nearest whose art or spot it is on. */
@@ -2801,6 +2835,8 @@ export class RoomScene extends Phaser.Scene {
     sideCam: { lead: number; level: number; x: number; y: number } | null;
     /** The painted egg (OP-261): where the own owl's egg is drawn (null without one), and what tapping an egg last said. */
     egg: { at: Vec2 | null; said: string | null };
+    /** Where the own owl's pet is drawn (OP-263), whatever pet it is; null without one. */
+    pet: Vec2 | null;
     /** Feather tag in the Party Grove (OP-403, behind ?tag=1): the game as this page has it; null elsewhere or without the flag. */
     tag: TagDebug | null;
     bowl: BowlDebug | null;
@@ -2810,6 +2846,7 @@ export class RoomScene extends Phaser.Scene {
     if (!this.built) return null;
     return {
       egg: { at: this.me.eggPos(), said: this.eggSaid },
+      pet: this.me.petPos(),
       tag: this.tag?.state() ?? null,
       bowl: this.bowl?.state() ?? null,
       motion: { calm: this.calm(), fadeInMs: this.fadeInMs, fadeOutMs: this.fadeOutMs },
@@ -2845,7 +2882,7 @@ export class RoomScene extends Phaser.Scene {
       tree: this.treeDress && { fronts: this.treeDress.fronts, raised: this.treeDress.raised, shades: this.treeDress.shades, lips: this.treeDress.lips, marks: this.treeDress.marks, barriers: this.treeDress.barriers, landings: this.treeDress.landings, behind: this.me.depth < this.treeDress.raisedDepth },
       view: (({ x, y, width, height }) => ({ x, y, w: width, h: height }))(this.cameras.main.worldView),
       wings: this.me.wingsOut,
-      npcs: [...this.npcs.values()].map((n) => ({ id: n.id, x: n.def.pos.x, y: n.def.pos.y, mark: this.spectator ? null : this.quests.markFor(n.id), approach: n.approaching })),
+      npcs: [...this.npcs.values()].map((n) => ({ id: n.id, x: n.def.pos.x, y: n.def.pos.y, mark: this.quests.markFor(n.id), approach: n.approaching })),
       thermals: (this.room.thermals ?? []).map((t) => ({ id: t.id, x: t.pos.x, y: t.pos.y, r: t.r, top: t.top })),
       objects: interactablesIn(this.room.id).map((d) => ({ id: d.id, kind: d.kind, x: d.pos.x, y: d.pos.y, top: d.top ?? 0, here: this.piles.get(d.id)?.here ?? true })),
       items: [...this.items.values()].map((m) => ({ quest: m.quest, n: m.n, kind: m.kind, x: m.pos.x, y: m.pos.y, top: m.top })),
@@ -2966,7 +3003,8 @@ export class RoomScene extends Phaser.Scene {
     for (const npc of this.npcs.values()) {
       const d = distance(pos, npc.def.pos);
       npc.lookAt(d <= NPC_LOOK_PX ? pos.x : null);
-      if (d <= NPC_TALK_RADIUS && d < best) {
+      // An owl out playing (OP-426, Pip standing in at feather tag) is not at its spot to talk to.
+      if (d <= NPC_TALK_RADIUS && d < best && !npc.standingIn) {
         nearest = npc;
         best = d;
       }
@@ -2998,6 +3036,7 @@ export class RoomScene extends Phaser.Scene {
     if (this.party) out.push(...this.party.actions(pos));
     if (this.tag) out.push(...this.tag.actions(pos));
     if (this.bowl) out.push(...this.bowl.actions(pos));
+    if (Date.now() < this.swapUntil && canSwapPet(this.myPets())) out.push({ id: 'pet:swap', label: PET_SWAP_WORDS.swap, run: () => this.swapPet() });
     return out;
   }
 
@@ -3095,8 +3134,8 @@ export class RoomScene extends Phaser.Scene {
   private async refreshBoard(): Promise<void> {
     const gen = this.gen;
     const link = this.link;
-    // A spectator's quests are locked (OP-191): asked for again once a ticket makes it a visitor.
-    if (!link || this.spectator) return;
+    // A spectator's board holds only the quests a guest may do (OP-428, the room server's guestBoard).
+    if (!link) return;
     const res = await link.board();
     if (gen !== this.gen || this.leaving || !this.scene.isActive()) return;
     this.boardTimer?.remove();
@@ -3123,8 +3162,8 @@ export class RoomScene extends Phaser.Scene {
   /** The board changed: NPC markers and this room's quest items follow it. */
   private showBoard(board: QuestBoard | null): void {
     if (!this.built) return;
-    // A spectator's quests are locked (OP-191): no marks over the NPC owls, and no quest items drawn.
-    for (const npc of this.npcs.values()) npc.setMark(this.spectator ? null : this.quests.markFor(npc.id));
+    // A spectator's board holds only a guest's quests (OP-428): its marks are Bramble's welcome's, and no quest items are drawn.
+    for (const npc of this.npcs.values()) npc.setMark(this.quests.markFor(npc.id));
     const wanted = new Map<string, { quest: string; n: number; kind: QuestItemMarker['kind']; x: number; y: number; top?: number }>();
     for (const q of this.spectator ? [] : (board?.active ?? [])) for (const it of q.items) if (it.room === this.room.id) wanted.set(`${q.id}#${it.n}`, { quest: q.id, ...it });
     for (const [key, m] of this.items) {
@@ -3336,8 +3375,8 @@ export class RoomScene extends Phaser.Scene {
   private async talk(id: string): Promise<void> {
     const npc = this.npcs.get(id);
     if (!npc || this.busy) return;
-    // The NPC owls' quests and Nova's shop are ticket holders' (OP-191).
-    if (this.spectator) return this.offerDayTicket(SPECTATOR_WORDS.locked);
+    // A free guest talks to the NPC owls too (OP-428: Bramble's welcome asks it to); their other quests
+    // and Nova's shop stay ticket holders' (OP-191), as the dialogue and the shop say.
     if (!this.link) return void this.hud.toast(ROOM_DOWN, 3200);
     const gen = this.gen;
     this.busy = true;
@@ -4264,7 +4303,10 @@ export class RoomScene extends Phaser.Scene {
     const welcome = guestWelcome(this.registry.get(GUEST_IN) === true, on);
     if (welcome) this.hud.toast(welcome, 4500);
     if (welcome || !on) this.registry.set(GUEST_IN, false);
-    if (on && !was) this.showBoard(this.quests.board);
+    if (on && !was) {
+      this.showBoard(this.quests.board);
+      void this.refreshBoard();
+    }
     if (!on && was) {
       this.showBoard(this.quests.board);
       void this.refreshBoard();

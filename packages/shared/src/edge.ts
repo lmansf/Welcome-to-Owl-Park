@@ -195,8 +195,8 @@ export interface ClientSnowball {
  * Feather tag in the Party Grove (OP-403, party/tag.ts): `join` as the owl steps into the tag ring,
  * `leave` as it steps out, `pass` the feather to the owl `at` it touched, `view` to be sent the game.
  */
-export type TagOp = 'join' | 'leave' | 'pass' | 'view';
-export const TAG_OPS: readonly TagOp[] = ['join', 'leave', 'pass', 'view'];
+export type TagOp = 'join' | 'leave' | 'pass' | 'view' | 'standin';
+export const TAG_OPS: readonly TagOp[] = ['join', 'leave', 'pass', 'view', 'standin'];
 export interface ClientTag {
   t: 'tag';
   op: TagOp;
@@ -340,6 +340,8 @@ export interface ClientParty {
   r: number;
   /** `start`: fill the empty seats with park owls. */
   bots?: boolean;
+  /** `start`, by an owl sitting alone (OP-426): play with Pip, a park owl, in the second seat. */
+  standin?: boolean;
   /** `in`: what the owl did, and a small whole number with it. */
   k?: PartyKey;
   v?: number;
@@ -934,7 +936,10 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
       const op = v['op'];
       if (!isRequest(v['r']) || typeof op !== 'string' || !(PARTY_OPS as readonly string[]).includes(op)) return null;
       const out: ClientParty = { t: 'party', op: op as PartyOp, r: v['r'] };
-      if (op === 'start') out.bots = v['bots'] === true;
+      if (op === 'start') {
+        out.bots = v['bots'] === true;
+        if (v['standin'] === true) out.standin = true;
+      }
       if (op === 'in') {
         const k = v['k'];
         const n = v['v'];

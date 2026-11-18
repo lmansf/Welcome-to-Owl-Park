@@ -11,15 +11,24 @@
  * The room server keeps the game and checks every step (party/tag.ts); this layer only asks it, and reads
  * what it says on the room's clock with tagAt, so every page shows the same moment. Without the room
  * server (the local park) the ring says it needs the server.
+ *
+ * Never a one-owl game (OP-426, behind `?standin=1`): alone in the ring for a few seconds, the page asks
+ * the room for Pip, who runs round inside the ring where the clock has Pip (standInAt) on every page;
+ * Pip's own NPC owl is drawn there while it plays, and goes home after.
  */
 import Phaser from 'phaser';
 import {
   BOWLING_LANE,
   TAG_BACK_MS,
   TAG_RING,
+  TAG_STANDIN,
+  TAG_STANDIN_WAIT_MS,
   TAG_WORDS,
   inTagRing,
+  isStandIn,
   newTag,
+  realPlayers,
+  standInAt,
   tagAt,
   tagPhase,
   tagTouches,
@@ -39,6 +48,10 @@ export interface TagLayerOpts {
   me(): string;
   /** Where an owl here stands now (this page's own owl included), as this page draws it. */
   posOf(id: string): Vec2 | null;
+  /** Whether this page asks for a park owl when its owl is alone in the ring (OP-426, `?standin=1`). */
+  askStandIn?: boolean;
+  /** Draw the park owl `id` standing in at `pos`, or back at its spot (null) (OP-426). */
+  standIn?(id: string, pos: Vec2 | null): void;
 }
 
 export interface TagAction {
@@ -63,6 +76,8 @@ export interface TagDebug {
   refused: TagRefusal[];
   /** Whether the room server runs the game for this page. */
   server: boolean;
+  /** Where Pip stands in the ring while standing in (OP-426), null otherwise. */
+  standIn: Vec2 | null;
 }
 
 const CSS = `
@@ -92,6 +107,11 @@ export class TagLayer {
   private readonly refused: TagRefusal[] = [];
   private toldFull = false;
   private toldNoServer = false;
+  /** When this page saw its owl alone in the game (OP-426), and when it last asked for Pip. */
+  private aloneSince = 0;
+  private askedStandIn = 0;
+  private pipShown = false;
+  private toldPip = false;
 
   constructor(private readonly o: TagLayerOpts) {
     this.drawSpaces();
@@ -159,8 +179,12 @@ export class TagLayer {
     return this.conn?.tag?.self() ?? this.o.me();
   }
 
-  /** Where an owl in the game stands: this owl by either of its ids, another by the room's id for it. */
+  /** Where an owl in the game stands: this owl by either of its ids, Pip where the clock has Pip, another by the room's id for it. */
   private posOf(id: string): Vec2 | null {
+    if (isStandIn(id)) {
+      const g = tagAt(this.game, this.now());
+      return g.players.includes(id) ? standInAt(g, this.now()) : null;
+    }
     return this.o.posOf(id === this.me() ? this.o.me() : id);
   }
 
@@ -199,8 +223,26 @@ export class TagLayer {
       link.send('leave');
     }
     if (!inRing) this.toldFull = false;
+    this.askForPip(g, me, now);
     const target = this.touching(g, me, pos, now);
     if (target && now - this.askedPass >= PASS_AGAIN_MS) this.pass(target);
+  }
+
+  /**
+   * Alone in the game with no round going for TAG_STANDIN_WAIT_MS (OP-426, `?standin=1`): ask the room
+   * for Pip. The room checks the wait on its own clock; asked again now and then while still alone.
+   */
+  private askForPip(g: TagState, me: string, now: number): void {
+    const alone = this.mine(g) && g.players.length === 1 && g.startsAt === 0;
+    if (!alone) {
+      this.aloneSince = 0;
+      return;
+    }
+    if (!this.o.askStandIn) return;
+    if (this.aloneSince === 0) this.aloneSince = now;
+    if (now - this.aloneSince < TAG_STANDIN_WAIT_MS + 200 || now - this.askedStandIn < ASK_AGAIN_MS) return;
+    this.askedStandIn = now;
+    this.conn?.tag?.send('standin');
   }
 
   /** The owl the feather would pass to now: holding it in a live round, another owl in the game this owl's feet touch. */
@@ -257,18 +299,34 @@ export class TagLayer {
       return inRing ? (this.conn?.tag ? '' : TAG_WORDS.noServer) : '';
     }
     if (phase === 'waiting') return TAG_WORDS.waiting;
+    const pip = g.players.includes(TAG_STANDIN);
     if (phase === 'countdown') {
       const n = Math.max(1, Math.ceil((g.startsAt - now) / 1000));
       return g.holder === me ? `${TAG_WORDS.countdown(n)}. You start with the feather!` : TAG_WORDS.countdown(n);
     }
     if (phase === 'live') {
       const left = Math.max(0, Math.ceil((g.endsAt - now) / 1000));
-      return `${g.holder === me ? TAG_WORDS.youHave : TAG_WORDS.theyHave} · ${left}s`;
+      const say = g.holder === me ? TAG_WORDS.youHave : pip && isStandIn(g.holder) ? TAG_WORDS.pipHas : TAG_WORDS.theyHave;
+      return `${say} · ${left}s`;
     }
-    return g.left === me ? TAG_WORDS.youLeft : TAG_WORDS.theyLeft;
+    return g.left === me ? TAG_WORDS.youLeft : isStandIn(g.left) ? TAG_WORDS.pipLeft : TAG_WORDS.theyLeft;
+  }
+
+  /** Pip drawn where the clock has Pip while standing in, and sent home after (OP-426); told once a page. */
+  private showPip(g: TagState, now: number): void {
+    const playing = g.players.includes(TAG_STANDIN);
+    if (playing) {
+      this.o.standIn?.(TAG_STANDIN, standInAt(g, now));
+      if (!this.pipShown && this.mine(g) && realPlayers(g).length === 1 && !this.toldPip) {
+        this.toldPip = true;
+        this.o.toast(TAG_WORDS.standIn, 3500);
+      }
+    } else if (this.pipShown) this.o.standIn?.(TAG_STANDIN, null);
+    this.pipShown = playing;
   }
 
   private show(g: TagState, me: string, now: number, pos: Vec2 | null): void {
+    this.showPip(g, now);
     const inRing = pos ? inTagRing(pos) : false;
     const text = this.words(g, me, now, inRing);
     this.setLine(text, this.mine(g) && g.holder === me && tagPhase(g, now) !== 'waiting' && tagPhase(g, now) !== 'over');
@@ -325,11 +383,14 @@ export class TagLayer {
       passesAsked: this.passesAsked,
       refused: [...this.refused],
       server: !!this.conn?.tag,
+      standIn: g.players.includes(TAG_STANDIN) ? standInAt(g, now) : null,
     };
   }
 
   /** The owl moves on: everything here goes with the room. Its page leaving the room takes it out of the game. */
   destroy(): void {
+    if (this.pipShown) this.o.standIn?.(TAG_STANDIN, null);
+    this.pipShown = false;
     for (const d of this.drawn) d.destroy();
     this.drawn.length = 0;
     this.feather.destroy();
