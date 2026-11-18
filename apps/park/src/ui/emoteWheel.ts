@@ -77,7 +77,7 @@ const CSS = `
 #hud .wheel .hub [data-name]{font-size:13px;min-height:16px;color:#FFD36A}
 #hud .wheel .pager{display:flex;align-items:center;gap:6px;font-size:12px}
 #hud .wheel .pager button{min-height:34px;min-width:34px;padding:0;font-size:18px;line-height:1}
-#hud .wheel .note{max-width:min(360px,calc(100vw - 32px));text-align:center;font-size:13px;line-height:1.35;background:rgba(12,30,54,.86);border:1px solid rgba(246,241,227,.15);border-radius:12px;padding:8px 12px}
+#hud .wheel .note{max-width:min(360px,calc(calc(100vw/var(--vz,1)) - 32px));text-align:center;font-size:13px;line-height:1.35;background:rgba(12,30,54,.86);border:1px solid rgba(246,241,227,.15);border-radius:12px;padding:8px 12px}
 #hud .wheel .note:empty{display:none}
 #hud .wheel [data-close],#hud .wheel [data-swap]{min-height:40px}
 #hud .wheel .wfoot{display:flex;gap:8px;justify-content:center}

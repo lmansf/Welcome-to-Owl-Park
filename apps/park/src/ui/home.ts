@@ -205,21 +205,21 @@ const OWL_VIEW = 204 / 222;
 function css(): string {
   const base = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`;
   return `
-#hud .home{position:absolute;inset:0;z-index:4;display:grid;grid-template-columns:minmax(0,min(440px,56vw)) minmax(0,1fr);pointer-events:none}
+#hud .home{position:absolute;inset:0;z-index:4;display:grid;grid-template-columns:minmax(0,min(440px,calc(56vw/var(--vz,1)))) minmax(0,1fr);pointer-events:none}
 #hud .home[hidden]{display:none}
 #hud.covered .home{visibility:hidden}
 #hud .home .h-side{pointer-events:auto;display:flex;flex-direction:column;justify-content:safe center;min-height:0;overflow-y:auto;
-  padding:max(16px,env(safe-area-inset-top)) clamp(16px,4vw,44px) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));
+  padding:max(16px,env(safe-area-inset-top)) clamp(16px,calc(4vw/var(--vz,1)),44px) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));
   background:linear-gradient(90deg,rgba(12,30,54,.9),rgba(12,30,54,.62) 72%,rgba(12,30,54,0))}
 /* The hero and its footer are one block, in the middle of the side's height: no gap opens between them on a tall phone. */
-#hud .home .h-hero{display:flex;flex-direction:column;gap:clamp(10px,2.2vh,16px)}
-#hud .home .h-brand{display:flex;align-items:center;gap:clamp(10px,2vw,16px);margin-bottom:clamp(4px,2.4vh,20px)}
-#hud .home .h-mascot{--m:clamp(56px,13vh,112px);flex:none;width:var(--m);height:var(--m);border-radius:50%;
+#hud .home .h-hero{display:flex;flex-direction:column;gap:clamp(10px,calc(2.2vh/var(--vz,1)),16px)}
+#hud .home .h-brand{display:flex;align-items:center;gap:clamp(10px,calc(2vw/var(--vz,1)),16px);margin-bottom:clamp(4px,calc(2.4vh/var(--vz,1)),20px)}
+#hud .home .h-mascot{--m:clamp(56px,calc(13vh/var(--vz,1)),112px);flex:none;width:var(--m);height:var(--m);border-radius:50%;
   background:url(${base}home-mascot.webp) center/cover no-repeat;box-shadow:0 0 22px rgba(255,211,106,.35)}
-#hud .home h1{margin:0;font-size:clamp(28px,5.6vh,46px);line-height:1.05;color:#FFD36A;text-shadow:0 2px 12px rgba(0,0,0,.55)}
-#hud .home h1 .h-tag{display:block;margin-top:4px;font-size:clamp(14px,2.3vh,18px);font-weight:600;line-height:1.25;color:#F6F1E3}
+#hud .home h1{margin:0;font-size:clamp(28px,calc(5.6vh/var(--vz,1)),46px);line-height:1.05;color:#FFD36A;text-shadow:0 2px 12px rgba(0,0,0,.55)}
+#hud .home h1 .h-tag{display:block;margin-top:4px;font-size:clamp(14px,calc(2.3vh/var(--vz,1)),18px);font-weight:600;line-height:1.25;color:#F6F1E3}
 #hud .home .h-side button{width:100%}
-#hud .home .h-main{min-height:clamp(52px,8vh,64px);font-size:clamp(18px,2.8vh,22px)}
+#hud .home .h-main{min-height:clamp(52px,calc(8vh/var(--vz,1)),64px);font-size:clamp(18px,calc(2.8vh/var(--vz,1)),22px)}
 #hud .home .h-small{min-height:44px;font-size:15px}
 /* Pressed: a press shows at once, on a phone too (data-pressed, as touch screens do not all show :active). */
 #hud .home .h-main:active,#hud .home .h-main[data-pressed]{transform:translateY(1px) scale(.985);box-shadow:0 1px 4px rgba(0,0,0,.35)}
@@ -227,7 +227,7 @@ function css(): string {
 #hud .home .h-main[aria-busy="true"]{cursor:progress;animation:h-opening 1.2s ease-in-out infinite}
 @keyframes h-opening{0%,100%{opacity:1}50%{opacity:.72}}
 @media (prefers-reduced-motion:reduce){#hud .home .h-main[aria-busy="true"]{animation:none;opacity:.85}}
-#hud .home .h-lead{margin:0;font-size:clamp(14px,2.2vh,17px);line-height:1.4}
+#hud .home .h-lead{margin:0;font-size:clamp(14px,calc(2.2vh/var(--vz,1)),17px);line-height:1.4}
 #hud .home .h-safe{margin:-6px 0 0;font-size:13px;line-height:1.35;opacity:.8}
 /* Under Play free now: the first thing to do, named (OP-364). */
 #hud .home .h-free-line{margin:-6px 0 0;font-size:13px;line-height:1.35;text-align:center;color:#F6F1E3;opacity:.85}
@@ -242,21 +242,21 @@ function css(): string {
 #hud .home .h-side button.h-link:hover{opacity:1;text-decoration-color:currentColor}
 #hud .home .h-side button.h-link:focus-visible{opacity:1;outline:2px solid #FFD36A;outline-offset:2px;border-radius:8px}
 #hud .home .h-side button.h-restore{align-self:center;margin-top:-6px;font-size:14px}
-#hud .home .h-foot{display:flex;flex-direction:column;align-items:center;gap:2px;padding-top:clamp(14px,3.5vh,28px);text-align:center}
+#hud .home .h-foot{display:flex;flex-direction:column;align-items:center;gap:2px;padding-top:clamp(14px,calc(3.5vh/var(--vz,1)),28px);text-align:center}
 /* Settings and the two screens in one centred row, under Play's middle (a narrow phone wraps the last to a second row). */
 #hud .home .h-links{display:flex;flex-wrap:wrap;justify-content:center;column-gap:2px}
 #hud .home .h-side .h-links button.h-link{padding:6px 8px}
 #hud .home .h-welcome{margin:0;font-size:12px;line-height:1.35;opacity:.62}
 #hud .home .h-note{margin:0;align-self:flex-start;padding:6px 14px;border-radius:999px;font-size:14px;font-weight:700;background:rgba(123,201,80,.2);border:1px solid rgba(123,201,80,.65)}
 #hud .home .h-line{display:flex;flex-direction:column;gap:6px;padding:14px 16px;border-radius:16px;background:rgba(12,30,54,.72);border:1px solid rgba(255,211,106,.45)}
-#hud .home .h-line h2{margin:0;font-size:clamp(16px,2.4vh,19px);color:#FFD36A}
+#hud .home .h-line h2{margin:0;font-size:clamp(16px,calc(2.4vh/var(--vz,1)),19px);color:#FFD36A}
 #hud .home .h-line .h-place{margin:0;font-size:15px;opacity:1}
-#hud .home .h-line .h-place strong{display:block;font-size:clamp(34px,6vh,48px);line-height:1.05;color:#F6F1E3}
-#hud .home .h-line .h-message{margin:0;font-size:clamp(18px,2.8vh,22px);font-weight:700;opacity:1}
+#hud .home .h-line .h-place strong{display:block;font-size:clamp(34px,calc(6vh/var(--vz,1)),48px);line-height:1.05;color:#F6F1E3}
+#hud .home .h-line .h-message{margin:0;font-size:clamp(18px,calc(2.8vh/var(--vz,1)),22px);font-weight:700;opacity:1}
 #hud .home .h-line p{margin:0;font-size:14px;line-height:1.35;opacity:.92}
 #hud .home .h-line .h-small-note{font-size:13px;opacity:.75}
 #hud .home .h-closed{display:flex;flex-direction:column;gap:6px;padding:14px 16px;border-radius:16px;background:rgba(12,30,54,.78);border:1px solid rgba(224,122,95,.75)}
-#hud .home .h-closed .h-closed-words{margin:0;font-size:clamp(17px,2.6vh,21px);font-weight:700;line-height:1.3}
+#hud .home .h-closed .h-closed-words{margin:0;font-size:clamp(17px,calc(2.6vh/var(--vz,1)),21px);font-weight:700;line-height:1.3}
 #hud .home .h-closed p{margin:0;font-size:14px;line-height:1.35;opacity:.92}
 #hud .home .h-stage{min-width:0;min-height:0}
 /* The keepers' ribbon lies across the top of the home screen (OP-369): the side's block keeps clear of it, moved down only as far
@@ -267,20 +267,20 @@ function css(): string {
 /* A phone on its side: the block fills its side from top to bottom, and moved down its last links would leave the screen. There
    the ribbon stands over the owl's side instead, and the block stays where it is. */
 @media (max-height:480px) and (min-width:641px){
-  #hud.at-home.ribbon-on .ribbon{margin:0 max(8px,env(safe-area-inset-right)) 0 auto;max-width:calc(100vw - min(440px,56vw) - 24px)}
+  #hud.at-home.ribbon-on .ribbon{margin:0 max(8px,env(safe-area-inset-right)) 0 auto;max-width:calc(calc(100vw/var(--vz,1)) - min(440px,calc(56vw/var(--vz,1))) - 24px)}
   #hud.ribbon-on .home .h-side::before{min-height:0}
 }
 /* After every rule that sets a display, so a hidden part (the line, its message, the note) stays hidden. */
 #hud .home [hidden]{display:none}
 @media (max-width:520px){
   /* A little wider than half, so the footer's links sit in a row; the owl still has the rest. */
-  #hud .home{grid-template-columns:minmax(0,56vw) minmax(0,1fr)}
+  #hud .home{grid-template-columns:minmax(0,calc(56vw/var(--vz,1))) minmax(0,1fr)}
   /* Make your owl on one line on a phone (a very narrow one may still wrap it). */
-  #hud .home .h-main{font-size:clamp(15px,4.8vw,20px);padding-left:10px;padding-right:10px}
+  #hud .home .h-main{font-size:clamp(15px,calc(4.8vw/var(--vz,1)),20px);padding-left:10px;padding-right:10px}
   #hud .home .h-side{padding-left:max(14px,env(safe-area-inset-left));padding-right:10px}
   /* On a phone the side is one centred column: mascot, name, line, Play and the rest share its middle. */
   #hud .home .h-brand{flex-direction:column;align-items:center;gap:8px;text-align:center}
-  #hud .home h1{font-size:clamp(24px,7.4vw,32px)}
+  #hud .home h1{font-size:clamp(24px,calc(7.4vw/var(--vz,1)),32px)}
   #hud .home h1 .h-tag{font-size:13px}
   #hud .home .h-lead{font-size:14px;text-align:center}
   #hud .home .h-side .h-links button.h-link{font-size:12px;padding:6px}

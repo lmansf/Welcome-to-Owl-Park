@@ -1,4 +1,5 @@
-import type { Settings, SettingsStore } from '../settings';
+import { TEXT_SIZES, type Settings, type SettingsStore } from '../settings';
+import { TEXT_WORDS } from '../textSize';
 import { createModal, modalHeader } from './modal';
 
 export interface SettingsScreen {
@@ -23,6 +24,10 @@ const CSS = `
 #hud .settings .touch-only,#hud .settings .keys-only{display:none}
 @media (pointer:coarse){#hud .settings .touch-only{display:flex}}
 @media (hover:hover) and (pointer:fine){#hud .settings .keys-only{display:grid}}
+#hud .settings .sizes{display:flex;flex:none;gap:6px}
+#hud .settings .sizes button{min-width:58px;padding:8px 10px;background:rgba(246,241,227,.12);color:#F6F1E3;border:1px solid rgba(246,241,227,.3);box-shadow:none}
+#hud .settings .sizes button[aria-pressed=true]{background:#C9A227;color:#0C1E36;border-color:#FFD36A}
+@media (max-width:420px){#hud .settings .opt.text-size{flex-wrap:wrap}}
 #hud .settings .tips{font-size:13.5px;line-height:1.45;margin:0;opacity:.9}
 `;
 
@@ -43,10 +48,13 @@ export const KEY_HELP: ReadonlyArray<[keys: string[], what: string]> = [
 ];
 
 let styled = false;
+/** Text size rows drawn so far, for each one's own label id. */
+let textRows = 0;
 
 /** Each switch's state, from the settings (after the rows are drawn, and whenever a setting changes). */
 export function syncSettings(root: ParentNode, s: Settings): void {
   for (const sw of root.querySelectorAll<HTMLButtonElement>('[data-setting]')) sw.setAttribute('aria-checked', String(s[sw.dataset['setting'] as keyof Settings]));
+  for (const b of root.querySelectorAll<HTMLButtonElement>('[data-text-size]')) b.setAttribute('aria-pressed', String(Number(b.dataset['textSize']) === s.text));
 }
 
 /**
@@ -109,6 +117,32 @@ export function settingsRows(store: SettingsStore, redraw: () => void, feedback:
     row.append(text, sw);
     return row;
   };
+  /** Text size (OP-386): three buttons, one pressed. */
+  const textSize = (): HTMLElement => {
+    const row = document.createElement('div');
+    row.className = 'opt text-size';
+    const text = document.createElement('span');
+    text.id = `text-size-title-${++textRows}`;
+    text.append(TEXT_WORDS.title);
+    const small = document.createElement('small');
+    small.textContent = TEXT_WORDS.note;
+    text.appendChild(small);
+    const group = document.createElement('div');
+    group.className = 'sizes';
+    group.setAttribute('role', 'group');
+    group.setAttribute('aria-labelledby', text.id);
+    for (const n of TEXT_SIZES) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = TEXT_WORDS.size(n);
+      b.dataset['textSize'] = String(n);
+      b.setAttribute('aria-pressed', String(store.get().text === n));
+      b.addEventListener('click', () => store.set({ text: n }));
+      group.appendChild(b);
+    }
+    row.append(text, group);
+    return row;
+  };
 
   {
     const h = (t: string) => {
@@ -123,6 +157,7 @@ export function settingsRows(store: SettingsStore, redraw: () => void, feedback:
     rows.push(
       fb.row,
       h('On screen'),
+      textSize(),
       toggle('thumbstick', 'Thumbstick', 'Walk with the stick in the corner. Off: tap the floor to walk.', 'touch-only'),
       toggle('bubbles', 'Show what owls say', ''),
       toggle('trail', 'Feather trail', 'Feathers lead to a doorway you haven’t been through yet.'),

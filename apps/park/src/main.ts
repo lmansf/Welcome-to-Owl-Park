@@ -35,6 +35,7 @@ import { createRibbon } from './ui/ribbon';
 import { createAway } from './ui/away';
 import { deviceSettings } from './settings';
 import { keepHudCalm } from './calmMotion';
+import { keepHudText } from './textSize';
 import { guardZoom } from './ui/noZoom';
 
 // HeyCatch analytics (heycatch.ai/agents.md): once, at module scope, before anything else runs, so the
@@ -84,6 +85,8 @@ guardZoom(document, window);
 const hud = createHud(document.body, look, settings);
 // Calm motion (OP-375): the HUD's screens move little or not at all while it is on (calmMotion.ts).
 keepHudCalm(document.getElementById('hud') as HTMLElement, () => settings.get().calm, (cb) => settings.onChange(cb));
+// Text size (OP-386): the HUD's screens drawn larger, from Settings, in place of pinch zoom (textSize.ts).
+keepHudText(document.getElementById('hud') as HTMLElement, () => settings.get().text, (cb) => settings.onChange(cb));
 // The busy ribbon (OP-075) across the top of the home screen and every room.
 const ribbon = createRibbon(document.getElementById('hud') as HTMLElement);
 // An owl asleep a long while (OP-126): "Still here?", and the way back once it has left.

@@ -21,7 +21,7 @@ export function turnGroup(group: PhraseGroup, step: number): PhraseGroup {
 }
 
 const CSS = `
-#hud .layer .modal.say{width:auto;max-height:calc(100dvh - 16px);overflow:auto;padding:0;background:transparent;border:0;box-shadow:none;align-items:center;gap:12px}
+#hud .layer .modal.say{width:auto;max-height:calc(calc(100dvh/var(--vz,1)) - 16px);overflow:auto;padding:0;background:transparent;border:0;box-shadow:none;align-items:center;gap:12px}
 #hud .say .ring{--r:126px;position:relative;flex:none;width:calc(var(--r) * 2 + 92px);height:calc(var(--r) * 2 + 92px);border-radius:50%;background:radial-gradient(circle,rgba(12,30,54,.94) 0 46%,rgba(12,30,54,.86) 47% 100%);border:1px solid rgba(246,241,227,.2);box-shadow:0 18px 60px rgba(0,0,0,.55),inset 0 0 0 10px rgba(246,241,227,.04)}
 #hud .say .group{position:absolute;left:50%;top:50%;width:84px;height:84px;min-height:0;margin:-42px 0 0 -42px;padding:6px;border-radius:50%;display:flex;align-items:center;justify-content:center;text-align:center;background:rgba(246,241,227,.08);color:#F6F1E3;border:1px solid rgba(246,241,227,.22);box-shadow:none;font-size:12px;font-weight:700;line-height:1.15;transition:transform .12s ease-out,background .12s}
 #hud .say .group[aria-pressed=true]{background:#C9A227;color:#0C1E36;border-color:#FFD36A}
@@ -30,7 +30,7 @@ const CSS = `
 #hud .say .hub{position:absolute;left:50%;top:50%;width:120px;margin-left:-60px;transform:translateY(-50%);display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center}
 #hud .say .hub b{font-size:20px}
 #hud .say .hub [data-group-name]{font-size:13px;color:#FFD36A;min-height:16px}
-#hud .say .phrases{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:min(420px,calc(100vw - 24px))}
+#hud .say .phrases{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:min(420px,calc(calc(100vw/var(--vz,1)) - 24px))}
 #hud .say .phrase{position:relative;min-height:48px;padding:8px 30px 8px 12px;border-radius:16px;font-size:15px;line-height:1.2;text-align:left;background:rgba(12,30,54,.92);color:#F6F1E3;border:1px solid rgba(255,211,106,.55)}
 #hud .say .phrase:disabled{opacity:.45;cursor:default}
 #hud .say .phrase kbd{position:absolute;top:8px;right:8px;margin:0}

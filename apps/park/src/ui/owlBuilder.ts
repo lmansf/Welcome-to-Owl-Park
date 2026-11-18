@@ -87,7 +87,7 @@ const CSS = `
 #hud .builder{display:grid;grid-template-rows:auto 1fr;height:100%}
 #hud .builder > header{padding:max(10px,env(safe-area-inset-top)) max(14px,env(safe-area-inset-right)) 10px max(14px,env(safe-area-inset-left));background:linear-gradient(rgba(12,30,54,.92),rgba(12,30,54,.6));z-index:1}
 #hud .builder > header .x{background:#C9A227;color:#0C1E36;border:0}
-#hud .builder .b-body{display:grid;grid-template-columns:minmax(0,1fr) min(460px,46vw);min-height:0}
+#hud .builder .b-body{display:grid;grid-template-columns:minmax(0,1fr) min(460px,calc(46vw/var(--vz,1)));min-height:0}
 #hud .builder .b-stage{position:relative;min-height:0;display:flex;align-items:flex-end;justify-content:center;padding-bottom:18px}
 #hud .builder .b-name{margin:0;padding:6px 14px;border-radius:999px;background:rgba(12,30,54,.7);border:1px solid rgba(246,241,227,.18);font-size:14px;font-weight:700}
 #hud .builder .b-panel{display:flex;flex-direction:column;gap:12px;min-height:0;padding:14px max(14px,env(safe-area-inset-right)) max(14px,env(safe-area-inset-bottom)) 14px;background:rgba(12,30,54,.97);border-left:1px solid rgba(246,241,227,.14)}

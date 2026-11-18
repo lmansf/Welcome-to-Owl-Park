@@ -31,8 +31,8 @@ const CSS = `
 #hud .layer{position:fixed;inset:0;z-index:20;display:none;pointer-events:auto;align-items:center;justify-content:center}
 #hud .layer.open{display:flex}
 #hud .layer .scrim{position:absolute;inset:0;background:rgba(6,14,28,.58);animation:modal-fade .18s ease-out}
-#hud .modal{position:relative;display:flex;flex-direction:column;gap:12px;width:min(560px,calc(100vw - 24px));max-height:calc(100dvh - 32px);overflow:auto;padding:16px;background:rgba(12,30,54,.97);border:1px solid rgba(246,241,227,.18);border-radius:22px;box-shadow:0 18px 60px rgba(0,0,0,.6);color:#F6F1E3;animation:modal-pop .2s ease-out;overscroll-behavior:contain}
-#hud .layer.full .modal{width:100vw;height:100dvh;max-height:none;border-radius:0;border:0;padding:0;overflow:hidden;background:transparent;box-shadow:none;animation:modal-fade .18s ease-out}
+#hud .modal{position:relative;display:flex;flex-direction:column;gap:12px;width:min(560px,calc(calc(100vw/var(--vz,1)) - 24px));max-height:calc(calc(100dvh/var(--vz,1)) - 32px);overflow:auto;padding:16px;background:rgba(12,30,54,.97);border:1px solid rgba(246,241,227,.18);border-radius:22px;box-shadow:0 18px 60px rgba(0,0,0,.6);color:#F6F1E3;animation:modal-pop .2s ease-out;overscroll-behavior:contain}
+#hud .layer.full .modal{width:calc(100vw/var(--vz,1));height:calc(100dvh/var(--vz,1));max-height:none;border-radius:0;border:0;padding:0;overflow:hidden;background:transparent;box-shadow:none;animation:modal-fade .18s ease-out}
 #hud .modal > header{display:flex;align-items:center;gap:10px;min-height:44px}
 #hud .modal > header h2{margin:0;font-size:19px;letter-spacing:.01em}
 #hud .modal > header .sub{flex:1;font-size:13px;opacity:.8;min-width:0}
@@ -48,7 +48,7 @@ const CSS = `
 @keyframes modal-pop{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
 @media (max-width:600px){
   #hud .layer.rise{align-items:flex-end}
-  #hud .layer.rise .modal{width:100vw;max-height:88dvh;border-radius:22px 22px 0 0;padding:16px 14px max(16px,env(safe-area-inset-bottom));animation:modal-rise .22s ease-out}
+  #hud .layer.rise .modal{width:calc(100vw/var(--vz,1));max-height:calc(88dvh/var(--vz,1));border-radius:22px 22px 0 0;padding:16px 14px max(16px,env(safe-area-inset-bottom));animation:modal-rise .22s ease-out}
 }
 @keyframes modal-rise{from{transform:translateY(40px);opacity:.4}to{transform:none;opacity:1}}
 @media (prefers-reduced-motion:reduce){#hud .modal,#hud .layer .scrim{animation:none}}

@@ -29,14 +29,14 @@ type Store = Pick<Storage, 'getItem' | 'setItem'>;
 // first thing at the top. The 2 s notices and a course's objective strip move below it where they would lie over it (topStack.ts). On
 // a wide screen, where the activity cards stand at the top right, it keeps to the left of them.
 const CSS = `
-#hud .ribbon{position:relative;z-index:6;margin:8px auto 0;width:max-content;max-width:min(92vw,560px);display:flex;align-items:center;gap:8px;
+#hud .ribbon{position:relative;z-index:6;margin:8px auto 0;width:max-content;max-width:min(calc(92vw/var(--vz,1)),560px);display:flex;align-items:center;gap:8px;
   padding:5px 5px 5px 14px;border-radius:999px;background:rgba(255,211,106,.95);color:#0C1E36;font-size:14px;font-weight:700;line-height:1.3;
   box-shadow:0 3px 12px rgba(0,0,0,.35);pointer-events:auto;animation:hud-in .25s ease-out}
 #hud .ribbon[hidden]{display:none}
 #hud .ribbon span{overflow-wrap:anywhere}
 #hud .ribbon button{flex:none;min-height:32px;width:32px;padding:0;border-radius:50%;background:rgba(12,30,54,.12);color:#0C1E36;box-shadow:none;font-size:18px;line-height:1}
-@media (min-width:761px){#hud .ribbon{margin:8px 0 0;max-width:min(560px,calc(100vw - 452px))}}
-#hud.at-home .ribbon{margin:0 auto;max-width:min(92vw,560px)}
+@media (min-width:761px){#hud .ribbon{margin:8px 0 0;max-width:min(560px,calc(calc(100vw/var(--vz,1)) - 452px))}}
+#hud.at-home .ribbon{margin:0 auto;max-width:min(calc(92vw/var(--vz,1)),560px)}
 #hud.covered .ribbon{visibility:hidden}
 `;
 
