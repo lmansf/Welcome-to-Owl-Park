@@ -569,7 +569,7 @@ test.describe('room server', () => {
     await a.goto('/?transport=edge');
     await a.locator('[data-home-btn="guest"]').click({ timeout: 20_000 });
     await expect.poll(async () => (await state(a)).room, { timeout: 25_000 }).toBe('lobby');
-    const beam = (await state(a)).objects.find((o) => o.id === 'lobby-moonbeam')!;
+    const beam = (await state(a)).thermals.find((t) => t.id === 'commons')!;
     expect(dist((await state(a)).pos, beam)).toBeLessThan(450);
     await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(1);
     // Into the light and up: the other owl sees it carried far over a jump's reach, so the room server took it lifted.

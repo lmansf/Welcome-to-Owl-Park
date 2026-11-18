@@ -601,7 +601,7 @@ export class RoomObject extends DurableObject<Env> {
 
   /**
    * A spectator asked for something locked to ticket holders (OP-191): a quest, an NPC owl, a quest
-   * item, today's tasks (leaf piles, stalls and the moonbeam are open to it, OP-243). Told once per
+   * item, today's tasks (leaf piles, stalls and the floor's things are open to it, OP-243). Told once per
    * socket, with the first frame refused.
    *
    * TODO-DOCS (OP-191): docs/LOGGING.md: spectator_refused (room.play, info): frame (the first refused
@@ -1571,7 +1571,7 @@ export class RoomObject extends DurableObject<Env> {
     if (!att.cid) return refuse('unknown');
     if (room.sessionOf(att.id) !== att.sid) return;
     // The quests, the NPC owls and the quest items are ticket holders' (OP-191). A free guest may still
-    // flop into a leaf pile, browse a stall and bask in the moonbeam, for nothing (OP-243).
+    // flop into a leaf pile, browse a stall and use the floor's things, for nothing (OP-243).
     if (att.spec && frame.t !== 'use') {
       this.spectatorRefused(att, frame.t);
       return refuse('spectator');
@@ -1893,7 +1893,7 @@ export class RoomObject extends DurableObject<Env> {
 
   /**
    * A free guest's use of an interactable (OP-243): a leaf pile poofs for everyone as anyone's flop does,
-   * a stall or the moonbeam answers as for anyone; but it turns up no feathers, moves no quest and counts
+   * a stall or a floor thing answers as for anyone; but it turns up no feathers, moves no quest and counts
    * for no task, and the collections object is told only for the play log (OP-304). `practice` tells the page so.
    */
   private practiceUse(ws: WebSocket, room: Room, att: Attachment, id: string, shared: boolean, r: number): void {

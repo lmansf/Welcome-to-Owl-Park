@@ -41,12 +41,12 @@ describe('the painted common rooms grown into plazas (Nov 8: somewhere 80 owls c
     }
   });
 
-  it.each(plazas)('$id keeps every doorway, spawn and thing to do on its floor, and a moonbeam in each ring', ({ id, plaza }) => {
+  it.each(plazas)('$id keeps every doorway, spawn, thing to do and gathering ring on its floor', ({ id, plaza }) => {
     const room = getRoom(id)!;
     const onFloor = (p: { x: number; y: number }) => room.walkable.some((poly) => pointInPolygon(p, poly));
     for (const [name, at] of Object.entries(room.spawns)) expect(onFloor(at), name).toBe(true);
     for (const t of interactablesIn(id)) if (!t.top) expect(onFloor(t.pos), t.id).toBe(true);
-    for (const r of plaza.rings) expect(interactablesIn(id).some((t) => t.kind === 'moonbeam' && t.pos.x === r.x && t.pos.y === r.y), `${id} ring at ${r.x}`).toBe(true);
+    for (const r of plaza.rings) expect(onFloor(r), `${id} ring at ${r.x}`).toBe(true);
   });
 
   it.each(plazas)("$id's edge pieces stay in the room, each a known piece", ({ id }) => {

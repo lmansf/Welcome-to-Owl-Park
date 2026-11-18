@@ -85,17 +85,15 @@ export class QuestItemMarker {
   }
 }
 
-/** Glow colours of interactables that stay put (stalls, the moonbeam). */
-const SPOT_TINTS: Record<string, number> = { stall: 0xff2aa1, moonbeam: 0xbfe4ff };
+/** Glow colours of interactables that stay put (stalls). */
+const SPOT_TINTS: Record<string, number> = { stall: 0xff2aa1 };
 
 /**
- * A soft floor glow under an interactable that stays put (a market stall, the moonbeam): faint
- * from afar, brighter when the owl is close enough to use it. The moonbeam also gets its shaft
- * of light and a few motes drifting up through it.
+ * A soft floor glow under an interactable that stays put (a market stall): faint from afar, brighter
+ * when the owl is close enough to use it.
  */
 export class SpotGlow {
   private readonly glow: Phaser.GameObjects.Image;
-  private readonly extras: Phaser.GameObjects.GameObject[] = [];
   private near = false;
 
   constructor(
@@ -108,24 +106,6 @@ export class SpotGlow {
     const depth = def.pos.y;
     const tint = SPOT_TINTS[def.kind] ?? 0xffd36a;
     this.glow = scene.add.image(x, y, 'fx-glow').setTint(tint).setScale(0.6, 0.2).setAlpha(0.22).setBlendMode(Phaser.BlendModes.ADD).setDepth(depth - 3);
-    if (def.kind === 'moonbeam') {
-      const shaft = scene.add.image(x, y - 260, 'fx-glow').setTint(tint).setScale(0.45, 2.2).setAlpha(0.16).setBlendMode(Phaser.BlendModes.ADD).setDepth(depth - 4);
-      scene.tweens.add({ targets: shaft, alpha: 0.26, duration: 2600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-      const motes = scene.add
-        .particles(x, y - 10, symbolTexture(scene, 'dot'), {
-          speedY: { min: -40, max: -18 },
-          speedX: { min: -6, max: 6 },
-          lifespan: { min: 2200, max: 3400 },
-          scale: { start: 0.18, end: 0 },
-          alpha: { start: 0.9, end: 0 },
-          tint: [tint, 0xffffff],
-          blendMode: Phaser.BlendModes.ADD,
-          frequency: 380,
-          emitZone: { type: 'random', source: new Phaser.Geom.Rectangle(-45, -20, 90, 30) } as Phaser.Types.GameObjects.Particles.EmitZoneData,
-        })
-        .setDepth(depth + 2);
-      this.extras.push(shaft, motes);
-    }
   }
 
   setNear(near: boolean): void {
@@ -159,9 +139,50 @@ export class SpotGlow {
   destroy(): void {
     this.scene.tweens.killTweensOf(this.glow);
     this.glow.destroy();
-    for (const e of this.extras) {
-      this.scene.tweens.killTweensOf(e);
-      e.destroy();
+  }
+}
+
+/** The moonlight's colour, where the warm air rises in it. */
+const MOONLIGHT = 0xbfe4ff;
+
+/**
+ * The light a thermal rises in (thermal.ts): a shaft of moonlight down onto the floor, a pool where it
+ * lands and motes carried up through it, so an owl sees where the warm air is before it stands in it.
+ * It was the moonbeam until Nov 18, a thing to bask in as well; no prop does two unrelated jobs (the
+ * owner's rule), so it is only the rising air's light now, with nothing to press.
+ */
+export class RisingLight {
+  private readonly parts: Phaser.GameObjects.GameObject[] = [];
+
+  constructor(
+    private readonly scene: Phaser.Scene,
+    pos: Vec2,
+  ) {
+    const { x, y } = pos;
+    const depth = y;
+    const pool = scene.add.image(x, y, 'fx-glow').setTint(MOONLIGHT).setScale(0.6, 0.2).setAlpha(0.22).setBlendMode(Phaser.BlendModes.ADD).setDepth(depth - 3);
+    const shaft = scene.add.image(x, y - 260, 'fx-glow').setTint(MOONLIGHT).setScale(0.45, 2.2).setAlpha(0.16).setBlendMode(Phaser.BlendModes.ADD).setDepth(depth - 4);
+    scene.tweens.add({ targets: shaft, alpha: 0.26, duration: 2600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    const motes = scene.add
+      .particles(x, y - 10, symbolTexture(scene, 'dot'), {
+        speedY: { min: -40, max: -18 },
+        speedX: { min: -6, max: 6 },
+        lifespan: { min: 2200, max: 3400 },
+        scale: { start: 0.18, end: 0 },
+        alpha: { start: 0.9, end: 0 },
+        tint: [MOONLIGHT, 0xffffff],
+        blendMode: Phaser.BlendModes.ADD,
+        frequency: 380,
+        emitZone: { type: 'random', source: new Phaser.Geom.Rectangle(-45, -20, 90, 30) } as Phaser.Types.GameObjects.Particles.EmitZoneData,
+      })
+      .setDepth(depth + 2);
+    this.parts.push(pool, shaft, motes);
+  }
+
+  destroy(): void {
+    for (const p of this.parts) {
+      this.scene.tweens.killTweensOf(p);
+      p.destroy();
     }
   }
 }

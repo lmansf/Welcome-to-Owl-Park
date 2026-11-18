@@ -110,7 +110,7 @@ export const NPCS: readonly NpcDef[] = [
     pos: { x: 2210, y: 700 },
     facing: 1,
     look: { body: '#5C4033', belly: '#E8D8B8', accent: '#C9A227', wear: { head: 'mortarboard~0', face: 'half-moon-specs~0', neck: 'moon-pendant~0' } },
-    greetings: ['Welcome in. The tree has room for everyone.', 'Every leaf in this hollow has a story. Some are even true.', 'Mind the moonbeam. It likes to be looked at.'],
+    greetings: ['Welcome in. The tree has room for everyone.', 'Every leaf in this hollow has a story. Some are even true.', 'Have you been to the telescope? The moon likes to be looked at.'],
     idle: ['nod', 'hoot'],
   },
   {
@@ -258,7 +258,7 @@ export const NPCS: readonly NpcDef[] = [
     pos: questOwlAt('glass'),
     facing: 1,
     look: { body: '#5B6E99', belly: '#E6ECF7', accent: '#9FD0FF', wear: { head: 'moon-circlet~0', neck: 'pearl-necklace~0', pet: 'dragonfly~0' } },
-    greetings: ['Through that door the light comes in every colour at once.', 'Prism keeps count of the panes out there. I keep count of the owls.', 'Stand in the moonbeam a moment. It is warm.'],
+    greetings: ['Through that door the light comes in every colour at once.', 'Prism keeps count of the panes out there. I keep count of the owls.', 'The warm air at the heart lifts you right up. Jump in it and hold on.'],
     idle: ['nod', 'tilt'],
   },
 ];

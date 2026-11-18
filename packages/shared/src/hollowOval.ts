@@ -191,12 +191,12 @@ export const idolAt = (level: HallLevel): Vec2 => rimAt(commonsS(level), sized(7
 /** Its Realm Vote spot: on the floor just in front of its base, on the stone painted there. */
 export const voteAt = (level: HallLevel): Vec2 => rimAt(commonsS(level), sized(300));
 
-/** Each Commons' plaza: out from its idol toward the middle, where its moonbeam falls. */
+/** Each Commons' plaza: out from its idol toward the middle, where its worn ring is. */
 export const plazaAt = (level: HallLevel): Vec2 => ringAt(commonsS(level), 0.62);
 
 /**
  * Where each Commons' quest owl stands (OP-281, OP-258): out on its floor to one side of its plaza, a
- * few steps from its leaf piles and moonbeam but never on them, clear of its doorways' signs and
+ * few steps from its leaf piles and plaza ring but never on them, clear of its doorways' signs and
  * landings and of its idol's vote stone. The two Commons at the front stand toward the root runs, the
  * two at the back toward the knothole, mirrored across the hollow.
  */
@@ -216,20 +216,27 @@ export const HALL_HEART: Vec2 = { x: HALL_CX, y: HALL_CY - sized(340) };
  */
 export const RUN_Y = HALL_CY;
 
-/** The moonbeams: one in each Commons' plaza and one at the heart. */
-export const HALL_MOONBEAMS: ReadonlyArray<{ id: string; pos: Vec2 }> = [
-  ...(['glass', 'ink', 'grove', 'market'] as const).map((level) => ({ id: `moonbeam-${level}`, pos: plazaAt(level) })),
-  { id: 'moonbeam-heart', pos: HALL_HEART },
+/**
+ * The worn rings where owls gather: one in each Commons' plaza and one at the heart. A moonbeam fell in
+ * each until Nov 18, a thing to bask in; now only the heart has light, the light its warm air rises in
+ * (rooms/hollowHall.ts, HEART_THERMAL), and the rings are places to meet.
+ */
+export const HALL_RINGS: ReadonlyArray<{ id: string; pos: Vec2 }> = [
+  ...(['glass', 'ink', 'grove', 'market'] as const).map((level) => ({ id: level, pos: plazaAt(level) })),
+  { id: 'heart', pos: HALL_HEART },
 ];
 
 /**
  * The leaf piles (OP-417, the owner's Nov 14 note on art "scattered around randomly"): only where the wind
  * would leave them. Two drift either side of the knothole at the back, where it blows in, one lies by the
  * hatch, where they fall through, and one out in front of the heart, between the trunk's door and the hatch.
+ * Since Nov 18, when the plazas' moonbeams went, one more: leaves blown in at the trunk's door from the
+ * Party Grove drift east along the rim toward the neon Commons, so its side of the floor is no empty walk.
  */
 export const HALL_LEAVES: ReadonlyArray<{ id: string; pos: Vec2 }> = [
   { id: 'leaves-hatch', pos: rimAt(wayS('down') + sized(380), 260) },
   { id: 'leaves-knothole-west', pos: rimAt(wayS('up') - sized(420), 220) },
   { id: 'leaves-knothole-east', pos: rimAt(wayS('up') + sized(420), 220) },
   { id: 'leaves-front', pos: { x: HALL_CX, y: HALL_CY + sized(700) } },
+  { id: 'leaves-trunk-door', pos: rimAt(wayS('to-party') - sized(300), 260) },
 ];

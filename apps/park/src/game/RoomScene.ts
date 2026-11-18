@@ -240,7 +240,7 @@ import { NestDecor, pieceThumb } from './nest';
 import { firstGlint, firstNestWelcome, streetDoors, streetSpawnBack, type StreetDoor } from './nestPlan';
 import { NpcOwl } from './Npc';
 import { OWL_SCALE, OWL_W, Owl } from './Owl';
-import { QuestItemMarker, SpotGlow } from './QuestItem';
+import { QuestItemMarker, RisingLight, SpotGlow } from './QuestItem';
 import { PuzzleMarker, markKey, type PuzzleMarkKind, type PuzzleMarkLook } from './PuzzleMarker';
 import { StreetDoors, addNestsSign, addParkSign } from './street';
 import { cameraBounds, followLead, type CoveredEdges } from './hudInset';
@@ -361,7 +361,6 @@ const FLOP_LAND_MS = 330;
 /** A few words for using things that stay put. */
 const USE_LINES: Record<string, readonly string[]> = {
   stall: ['Neon trinkets, rain-polished gears and a jar of something glowing.', 'A tray of buttons that hum when you look at them.', 'Paper lanterns, folded owls and one very small umbrella.'],
-  moonbeam: ['The moonbeam is warm. You feel a little shinier.', 'You bask. The moonlight hums softly.', 'Silver light settles on your feathers.'],
   'bird-bath': ['Splash! You shake the water off every feather.', 'The water is cold and sparkly. Very refreshing.', 'You splash so hard the moon wobbles in the water.'],
   mushroom: ['Boing! The caps are as springy as a cushion.', 'You bounce, and a puff of glowing spores floats up.', 'Squish, boing. The mushrooms do not seem to mind.'],
   telescope: ['You spot a star shaped like an owl. It winks back.', 'The moon is so close you can see its craters.', 'Far off, a shooting star. Make a wish.'],
@@ -558,6 +557,8 @@ export class RoomScene extends Phaser.Scene {
   /** Things shared by the room: leaf piles, and the shiny things out on a plaza's floor (gone for everyone once used). */
   private readonly piles = new Map<string, LeafPile | FloorThing>();
   private readonly glows = new Map<string, SpotGlow>();
+  /** The light each thermal rises in (thermal.ts): the room's warm air, seen from afar. */
+  private readonly risingLights: RisingLight[] = [];
   /** Things to use out on a plaza's floor (plazaFloor.ts): bird baths, mushrooms, telescopes and shiny things. */
   private readonly things = new Map<string, FloorThing>();
   private readonly items = new Map<string, QuestItemMarker>();
@@ -876,6 +877,7 @@ export class RoomScene extends Phaser.Scene {
     this.npcs.clear();
     this.piles.clear();
     this.glows.clear();
+    this.risingLights.length = 0;
     this.things.clear();
     this.items.clear();
     this.gathering.clear();
@@ -2701,6 +2703,8 @@ export class RoomScene extends Phaser.Scene {
     npcs: Array<{ id: string; x: number; y: number; mark: string | null; approach: boolean }>;
     /** Interactables in this room; `here` is false while a leaf pile is used up. */
     objects: Array<{ id: string; kind: string; x: number; y: number; top: number; here: boolean }>;
+    /** The room's thermals (thermal.ts): where its warm air rises, in the light drawn there. */
+    thermals: Array<{ id: string; x: number; y: number; r: number; top: number }>;
     /** Quest items waiting in this room (only this visitor sees them); `top` for one up on a perch. */
     items: Array<{ quest: string; n: number; kind: string; x: number; y: number; top: number }>;
     /** What the owl can do where it stands (the action buttons), in order. */
@@ -2832,6 +2836,7 @@ export class RoomScene extends Phaser.Scene {
       view: (({ x, y, width, height }) => ({ x, y, w: width, h: height }))(this.cameras.main.worldView),
       wings: this.me.wingsOut,
       npcs: [...this.npcs.values()].map((n) => ({ id: n.id, x: n.def.pos.x, y: n.def.pos.y, mark: this.spectator ? null : this.quests.markFor(n.id), approach: n.approaching })),
+      thermals: (this.room.thermals ?? []).map((t) => ({ id: t.id, x: t.pos.x, y: t.pos.y, r: t.r, top: t.top })),
       objects: interactablesIn(this.room.id).map((d) => ({ id: d.id, kind: d.kind, x: d.pos.x, y: d.pos.y, top: d.top ?? 0, here: this.piles.get(d.id)?.here ?? true })),
       items: [...this.items.values()].map((m) => ({ quest: m.quest, n: m.n, kind: m.kind, x: m.pos.x, y: m.pos.y, top: m.top })),
       actions: this.actions.map((a) => a.id),
@@ -2871,7 +2876,7 @@ export class RoomScene extends Phaser.Scene {
 
   // ---------- NPC owls, interactables and quests ----------
 
-  /** The room's residents: NPC owls, leaf piles, and glows under the things that stay put. */
+  /** The room's residents: NPC owls, leaf piles, glows under the things that stay put, and the light its warm air rises in. */
   private addResidents(): void {
     const scale = itemScale(this.cfg.pixelRatio);
     for (const def of npcsIn(this.room.id)) this.npcs.set(def.id, new NpcOwl(this, def, scale, (npc, pointer, event) => this.onNpcTap(npc, pointer, event)));
@@ -2883,6 +2888,7 @@ export class RoomScene extends Phaser.Scene {
         if (KIND_RULES[def.kind].shared) this.piles.set(def.id, thing);
       } else this.glows.set(def.id, new SpotGlow(this, def));
     }
+    for (const t of this.room.thermals ?? []) this.risingLights.push(new RisingLight(this, t.pos));
   }
 
   /** Tapping an NPC owl: talk now if close enough, otherwise walk up and talk on arrival. */
@@ -3342,12 +3348,12 @@ export class RoomScene extends Phaser.Scene {
     }
   }
 
-  /** Use an interactable close by: flop into a leaf pile, browse a stall, bask in the moonbeam. */
+  /** Use an interactable close by: flop into a leaf pile, browse a stall, look through a telescope. */
   private async use(id: string): Promise<void> {
     const def = getInteractable(id);
     if (!def || this.busy) return;
     if (!this.link) return void this.hud.toast(ROOM_DOWN, 3200);
-    // A free guest flops, browses and basks too (OP-243): the room server makes it count for nothing.
+    // A free guest flops, browses and looks too (OP-243): the room server makes it count for nothing.
     const gen = this.gen;
     this.busy = true;
     try {
@@ -4528,6 +4534,8 @@ export class RoomScene extends Phaser.Scene {
     this.things.clear();
     for (const glow of this.glows.values()) glow.destroy();
     this.glows.clear();
+    for (const light of this.risingLights) light.destroy();
+    this.risingLights.length = 0;
     this.play?.destroy();
     this.play = null;
     this.party?.destroy();

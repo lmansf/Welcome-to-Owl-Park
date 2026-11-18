@@ -22,7 +22,9 @@ const talk = (npc: string): QuestStep => ({ goal: { kind: 'talk', npc } });
 const visit = (room: string): QuestStep => ({ goal: { kind: 'visit', room } });
 const flop = (count: number, room?: string): QuestStep => ({ goal: room ? { kind: 'interact', what: 'leaf-pile', count, room } : { kind: 'interact', what: 'leaf-pile', count } });
 const browse = (count: number): QuestStep => ({ goal: { kind: 'interact', what: 'stall', count, room: 'market', distinct: count > 1 } });
-const bask = (): QuestStep => ({ goal: { kind: 'interact', what: 'moonbeam', count: 1, room: 'hub' } });
+// The Party Grove's telescope (plazaFloor.ts): it took the moonbeam's place in the quests on Nov 18, when
+// basking went (no prop does two unrelated jobs, the owner's rule; the moonbeams are the warm air's light).
+const stargaze = (): QuestStep => ({ goal: { kind: 'interact', what: 'telescope', count: 1, room: 'hub' } });
 const emote = (e: string, opts: { npc?: string; room?: string } = {}): QuestStep => ({ goal: { kind: 'emote', emote: e, ...opts } as Goal });
 const gather = (room: RoomId, count: number): QuestStep => ({ goal: { kind: 'gather', item: ITEM_OF[room], count, room } });
 
@@ -98,9 +100,9 @@ export const STORY_QUESTS: readonly QuestDef[] = [
     difficulty: 'easy',
     length: 'medium',
     cadence: 'story',
-    steps: [bask(), visit('grove'), visit('market')],
+    steps: [stargaze(), visit('grove'), visit('market')],
     reward: { feathers: 50, item: 'fireflies~0' },
-    offer: 'Every night I check the light. Bask in the moonbeam, then look in on the clearing and the neon street for me?',
+    offer: 'Every night I check the light. Look at the moon through the telescope out on the plaza, then look in on the clearing and the neon street for me?',
     thanks: 'All bright, all well. The fireflies liked you, so they are coming with you now.',
     requires: ['story-welcome'],
   },
@@ -208,8 +210,8 @@ export const STORY_QUESTS: readonly QuestDef[] = [
     offer: 'There is a door at the end of the street that blinks all night. Neon Roost, the arcade! Go and find it, then come back and give me a hoot.',
     thanks: 'You found it! I fixed half those cabinets myself. Have a go on one any time.',
   },
-  // The Great Hollow's Commons (OP-281, OP-258): each Commons' quest owl asks for a leaf pile or the
-  // moonbeam on the hollow's floor and a look through its Commons' door, then a hoot back, so every
+  // The Great Hollow's Commons (OP-281, OP-258): each Commons' quest owl asks for a leaf pile on the
+  // hollow's floor (or a flap) and a look through its Commons' door, then a hoot back, so every
   // Commons has something to do and points the way on. The ink Commons' first: before these, all it had
   // was its leaf piles.
   {
@@ -246,9 +248,9 @@ export const STORY_QUESTS: readonly QuestDef[] = [
     difficulty: 'easy',
     length: 'medium',
     cadence: 'story',
-    steps: [{ goal: { kind: 'interact', what: 'moonbeam', count: 1, room: 'm3-hall' } }, visit('circuit-1'), emote('hoot', { npc: 'volt' })],
+    steps: [flop(1, 'm3-hall'), visit('circuit-1'), emote('hoot', { npc: 'volt' })],
     reward: { feathers: 40, item: null },
-    offer: 'Before you go out where it is dark, soak up some light. Bask in a moonbeam here in the hollow, then go through the course gate to Blackout Circuit. Come back and hoot for me.',
+    offer: 'Before you go out where it is dark, shake the sleep off your wings. Flop into a leaf pile here in the hollow, then go through the course gate to Blackout Circuit. Come back and hoot for me.',
     thanks: 'You went into the dark and came back shining. Here, for your trouble.',
   },
   {
@@ -261,10 +263,10 @@ export const STORY_QUESTS: readonly QuestDef[] = [
     cadence: 'story',
     // The glass realm has a quest owl of its own at its start and may be gated (realmStart.test.ts), so
     // Lumen's errand stays in the hollow, by the realm's door.
-    steps: [flop(1, 'm3-hall'), { goal: { kind: 'interact', what: 'moonbeam', count: 1, room: 'm3-hall' } }, emote('hoot', { npc: 'lumen' })],
+    steps: [flop(1, 'm3-hall'), emote('flap', { room: 'm3-hall' }), emote('hoot', { npc: 'lumen' })],
     reward: { feathers: 40, item: null },
-    offer: 'Leaves blow up against the glass door all day. Flop into one pile in the hollow, then bask in a moonbeam to see the colours, and come back and hoot for me.',
-    thanks: 'Now you have the light in your feathers. The glass door in this Commons opens whenever you like.',
+    offer: 'Leaves blow up against the glass door all day. Flop into one pile in the hollow, then give your wings a good flap to shake the leaves off, and come back and hoot for me.',
+    thanks: 'Not a leaf left on you. Now the light can find your feathers. The glass door in this Commons opens whenever you like.',
   },
 ];
 
@@ -338,7 +340,7 @@ const TEMPLATES: readonly Template[] = [
       let steps: QuestStep[];
       if (d === 'easy') steps = [visit(pick(key, away))];
       else if (d === 'medium') steps = away.map(visit);
-      else steps = [...away.map(visit), bask(), talk(pick(key + 'n', othersElsewhere(giver)).id)];
+      else steps = [...away.map(visit), stargaze(), talk(pick(key + 'n', othersElsewhere(giver)).id)];
       return {
         title: pick(key, ['Stretch your wings', 'A little wander', 'See the sights', 'Out and about']),
         type: d === 'hard' ? 'mixed' : 'visit',
@@ -394,7 +396,7 @@ const TEMPLATES: readonly Template[] = [
     id: 'browse',
     givers: ['nova', 'flicker'],
     build: (giver, d, key) => {
-      const steps = d === 'easy' ? [browse(1)] : d === 'medium' ? [browse(3)] : [browse(3), bask(), talk('pip')];
+      const steps = d === 'easy' ? [browse(1)] : d === 'medium' ? [browse(3)] : [browse(3), stargaze(), talk('pip')];
       return {
         title: pick(key, ['Window shopper', 'What is new', 'Stall to stall']),
         type: d === 'hard' ? 'mixed' : 'interact',
@@ -405,15 +407,16 @@ const TEMPLATES: readonly Template[] = [
     },
   },
   {
-    id: 'bask',
+    // In place of basking in the moonbeam (Nov 18): its quests, ids `bask-*`, are retired (questLog.ts).
+    id: 'stargaze',
     givers: ['bramble', 'pip'],
     build: (giver, d, key) => {
-      const steps = d === 'easy' ? [bask()] : d === 'medium' ? [bask(), emote('hoot', { npc: giver === 'bramble' ? 'pip' : 'bramble' })] : [bask(), flop(3, 'grove'), emote('hoot', { npc: 'hazel' }), visit('market')];
+      const steps = d === 'easy' ? [stargaze()] : d === 'medium' ? [stargaze(), emote('hoot', { npc: giver === 'bramble' ? 'pip' : 'bramble' })] : [stargaze(), flop(3, 'grove'), emote('hoot', { npc: 'hazel' }), visit('market')];
       return {
-        title: pick(key, ['Moonbathing', 'A little light', 'Silver hour']),
+        title: pick(key, ['Stargazing', 'A look at the moon', 'Silver hour']),
         type: d === 'easy' ? 'interact' : 'mixed',
         steps,
-        offer: pick(key + 'o', ['The moonbeam is at its best right now. Go and stand in it a moment.', 'You look tired. Bask in the moonbeam, it helps.']),
+        offer: pick(key + 'o', ['The sky is very clear tonight. Go and look through the telescope out on the plaza.', 'You look like you need a little wonder. Have a look through the telescope, the moon is out.']),
         thanks: pick(key + 't', THANKS),
       };
     },
@@ -429,7 +432,7 @@ const TEMPLATES: readonly Template[] = [
         () => visit(pick(key + 'visit', ROOMS.filter((r) => r !== roomOf(giver)))),
         () => flop(2),
         () => browse(2),
-        () => bask(),
+        () => stargaze(),
         () => emote('hoot', { npc: pick(key + 'emote', others(giver)).id }),
         () => emote('flap', { room: pick(key + 'flap', ROOMS) }),
         () => gather(pick(key + 'gather', ROOMS), 2),
@@ -465,7 +468,7 @@ const TEMPLATES: readonly Template[] = [
         () => visit(pick(key + 'visit', ROOMS.filter((r) => r !== roomOf(giver)))),
         () => flop(4),
         () => browse(3),
-        () => bask(),
+        () => stargaze(),
         () => emote('hoot', { npc: pick(key + 'emote', others(giver)).id }),
         () => emote('flap', { room: pick(key + 'flap', ROOMS) }),
         () => gather(pick(key + 'gather', ROOMS), 3),

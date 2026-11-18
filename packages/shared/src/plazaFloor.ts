@@ -93,13 +93,14 @@ export const PLAZA_CLUSTERS: readonly FloorCluster[] = [
     ],
     perches: [{ kind: 'stump', x: 2400, y: 1070 }],
   },
-  // The arcade hall, under the roots: between its two rings and at its far end.
+  // The arcade hall, under the roots: between its two rings and at its far end. The vending machine stands
+  // toward the east ring since Nov 18, when the skylights' moonbeams went and that side of the floor was an empty walk.
   {
     id: 'arcade-token',
     room: 'arcade',
     story: 'A token rolled out from under the vending machine and lies glinting on the wet tiles.',
-    decor: [{ key: 'kit-neon-vending-machine', x: 2150, y: 1000 }],
-    things: [{ kind: 'shiny', x: 2060, y: 1060 }],
+    decor: [{ key: 'kit-neon-vending-machine', x: 3090, y: 1000 }],
+    things: [{ kind: 'shiny', x: 3000, y: 1060 }],
   },
   {
     id: 'arcade-crack',

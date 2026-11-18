@@ -13,7 +13,7 @@ import { getRoom } from './index';
 /**
  * Fewer, fuller rooms (OP-306): in every room seen from above that the new map walks through, outside
  * the courses, an owl is never more than a few seconds' walk from something to do, wherever it stands.
- * Something to do is a doorway (a cabinet's spot counts), a leaf pile, a stall, a moonbeam, an owl to
+ * Something to do is a doorway (a cabinet's spot counts), a leaf pile, a stall, a floor thing, an owl to
  * talk to, a perch to hop up on, or one of the Party Grove's games.
  */
 const ROOMS_WALKED = [LOBBY_ROOM, STREET_ROOM, 'm3-hall', 'glass', 'ink', 'grove', 'market', 'hub', 'arcade'];

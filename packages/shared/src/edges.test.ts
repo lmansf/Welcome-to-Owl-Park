@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HALL_ROOM, HALL_W } from '../rooms/hollowHall';
+import { HALL_RINGS, HALL_ROOM, HALL_W } from '../rooms/hollowHall';
 import { ROOMS } from '../rooms/index';
 import { EDGE_ART, HALL_RING, SIDE_LEAST, STRIP_OUT, bumpProfile, edgeArt, edgeDraws, edgePlaceholder, kitFrames, shapedEdge } from './edges';
 import { pointInPolygon } from './geometry';
@@ -53,10 +53,10 @@ describe('edge pieces (the map should not read as big rectangles, Nov 8)', () =>
 describe("the Great Hollow's edges", () => {
   const edges = HALL_ROOM.edges ?? [];
 
-  it('lays a worn ring round each moonbeam, walked across, and cuts nothing out of the oval floor', () => {
+  it('lays a worn ring in each plaza and at the heart, walked across, and cuts nothing out of the oval floor', () => {
     expect(edges.length).toBeGreaterThanOrEqual(5);
     for (const e of edges) expect(edgeArt(e.key).kind, e.id).toBe('ring');
-    for (const m of INTERACTABLES.filter((i) => i.room === HALL_ROOM.id && i.kind === 'moonbeam')) {
+    for (const m of HALL_RINGS) {
       expect(
         edges.some((e) => Math.abs(e.x + 380 - m.pos.x) < 2 && Math.abs(e.y + 190 - m.pos.y) < 2),
         m.id,
