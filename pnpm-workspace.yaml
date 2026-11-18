@@ -9,3 +9,10 @@ patchedDependencies:
 overrides:
   # Miniflare's development HTTP client: remove once the pinned Wrangler resolves a patched version.
   'miniflare>undici': 7.30.1
+
+auditConfig:
+  ignoreGhsas:
+    # picomatch ReDoS through repeated extglobs (OP-424): no patched version exists yet. It reaches us only
+    # through vitest's test-file globbing (apps/edge > vitest), which reads our own patterns, never a
+    # visitor's. Remove this line once a patched picomatch is out and the lockfile takes it.
+    - GHSA-fc5q-39xc-vjpf
