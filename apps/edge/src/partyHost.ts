@@ -16,10 +16,12 @@ import {
   PARTY_LONGEST_MS,
   PARTY_MIN_OWLS,
   PARTY_SEATS,
+  PARTY_STANDIN_WAIT_MS,
   STUMP_AT,
   STUMP_REACH,
   STUMP_ROOM,
   distance,
+  getNpc,
   isPartyRoom,
   newParty,
   newPartyRoomId,
@@ -102,6 +104,9 @@ function youIn(stump: StumpView, owl: string): { you?: number } {
 }
 /** A park owl's look for a seat: the few real owls' colours, in turn. */
 const PARK_LOOK = (i: number) => PARK_OWL_LOOKS[i % PARK_OWL_LOOKS.length]!;
+/** Pip the lantern keeper, who plays with an owl left alone at the stump (OP-426), in Pip's own colours. */
+const PIP = getNpc('pip');
+const PIP_LOOK = PIP ? partyLook(PIP.look) : PARK_LOOK(1);
 
 /** A game's steps a page must hear about: a change in any of these sends everyone the view. */
 function markOf(s: PartyState): string {
@@ -253,7 +258,9 @@ export class PartyHost {
       return answer(false, seated.has(mine) ? 'not-starter' : 'not-seated');
     }
     if (this.closing(now)) return answer(false, 'closing');
-    if (seated.size < PARTY_MIN_OWLS || this.games.size >= MAX_GAMES) {
+    // Never a one-owl game (OP-426): an owl that has sat alone for a while may play with Pip.
+    const withPip = f.standin === true && seated.size === 1 && now - order[0]![1].a.stump.at >= PARTY_STANDIN_WAIT_MS;
+    if ((seated.size < PARTY_MIN_OWLS && !withPip) || this.games.size >= MAX_GAMES) {
       this.d.logOf(a).info('room.play', 'party_refused', 'A game at the Old Stump could not start: too few owls sat down.', { reason: 'few', owls: seated.size });
       return answer(false, 'few');
     }
@@ -264,14 +271,16 @@ export class PartyHost {
       seats.push({ owl: s.a.id, bot: false, look: partyLook(look), ...(s.a.cid ? { cid: s.a.cid } : {}), ...(s.a.spec ? { spec: true } : {}) });
     }
     const humans = seats.length;
+    if (withPip && humans === 1) seats.push({ owl: '', bot: true, look: PIP_LOOK });
     if (f.bots) for (let i = seats.length; i < PARTY_SEATS; i++) seats.push({ owl: '', bot: true, look: PARK_LOOK(i) });
+    if (seats.length < PARTY_MIN_OWLS) return answer(false, 'few');
     let id = newPartyRoomId(() => this.d.random());
     while (this.games.has(id)) id = newPartyRoomId(() => this.d.random());
     const s = newParty({ room: id, seats, seed: seedFrom(() => this.d.random()), now, closesAt: nextRestartAt(now) });
     this.games.set(id, s);
     this.marks.set(id, markOf(s));
     this.save(s, now, true);
-    this.d.logOf(a).info('room.play', 'party_started', 'A party game started at the Old Stump.', { owls: humans, bots: seats.length - humans });
+    this.d.logOf(a).info('room.play', 'party_started', 'A party game started at the Old Stump.', { owls: humans, bots: seats.length - humans, ...(withPip ? { standin: true } : {}) });
     for (const [, st] of seated) {
       this.mark(st.ws, st.a, { seat: null, at: now });
       if (st.ws === ws) answer(true, undefined, id);

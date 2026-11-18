@@ -1,6 +1,8 @@
 import { type Browser, devices, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { openPark, state, walkAndStop } from './helpers';
+import { FROM_STUMP_AT, STUMP_ROOM } from '../../../packages/shared/src/party/ids';
+import { PARTY_WORDS } from '../../../packages/shared/src/party/words';
+import { doAction, openPark, state, walkAndStop } from './helpers';
 
 /**
  * Feather tag in the Party Grove (OP-403, D5), behind `?tag=1` (src/flags.ts), on the room server: a
@@ -82,5 +84,67 @@ test.describe('feather tag in the Party Grove (OP-403, behind ?tag=1)', () => {
     await expect.poll(async () => (await tagOf(other))?.line).toMatch(/Waiting for one more owl/);
     await computer.context().close();
     await phone.context().close();
+  });
+});
+
+test.describe('never a one-owl game: Pip stands in (OP-426, behind ?standin=1)', () => {
+  test('alone in the ring, Pip joins within a few seconds; a ten year old’s owl catches Pip, gets the feather back, and a second owl sends Pip home after the round', async ({ browser }) => {
+    test.slow(); // a wait alone, a chase round the ring, a round played out and the next begun
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const page = await ctx.newPage();
+    await openPark(page, { ...GROVE, tag: '1', standin: '1' });
+    await expect.poll(async () => (await tagOf(page))?.server).toBe(true);
+    await walkAndStop(page, SPOT_A.x, SPOT_A.y);
+    await expect.poll(async () => (await tagOf(page))?.players.length, { timeout: 10_000 }).toBe(1);
+    const me = (await tagOf(page))!.players[0]!;
+    // Pip steps in after about five seconds alone, and a round starts with this owl holding the feather.
+    await expect.poll(async () => (await tagOf(page))?.players, { timeout: 12_000 }).toEqual([me, 'npc:pip']);
+    await expect(page.getByText('Pip the lantern keeper is joining you!')).toBeVisible();
+    expect((await tagOf(page))?.standIn).not.toBeNull();
+    await expect.poll(async () => (await tagOf(page))?.phase, { timeout: 10_000 }).toBe('live');
+    expect((await tagOf(page))?.holder).toBe(me);
+    await page.screenshot({ path: 'e2e-screenshots/tag-standin.png' });
+
+    // The chase, as a child plays it: run at where Pip is going, a few times at most, until the feather is Pip's.
+    let tries = 0;
+    for (; tries < 8 && (await tagOf(page))?.holder !== 'npc:pip'; tries++) {
+      const a = (await tagOf(page))!.standIn!;
+      await page.waitForTimeout(200);
+      const b = (await tagOf(page))!.standIn!;
+      const lead = 3; // a little over half a second ahead
+      await page.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), { x: b.x + (b.x - a.x) * lead, y: b.y + (b.y - a.y) * lead });
+      await page.waitForTimeout(700);
+    }
+    await expect.poll(async () => (await tagOf(page))?.holder, { timeout: 5_000 }).toBe('npc:pip');
+    expect(tries).toBeLessThanOrEqual(6);
+    await expect.poll(async () => (await tagOf(page))?.line).toMatch(/Pip has it/);
+    // Pip gives it back by itself after a short wait.
+    await expect.poll(async () => (await tagOf(page))?.holder, { timeout: 8_000 }).toBe(me);
+
+    // A second owl steps in: Pip plays out the round, then goes home.
+    const phone = await grovePage(browser, true);
+    await expect.poll(async () => (await tagOf(phone))?.server).toBe(true);
+    await walkAndStop(phone, SPOT_B.x, SPOT_B.y);
+    await expect.poll(async () => (await tagOf(page))?.players.length, { timeout: 10_000 }).toBe(3);
+    await expect.poll(async () => (await tagOf(page))?.players.includes('npc:pip'), { timeout: 60_000 }).toBe(false);
+    expect((await tagOf(page))?.players).toHaveLength(2);
+    expect((await tagOf(page))?.standIn).toBeNull();
+    await ctx.close();
+    await phone.context().close();
+  });
+
+  test('alone at the Old Stump, Pip offers to play after a few seconds, and Start takes this owl into a game with Pip', async ({ page }) => {
+    await openPark(page, { transport: 'edge', room: STUMP_ROOM, spawn: 'default', friends: '1', standin: '1' });
+    await walkAndStop(page, FROM_STUMP_AT.x, FROM_STUMP_AT.y);
+    await expect.poll(async () => (await state(page)).actions, { timeout: 10_000 }).toContain('party:sit');
+    await doAction(page, 'party:sit');
+    const card = page.locator('#hud .stump-card');
+    await expect(card.locator('[data-line]')).toHaveText(PARTY_WORDS.waitMore);
+    await expect(card.locator('[data-start]')).toBeDisabled();
+    // No friend came: Pip offers to play, and one press starts the game.
+    await expect(card.locator('[data-line]')).toHaveText(PARTY_WORDS.standIn, { timeout: 10_000 });
+    await page.screenshot({ path: 'e2e-screenshots/stump-standin.png' });
+    await card.locator('[data-start]').click();
+    await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toMatch(/^party-/);
   });
 });

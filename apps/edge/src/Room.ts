@@ -48,7 +48,10 @@ import {
   tagJoin,
   tagLeave,
   tagPass,
+  tagStandIn,
   tagTouches,
+  standInAt,
+  isStandIn,
   type ClientTag,
   type TagRefusal,
   type TagState,
@@ -227,6 +230,8 @@ export class Room {
   private readonly leavers = new Map<string, Leaver>();
   /** Feather tag (OP-403, party/tag.ts): only in the Party Grove. Plain data, moved on by the clock wherever it is read. */
   private tagGame: TagState | null = null;
+  /** When each owl in feather tag stepped into the ring, for Pip's wait (OP-426). */
+  private readonly tagJoinedAt = new Map<string, number>();
   private readonly opts: RoomOptions;
   /** Shared interactables used up for now (leaf piles): id -> server ms when they are back. */
   private readonly objects = new Map<string, number>();
@@ -838,15 +843,24 @@ export class Room {
         this.send(v, { t: 'tag', tag: game });
         return false;
       case 'leave':
+        this.tagJoinedAt.delete(id);
         return this.setTag(tagLeave(game, id, now));
       case 'join': {
         if (!here || !inTagRing(here, TAG_SLACK)) return refuse('far', game);
         const r = tagJoin(game, id, now, (n) => Math.floor(this.rnd() * n));
+        if (r.ok && !game.players.includes(id)) this.tagJoinedAt.set(id, now);
+        return r.ok ? this.setTag(r.state) : refuse(r.reason, r.state);
+      }
+      case 'standin': {
+        // Pip steps in for an owl alone in the ring (OP-426): still standing in it, alone there long enough.
+        if (!here || !inTagRing(here, TAG_SLACK)) return refuse('far', game);
+        const r = tagStandIn(game, id, now, this.tagJoinedAt.get(id) ?? now);
         return r.ok ? this.setTag(r.state) : refuse(r.reason, r.state);
       }
       case 'pass': {
         const at = f.at ?? '';
-        const there = this.positionOf(at);
+        // Pip stands where the clock has Pip, inside the ring (OP-426).
+        const there = isStandIn(at) ? (game.players.includes(at) ? standInAt(game, now) : null) : this.positionOf(at);
         // An owl touched that has walked out of the ring is out of the game: told to everyone, and no pass.
         if (there && !inTagRing(there, TAG_SLACK) && game.players.includes(at)) {
           this.setTag(tagLeave(game, at, now));
@@ -1050,6 +1064,7 @@ export class Room {
     }
     this.broadcast({ t: 'leave', id });
     // Out of the room is out of feather tag (OP-403).
+    this.tagJoinedAt.delete(id);
     if (this.tagGame?.players.includes(id)) this.setTag(tagLeave(this.tagGame, id, this.now()));
   }
 }
