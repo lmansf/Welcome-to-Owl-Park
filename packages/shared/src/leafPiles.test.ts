@@ -32,14 +32,15 @@ describe("leaf piles where the wind would leave them (OP-417, the owner's Nov 14
     }
   });
 
-  it('lays every pile in the treehouse clearing on its walkable floor, off every perch, where an owl seen from above walks to it (OP-423)', () => {
-    const grove = getRoom('grove')!;
-    const here = piles.filter((p) => p.room === 'grove');
-    expect(here.map((p) => p.id).sort()).toEqual(['grove-leaves-2', 'grove-leaves-hut', 'grove-leaves-porch']);
-    for (const p of here) {
+  it('lays every pile in a room seen from above on its walkable floor, off every perch, where an owl walks to it (OP-423, OP-414)', () => {
+    const seenFromAbove = piles.filter((p) => PLAZAS[p.room]);
+    // The treehouse clearing's two treehouse piles and the Party Grove's lantern beam pile were up on perches.
+    for (const id of ['grove-leaves-hut', 'grove-leaves-porch', 'hub-leaves-beam']) expect(seenFromAbove.map((p) => p.id)).toContain(id);
+    for (const p of seenFromAbove) {
+      const room = getRoom(p.room)!;
       expect(p.top, p.id).toBeUndefined();
-      expect(grove.walkable.some((poly) => pointInPolygon(p.pos, poly)), `${p.id} on the floor`).toBe(true);
-      for (const perch of grove.perches ?? []) expect(pointInPolygon(p.pos, perch.area), `${p.id} under ${perch.id}`).toBe(false);
+      expect(room.walkable.some((poly) => pointInPolygon(p.pos, poly)), `${p.id} on the floor`).toBe(true);
+      for (const perch of room.perches ?? []) expect(pointInPolygon(p.pos, perch.area), `${p.id} under ${perch.id}`).toBe(false);
     }
   });
 

@@ -244,8 +244,9 @@ a tier 1 perch (`docs/TESTING.md`). A thing up on a perch (its `top`) is in reac
 perch, and a thing on the floor only from the floor.
 
 - **The hub** (the west wing's back wall): the root bench under the lantern beam, a jump up (tier 1,
-  `hub-bench`), and the beam itself, a jump and the flap up from the bench (tier 2, `hub-beam`). A
-  leaf pile waits on the beam.
+  `hub-bench`), and the beam itself, a jump and the flap up from the bench (tier 2, `hub-beam`). The
+  leaf pile blown off the beam lies on the floor at the bench's foot, since the Party Grove is seen
+  from above (OP-414).
 - **The grove's treetop walk** (the east wing): the fallen log on the lawn, a jump up; the ladder up
   the middle tree, a rung halfway and the porch at its top, a jump each; from the porch the loft's
   deck, a jump more. All single jumps (tier 1); the porch is also a jump and the flap straight from the

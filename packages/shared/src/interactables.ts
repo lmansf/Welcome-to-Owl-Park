@@ -54,8 +54,9 @@ export const KIND_RULES: Readonly<Record<InteractableKind, KindRules>> = {
 export const INTERACTABLES: readonly InteractableDef[] = [
   // Leaves blow in through the storybook arch and pile up just inside the great tree...
   { id: 'hub-leaves-1', kind: 'leaf-pile', room: 'hub', pos: { x: 1930, y: 820 } },
-  // ...and some up on the lantern beam in the west wing, a jump and the second flap from the root bench (OP-084).
-  { id: 'hub-leaves-beam', kind: 'leaf-pile', room: 'hub', pos: { x: 930, y: 696 }, top: 264 },
+  // ...and some blown off the lantern beam in the west wing to the floor at the root bench's foot. The Party
+  // Grove is seen from above (plaza.ts), so the pile that sat up on the beam read as one no owl could reach (OP-414).
+  { id: 'hub-leaves-beam', kind: 'leaf-pile', room: 'hub', pos: { x: 930, y: 765 } },
   // ...and drift against the roots at the foot of the tree outside, past its doorway (OP-417: three piles a room, each where the wind would leave it).
   { id: 'grove-leaves-2', kind: 'leaf-pile', room: 'grove', pos: { x: 2890, y: 845 } },
   // ...and drift off the east wing's treehouses to the foot of their trees: under the porch, at the
