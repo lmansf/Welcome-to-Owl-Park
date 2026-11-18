@@ -116,6 +116,8 @@ import {
   type PlayEvent,
   type PlayResult,
   type QuestBoard,
+  guestBoard,
+  guestQuest,
   type QuestUpdate,
   type RealmsSettings,
   type RunResult,
@@ -195,6 +197,12 @@ export interface Attachment {
  */
 export function spectatorSocket(roomId: string, kind: string | null): boolean {
   return insidePark(roomId) && kind !== 'visitor';
+}
+
+/** Whether a free guest may send this quest frame (OP-428): the board, a talk, a use, or taking, handing in or dropping one of a guest's quests. */
+export function guestFrame(frame: { t: string; quest?: unknown }): boolean {
+  if (frame.t === 'quests' || frame.t === 'talk' || frame.t === 'use') return true;
+  return (frame.t === 'accept' || frame.t === 'handin' || frame.t === 'abandon') && guestQuest(frame.quest);
 }
 
 /** What an owl's play earned (OP-191): a ticket holder's pay, or a spectator's nothing, with its balance and `practice`. */
@@ -1343,7 +1351,7 @@ export class RoomObject extends DurableObject<Env> {
     if (isArcadeRoom(att.room)) this.serial(att, () => this.sendWall(ws, att));
     // Into a sealed hollow's group, and everyone inside sees who is waiting (OP-310).
     if (isEscapeRoom(att.room)) this.escapeArrived(att);
-    // Arriving in a room counts for quests that ask to visit it (none asks for a nest; nor for a spectator's arrival, OP-191).
+    // Arriving in a room counts for quests that ask to visit it (none asks for a nest); a spectator's, for a guest's quests only (OP-191, OP-428).
     if (!isNestRoom(att.room)) this.serial(att, () => this.pushEvent(ws, att, { kind: 'visit', room: att.room }));
     return true;
   }
@@ -1549,16 +1557,20 @@ export class RoomObject extends DurableObject<Env> {
     });
   }
 
-  private sendBoard(ws: WebSocket, board: QuestBoard, updates: QuestUpdate[], extra: { r?: number; ok?: boolean; reason?: string } = {}): void {
-    this.send(ws, { t: 'quests', ...extra, board, updates });
+  /** The quest board to a page: a free guest's shows only the quests a guest may do (OP-428). */
+  private sendBoard(ws: WebSocket, att: Attachment, board: QuestBoard, updates: QuestUpdate[], extra: { r?: number; ok?: boolean; reason?: string } = {}): void {
+    this.send(ws, { t: 'quests', ...extra, board: att.spec ? guestBoard(board) : board, updates });
   }
 
-  /** Count an event toward the visitor's quests and push the board when something moved. A spectator's count for nothing (OP-191). */
+  /**
+   * Count an event toward the visitor's quests and push the board when something moved. A spectator's
+   * count for nothing (OP-191) but the quests a free guest may do (OP-428, guestQuests.ts).
+   */
   private async pushEvent(ws: WebSocket, att: Attachment, ev: Parameters<Collections['questEvent']>[1]): Promise<void> {
-    if (!att.cid || att.spec) return;
+    if (!att.cid) return;
     try {
-      const res = await this.collections().questEvent(att.cid, ev, att.room);
-      if (res.updates.length && res.board) this.sendBoard(ws, res.board, res.updates);
+      const res = await this.collections().questEvent(att.cid, ev, att.room, att.spec === true);
+      if (res.updates.length && res.board) this.sendBoard(ws, att, res.board, res.updates);
     } catch (e) {
       // Quests are best effort for pushes: the next request returns the true board.
       this.logOf(att).warn('room.play', 'write_failed', 'A quest event was not counted: the collections object did not answer.', { kind: ev.kind, error: e });
@@ -1571,8 +1583,10 @@ export class RoomObject extends DurableObject<Env> {
     if (!att.cid) return refuse('unknown');
     if (room.sessionOf(att.id) !== att.sid) return;
     // The quests, the NPC owls and the quest items are ticket holders' (OP-191). A free guest may still
-    // flop into a leaf pile, browse a stall and use the floor's things, for nothing (OP-243).
-    if (att.spec && frame.t !== 'use') {
+    // flop into a leaf pile, browse a stall and use the floor's things, for nothing (OP-243), and do
+    // Bramble's welcome (OP-428): read its board, talk to the NPC owls, and take, hand in or drop a
+    // guest's quest. Every other quest, the quest items and the puzzles stay ticket holders'.
+    if (att.spec && !guestFrame(frame)) {
       this.spectatorRefused(att, frame.t);
       return refuse('spectator');
     }
@@ -1581,13 +1595,13 @@ export class RoomObject extends DurableObject<Env> {
     try {
       switch (frame.t) {
         case 'quests':
-          return this.sendBoard(ws, await stub.board(cid), [], { r });
+          return this.sendBoard(ws, att, await stub.board(cid), [], { r });
         case 'talk': {
           const npc = getNpc(frame.npc);
           if (!npc || npc.room !== att.room) return refuse('unknown');
           if (!room.near(att.id, npc.pos, NPC_TALK_RADIUS)) return refuse('far');
-          const res = await stub.questEvent(cid, { kind: 'talk', npc: npc.id }, att.room);
-          return this.sendBoard(ws, res.board ?? (await stub.board(cid)), res.updates, { r });
+          const res = await stub.questEvent(cid, { kind: 'talk', npc: npc.id }, att.room, att.spec === true);
+          return this.sendBoard(ws, att, res.board ?? (await stub.board(cid)), res.updates, { r });
         }
         case 'accept':
         case 'handin': {
@@ -1597,15 +1611,15 @@ export class RoomObject extends DurableObject<Env> {
           if (!room.near(att.id, giver.pos, NPC_TALK_RADIUS)) return refuse('far');
           if (frame.t === 'accept') {
             const res = await stub.accept(cid, q.id, att.room);
-            return this.sendBoard(ws, res.board, [], { r, ok: res.ok, ...(res.ok ? {} : { reason: res.reason }) });
+            return this.sendBoard(ws, att, res.board, [], { r, ok: res.ok, ...(res.ok ? {} : { reason: res.reason }) });
           }
-          const res = await stub.handIn(cid, q.id, giver.id, visitOf(att));
+          const res = await stub.handIn(cid, q.id, giver.id, visitOf(att), att.spec === true);
           if (res.ok && res.award && !res.award.dup) this.owned.get(cid)?.set.add(res.award.variant);
           return this.send(ws, { t: 'handin', r, ...res });
         }
         case 'abandon': {
           const res = await stub.abandon(cid, frame.quest);
-          return this.sendBoard(ws, res.board, [], { r, ok: res.ok });
+          return this.sendBoard(ws, att, res.board, [], { r, ok: res.ok });
         }
         case 'use': {
           const it = getInteractable(frame.target);
@@ -1613,7 +1627,11 @@ export class RoomObject extends DurableObject<Env> {
           const rules = KIND_RULES[it.kind];
           if (!room.reaches(att.id, it.pos, rules.reach, it)) return refuse('far');
           if (!room.takeUse(att.id)) return refuse('busy');
-          if (att.spec) return this.practiceUse(ws, room, att, it.id, rules.shared, r);
+          if (att.spec) {
+            // A guest's use earns nothing, and moves only the guest's own quests (a flop for Bramble's welcome, OP-428).
+            if (this.practiceUse(ws, room, att, it.id, rules.shared, r)) await this.pushEvent(ws, att, { kind: 'interact', what: it.kind, id: it.id, room: att.room });
+            return;
+          }
           const ev = { kind: 'interact' as const, what: it.kind, id: it.id, room: att.room };
           // Leaf piles and stalls count toward today's tasks too.
           const task = it.kind === 'leaf-pile' ? 'flop' : it.kind === 'stall' ? 'browse' : null;
@@ -1622,11 +1640,11 @@ export class RoomObject extends DurableObject<Env> {
             this.saveObjects();
             const res = await stub.flop(cid, ev, att.room);
             this.send(ws, { t: 'useResult', r, ok: true, feathers: res.feathers, total: res.total, updates: res.updates });
-            if (res.board) this.sendBoard(ws, res.board, res.updates);
+            if (res.board) this.sendBoard(ws, att, res.board, res.updates);
           } else {
             const res = await stub.questEvent(cid, ev, att.room);
             this.send(ws, { t: 'useResult', r, ok: true, feathers: 0, total: res.board?.feathers ?? -1, updates: res.updates });
-            if (res.board) this.sendBoard(ws, res.board, res.updates);
+            if (res.board) this.sendBoard(ws, att, res.board, res.updates);
           }
           if (task) this.pushTasks(ws, await stub.play(cid, 0, { kind: task }));
           return;
@@ -1635,8 +1653,8 @@ export class RoomObject extends DurableObject<Env> {
           const pos = room.positionOf(att.id);
           if (!pos) return refuse('unknown');
           const res = await stub.gather(cid, frame.quest, frame.n, att.room, pos, room.groundOf(att.id));
-          if (res.ok) return this.sendBoard(ws, res.board, res.updates, { r, ok: true });
-          return this.sendBoard(ws, await stub.board(cid), [], { r, ok: false, reason: res.reason });
+          if (res.ok) return this.sendBoard(ws, att, res.board, res.updates, { r, ok: true });
+          return this.sendBoard(ws, att, await stub.board(cid), [], { r, ok: false, reason: res.reason });
         }
         case 'puzzle':
           return await this.puzzle(ws, att, room, frame);
@@ -1893,12 +1911,15 @@ export class RoomObject extends DurableObject<Env> {
 
   /**
    * A free guest's use of an interactable (OP-243): a leaf pile poofs for everyone as anyone's flop does,
-   * a stall or a floor thing answers as for anyone; but it turns up no feathers, moves no quest and counts
+   * a stall or a floor thing answers as for anyone; but it turns up no feathers, moves no quest but a guest's own (OP-428) and counts
    * for no task, and the collections object is told only for the play log (OP-304). `practice` tells the page so.
    */
-  private practiceUse(ws: WebSocket, room: Room, att: Attachment, id: string, shared: boolean, r: number): void {
+  private practiceUse(ws: WebSocket, room: Room, att: Attachment, id: string, shared: boolean, r: number): boolean {
     if (shared) {
-      if (!room.useObject(att.id, id, Date.now() + leafRespawnMs(Math.random))) return this.send(ws, { t: 'useResult', r, ok: false, reason: 'gone', feathers: 0, total: -1, updates: [] });
+      if (!room.useObject(att.id, id, Date.now() + leafRespawnMs(Math.random))) {
+        this.send(ws, { t: 'useResult', r, ok: false, reason: 'gone', feathers: 0, total: -1, updates: [] });
+        return false;
+      }
       this.saveObjects();
     }
     // The play log (OP-304) counts a guest's use too, so the owner sees what free owls play with: never waited on.
@@ -1912,6 +1933,7 @@ export class RoomObject extends DurableObject<Env> {
       );
     }
     this.send(ws, { t: 'useResult', r, ok: true, feathers: 0, total: -1, updates: [], practice: true });
+    return true;
   }
 
   // ---------- activities: lanterns, fishing, the copy game, the stage quiz ----------

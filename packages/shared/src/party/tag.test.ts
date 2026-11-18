@@ -7,7 +7,15 @@ import {
   TAG_REST_MS,
   TAG_RING,
   TAG_ROUND_MS,
+  TAG_STANDIN,
+  TAG_STANDIN_HOLD_MS,
+  TAG_STANDIN_SPEED,
+  TAG_STANDIN_WAIT_MS,
   TAG_WORDS,
+  isStandIn,
+  realPlayers,
+  standInAt,
+  tagStandIn,
   inTagRing,
   isTagState,
   newTag,
@@ -145,6 +153,108 @@ describe('feather tag (OP-403)', () => {
   });
 });
 
+describe('never a one-owl game: Pip stands in (OP-426)', () => {
+  const live = TAG_COUNTDOWN_MS;
+  /** Owl a alone in the ring since time 0, and Pip asked for at TAG_STANDIN_WAIT_MS. */
+  function withPip(): TagState {
+    const alone = ok(tagJoin(newTag(), 'a', 0, first));
+    return ok(tagStandIn(alone, 'a', TAG_STANDIN_WAIT_MS, 0));
+  }
+  const t0 = TAG_STANDIN_WAIT_MS;
+
+  it('steps in only for an owl alone in the ring for a few seconds, with no round going', () => {
+    const alone = ok(tagJoin(newTag(), 'a', 0, first));
+    expect(tagPhase(alone, 1000)).toBe('waiting');
+    expect(tagStandIn(alone, 'a', TAG_STANDIN_WAIT_MS - 1, 0)).toMatchObject({ ok: false, reason: 'early' });
+    expect(tagStandIn(alone, 'b', TAG_STANDIN_WAIT_MS, 0)).toMatchObject({ ok: false, reason: 'not-player' });
+    const pair = ok(tagJoin(alone, 'b', 1000, first));
+    expect(tagStandIn(pair, 'a', TAG_STANDIN_WAIT_MS, 0)).toMatchObject({ ok: false, reason: 'not-alone' });
+    const s = withPip();
+    expect(s.players).toEqual(['a', TAG_STANDIN]);
+    expect(realPlayers(s)).toEqual(['a']);
+    expect(isStandIn(TAG_STANDIN)).toBe(true);
+    expect(isStandIn('a')).toBe(false);
+    // A round at once, the owl starting with the feather and Pip to catch.
+    expect(s.holder).toBe('a');
+    expect(tagPhase(s, t0 + 1)).toBe('countdown');
+    expect(tagPhase(s, t0 + live)).toBe('live');
+    expect(isTagState(s)).toBe(true);
+  });
+
+  it('runs round inside the ring at half an owl’s walk, the same on every page', () => {
+    const s = withPip();
+    let last = standInAt(s, t0);
+    let walked = 0;
+    for (let t = t0 + 100; t <= t0 + live + TAG_ROUND_MS; t += 100) {
+      const p = standInAt(s, t);
+      expect(inTagRing(p), `t=${t}`).toBe(true);
+      walked += Math.hypot(p.x - last.x, p.y - last.y);
+      last = p;
+    }
+    const secs = (live + TAG_ROUND_MS) / 1000;
+    expect(walked / secs).toBeGreaterThan(TAG_STANDIN_SPEED * 0.7);
+    expect(walked / secs).toBeLessThan(TAG_STANDIN_SPEED * 1.3);
+    expect(TAG_STANDIN_SPEED).toBeLessThanOrEqual(260 / 2);
+    expect(standInAt(s, t0 + 7000)).toEqual(standInAt(s, t0 + 7000));
+  });
+
+  it('is caught like any owl, and gives the feather back after a short wait', () => {
+    const s = withPip();
+    const at = t0 + live + 2000;
+    const caught = ok(tagPass(s, 'a', TAG_STANDIN, at));
+    expect(caught.holder).toBe(TAG_STANDIN);
+    expect(tagAt(caught, at + TAG_STANDIN_HOLD_MS - 1).holder).toBe(TAG_STANDIN);
+    const back = tagAt(caught, at + TAG_STANDIN_HOLD_MS);
+    expect(back).toMatchObject({ holder: 'a', from: TAG_STANDIN, passedAt: at + TAG_STANDIN_HOLD_MS });
+    expect(TAG_STANDIN_HOLD_MS).toBeGreaterThan(TAG_BACK_MS);
+    // And straight back to Pip is the usual tag rule: not for TAG_BACK_MS.
+    expect(tagPass(back, 'a', TAG_STANDIN, at + TAG_STANDIN_HOLD_MS + 10)).toMatchObject({ ok: false, reason: 'back' });
+    expect(ok(tagPass(back, 'a', TAG_STANDIN, at + TAG_STANDIN_HOLD_MS + TAG_BACK_MS)).holder).toBe(TAG_STANDIN);
+  });
+
+  it('plays a round to its end: caught just before the bell, Pip is left holding the feather and the owl got away', () => {
+    const s = withPip();
+    const end = s.endsAt;
+    const caught = ok(tagPass(s, 'a', TAG_STANDIN, end - 2000));
+    const over = tagAt(caught, end + 100);
+    expect(tagPhase(over, end + 100)).toBe('over');
+    expect(over.left).toBe(TAG_STANDIN);
+    // Still alone, the owl plays on with Pip: the next round starts with Pip holding the feather, who gives it back.
+    const next = tagAt(over, end + TAG_REST_MS);
+    expect(next.players).toEqual(['a', TAG_STANDIN]);
+    expect(next.round).toBe(2);
+    expect(next.holder).toBe(TAG_STANDIN);
+    expect(tagAt(next, next.startsAt + TAG_STANDIN_HOLD_MS).holder).toBe('a');
+  });
+
+  it('plays out the round when a second real owl steps in, then steps out', () => {
+    const s = withPip();
+    const joined = ok(tagJoin(s, 'b', t0 + live + 1000, first));
+    expect(joined.players).toEqual(['a', TAG_STANDIN, 'b']);
+    expect(joined.round).toBe(1);
+    const next = tagAt(joined, joined.endsAt + TAG_REST_MS);
+    expect(next.players).toEqual(['a', 'b']);
+    expect(next.round).toBe(2);
+    expect(tagPhase(next, next.startsAt)).toBe('live');
+    // A real owl that stepped in can't ask for Pip once it has company.
+    expect(tagStandIn(next, 'a', next.startsAt, 0)).toMatchObject({ ok: false, reason: 'not-alone' });
+  });
+
+  it('goes when the owl it played with steps out', () => {
+    const s = withPip();
+    const gone = tagLeave(s, 'a', t0 + live + 1000);
+    expect(gone.players).toEqual([]);
+    expect(tagPhase(gone, t0 + live + 1000)).toBe('waiting');
+  });
+
+  it('says it plainly', () => {
+    for (const w of [TAG_WORDS.standIn, TAG_WORDS.pipHas, TAG_WORDS.pipLeft]) {
+      expect(w).not.toMatch(/grown/i);
+      expect(w.length).toBeLessThan(100);
+    }
+  });
+});
+
 describe('feather tag’s frames (OP-403)', () => {
   it('reads a page’s tag frame, and nothing else', async () => {
     const { parseClientFrame, parseServerFrame } = await import('../edge');
@@ -153,6 +263,8 @@ describe('feather tag’s frames (OP-403)', () => {
     expect(parseClientFrame(JSON.stringify({ t: 'tag', op: 'pass', at: 'v_b' }))).toEqual({ t: 'tag', op: 'pass', at: 'v_b' });
     expect(parseClientFrame(JSON.stringify({ t: 'tag', op: 'pass' }))).toBeNull();
     expect(parseClientFrame(JSON.stringify({ t: 'tag', op: 'win' }))).toBeNull();
+    expect(parseClientFrame(JSON.stringify({ t: 'tag', op: 'standin' }))).toEqual({ t: 'tag', op: 'standin' });
+    expect(parseClientFrame(JSON.stringify({ t: 'tag', op: 'pass', at: TAG_STANDIN }))).toEqual({ t: 'tag', op: 'pass', at: TAG_STANDIN });
     expect(parseServerFrame(JSON.stringify({ t: 'tag', tag: newTag() }))).toEqual({ t: 'tag', tag: newTag() });
   });
 });

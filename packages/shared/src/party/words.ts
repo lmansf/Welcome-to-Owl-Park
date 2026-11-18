@@ -9,6 +9,8 @@ export const PARTY_WORDS = {
   start: 'Start when ready',
   fill: 'Fill seats with park owls',
   waitMore: 'Waiting for one more owl to sit down',
+  standIn: 'Pip will play with you. Press Start!',
+  withPip: 'Play with Pip',
   waitStarter: 'The first owl to sit starts the game',
   full: 'Every seat is taken. Watch, or come back soon!',
   closing: 'No new games now: the park closes for the night soon.',

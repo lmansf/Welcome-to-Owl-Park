@@ -356,11 +356,12 @@ export class Collections extends DurableObject<Env> {
     return this.quests.abandon(cid, quest, Date.now());
   }
 
-  /** Count a talk, visit, use or emote toward the collector's quests. */
-  async questEvent(cid: string, ev: QuestEvent, here: string): Promise<EventResult> {
+  /** Count a talk, visit, use or emote toward the collector's quests; `guest` (OP-428): toward a free guest's own quests only. */
+  async questEvent(cid: string, ev: QuestEvent, here: string, guest = false): Promise<EventResult> {
     const now = Date.now();
-    if (ev.kind === 'interact') this.played({ event: 'interact', cid, room: here, thing: `${ev.what}:${ev.id}` });
-    const updates = this.quests.event(cid, ev, now, here);
+    // A free guest's use is in the play log already (practiceUsed): its event only moves its own quests (OP-428).
+    if (ev.kind === 'interact' && !guest) this.played({ event: 'interact', cid, room: here, thing: `${ev.what}:${ev.id}` });
+    const updates = this.quests.event(cid, ev, now, here, guest);
     return updates.length ? { updates, board: this.quests.board(cid, now) } : { updates };
   }
 
@@ -521,8 +522,9 @@ export class Collections extends DurableObject<Env> {
     return this.quests.gather(cid, quest, n, room, pos, Date.now(), ground);
   }
 
-  async handIn(cid: string, quest: string, npc: string, visit?: Visit): Promise<HandInResult> {
-    return this.during(visit, () => this.quests.handIn(cid, quest, npc, Date.now(), secureRandom));
+  /** Hand a quest in to its giver; `guest` (OP-428): a free guest's, which pays the collectible only. */
+  async handIn(cid: string, quest: string, npc: string, visit?: Visit, guest = false): Promise<HandInResult> {
+    return this.during(visit, () => this.quests.handIn(cid, quest, npc, Date.now(), secureRandom, guest));
   }
 
   // ---------- nests: none of these answers carries a collector id ----------

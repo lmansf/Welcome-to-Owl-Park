@@ -17,6 +17,8 @@ export interface ParkState {
     passesAsked: number;
     refused: string[];
     server: boolean;
+    /** Where Pip stands in the ring while standing in for a missing player (OP-426, behind ?standin=1). */
+    standIn: { x: number; y: number } | null;
   } | null;
   /** Pinecone bowling in the Party Grove (OP-403, behind ?bowl=1): this page's game; null elsewhere or without the flag. */
   bowl: {
@@ -130,6 +132,7 @@ export interface ParkState {
   /** The side camera (OP-351): its lead (room px, to the right is positive), the height it holds and where it looks; null in a room seen from above. */
   sideCam: { lead: number; level: number; x: number; y: number } | null;
   egg: { at: { x: number; y: number } | null; said: string | null };
+  pet: { x: number; y: number } | null;
   trail: { feathers: Array<{ x: number; y: number }>; glints: string[]; on: boolean } | null;
   floorShown: boolean;
   /** How many pieces shaping the room's edges seen from above were drawn (edges.ts). */
