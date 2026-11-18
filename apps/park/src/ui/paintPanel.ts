@@ -56,7 +56,7 @@ const TOOL_COLOURS: Record<Tool, string> = { select: '#F6F1E3', ledge: '#5BE37D'
 
 // Inside #hud, so the Menu and the screens over the room (z-index 20 there) cover it; #hud's own button style is put back to the panel's.
 const CSS = `
-#hud .paint-panel{position:absolute;z-index:15;right:max(8px,env(safe-area-inset-right));top:calc(max(10px,env(safe-area-inset-top)) + 58px);width:min(300px,calc(100vw - 16px));
+#hud .paint-panel{position:absolute;z-index:15;right:max(8px,env(safe-area-inset-right));top:calc(max(10px,env(safe-area-inset-top)) + 58px);width:min(300px,calc(calc(100vw/var(--vz,1)) - 16px));
   display:flex;flex-direction:column;gap:6px;padding:8px;border-radius:10px;pointer-events:auto;color:#F6F1E3;background:rgba(12,30,54,.88);
   border:1px solid rgba(246,241,227,.22);box-shadow:0 4px 14px rgba(0,0,0,.45);font:12px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 #hud .paint-panel h2{margin:0;font-size:12px;font-weight:700;letter-spacing:.04em;color:#FFD36A}

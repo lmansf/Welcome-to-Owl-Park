@@ -28,6 +28,7 @@ export const FLAGS = {
   snow: { param: 'snow', note: 'The first snow (OP-074): snow falling in every room open to the sky and lying thin on the floors seen from above, drawn in code' },
   bowl: { param: 'bowl', note: 'Pinecone bowling in the Party Grove (OP-403): its six pins and the pinecone in code, three rolls a game at the head of the lane, played on this page' },
   tag: { param: 'tag', note: 'Feather tag in the Party Grove (OP-403): its game spaces as size boxes, and tag for 2 to 8 owls in the ring, played on the room server' },
+  share: { param: 'share', note: 'Share my owl (OP-392): a button on the Which owl are you result that shares a link to that owl’s own page' },
 } as const satisfies Record<string, FlagSpec>;
 
 export type FlagName = keyof typeof FLAGS;

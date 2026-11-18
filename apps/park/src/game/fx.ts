@@ -10,6 +10,7 @@
 import Phaser from 'phaser';
 import { hexToInt, parseVariant } from '@owl-park/shared';
 import { symbolTexture, type SymbolName } from './symbols';
+import { motion } from '../calmMotion';
 
 export type AnchorName = 'head' | 'eyes' | 'eyeL' | 'eyeR' | 'beak' | 'chest' | 'feet';
 
@@ -34,6 +35,8 @@ export interface FxHost {
   bodyTexture(): string;
   /** A horizontal jolt of the whole owl (glitch), in owl canvas units. */
   setJitter(dx: number): void;
+  /** Whether the visitor asked for calm motion (OP-375): glows hold still, nothing flashes or jolts, bursts are small. */
+  calm(): boolean;
 }
 
 export interface FxHandle {
@@ -66,8 +69,18 @@ class Rig implements FxHandle {
   readonly objects: Phaser.GameObjects.GameObject[] = [];
   readonly tweens: Phaser.Tweens.Tween[] = [];
   onTick: ((now: number) => void) | null = null;
+  /** The effect's own clock for what circles and bobs (ms): it stands still in calm motion (calmMotion.ts, orbit). */
+  private clockAt = 0;
+  private lastNow: number | null = null;
 
   constructor(readonly host: FxHost) {}
+
+  /** The effect's clock now: it runs with the page's, and stops while calm motion is on. */
+  clock(now: number): number {
+    if (this.lastNow !== null) this.clockAt += Math.max(0, now - this.lastNow) * motion('orbit', this.host.calm());
+    this.lastNow = now;
+    return this.clockAt;
+  }
 
   emitter(symbol: SymbolName, at: Parameters<FxHost['anchor']>[0], config: EmitterConfig, opts: { dx?: number; dy?: number; mirror?: boolean; behind?: boolean } = {}): Emitter {
     const scene = this.host.scene;
@@ -91,6 +104,12 @@ class Rig implements FxHandle {
   }
 
   tick(now: number): void {
+    // A glow that breathes holds still in calm motion (calmMotion.ts, glowPulse), and breathes again when it is off.
+    const still = motion('glowPulse', this.host.calm()) === 0;
+    for (const t of this.tweens) {
+      if (still && !t.isPaused()) t.pause();
+      else if (!still && t.isPaused()) t.resume();
+    }
     const dir = this.host.facing();
     for (const it of this.emitters) {
       const a = this.host.drawnAnchor(it.at);
@@ -177,8 +196,9 @@ export function createFx(host: FxHost, variant: string): FxHandle | null {
       const stars = Array.from({ length: 6 }, () => rig.image('front', 0, 0, symbolTexture(scene, 'star4'), tint, 0.95).setScale(0.55));
       rig.onTick = (now) => {
         const a = host.localAnchor('head');
+        const at = rig.clock(now);
         for (let i = 0; i < stars.length; i++) {
-          const t = now / 1300 + (i * Math.PI * 2) / stars.length;
+          const t = at / 1300 + (i * Math.PI * 2) / stars.length;
           stars[i]!.setPosition(a.x + Math.cos(t) * 42, a.y - 26 + Math.sin(t) * 9);
           stars[i]!.setAlpha(Math.sin(t) > 0 ? 1 : 0.55);
         }
@@ -190,7 +210,7 @@ export function createFx(host: FxHost, variant: string): FxHandle | null {
       const moon = rig.image('front', 0, 0, symbolTexture(scene, 'crescent'), light, 1, Phaser.BlendModes.NORMAL).setScale(0.9);
       rig.onTick = (now) => {
         const a = host.localAnchor('head');
-        const y = a.y - 34 + Math.sin(now / 700) * 3;
+        const y = a.y - 34 + Math.sin(rig.clock(now) / 700) * 3;
         moon.setPosition(a.x + 10, y);
         halo.setPosition(a.x + 10, y);
       };
@@ -222,9 +242,14 @@ export function createFx(host: FxHost, variant: string): FxHandle | null {
         if (now < nextAt) return;
         nextAt = now + rnd(1400, 3000);
         const a = host.localAnchor('head');
-        bolt.setPosition(a.x + rnd(-50, 50), a.y - rnd(10, 40)).setAngle(rnd(-20, 20)).setAlpha(1);
-        scene.tweens.add({ targets: bolt, alpha: 0, duration: 260, ease: 'Quad.easeIn' });
-        sparks.explode(9);
+        const calm = host.calm();
+        // In calm motion no bolt flashes and only a few sparks fly (calmMotion.ts).
+        const flash = motion('boltFlash', calm);
+        if (flash > 0) {
+          bolt.setPosition(a.x + rnd(-50, 50), a.y - rnd(10, 40)).setAngle(rnd(-20, 20)).setAlpha(flash);
+          scene.tweens.add({ targets: bolt, alpha: 0, duration: 260, ease: 'Quad.easeIn' });
+        }
+        sparks.explode(motion('sparkBurst', calm));
       };
       break;
     }
@@ -258,7 +283,7 @@ export function createFx(host: FxHost, variant: string): FxHandle | null {
         const walking = host.isWalking();
         if ((wasWalking && !walking) || now >= nextAt) {
           nextAt = now + rnd(2800, 4200);
-          e.explode(14);
+          e.explode(motion('confettiBurst', host.calm()));
         }
         wasWalking = walking;
       };
@@ -273,8 +298,9 @@ export function createFx(host: FxHost, variant: string): FxHandle | null {
       const shapes: SymbolName[] = ['diamond', 'triangle', 'ring', 'diamond', 'triangle', 'ring', 'diamond', 'triangle'];
       const runes = shapes.map((s) => rig.image('back', 0, 0, symbolTexture(scene, s), tint, 0.9).setScale(0.5));
       rig.onTick = (now) => {
+        const at = rig.clock(now);
         for (let i = 0; i < runes.length; i++) {
-          const t = now / 1600 + (i * Math.PI * 2) / runes.length;
+          const t = at / 1600 + (i * Math.PI * 2) / runes.length;
           runes[i]!.setPosition(Math.cos(t) * 64, -6 + Math.sin(t) * 14).setAlpha(Math.sin(t) > 0 ? 0.95 : 0.45);
         }
       };
@@ -288,9 +314,11 @@ export function createFx(host: FxHost, variant: string): FxHandle | null {
         if (now >= nextAt) {
           nextAt = now + rnd(1200, 2600);
           until = now + 140;
-          bits.explode(10);
+          bits.explode(motion('sparkBurst', host.calm()));
         }
-        host.setJitter(now < until ? (Math.random() < 0.5 ? -8 : 8) : 0);
+        // In calm motion the owl is not jolted (calmMotion.ts, glitchJolt).
+        const jolt = motion('glitchJolt', host.calm());
+        host.setJitter(now < until && jolt > 0 ? (Math.random() < 0.5 ? -jolt : jolt) : 0);
       };
       break;
     }

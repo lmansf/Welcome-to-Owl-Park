@@ -47,7 +47,7 @@ export interface PartyAction {
 }
 
 const CARD_CSS = `
-#hud .stump-card{position:absolute;z-index:12;left:50%;transform:translateX(-50%);bottom:calc(max(12px,env(safe-area-inset-bottom)) + 120px);width:min(420px,calc(100vw - 24px));display:flex;flex-direction:column;gap:10px;padding:12px 14px;border-radius:18px;background:rgba(12,30,54,.94);border:1px solid rgba(255,211,106,.55);color:#F6F1E3;pointer-events:auto;box-shadow:0 8px 30px rgba(0,0,0,.45)}
+#hud .stump-card{position:absolute;z-index:12;left:50%;transform:translateX(-50%);bottom:calc(max(12px,env(safe-area-inset-bottom)) + 120px);width:min(420px,calc(calc(100vw/var(--vz,1)) - 24px));display:flex;flex-direction:column;gap:10px;padding:12px 14px;border-radius:18px;background:rgba(12,30,54,.94);border:1px solid rgba(255,211,106,.55);color:#F6F1E3;pointer-events:auto;box-shadow:0 8px 30px rgba(0,0,0,.45)}
 #hud .stump-card header{display:flex;align-items:center;gap:8px}
 #hud .stump-card header b{flex:1;font-size:17px}
 #hud .stump-card .seats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}

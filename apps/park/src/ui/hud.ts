@@ -343,7 +343,7 @@ const CSS = `
 #hud.just-in .fb-bug,#hud.just-in .fb-card{pointer-events:none}
 #hud.at-home .bar,#hud.at-home .welcome,#hud.at-home .welcome.show,#hud.at-home .nest-welcome.show,#hud.at-home .bottom,#hud.at-home .hints,#hud.at-home .cards,#hud.at-home .notices{display:none}
 @media (pointer:coarse){#hud.no-stick .bottom .actions{bottom:0}}
-#hud .toasts{position:absolute;z-index:10;left:50%;transform:translate(-50%,calc(-1 * var(--toasts-lift,0px)));bottom:calc(max(12px,env(safe-area-inset-bottom)) + 64px);display:flex;flex-direction:column;gap:6px;align-items:center;width:min(92vw,520px)}
+#hud .toasts{position:absolute;z-index:10;left:50%;transform:translate(-50%,calc(-1 * var(--toasts-lift,0px)));bottom:calc(max(12px,env(safe-area-inset-bottom)) + 64px);display:flex;flex-direction:column;gap:6px;align-items:center;width:min(calc(92vw/var(--vz,1)),520px)}
 #hud .toast{background:rgba(246,241,227,.95);color:#0C1E36;border-radius:12px;padding:10px 14px;font-size:14px;font-weight:600;text-align:center;box-shadow:0 4px 16px rgba(0,0,0,.4);animation:hud-in .25s ease-out}
 @keyframes hud-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 #hud .actions button{animation:hud-in .25s ease-out}
@@ -419,7 +419,7 @@ const CSS = `
 #hud .hint.say i{border-left-width:18px;border-top-width:7px;border-bottom-width:7px}
 #hud .hint.say span{color:#F6F1E3;font-size:14px;font-weight:700;white-space:nowrap}
 /* The nest's welcome (OP-105) looks as the lobby's card does (.welcome, ui/quests.ts), and closes at a tap. */
-#hud .nest-welcome{display:none;position:relative;margin-top:8px;width:min(330px,calc(100vw - 24px));min-height:0;padding:7px 32px 7px 11px;text-align:left;color:#F6F1E3;
+#hud .nest-welcome{display:none;position:relative;margin-top:8px;width:min(330px,calc(calc(100vw/var(--vz,1)) - 24px));min-height:0;padding:7px 32px 7px 11px;text-align:left;color:#F6F1E3;
   background:rgba(12,30,54,.72);border:1px solid rgba(246,241,227,.18);border-radius:12px;font-size:13px;font-weight:400;line-height:1.3;box-shadow:none;backdrop-filter:blur(6px)}
 #hud .nest-welcome.show{display:block}
 #hud .nest-welcome b{display:block;font-size:12px;color:#FFD36A;letter-spacing:.02em}
@@ -445,7 +445,7 @@ const CSS = `
   #hud .emote-btn{display:none}
   #hud .pad-btn.interact.idle{opacity:0;pointer-events:none}
   #hud .pad-btn.interact .lbl{display:none}
-  #hud .pad-btn.interact.labelled{width:max-content;min-width:56px;max-width:min(240px,calc(100vw - 232px));padding:0 14px 0 12px;gap:4px;justify-content:flex-start;border-radius:28px;background:rgba(12,30,54,.78)}
+  #hud .pad-btn.interact.labelled{width:max-content;min-width:56px;max-width:min(240px,calc(calc(100vw/var(--vz,1)) - 232px));padding:0 14px 0 12px;gap:4px;justify-content:flex-start;border-radius:28px;background:rgba(12,30,54,.78)}
   #hud .pad-btn.interact.labelled svg{flex:none}
   #hud .pad-btn.interact.labelled .lbl{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;font-size:13px;font-weight:700;line-height:1.15;text-align:left;color:#F6F1E3}
   /* The first action is Interact's own, so its button in the row would say it twice. */

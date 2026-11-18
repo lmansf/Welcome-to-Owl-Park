@@ -58,14 +58,14 @@ const CSS = `
 #hud .fb-card{position:fixed;z-index:21;left:calc(max(6px,env(safe-area-inset-left)) + 54px);top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:2px;padding:2px;border-radius:14px;background:rgba(12,30,54,.88);border:1px solid rgba(255,211,106,.55);box-shadow:0 2px 10px rgba(0,0,0,.4);color:#F6F1E3}
 /* The card's tail points back at the bug the mouse sits beside. */
 #hud .fb-card::before{content:'';position:absolute;left:-7px;top:50%;width:12px;height:12px;transform:translateY(-50%) rotate(45deg);background:rgba(12,30,54,.88);border-left:1px solid rgba(255,211,106,.55);border-bottom:1px solid rgba(255,211,106,.55)}
-#hud .fb-card .fb-card-open{display:flex;align-items:center;gap:6px;min-height:44px;max-width:min(210px,calc(100vw - 150px));padding:2px 6px 2px 4px;background:none;border:0;box-shadow:none;color:inherit;font:inherit;font-size:13px;line-height:1.25;text-align:left;cursor:pointer}
+#hud .fb-card .fb-card-open{display:flex;align-items:center;gap:6px;min-height:44px;max-width:min(210px,calc(calc(100vw/var(--vz,1)) - 150px));padding:2px 6px 2px 4px;background:none;border:0;box-shadow:none;color:inherit;font:inherit;font-size:13px;line-height:1.25;text-align:left;cursor:pointer}
 #hud .fb-card .fb-card-open canvas{flex:none;width:40px;height:32px}
 #hud .fb-card .fb-card-x{flex:none;width:32px;height:32px;min-height:32px;padding:0;border-radius:50%;background:none;border:0;box-shadow:none;color:rgba(246,241,227,.75);font-size:18px;line-height:1}
 #hud .fb-card button:focus-visible{outline:2px solid #FFD36A;outline-offset:1px}
 /* On the home screen the bug keeps to the right edge, so the card sits to its left with the tail on its right. */
 #hud.at-home:not(.covered) .fb-card{left:auto;right:calc(max(6px,env(safe-area-inset-right)) + 54px)}
 #hud.at-home:not(.covered) .fb-card::before{left:auto;right:-7px;transform:translateY(-50%) rotate(225deg)}
-@media (max-width:520px){#hud.at-home:not(.covered) .fb-card{right:max(6px,env(safe-area-inset-right));top:calc(50% + 32px);transform:none;max-width:calc(44vw - 6px)}#hud.at-home:not(.covered) .fb-card::before{right:16px;top:-7px;transform:rotate(135deg)}#hud.at-home:not(.covered) .fb-card .fb-card-open{max-width:none;font-size:12px}}
+@media (max-width:520px){#hud.at-home:not(.covered) .fb-card{right:max(6px,env(safe-area-inset-right));top:calc(50% + 32px);transform:none;max-width:calc(calc(44vw/var(--vz,1)) - 6px)}#hud.at-home:not(.covered) .fb-card::before{right:16px;top:-7px;transform:rotate(135deg)}#hud.at-home:not(.covered) .fb-card .fb-card-open{max-width:none;font-size:12px}}
 /* Only over the park and the home screen: a covering screen or a game has the room to itself. */
 #hud.covered .fb-card,#hud .fb-card[hidden]{display:none}
 /* A phone's park view keeps Feedback in the Menu (OP-242), so the card goes with the bug. */

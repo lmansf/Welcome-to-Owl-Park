@@ -66,7 +66,7 @@ export interface TagDebug {
 }
 
 const CSS = `
-#hud .tag-line{position:absolute;z-index:11;left:50%;transform:translateX(-50%);top:calc(max(12px,env(safe-area-inset-top)) + 64px);max-width:min(460px,calc(100vw - 24px));padding:8px 14px;border-radius:999px;background:rgba(12,30,54,.92);border:1px solid rgba(255,211,106,.6);color:#F6F1E3;font-size:15px;line-height:1.3;text-align:center;pointer-events:none;box-shadow:0 6px 22px rgba(0,0,0,.4)}
+#hud .tag-line{position:absolute;z-index:11;left:50%;transform:translateX(-50%);top:calc(max(12px,env(safe-area-inset-top)) + 64px);max-width:min(460px,calc(calc(100vw/var(--vz,1)) - 24px));padding:8px 14px;border-radius:999px;background:rgba(12,30,54,.92);border:1px solid rgba(255,211,106,.6);color:#F6F1E3;font-size:15px;line-height:1.3;text-align:center;pointer-events:none;box-shadow:0 6px 22px rgba(0,0,0,.4)}
 #hud .tag-line.you{border-color:#ffd36a;background:rgba(84,58,8,.94)}
 `;
 let styled = false;

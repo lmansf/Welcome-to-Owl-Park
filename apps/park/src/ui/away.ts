@@ -25,7 +25,7 @@ export const AWAY_WORDS = {
 const CSS = `
 #hud .away{position:fixed;inset:0;z-index:40;display:none;align-items:center;justify-content:center;pointer-events:auto;background:rgba(6,14,28,.58)}
 #hud .away.open{display:flex}
-#hud .away .card{display:flex;flex-direction:column;align-items:center;gap:14px;width:min(360px,calc(100vw - 32px));padding:22px 18px;text-align:center;background:rgba(12,30,54,.97);border:1px solid rgba(246,241,227,.18);border-radius:22px;box-shadow:0 18px 60px rgba(0,0,0,.6);color:#F6F1E3}
+#hud .away .card{display:flex;flex-direction:column;align-items:center;gap:14px;width:min(360px,calc(calc(100vw/var(--vz,1)) - 32px));padding:22px 18px;text-align:center;background:rgba(12,30,54,.97);border:1px solid rgba(246,241,227,.18);border-radius:22px;box-shadow:0 18px 60px rgba(0,0,0,.6);color:#F6F1E3}
 #hud .away h2{margin:0;font-size:22px}
 #hud .away p{margin:0;font-size:16px;line-height:1.35;opacity:.9}
 #hud .away button{min-height:56px;min-width:180px;padding:10px 24px;font-size:20px;font-weight:800;border-radius:28px;border:0;background:#C9A227;color:#0C1E36;cursor:pointer}

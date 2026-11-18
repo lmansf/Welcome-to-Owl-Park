@@ -110,7 +110,7 @@ export interface EscapeHost {
 }
 
 const CSS = `
-#hud .escape{position:fixed;top:calc(max(10px,env(safe-area-inset-top)) + 56px);left:50%;transform:translateX(-50%);width:min(440px,calc(100vw - 20px));display:flex;flex-direction:column;gap:6px;pointer-events:auto;background:rgba(12,30,54,.92);border:1px solid rgba(246,241,227,.18);border-radius:14px;padding:10px 12px;color:#F6F1E3;font-size:13px;box-shadow:0 6px 24px rgba(0,0,0,.45)}
+#hud .escape{position:fixed;top:calc(max(10px,env(safe-area-inset-top)) + 56px);left:50%;transform:translateX(-50%);width:min(440px,calc(calc(100vw/var(--vz,1)) - 20px));display:flex;flex-direction:column;gap:6px;pointer-events:auto;background:rgba(12,30,54,.92);border:1px solid rgba(246,241,227,.18);border-radius:14px;padding:10px 12px;color:#F6F1E3;font-size:13px;box-shadow:0 6px 24px rgba(0,0,0,.45)}
 #hud .escape h2{margin:0;font-size:15px}
 #hud .escape p{margin:0;line-height:1.35}
 #hud .escape .note{opacity:.85;font-style:italic}
@@ -122,7 +122,7 @@ const CSS = `
 #hud .escape .pips{display:flex;gap:4px}
 #hud .escape .pips i{width:10px;height:10px;border-radius:50%;background:rgba(246,241,227,.2)}
 #hud .escape .pips i.on{background:#8FE3A8}
-@media (max-height:520px){#hud .escape{top:8px;width:min(380px,calc(100vw - 20px));font-size:12px}}
+@media (max-height:520px){#hud .escape{top:8px;width:min(380px,calc(calc(100vw/var(--vz,1)) - 20px));font-size:12px}}
 `;
 let styled = false;
 

@@ -117,7 +117,7 @@ export function gateBuy(sale: Pick<GateSale, 'ticketsUrl' | 'checkout'>, started
 }
 
 const CSS = `
-#hud .gate-sale{position:absolute;z-index:11;left:50%;top:20%;transform:translateX(-50%);width:min(340px,90vw);display:none;flex-direction:column;align-items:center;gap:10px;padding:16px 18px;border-radius:16px;text-align:center;pointer-events:auto;
+#hud .gate-sale{position:absolute;z-index:11;left:50%;top:20%;transform:translateX(-50%);width:min(340px,calc(90vw/var(--vz,1)));display:none;flex-direction:column;align-items:center;gap:10px;padding:16px 18px;border-radius:16px;text-align:center;pointer-events:auto;
   background:linear-gradient(160deg,#F6F1E3,#EADFC3);color:#0C1E36;box-shadow:0 0 0 2px #C9A227,0 0 30px rgba(201,162,39,.7),0 10px 30px rgba(0,0,0,.45)}
 #hud .gate-sale.open{display:flex}
 #hud .gate-sale p{margin:0;font-size:15px;font-weight:700;line-height:1.4}

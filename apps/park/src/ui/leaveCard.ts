@@ -8,7 +8,7 @@ export interface LeaveCard {
 }
 
 const CSS = `
-#hud .layer .modal.leave{width:min(360px,calc(100vw - 32px));align-items:center;text-align:center;gap:14px;padding:20px 18px}
+#hud .layer .modal.leave{width:min(360px,calc(calc(100vw/var(--vz,1)) - 32px));align-items:center;text-align:center;gap:14px;padding:20px 18px}
 #hud .leave .ask{margin:0;font-size:17px;line-height:1.35}
 #hud .leave .row{display:flex;gap:10px;justify-content:center}
 #hud .leave .row button{min-height:44px;min-width:104px;padding:8px 20px}
