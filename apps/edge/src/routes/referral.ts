@@ -26,8 +26,11 @@ export async function referral(c: RouteCtx): Promise<Response> {
   if (owl.status !== 200) return json({ error: 'try-later' }, 503);
   const hadTicket = owl.body['hadTicket'] === true;
   const rpc = collections(env);
+  // The card's whole state: the mode, whether a free Day Ticket can be checked out yet, and this owl's view.
+  // A code taken answers with all of it too, since the card redraws from that answer (OP-420).
+  const view = async () => ({ mode, free: !!env.REFERRAL_CODE?.trim(), ...(await rpc.referralView(cid, hadTicket)) });
   if (url.pathname === '/api/referral' && request.method === 'GET') {
-    return json({ mode, free: !!env.REFERRAL_CODE?.trim(), ...(await rpc.referralView(cid, hadTicket)) });
+    return json(await view());
   }
   if (url.pathname === '/api/referral/invite' && request.method === 'POST') {
     const body = await readJson(request);
@@ -39,7 +42,7 @@ export async function referral(c: RouteCtx): Promise<Response> {
       return json({ ok: false, reason: r.reason }, r.reason === 'too-many' ? 429 : 409);
     }
     log.info('worker.accounts', 'referral_invited', 'An owl new to the park typed a friend’s code: it is offered a free Day Ticket.', { collector_hash: hashForLog(cid) });
-    return json({ ok: true, ...(await rpc.referralView(cid, hadTicket)) });
+    return json({ ok: true, ...(await view()) });
   }
   return json({ error: 'not found' }, 404);
 }

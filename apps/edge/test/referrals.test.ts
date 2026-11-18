@@ -112,7 +112,8 @@ describe('bringing a friend through the Worker (OP-056)', () => {
 
     const invited = await post(env, '/api/referral/invite', 'c_bea0000001', { code: alice.code.toLowerCase() });
     expect(invited.status).toBe(200);
-    expect(await invited.json()).toMatchObject({ ok: true, invited: true, canEnterCode: false, offers: [{ kind: 'friend' }] });
+    // The answer carries the card's whole state, free included, so the card shows its button without a reload (OP-420).
+    expect(await invited.json()).toMatchObject({ ok: true, mode: 'preview', free: true, invited: true, canEnterCode: false, offers: [{ kind: 'friend' }] });
     logged(cap.lines, 'referral_invited', { component: 'worker.accounts', collector_hash: hashForLog('c_bea0000001') });
 
     // The free Day Ticket's link: one Day Ticket, the store's code and the owl's checkout token.

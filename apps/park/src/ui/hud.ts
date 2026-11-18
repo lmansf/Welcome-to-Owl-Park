@@ -806,7 +806,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       invite: async (code) => {
         const answer = await r.link.invite(code);
         if (answer.ok) {
-          referral = { ...r, state: answer.state, said: REFERRAL_WORDS.welcome };
+          // Over what the card already knew, so a word the answer leaves out (whether free tickets are open) stays (OP-420).
+          referral = { ...r, state: { ...r.state, ...answer.state }, said: REFERRAL_WORDS.welcome };
           menu.refresh();
         }
         return answer;
