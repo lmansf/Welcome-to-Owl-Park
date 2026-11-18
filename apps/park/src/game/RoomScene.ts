@@ -2835,7 +2835,7 @@ export class RoomScene extends Phaser.Scene {
       tree: this.treeDress && { fronts: this.treeDress.fronts, raised: this.treeDress.raised, shades: this.treeDress.shades, lips: this.treeDress.lips, marks: this.treeDress.marks, barriers: this.treeDress.barriers, landings: this.treeDress.landings, behind: this.me.depth < this.treeDress.raisedDepth },
       view: (({ x, y, width, height }) => ({ x, y, w: width, h: height }))(this.cameras.main.worldView),
       wings: this.me.wingsOut,
-      npcs: [...this.npcs.values()].map((n) => ({ id: n.id, x: n.def.pos.x, y: n.def.pos.y, mark: this.spectator ? null : this.quests.markFor(n.id), approach: n.approaching })),
+      npcs: [...this.npcs.values()].map((n) => ({ id: n.id, x: n.def.pos.x, y: n.def.pos.y, mark: this.quests.markFor(n.id), approach: n.approaching })),
       thermals: (this.room.thermals ?? []).map((t) => ({ id: t.id, x: t.pos.x, y: t.pos.y, r: t.r, top: t.top })),
       objects: interactablesIn(this.room.id).map((d) => ({ id: d.id, kind: d.kind, x: d.pos.x, y: d.pos.y, top: d.top ?? 0, here: this.piles.get(d.id)?.here ?? true })),
       items: [...this.items.values()].map((m) => ({ quest: m.quest, n: m.n, kind: m.kind, x: m.pos.x, y: m.pos.y, top: m.top })),
@@ -3085,8 +3085,8 @@ export class RoomScene extends Phaser.Scene {
   private async refreshBoard(): Promise<void> {
     const gen = this.gen;
     const link = this.link;
-    // A spectator's quests are locked (OP-191): asked for again once a ticket makes it a visitor.
-    if (!link || this.spectator) return;
+    // A spectator's board holds only the quests a guest may do (OP-428, the room server's guestBoard).
+    if (!link) return;
     const res = await link.board();
     if (gen !== this.gen || this.leaving || !this.scene.isActive()) return;
     this.boardTimer?.remove();
@@ -3113,8 +3113,8 @@ export class RoomScene extends Phaser.Scene {
   /** The board changed: NPC markers and this room's quest items follow it. */
   private showBoard(board: QuestBoard | null): void {
     if (!this.built) return;
-    // A spectator's quests are locked (OP-191): no marks over the NPC owls, and no quest items drawn.
-    for (const npc of this.npcs.values()) npc.setMark(this.spectator ? null : this.quests.markFor(npc.id));
+    // A spectator's board holds only a guest's quests (OP-428): its marks are Bramble's welcome's, and no quest items are drawn.
+    for (const npc of this.npcs.values()) npc.setMark(this.quests.markFor(npc.id));
     const wanted = new Map<string, { quest: string; n: number; kind: QuestItemMarker['kind']; x: number; y: number; top?: number }>();
     for (const q of this.spectator ? [] : (board?.active ?? [])) for (const it of q.items) if (it.room === this.room.id) wanted.set(`${q.id}#${it.n}`, { quest: q.id, ...it });
     for (const [key, m] of this.items) {
@@ -3326,8 +3326,8 @@ export class RoomScene extends Phaser.Scene {
   private async talk(id: string): Promise<void> {
     const npc = this.npcs.get(id);
     if (!npc || this.busy) return;
-    // The NPC owls' quests and Nova's shop are ticket holders' (OP-191).
-    if (this.spectator) return this.offerDayTicket(SPECTATOR_WORDS.locked);
+    // A free guest talks to the NPC owls too (OP-428: Bramble's welcome asks it to); their other quests
+    // and Nova's shop stay ticket holders' (OP-191), as the dialogue and the shop say.
     if (!this.link) return void this.hud.toast(ROOM_DOWN, 3200);
     const gen = this.gen;
     this.busy = true;
@@ -4251,7 +4251,10 @@ export class RoomScene extends Phaser.Scene {
     this.spectator = on;
     this.registry.set('spectator', on);
     this.hud.setSpectator(on);
-    if (on && !was) this.showBoard(this.quests.board);
+    if (on && !was) {
+      this.showBoard(this.quests.board);
+      void this.refreshBoard();
+    }
     if (!on && was) {
       this.showBoard(this.quests.board);
       void this.refreshBoard();

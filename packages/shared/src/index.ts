@@ -20,6 +20,7 @@ export * from './plazaFloor';
 export * from './quests';
 export * from './questCatalog';
 export * from './questbook';
+export * from './guestQuests';
 export * from './puzzles';
 export * from './shop';
 export * from './activities';

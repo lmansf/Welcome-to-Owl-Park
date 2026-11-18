@@ -22,6 +22,8 @@ const ADMIN = { 'X-Admin-Key': E2E_ADMIN_KEY };
 const LOW = { risk: { recommendation: 'ACCEPT', assessments: [{ riskLevel: 'LOW' }] } };
 /** The words, drafts for the owner (ui/spectator.ts). */
 const LOCKED = 'Quests and the shops are for ticket holders. You can get a Day Ticket right here.';
+/** The Quests tab, and an NPC owl with nothing for a guest (OP-428). */
+const GUEST_QUESTS = 'Guests can do Elder Bramble’s welcome quest. The other quests and the shops are for ticket holders.';
 const IDOL = 'Ticket holders vote here, one vote a day.';
 const KEEP = 'A Day Ticket lets you keep what you win. You can get a Day Ticket right here.';
 const ADMITTED = 'Your Day Ticket is in. Have fun!';
@@ -133,10 +135,11 @@ test.describe('spectators (OP-191)', () => {
     await sale(a, KEEP);
     await notNow(a);
 
-    // The Quests tab says the quests are ticket holders', with the Day Ticket.
+    // The Quests tab says which quest a guest may do and that the rest are ticket holders', with the Day Ticket (OP-428).
     await a.keyboard.press('KeyJ');
     const menu = a.getByRole('dialog', { name: 'Menu' });
-    await expect(menu.getByText(LOCKED)).toBeVisible();
+    await expect(menu.getByText(`${GUEST_QUESTS} You can get a Day Ticket right here.`)).toBeVisible();
+    await expect(menu.locator('.journal')).toBeVisible();
     await menu.locator('[data-spectator-get="quests"]').click();
     await expect(menu).toBeHidden();
     await sale(a, LOCKED);
@@ -147,19 +150,22 @@ test.describe('spectators (OP-191)', () => {
     await a.context().close();
   });
 
-  test('in the market: Nova, the gift shop’s door and the idol sell a Day Ticket instead; a stall is browsed for nothing', async ({ browser, request }) => {
+  test('in the market: Nova’s shop, the gift shop’s door and the idol sell a Day Ticket instead; a stall is browsed for nothing', async ({ browser, request }) => {
     await pastTheClose((await flip(request, 'ticket'))['closedAt'] as number);
     const page = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
     await openPark(page, { transport: 'edge', room: 'market' });
     await spectating(page, 'market');
-    // No quest marks over the NPC owls and no quest items for a spectator.
+    // No quest marks over the market's NPC owls (a guest's one quest is Bramble's, in the hub) and no quest items.
     expect((await state(page)).npcs.every((n) => n.mark === null)).toBe(true);
     expect((await state(page)).items).toEqual([]);
 
-    // The feather shop's keeper: no dialogue, the Day Ticket.
+    // The feather shop's keeper talks to a guest (OP-428: the welcome quest asks it to), and her shop sells the Day Ticket.
     expect(await page.evaluate(() => window.owlPark.talk('nova'))).toBe(true);
+    const nova = page.locator('.dialogue[data-npc="nova"]');
+    await expect(nova).toBeVisible({ timeout: 15_000 });
+    await expect(nova.locator('[data-offer]')).toHaveCount(0);
+    await nova.getByRole('button', { name: 'Open the shop' }).click();
     await sale(page, LOCKED);
-    await expect(page.locator('.dialogue[data-npc="nova"]')).toBeHidden();
     await notNow(page);
 
     // A stall is browsed as by anyone (OP-243): its line, no card, no feathers.
@@ -262,5 +268,63 @@ test.describe('spectators (OP-191)', () => {
     await expect(menu).toBeVisible();
     await expect(menu.getByText(LOCKED)).toHaveCount(0);
     await a.context().close();
+  });
+
+  test('a free guest takes Elder Bramble’s welcome, walks it through the park and keeps its Leaf Crown, with no feathers, after a reload; every other quest stays a ticket holder’s (OP-428)', async ({ browser, request }) => {
+    test.slow(); // four rooms, each loaded and drawn with software WebGL on CI runners, and a reload
+    await pastTheClose((await flip(request, 'ticket'))['closedAt'] as number);
+    const page = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
+    const step = () => page.evaluate(() => window.owlPark.quests()?.active.find((q) => q.id === 'story-welcome')?.step ?? -1);
+    await openPark(page, { transport: 'edge', room: 'hub' });
+    await spectating(page, 'hub');
+    // Bramble has something for a guest, and no other NPC owl in the hub does.
+    await expect.poll(async () => (await state(page)).npcs.find((n) => n.id === 'bramble')?.mark, { timeout: 15_000 }).toBe('offer');
+    expect((await state(page)).npcs.filter((n) => n.mark !== null).map((n) => n.id)).toEqual(['bramble']);
+    expect(await page.evaluate(() => window.owlPark.talk('bramble'))).toBe(true);
+    const bramble = page.locator('.dialogue[data-npc="bramble"]');
+    await expect(bramble).toBeVisible({ timeout: 15_000 });
+    const offer = bramble.locator('[data-offer="story-welcome"]');
+    await expect(offer).toContainText('Reward: Leaf Crown');
+    await expect(offer).not.toContainText('feathers');
+    await offer.getByRole('button', { name: 'Take it on' }).click();
+    await expect.poll(step, { timeout: 15_000 }).toBe(0);
+    await expect(page.locator(STORE_CARD)).toBeHidden();
+
+    // Pip, in the same room; the clearing and a flop into its leaves; Nova on the neon street.
+    expect(await page.evaluate(() => window.owlPark.talk('pip'))).toBe(true);
+    await expect.poll(step, { timeout: 15_000 }).toBe(1);
+    await openPark(page, { transport: 'edge', room: 'grove' });
+    await spectating(page, 'grove');
+    await expect.poll(step, { timeout: 15_000 }).toBe(2);
+    expect(await page.evaluate(() => window.owlPark.use('grove-leaves-2'))).toBe(true);
+    await expect.poll(step, { timeout: 15_000 }).toBe(3);
+    // Hazel's acorns, right here: a ticket holder's quest, and the room server says no to a guest.
+    expect(await page.evaluate(() => window.owlPark.accept('story-hazel-acorns'))).toBe(false);
+    await openPark(page, { transport: 'edge', room: 'market' });
+    await spectating(page, 'market');
+    expect(await page.evaluate(() => window.owlPark.talk('nova'))).toBe(true);
+    await expect.poll(step, { timeout: 15_000 }).toBe(4);
+
+    // A hoot for Elder Bramble, then hand it in: the Leaf Crown, and the guest's feathers as they were (none).
+    await openPark(page, { transport: 'edge', room: 'hub' });
+    await spectating(page, 'hub');
+    expect(await page.evaluate(() => window.owlPark.talk('bramble'))).toBe(true);
+    await expect(bramble).toBeVisible({ timeout: 15_000 });
+    expect(await page.evaluate(() => window.owlPark.emote('hoot'))).toBe(true);
+    await expect.poll(async () => (await page.evaluate(() => window.owlPark.quests()?.active[0]?.ready)) ?? false, { timeout: 15_000 }).toBe(true);
+    expect(await page.evaluate(() => window.owlPark.handIn('story-welcome'))).toBe(true);
+    await expect.poll(async () => (await page.evaluate(() => window.owlPark.collection()?.owned.includes('leaf-crown~0'))) ?? false, { timeout: 15_000 }).toBe(true);
+    expect(await page.evaluate(() => window.owlPark.collection()?.feathers ?? -1)).toBe(0);
+    // Worn, and still owned and worn after a reload.
+    expect(await page.evaluate(() => window.owlPark.equip('leaf-crown~0'))).toBe(true);
+    await expect.poll(async () => (await state(page)).look.wear?.head ?? null).toBe('leaf-crown~0');
+    await page.reload();
+    await page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
+    await spectating(page, 'hub');
+    await expect.poll(async () => (await page.evaluate(() => window.owlPark.collection()?.owned.includes('leaf-crown~0'))) ?? false, { timeout: 15_000 }).toBe(true);
+    await expect.poll(async () => (await state(page)).look.wear?.head ?? null, { timeout: 15_000 }).toBe('leaf-crown~0');
+    // Done once: Bramble has nothing more for a guest.
+    await expect.poll(async () => (await state(page)).npcs.find((n) => n.id === 'bramble')?.mark ?? null, { timeout: 15_000 }).toBeNull();
+    await page.context().close();
   });
 });

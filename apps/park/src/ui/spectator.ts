@@ -36,6 +36,8 @@ export const SPECTATOR_WORDS = {
   again: 'Play again',
   /** The quests, the NPC owls, the stores: shown above the card before the store. */
   locked: 'Quests and the shops are for ticket holders.',
+  /** The Quests tab and an NPC owl with nothing for a guest (OP-428): the one quest a guest may do, and that the rest are ticket holders'. */
+  guestQuests: 'Guests can do Elder Bramble’s welcome quest. The other quests and the shops are for ticket holders.',
   /** A guest's first flop into a leaf pile on this page (OP-243): said once, with no card. */
   leaves: 'With a Day Ticket, leaf piles can turn up feathers.',
   /** At a realm's idol (the Realm Vote). */

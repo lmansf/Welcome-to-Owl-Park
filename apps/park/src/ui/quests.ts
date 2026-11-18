@@ -1,8 +1,12 @@
-import { ACTIVE_SLOTS, MAX_ACTIVE_QUESTS, TASKS_BONUS, getQuest, questPuzzle, type LockView, type PuzzleSymbol, TASK_FEATHERS, getNpc, placeName, placeWords, variantName, type ActiveQuestView, type NpcDef, type QuestOfferView, type QuestReward } from '@owl-park/shared';
+import { ACTIVE_SLOTS, MAX_ACTIVE_QUESTS, TASKS_BONUS, getQuest, questPuzzle, type LockView, type PuzzleSymbol, TASK_FEATHERS, getNpc, placeName, placeWords, type ActiveQuestView, type NpcDef, type QuestOfferView } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { TaskState } from '../collect/tasks';
 import { walkingMap } from '../game/walkingMap';
 import { PUZZLE_CSS, createCodePad, puzzleBox } from './puzzle';
+import { SPECTATOR_WORDS } from './spectator';
+import { rewardText } from './questReward';
+
+export { rewardText };
 
 export interface QuestActions {
   accept(quest: string): Promise<unknown>;
@@ -30,6 +34,8 @@ export interface QuestUi {
   mountJournal(host: HTMLElement, shown: () => boolean): void;
   /** Back to its first tab (Under way), for the J key and the Menu's Quests tab opened afresh. */
   resetJournal(): void;
+  /** The owl is a free guest (OP-428): an NPC owl with nothing for it says which quest a guest may do. */
+  setGuest(on: boolean): void;
   /** The room the owl is in: the lobby shows its welcome, and a finished quest can be collected where its giver stands. */
   setRoom(room: string): void;
   /** The code pad of a code lock the owl walked up to (OP-255). */
@@ -101,11 +107,6 @@ export function timeLeft(at: number, now = Date.now()): string {
   const h = Math.round(ms / 3_600_000);
   if (h < 36) return `${h} h`;
   return `${Math.round(ms / 86_400_000)} days`;
-}
-
-export function rewardText(r: QuestReward): string {
-  const item = r.item === 'pick' ? ' and a collectible' : r.item ? ` and ${variantName(r.item)}` : '';
-  return `${r.feathers} feathers${item}`;
 }
 
 const npcName = (id: string) => getNpc(id)?.name ?? 'a friend';
@@ -186,6 +187,7 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
 
   let talking: NpcDef | null = null;
   let greeting = '';
+  let guest = false;
   let room = '';
   /** A request from a button is under way: buttons wait for it. */
   let pending = false;
@@ -378,7 +380,8 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
       row.append(el('span', 'meta', 'A free gift every day, three new things every day and eight every week.'), button('Open the shop', '', () => actions.openShop()));
       dialogue.appendChild(row);
     } else if (!ready.length && !offers.length && !underway.length) {
-      dialogue.appendChild(el('p', 'empty', 'Nothing to ask of you right now. Come back tomorrow!'));
+      // A free guest's board holds only a guest's quests (OP-428): the rest are a ticket holder's, not tomorrow's.
+      dialogue.appendChild(el('p', 'empty', guest ? SPECTATOR_WORDS.guestQuests : 'Nothing to ask of you right now. Come back tomorrow!'));
     }
   };
 
@@ -424,6 +427,11 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
     },
     resetJournal() {
       tab = 'underway';
+    },
+    setGuest(on) {
+      if (on === guest) return;
+      guest = on;
+      renderDialogue();
     },
     openLock(quest, lock) {
       onOpen();

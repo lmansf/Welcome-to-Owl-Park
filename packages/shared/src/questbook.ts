@@ -17,6 +17,7 @@ import { sameLevel, type Raised } from './perches';
 import { nextParkDayAt, nextParkMonthAt, nextParkWeekAt, parkDay, parkMonth, parkWeek, rotationRandom } from './parktime';
 import type { Vec2 } from './protocol';
 import { DAILY_POOL, MONTHLY_POOL, MONTHLY_PUZZLE_POOL, QUESTS, WEEKLY_POOL, WEEKLY_PUZZLE_POOL, getQuest } from './questCatalog';
+import { guestQuest } from './guestQuests';
 import {
   ACTIVE_SLOTS,
   DAILY_OFFER_DIFFICULTIES,
@@ -265,10 +266,12 @@ export class QuestBook {
    * Something happened that quests may count: a talk, a visit, a use, an emote. Only the
    * current step of each active quest can move. `here` is the room the visitor stands in.
    */
-  event(cid: string, ev: QuestEvent, now: number, here?: string): QuestUpdate[] {
+  /** Count an event toward the collector's active quests; `guest` (OP-428): toward a free guest's quests only. */
+  event(cid: string, ev: QuestEvent, now: number, here?: string, guest = false): QuestUpdate[] {
     const updates: QuestUpdate[] = [];
     for (const row of this.rows(cid, now)) {
       if (row.doneAt !== null) continue;
+      if (guest && !guestQuest(row.quest)) continue;
       const q = getQuest(row.quest)!;
       if (row.step >= q.steps.length) continue;
       const goal = q.steps[row.step]!.goal;
@@ -300,14 +303,26 @@ export class QuestBook {
     return { ok: true, updates: [update], board: this.board(cid, now) };
   }
 
-  /** Hand a finished quest back to its giver: feathers, plus a collectible (or its duplicate feathers). */
-  handIn(cid: string, questId: unknown, npc: string, now: number, rnd: () => number): HandInResult {
+  /**
+   * Hand a finished quest back to its giver: feathers, plus a collectible (or its duplicate feathers).
+   * `guest` (OP-428): a free guest's hand-in of one of its quests pays the collectible only, with no
+   * feathers, and one it already owns pays nothing more.
+   */
+  handIn(cid: string, questId: unknown, npc: string, now: number, rnd: () => number, guest = false): HandInResult {
     const q = getQuest(questId);
-    if (!q) return { ok: false, reason: 'unknown', board: this.board(cid, now) };
+    if (!q || (guest && !guestQuest(q.id))) return { ok: false, reason: 'unknown', board: this.board(cid, now) };
     const row = this.rows(cid, now).find((r) => r.quest === q.id && r.doneAt === null);
     if (!row) return { ok: false, reason: 'not-active', board: this.board(cid, now) };
     if (q.giver !== npc) return { ok: false, reason: 'wrong-npc', board: this.board(cid, now) };
     if (row.step < q.steps.length) return { ok: false, reason: 'not-ready', board: this.board(cid, now) };
+    if (guest) {
+      const crown = typeof q.reward.item === 'string' && q.reward.item !== 'pick' ? q.reward.item : null;
+      const given = crown ? this.book.grant(cid, crown, 'quest', now) : null;
+      const award: Award | null = given?.ok ? { variant: given.variant, dup: !given.added, feathers: 0 } : null;
+      row.doneAt = now;
+      this.store.putQuest(row);
+      return { ok: true, quest: q.id, title: q.title, thanks: q.thanks, feathers: 0, total: this.book.feathers(cid, now), award, board: this.board(cid, now) };
+    }
     let award: Award | null = null;
     const item = q.reward.item === 'pick' ? pickRewardVariant(rewardOdds(q), variantsByRarity(), new Set(this.store.owned(cid)), rnd) : q.reward.item;
     if (item) award = this.book.award(cid, item, 'quest', now);
