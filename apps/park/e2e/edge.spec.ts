@@ -1087,3 +1087,16 @@ test.describe('room server', () => {
     await b.context().close();
   });
 });
+
+test('a shared quiz result opens as that owl’s own page, and any other owl goes to the front page (OP-392)', async ({ request }) => {
+  const res = await request.get('/owl/gentle', { maxRedirects: 0 });
+  expect(res.status()).toBe(200);
+  expect(res.headers()['content-type']).toContain('text/html');
+  const html = await res.text();
+  expect(html).toContain('data-owl="gentle"');
+  expect(html).toContain('og-image.jpg');
+  expect(html).not.toMatch(/<script/i);
+  const other = await request.get('/owl/dragon', { maxRedirects: 0 });
+  expect(other.status()).toBe(302);
+  expect(other.headers()['location']).toBe('/');
+});
