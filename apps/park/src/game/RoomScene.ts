@@ -112,6 +112,7 @@ import {
   dashRefusal,
   holdsDash,
   courseOfRoom,
+  walkStopsShort,
   endsCourse,
   placeShown,
   airOut,
@@ -175,6 +176,7 @@ import type { ParkConfig } from '../config';
 import { saveLook } from '../identity';
 import { OPEN_ENTRY, type ConnectionStatus, type Entry, type ParkTransport, type RoomConnection, type RoomHandlers, type ScanReply, type WalletEntry } from '../net';
 import type { Ribbon } from '../ui/ribbon';
+import { COURSE_WORDS } from '../ui/courseWords';
 import { openPosOverlay, type PosOverlay } from '../ui/posOverlay';
 import { keeperToken } from '../net/keeper';
 import type { EscapeLink } from '../net/transport';
@@ -2074,6 +2076,17 @@ export class RoomScene extends Phaser.Scene {
     if (!this.built || this.leaving || !door) return;
     this.pendingVote = false;
     const aim = { x: door.rect.x + door.rect.w / 2, y: door.rect.y + door.rect.h / 2 };
+    // In a course, a walk there stops at the edge of the first pit or thorns on the way, never in them,
+    // and says that a jump crosses (OP-422): a kid moving by taps would otherwise walk in, be put back, and loop.
+    if (this.sideView() && this.room.course) {
+      const from = { ...this.me.pos };
+      const stop = walkStopsShort(this.room, from, snapToWalkable(aim, this.footingNow().walkable), this.flier.air.z);
+      if (stop) {
+        if (distance(stop, from) >= 3) this.walkTo(stop);
+        this.hud.toast(TOUCH_SCREEN ? COURSE_WORDS.jumpHere.touch : COURSE_WORDS.jumpHere.keys, 3500);
+        return;
+      }
+    }
     // Already standing in it (a side view, OP-212): a tap on it goes through, as one walked to would.
     if (!this.walkTo(aim)) this.tapIntoDoorway(aim);
   }

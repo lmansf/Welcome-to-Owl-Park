@@ -240,6 +240,34 @@ export function thornsBetween(room: Pick<RoomDef, 'course'> | undefined, a: { x:
   });
 }
 
+/** How far short of a hazard a walk there stops (room px): at its edge, where a jump crosses it (OP-422). */
+export const HAZARD_STOP_PX = 40;
+
+/**
+ * Where a walk from `from` to `to`, at `z` over the floor, stops so that it never walks the owl into a
+ * hazard (OP-422): just short of the first pit it would walk over on the floor, or the first thorns it
+ * would walk into, at their edge, where a jump crosses. Null when the way is clear. A walk there (a
+ * chip at the screen's edge, as a kid on a phone moves) walks; only a jump crosses a hazard.
+ */
+export function walkStopsShort(room: Pick<RoomDef, 'course'> | undefined, from: Vec2, to: Vec2, z: number, stepPx = 4): Vec2 | null {
+  const thorns = room?.course?.thorns ?? [];
+  if (!room?.course?.pits?.length && !thorns.length) return null;
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const length = Math.hypot(dx, dy);
+  if (length < 1) return null;
+  const n = Math.ceil(length / stepPx);
+  for (let i = 1; i <= n; i++) {
+    const t = i / n;
+    const p = { x: from.x + dx * t, y: from.y + dy * t };
+    const hit = (z < 1 && inPit(room, p)) || thorns.some((h) => p.x >= h.x0 && p.x <= h.x1 && z >= h.z0 && z <= h.z1);
+    if (!hit) continue;
+    const back = Math.max(0, length * t - HAZARD_STOP_PX) / length;
+    return { x: from.x + dx * back, y: from.y + dy * back };
+  }
+  return null;
+}
+
 /** Whether a point is over one of a room's pits. */
 export function inPit(room: Pick<RoomDef, 'course'> | undefined, p: Vec2): boolean {
   return (room?.course?.pits ?? []).some((pit) => pointInPolygon(p, pit));
