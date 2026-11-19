@@ -15,7 +15,7 @@ import { account } from './account';
 import { referral } from './referral';
 import { adminCapacity, adminClimb, adminCollectLog, adminGate, adminGrant, adminKeeper, adminOpening, adminPing, adminRestart, adminStore, adminTickets } from './admin';
 import { clientError } from './clientErrors';
-import { collection, nest, nestGift } from './collection';
+import { collection, nest, nestGift, redeem } from './collection';
 import { adminFeedback, feedback } from './feedback';
 import { closed, line, notice } from './line';
 import { adminMasks, masks } from './masks';
@@ -78,6 +78,8 @@ export const ROUTES: readonly Route[] = [
   // ---- The collection, the shop and the nests ----
   { path: '/api/collection', handle: collection },
   { path: '/api/shop', handle: collection },
+  // Egg codes (OP-260): the painted egg for a code from the portfolio site's SQL console.
+  { path: '/api/redeem', handle: redeem },
   { path: '/api/shop/buy', handle: collection },
   { path: '/api/shop/gift', handle: collection },
   { path: '/api/nest', handle: nest },

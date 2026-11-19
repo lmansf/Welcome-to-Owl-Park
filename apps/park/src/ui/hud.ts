@@ -1,4 +1,4 @@
-import { getPhrase, NEST_WORDS, type ArcadeGame, type ClimbInput, type EquipSlot, type FeedbackDraft, type FeedbackRewardView, type LockView, type NestSpotId, type NpcDef, type OwlAccount, type OwlLook, type TravelRefusal, type TravelState, type Vec2, type Wear } from '@owl-park/shared';
+import { getPhrase, NEST_WORDS, type ArcadeGame, type ClimbInput, type EggRedeemReply, type EquipSlot, type FeedbackDraft, type FeedbackRewardView, type LockView, type NestSpotId, type NpcDef, type OwlAccount, type OwlLook, type TravelRefusal, type TravelState, type Vec2, type Wear } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { TaskState } from '../collect/tasks';
 import type { CollectionState } from '../collect/state';
@@ -108,6 +108,8 @@ export interface Hud {
   attachAccount(link: AccountLink, deps: Pick<AccountScreenDeps, 'restart' | 'startOver'>): AccountScreens;
   /** Bring a friend (OP-056): its card in the Menu's Nest tab, shown with the park's REFERRALS on, or as a preview when `preview` (?friends=1). */
   attachReferrals(link: ReferralLink, preview: boolean): void;
+  /** The Redeem a code card in the Menu's Settings tab (OP-260), behind ?eggcode=1. */
+  attachRedeem(redeem: (code: string) => Promise<EggRedeemReply>): void;
   /** The Menu's ways out: what "Leave the park" and travel from the map do. */
   attachWayOut(actions: WayOutActions): void;
   /** The tickets on this device, for the Menu's Settings tab (null: the page has no park server keeping them). */
@@ -578,6 +580,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   let account: OwlAccount | null = null;
   let builder: OwlBuilder | null = null;
   let collectionActions: CollectionActions | null = null;
+  /** Redeem an egg code (OP-260): null while the flag is off. */
+  let redeem: ((code: string) => Promise<EggRedeemReply>) | null = null;
   let wayOut: WayOutActions | null = null;
   let waysOut = { leave: false, home: false };
   /** Travel from the map (OP-130): what the room scene last said, the place whose card is open, and when places lit up. */
@@ -733,7 +737,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
         render: (panel) =>
           renderSettings(
             panel,
-            { settings, tickets: ticketsNow, canLeave: waysOut.leave, feedback: () => openScreen('feedback', true), title: () => openScreen('title'), leave: () => openScreen('leave'), account: accountCards(), retake: collectionActions ? () => retakeQuiz() : null },
+            { settings, tickets: ticketsNow, canLeave: waysOut.leave, feedback: () => openScreen('feedback', true), title: () => openScreen('title'), leave: () => openScreen('leave'), account: accountCards(), retake: collectionActions ? () => retakeQuiz() : null, redeem },
             () => menu.refresh(),
           ),
       },
@@ -1181,6 +1185,10 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
         referral = { link, state, said: '' };
         menu.refresh();
       });
+    },
+    attachRedeem(fn) {
+      redeem = fn;
+      if (menu.isOpen() && menu.tab() === 'settings') menu.refresh();
     },
     attachWayOut(actions) {
       wayOut = actions;

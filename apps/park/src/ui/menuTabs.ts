@@ -1,4 +1,4 @@
-import { ARCADE_NAME, NEST_WORDS, TRAVEL_WORDS, WAY_OUT_WORDS, WHICH_OWL_WORDS, allVariants, canTravel, needsGate, parseVariant, setProgress, type ItemKind, type SetProgress, type TravelRefusal } from '@owl-park/shared';
+import { ARCADE_NAME, NEST_WORDS, TRAVEL_WORDS, WAY_OUT_WORDS, WHICH_OWL_WORDS, allVariants, canTravel, needsGate, parseVariant, setProgress, type ItemKind, type SetProgress, type TravelRefusal, type EggRedeemReply } from '@owl-park/shared';
 import type { CollectionState } from '../collect/state';
 import { rasterNames } from '../game/artNames';
 import { PUBLISHED_ART, versioned } from '../game/publishedArt';
@@ -6,6 +6,7 @@ import { ROOMS } from '../rooms';
 import type { WalletEntry } from '../net/transport';
 import type { SettingsStore } from '../settings';
 import { ACCOUNT_WORDS } from './account';
+import { eggCodeCard } from './eggCode';
 import { REFERRAL_WORDS } from './referral';
 import { HOME_WORDS } from './home';
 import { settingsRows, syncSettings } from './settingsScreen';
@@ -513,6 +514,8 @@ export interface SettingsTabDeps {
   account?: HTMLElement[] | null;
   /** Retake the quiz (OP-076): which owl are you, again, for a new kind and colours. Null with no owl yet. */
   retake?: (() => void) | null;
+  /** Redeem an egg code from the portfolio site (OP-260), behind ?eggcode=1. Null: no card. */
+  redeem?: ((code: string) => Promise<EggRedeemReply>) | null;
 }
 
 /** The Settings tab's closed row of the tickets on this device (OP-172), for the owner's approval. */
@@ -572,6 +575,7 @@ export function renderSettings(panel: HTMLElement, deps: SettingsTabDeps, redraw
     quiz.appendChild(row);
     panel.appendChild(quiz);
   }
+  if (deps.redeem) panel.appendChild(eggCodeCard(deps.redeem));
   panel.appendChild(tickets);
 
   const out = card('Leaving');
