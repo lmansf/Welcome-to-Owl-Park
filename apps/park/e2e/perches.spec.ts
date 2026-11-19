@@ -179,9 +179,10 @@ test.describe('perches (OP-084)', () => {
     if (!isMobile) await page.setViewportSize({ width: 1024, height: 768 });
     await openPark(page, { room: 'grove' });
     const press = (s: { x: number; y: number }) => (isMobile ? page.touchscreen.tap(s.x, s.y) : page.mouse.click(s.x, s.y));
-    // The way along the floor from the doorway (the one the hook test above walks), and the three piles on it.
-    const way = [{ x: 2950, y: 868 }, { x: 2890, y: 845 }, { x: 3120, y: 720 }, { x: 3645, y: 725 }, { x: 4200, y: 745 }, { x: 4300, y: 740 }];
-    const piles = [{ id: 'grove-leaves-2', at: 1 }, { id: 'grove-leaves-hut', at: 3 }, { id: 'grove-leaves-porch', at: 5 }];
+    // The way along the floor from where the owl comes in (the one the hook test above walks), and the three piles on it.
+    const start = (await state(page)).pos;
+    const way = [start, { x: 2950, y: 868 }, { x: 2890, y: 845 }, { x: 3120, y: 720 }, { x: 3645, y: 725 }, { x: 4200, y: 745 }, { x: 4300, y: 740 }];
+    const piles = [{ id: 'grove-leaves-2', at: 2 }, { id: 'grove-leaves-hut', at: 4 }, { id: 'grove-leaves-porch', at: 6 }];
     // Points every 20 px along the way up to a given stop, nearest the stop first.
     const along = (to: number) => {
       const pts: Array<{ x: number; y: number }> = [];
