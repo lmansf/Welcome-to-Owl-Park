@@ -133,7 +133,7 @@ function connect(room: string, id: string, cid?: string, spec = false): FakeSock
 const send = (obj: Obj, ws: FakeSocket, frame: ClientFrame | Record<string, unknown>) => obj.webSocketMessage(ws as unknown as WebSocket, JSON.stringify(frame));
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-/** An owl in the Party Grove, in front of the stump. */
+/** An owl in the Great Hollow, in front of the stump. */
 async function atStump(obj: Obj, id: string, opts: { cid?: string; spec?: boolean } = {}) {
   const ws = connect(STUMP_ROOM, id, opts.cid, opts.spec);
   await send(obj, ws, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK, spawn: FROM_STUMP_SPAWN });
@@ -279,7 +279,7 @@ describe('the Old Stump (OP-314)', () => {
     expect(gs.of('party').find((f) => f.paid)!.paid).toEqual({ feathers: 0, practice: true });
     logged(lines.lines, 'party_ended', { why: 'finished' });
     logged(lines.lines, 'party_paid', { games: 1 });
-    // Its room is let go: the owls still in it are sent back to the Party Grove.
+    // Its room is let go: the owls still in it are sent back to the Great Hollow.
     expect(ga.closed?.code).toBe(CLOSE.PARTY_CLOSED);
     expect(state.kept.get(`party:${go}`)).toBeUndefined();
   });

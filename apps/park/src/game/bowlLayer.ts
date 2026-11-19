@@ -1,5 +1,5 @@
 /**
- * Pinecone bowling in the Party Grove (OP-403, Dec 1 plan D5), behind `?bowl=1` (flags.ts): the six pins
+ * Pinecone bowling in the Great Hollow (OP-403, Dec 1 plan D5), behind `?bowl=1` (flags.ts): the six pins
  * and the pinecone drawn in code as size boxes would be, on the bowling lane that feather tag laid out
  * (party/tag.ts), and the game itself (party/bowling.ts).
  *

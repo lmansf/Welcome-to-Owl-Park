@@ -189,10 +189,10 @@ export async function socket(c: RouteCtx): Promise<Response> {
   // One of our own test visits (the page's `test=1`, or a headless browser): only the Worker says so, whatever the page sent under the name goes.
   headers.delete('X-Test-Visit');
   if (isTestVisit(url.searchParams.get('test'), request.headers.get('User-Agent'))) headers.set('X-Test-Visit', '1');
-  // A party game's room (OP-314) lives in the object of the Party Grove it was started in: the page names that copy.
+  // A party game's room (OP-314) lives in the object of the Great Hollow it was started in: the page names that copy.
   if (isPartyRoom(roomId)) return objectFor(env, STUMP_ROOM, Number.isInteger(askedCopy) && askedCopy > 1 && askedCopy <= MAX_PARTY_COPY ? askedCopy : 1).fetch(new Request(request, { headers }));
   return objectFor(env, roomId, copy).fetch(new Request(request, { headers }));
 }
 
-/** The highest copy of the Party Grove a page may name for its game's room (OP-314). */
+/** The highest copy of the Great Hollow a page may name for its game's room (OP-314). */
 const MAX_PARTY_COPY = 16;

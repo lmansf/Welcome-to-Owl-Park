@@ -228,7 +228,7 @@ export class Room {
   readonly def: RoomDef;
   private readonly visitors = new Map<string, Visitor>();
   private readonly leavers = new Map<string, Leaver>();
-  /** Feather tag (OP-403, party/tag.ts): only in the Party Grove. Plain data, moved on by the clock wherever it is read. */
+  /** Feather tag (OP-403, party/tag.ts): only in the Great Hollow. Plain data, moved on by the clock wherever it is read. */
   private tagGame: TagState | null = null;
   /** When each owl in feather tag stepped into the ring, for Pip's wait (OP-426). */
   private readonly tagJoinedAt = new Map<string, number>();
@@ -824,12 +824,12 @@ export class Room {
   }
 
   /**
-   * Feather tag in the Party Grove (OP-403): an owl steps into the tag ring (`join`, where the room has
+   * Feather tag in the Great Hollow (OP-403): an owl steps into the tag ring (`join`, where the room has
    * it standing in the ring, give or take TAG_SLACK), steps out (`leave`), passes the feather to an owl
    * it touches (`pass`: it holds the feather, and the room has the two within TAG_REACH and TAG_SLACK,
    * the owl touched still in the ring) or asks to see the game (`view`). Every change goes to everyone
    * here; a refusal, or a view, to the asker alone. Whether the park plays it at all is the page's flag;
-   * the room only ever plays it in the Party Grove. Returns whether the game changed.
+   * the room only ever plays it in the Great Hollow. Returns whether the game changed.
    */
   tag(id: string, f: ClientTag): boolean {
     const v = this.visitors.get(id);
