@@ -227,10 +227,11 @@ test.describe('perches (OP-084)', () => {
         }
         // Out of view: a tap on the farthest open floor along the way toward it, as a player walks.
         const before = (await state(page)).pos;
-        let step: { x: number; y: number } | null = null;
-        for (const p of along(pile.at)) if (await shown(p)) { step = p; break; }
-        expect(step, `${pile.id}: no floor toward it on screen, owl at ${JSON.stringify(before)}`).not.toBeNull();
-        step = await openGround(page, [step!]);
+        // (Not on an owl to talk to or anything else in the room that takes a tap: the farthest open point.)
+        const onScreen: Array<{ x: number; y: number }> = [];
+        for (const p of along(pile.at)) if (await shown(p)) onScreen.push(p);
+        expect(onScreen.length, `${pile.id}: no floor toward it on screen, owl at ${JSON.stringify(before)}`).toBeGreaterThan(0);
+        const step = await openGround(page, onScreen);
         await press((await shown(step))!);
         const after = await stood();
         expect(Math.hypot(after.x - before.x, after.y - before.y), `${pile.id}: a tap toward it did not move the owl from ${JSON.stringify(before)}`).toBeGreaterThan(4);
