@@ -7,6 +7,7 @@ import type { FeedbackSent } from '../net/feedback';
 import type { WalletEntry } from '../net/transport';
 import type { SettingsStore } from '../settings';
 import { createInfoScreens, type InfoKind } from './about';
+import { eggCodeCard } from './eggCode';
 import { accountCard, createAccountScreens, type AccountScreenDeps, type AccountScreens } from './account';
 import { createActivityCards, type CopyView, type QuizView } from './activities';
 import { createArcadeScreen, type ArcadeHandlers, type ArcadeResultView, type ArcadeView } from './arcadeScreen';
@@ -580,8 +581,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   let account: OwlAccount | null = null;
   let builder: OwlBuilder | null = null;
   let collectionActions: CollectionActions | null = null;
-  /** Redeem an egg code (OP-260): null while the flag is off. */
-  let redeem: ((code: string) => Promise<EggRedeemReply>) | null = null;
+  /** The Redeem a code card (OP-260), made once so its last line outlasts a redraw: null while the flag is off. */
+  let redeem: HTMLElement | null = null;
   let wayOut: WayOutActions | null = null;
   let waysOut = { leave: false, home: false };
   /** Travel from the map (OP-130): what the room scene last said, the place whose card is open, and when places lit up. */
@@ -1187,7 +1188,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       });
     },
     attachRedeem(fn) {
-      redeem = fn;
+      redeem = eggCodeCard(fn);
       if (menu.isOpen() && menu.tab() === 'settings') menu.refresh();
     },
     attachWayOut(actions) {
