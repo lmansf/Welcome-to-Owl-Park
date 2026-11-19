@@ -1,27 +1,28 @@
 import { expect, test } from './fixtures';
+import { BOWL_SPOT } from '../../../packages/shared/src/party/bowling';
+import { TAG_ROOM } from '../../../packages/shared/src/party/tag';
 import { doAction, openPark, state, walkAndStop } from './helpers';
 
 /**
- * Pinecone bowling in the Party Grove (OP-403, D5), behind `?bowl=1` (src/flags.ts), on this page alone:
+ * Pinecone bowling in the Great Hollow (OP-403, D5; the Party Grove's until Nov 19), behind `?bowl=1` (src/flags.ts), on this page alone:
  * walk to the head of the lane, Bowl a pinecone, Roll it! three times, and the game's score is said.
  * Its rules are packages/shared/src/party/bowling.test.ts.
  */
-const GROVE = { room: 'hub', spawn: 'default' };
-/** The head of the lane (BOWL_SPOT in party/bowling.ts). */
-const SPOT = { x: 1210, y: 1170 };
+const HOLLOW = { room: TAG_ROOM, spawn: 'default' };
+/** The head of the lane. */
+const SPOT = BOWL_SPOT;
 
-test.describe('pinecone bowling in the Party Grove (OP-403, behind ?bowl=1)', () => {
+test.describe('pinecone bowling in the Great Hollow (OP-403, behind ?bowl=1)', () => {
   test('a plain address has no bowling', async ({ page }) => {
-    await openPark(page, GROVE);
+    await openPark(page, HOLLOW);
     expect((await state(page)).bowl).toBeNull();
   });
 
   test('three rolls at the head of the lane make a game, and every roll knocks pins down', async ({ page }) => {
-    test.slow(); // a walk across the grove and three rolls
-    await openPark(page, { ...GROVE, bowl: '1' });
+    test.slow(); // a walk across the hollow and three rolls
+    await openPark(page, { ...HOLLOW, bowl: '1' });
     expect((await state(page)).bowl?.atSpot).toBe(false);
     expect((await state(page)).actions).not.toContain('bowl:start');
-    await walkAndStop(page, 1500, 950);
     await walkAndStop(page, SPOT.x, SPOT.y);
     await expect.poll(async () => (await state(page)).bowl?.atSpot).toBe(true);
 

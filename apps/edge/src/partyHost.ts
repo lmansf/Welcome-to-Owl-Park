@@ -1,6 +1,6 @@
 /**
- * The party game's host on the room server (OP-314): the Old Stump's four seats in the Party Grove, and
- * every game in its own room (`party-<id>`, at most four owls) in the same object as the Party Grove.
+ * The party game's host on the room server (OP-314): the Old Stump's four seats in the Great Hollow, and
+ * every game in its own room (`party-<id>`, at most four owls) in the same object as the Great Hollow.
  *
  * The seats live on the sockets' attachments (`stump`), so they outlast the object's sleep and free
  * themselves when a socket goes. A game is plain data (party/game.ts) kept in storage under its room,
@@ -93,7 +93,7 @@ const gameKey = (room: string) => `party:${room}`;
 const SAVE_EVERY_MS = 2_000;
 /** How much slack the room allows past STUMP_REACH: the page's owl may be a step from where the room has it. */
 const REACH_SLACK = 40;
-/** The most games one object holds at once (four owls each): far past a busy night's Party Grove. */
+/** The most games one object holds at once (four owls each): far past a busy night at the Old Stump. */
 const MAX_GAMES = 60;
 
 const att = (ws: WebSocket) => ws.deserializeAttachment() as PartyAtt | null;
@@ -384,7 +384,7 @@ export class PartyHost {
     }
   }
 
-  /** The game's room is let go: anyone still in it is sent back to the Party Grove. */
+  /** The game's room is let go: anyone still in it is sent back to the Great Hollow. */
   private letGo(s: PartyState): void {
     // Gone first, so the sockets closing below find no game to leave.
     this.games.delete(s.room);

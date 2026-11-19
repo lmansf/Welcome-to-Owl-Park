@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type Rect, type Vec2, VOTABLE_REALMS, interactablesIn, voteShares } from '@owl-park/shared';
+import { BOWLING_LANE, STUMP_AT, STUMP_REACH, STUMP_ROOM, TAG_RING, type Rect, type Vec2, VOTABLE_REALMS, interactablesIn, voteShares } from '@owl-park/shared';
 import { HALL_ROOM, ROOT_RUNS } from '@owl-park/shared/rooms';
 import { guardianShade } from './guardian';
 import { DESK_WORDS, VOTE_DESK, VOTE_DESK_ROOM, deskBox, deskLines, deskRows } from './voteDesk';
@@ -26,6 +26,14 @@ describe('the vote desk in the Great Hollow (OP-288)', () => {
     for (const run of ROOT_RUNS)
       for (const [kind, x] of run.steps) expect(fromBox({ x, y: 1258 }, footprint), `${run.level} ${kind}`).toBeGreaterThan(200);
     for (const door of HALL_ROOM.doors) expect(overlaps(footprint, door.rect), door.id).toBe(false);
+  });
+
+  it('stands clear of the party’s games at the front of the hall: the Old Stump, the tag ring and the bowling lane (Nov 19)', () => {
+    expect(STUMP_ROOM).toBe(VOTE_DESK_ROOM);
+    expect(fromBox(STUMP_AT, footprint)).toBeGreaterThan(STUMP_REACH);
+    const ring: Rect = { x: TAG_RING.x - TAG_RING.rx, y: TAG_RING.y - TAG_RING.ry, w: TAG_RING.rx * 2, h: TAG_RING.ry * 2 };
+    expect(overlaps(footprint, ring)).toBe(false);
+    expect(overlaps(footprint, { ...BOWLING_LANE, x: BOWLING_LANE.x - 110 })).toBe(false);
   });
 
   it('stands off the knot hole’s sinking air, where owls dive down to the arcade (OP-287)', () => {

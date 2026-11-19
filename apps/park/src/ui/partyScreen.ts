@@ -37,7 +37,7 @@ export interface PartyScreenOpts {
   send(k: PartyKey, v: number): void;
   /** The room server's clock now (ms). */
   serverNow(): number;
-  /** Back to the Party Grove. */
+  /** Back to the Great Hollow, in front of the Old Stump. */
   leave(): void;
 }
 

@@ -1,6 +1,6 @@
 /**
  * The party game in the park (OP-314), behind the friends preview (`?friends=1`): the Old Stump and its
- * four seats in the Party Grove, drawn as size boxes; the stump's card, where owls sit, stand and the
+ * four seats in the Great Hollow, drawn as size boxes; the stump's card, where owls sit, stand and the
  * first to sit starts the game; and, in a game's own room, the party screen over everything.
  *
  * The room server keeps the seats and the games; this layer asks it (`party` frames through the room's
@@ -39,7 +39,7 @@ export interface PartyLayerOpts {
   toast(message: string, ms?: number): void;
   /** Walk the owl to a spot (its seat). */
   walkTo(p: Vec2): void;
-  /** Into a game's room, or back to the Party Grove in front of the stump. */
+  /** Into a game's room, or back to the Great Hollow in front of the stump. */
   goTo(room: string): void;
   back(): void;
   /** Whether an owl alone at the stump may play with Pip (OP-426). */

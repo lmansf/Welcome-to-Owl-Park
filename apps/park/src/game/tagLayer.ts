@@ -1,5 +1,5 @@
 /**
- * Feather tag in the Party Grove (OP-403, Dec 1 plan D5), behind `?tag=1` (flags.ts): the grove's two
+ * Feather tag in the Great Hollow (OP-403, Dec 1 plan D5), behind `?tag=1` (flags.ts): the hollow's two
  * game spaces drawn as size boxes on the plaza's floor (the tag ring and the bowling lane, each with its
  * dimensions on it, until their art is painted), and the game itself.
  *

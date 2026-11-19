@@ -69,9 +69,9 @@ export interface RoomHandlers extends QuestPushes, ActivityPushes, NestPushes {
   onStump?(frame: ServerStump): void;
   /** A party game as it stands, an owl's input in its minigame, or what it paid (OP-314). */
   onParty?(frame: ServerParty): void;
-  /** The party game's room turned this owl away, or its game is over (OP-314): back to the Party Grove. */
+  /** The party game's room turned this owl away, or its game is over (OP-314): back to the Old Stump in the Great Hollow. */
   onPartyClosed?(): void;
-  /** Feather tag in the Party Grove (OP-403): the game as it now stands, or why the room turned this owl's frame down. */
+  /** Feather tag in the Great Hollow (OP-403): the game as it now stands, or why the room turned this owl's frame down. */
   onTag?(frame: ServerTag): void;
 }
 

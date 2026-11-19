@@ -62,6 +62,7 @@ import type { DoorDef, RoomBowl, RoomDef, RoomKit, RoomPiece } from '../src/room
 import type { Thermal } from '../src/thermal';
 import type { Downdraft } from '../src/movers';
 import { KIT_ART } from '../src/kitArt';
+import { FROM_STUMP_AT, FROM_STUMP_SPAWN } from '../src/party/ids';
 
 export {
   HALL_CX,
@@ -541,6 +542,8 @@ const SPAWNS: Record<string, Vec2> = {
   'from-lobby': wayAt('up', ARRIVE),
   'from-party': wayAt('to-party', arriveAt('to-party')),
   'from-under': wayAt('down', 330),
+  // Back from a party game (OP-314): in front of the Old Stump (src/party/ids.ts).
+  [FROM_STUMP_SPAWN]: { ...FROM_STUMP_AT },
   // An arrival spot in front of each way that leads somewhere (a grown-over way has none).
   ...Object.fromEntries(
     HALL_COMMONS.flatMap((c) => [

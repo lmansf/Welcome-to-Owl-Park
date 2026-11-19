@@ -1,6 +1,6 @@
 /**
- * Feather tag in the Party Grove (OP-403, Dec 1 plan D5), behind the park's `tag` flag: the grove seen
- * from above has two game spaces marked on its plaza's floor, drawn as size boxes until their art is
+ * Feather tag in the Great Hollow (OP-403, Dec 1 plan D5; the Party Grove's until Nov 19), behind the
+ * park's `tag` flag: the hollow seen from above has two game spaces marked on its floor's front, drawn as size boxes until their art is
  * painted (Logan's ask, Nov 7: a box with its dimensions on it). The tag ring is where feather tag is
  * played; the bowling lane is where pinecone bowling will be (D5's second game, built after this one).
  *
@@ -16,7 +16,7 @@
  * room server needs no timer of its own for the game, and a page shows the same moment as everyone else.
  *
  * Never a one-owl game (OP-426, behind `?standin=1`): an owl alone in the ring for TAG_STANDIN_WAIT_MS
- * asks, and Pip, the Party Grove's lantern keeper, steps in as the second player. Pip runs round inside
+ * asks, and Pip, the lantern keeper, steps in as the second player. Pip runs round inside
  * the ring at half an owl's walk, on the clock alone (standInAt), so any owl can catch Pip in a few
  * tries; handed the feather, Pip gives it back after TAG_STANDIN_HOLD_MS. When a second real owl is in,
  * Pip plays out the round and steps out at its end. Pip earns nothing and holds no record: tag pays
@@ -26,22 +26,23 @@ import { distance } from '../geometry';
 import type { Vec2 } from '../protocol';
 import { STUMP_ROOM } from './ids';
 
-/** The room feather tag is played in: the Party Grove (still called `hub`). */
+/** The room feather tag is played in: the Great Hollow, with the Old Stump (ids.ts; the Party Grove until Nov 19). */
 export const TAG_ROOM = STUMP_ROOM;
 
 /**
- * The tag ring on the plaza's floor, its middle and its half-widths (an oval, seen from above): on the
- * grove's quiet east side, between the east moonbeam and the telescope, away from the way back into the
- * Great Hollow, so an owl only passing through never finds itself in a game. Room for eight to run round.
+ * The tag ring on the hollow's floor, its middle and its half-widths (an oval, seen from above): at the
+ * front's east side, in front of the roots and in from the trunk's door, off the
+ * walk from where owls land to the doorways, so an owl only passing through never finds itself in a game.
+ * Room for eight to run round.
  */
-export const TAG_RING = { x: 3950, y: 1085, rx: 240, ry: 120 } as const;
+export const TAG_RING = { x: 3330, y: 1530, rx: 240, ry: 120 } as const;
 
 /**
- * Where pinecone bowling will be (D5's second game): a lane along the plaza's front, between the Old
- * Stump and the way back into the Great Hollow. Laid out now so the grove's layout is whole; nothing is
- * played there yet, and it is drawn only behind the same flag.
+ * Pinecone bowling's lane (D5's second game): along the front of the floor, in front of the leaves blown
+ * in there, from the hatch's side toward the trunk's door, so the pinecone rolls the way the party came
+ * in. Drawn only behind its flag.
  */
-export const BOWLING_LANE = { x: 1250, y: 1135, w: 800, h: 70 } as const;
+export const BOWLING_LANE = { x: 2340, y: 1960, w: 800, h: 70 } as const;
 
 export const TAG_MIN_OWLS = 2;
 export const TAG_MAX_OWLS = 8;
