@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { doAction, frames, holdSpace, jumpFlapGlide, openGround, openPark, settleCamera, state, steppedFlight, tapRoomPoint, toScreen, walkAndStop } from './helpers';
+import { actionButton, doAction, frames, holdSpace, jumpFlapGlide, openGround, openPark, settleCamera, state, steppedFlight, tapRoomPoint, toScreen, walkAndStop } from './helpers';
 
 /**
  * Perches (OP-084): what an owl can land on above the floor. The hub's west wing has the first two,
@@ -212,9 +212,16 @@ test.describe('perches (OP-084)', () => {
         await settleCamera(page);
         const onPile = await shown(pos);
         if (onPile) {
-          // In view: the player taps the pile itself, and the owl walks over and flops into it.
+          // In view: the player taps the pile itself and the owl walks onto it, on the floor; the prompt
+          // shows, and a tap (or a click) on its button flops the owl into the leaves.
           await press(onPile);
-          await expect.poll(async () => (await state(page)).objects.find((o) => o.id === pile.id)?.here, { timeout: 15_000, message: `${pile.id}: tapped, not flopped into, owl at ${JSON.stringify((await state(page)).pos)}` }).toBe(false);
+          const at = await stood();
+          expect((await where(page)).z, `${pile.id}: owl at ${JSON.stringify(at)}`).toBe(0);
+          await expect.poll(async () => (await state(page)).actions, { timeout: 10_000, message: `${pile.id}: no Flop here, owl at ${JSON.stringify(at)}` }).toContain(`use:${pile.id}`);
+          await expect.poll(async () => (await state(page)).promptShown, { timeout: 10_000 }).toBe(isMobile ? 'Flop into the leaves' : 'E: Flop into the leaves');
+          const button = actionButton(page, `use:${pile.id}`);
+          await (isMobile ? button.tap() : button.click());
+          await expect.poll(async () => (await state(page)).objects.find((o) => o.id === pile.id)?.here, { timeout: 15_000, message: `${pile.id}: its button pressed, not flopped into` }).toBe(false);
           flopped = true;
           break;
         }
