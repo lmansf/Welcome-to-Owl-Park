@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { actionButton, doAction, frames, holdSpace, jumpFlapGlide, openGround, openPark, settleCamera, state, steppedFlight, tapRoomPoint, toScreen, walkAndStop } from './helpers';
+import { actionButton, doAction, frames, holdSpace, jumpFlapGlide, openGround, openPark, settleCamera, state, steppedFlight, tapRoomPoint, walkAndStop } from './helpers';
 
 /**
  * Perches (OP-084): what an owl can land on above the floor. The hub's west wing has the first two,
@@ -194,12 +194,18 @@ test.describe('perches (OP-084)', () => {
       return pts.reverse();
     };
     const vp = page.viewportSize()!;
-    const shown = async (p: { x: number; y: number }) => {
-      const s = await toScreen(page, p.x, p.y);
-      if (s.x < 24 || s.x > vp.width - 24 || s.y < 90 || s.y > vp.height - 160) return null;
-      const hit = await page.evaluate(([x, y]) => document.elementFromPoint(x!, y!)?.tagName ?? '', [s.x, s.y]);
-      return hit === 'CANVAS' ? s : null;
-    };
+    // Where these room points are drawn on screen (CSS px), for those in view with nothing of the HUD over them; in one look.
+    const shownAll = (pts: Array<{ x: number; y: number }>) =>
+      page.evaluate(({ pts, w, h }) => {
+        const cam = window.owlPark.camera();
+        if (!cam) return pts.map(() => null);
+        return pts.map((p) => {
+          const x = ((p.x - cam.viewX) * cam.zoom) / cam.dpr, y = ((p.y - cam.viewY) * cam.zoom) / cam.dpr;
+          if (x < 24 || x > w - 24 || y < 90 || y > h - 160) return null;
+          return document.elementFromPoint(x, y)?.tagName === 'CANVAS' ? { x, y } : null;
+        });
+      }, { pts, w: vp.width, h: vp.height });
+    const shown = async (p: { x: number; y: number }) => (await shownAll([p]))[0] ?? null;
     const stood = async () => {
       await frames(page, 5);
       await expect.poll(async () => (await state(page)).walking, { timeout: 15_000, intervals: [50] }).toBe(false);
@@ -228,8 +234,9 @@ test.describe('perches (OP-084)', () => {
         // Out of view: a tap on the farthest open floor along the way toward it, as a player walks.
         const before = (await state(page)).pos;
         // (Not on an owl to talk to or anything else in the room that takes a tap: the farthest open point.)
-        const onScreen: Array<{ x: number; y: number }> = [];
-        for (const p of along(pile.at)) if (await shown(p)) onScreen.push(p);
+        const pts = along(pile.at);
+        const seen = await shownAll(pts);
+        const onScreen = pts.filter((_, i) => seen[i]);
         expect(onScreen.length, `${pile.id}: no floor toward it on screen, owl at ${JSON.stringify(before)}`).toBeGreaterThan(0);
         const step = await openGround(page, onScreen);
         await press((await shown(step))!);
@@ -237,6 +244,7 @@ test.describe('perches (OP-084)', () => {
         expect(Math.hypot(after.x - before.x, after.y - before.y), `${pile.id}: a tap toward it did not move the owl from ${JSON.stringify(before)}`).toBeGreaterThan(4);
       }
       expect(flopped, pile.id).toBe(true);
+      test.info().annotations.push({ type: 'flopped', description: pile.id });
       await stood();
     }
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-clearing-piles-tapped.png` });
