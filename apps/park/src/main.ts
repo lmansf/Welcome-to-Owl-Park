@@ -841,6 +841,8 @@ const takeAccountLink = () => {
 takeAccountLink();
 window.addEventListener('hashchange', takeAccountLink);
 // The Menu's Settings tab says which tickets this device holds (OP-108), where the park's server keeps them.
+// Egg codes from the portfolio site (OP-260): the Redeem a code card, behind ?eggcode=1 until the owner's yes.
+if (flagOn('eggcode')) hud.attachRedeem((code) => collection.redeemEgg(code));
 hud.attachTickets(() => (transport.tickets ? transport.tickets.wallet() : Promise.resolve(null)));
 // Back from checkout in this page (OP-190): the wallet is watched for the bought ticket. On the home
 // screen it is said, and Play lands the owl in front of the turnstiles and on through them with it;

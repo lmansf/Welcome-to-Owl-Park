@@ -513,6 +513,11 @@ export interface SettingsTabDeps {
   account?: HTMLElement[] | null;
   /** Retake the quiz (OP-076): which owl are you, again, for a new kind and colours. Null with no owl yet. */
   retake?: (() => void) | null;
+  /**
+   * The Redeem a code card (OP-260), behind ?eggcode=1: one card for the page, so what it last said
+   * stays when the Menu redraws (as it does when the egg comes in). Null: no card.
+   */
+  redeem?: HTMLElement | null;
 }
 
 /** The Settings tab's closed row of the tickets on this device (OP-172), for the owner's approval. */
@@ -572,6 +577,7 @@ export function renderSettings(panel: HTMLElement, deps: SettingsTabDeps, redraw
     quiz.appendChild(row);
     panel.appendChild(quiz);
   }
+  if (deps.redeem) panel.appendChild(deps.redeem);
   panel.appendChild(tickets);
 
   const out = card('Leaving');

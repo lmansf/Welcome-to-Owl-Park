@@ -7,6 +7,7 @@ import type {
   CoursePaid,
   CourseRefusal,
   CourseView,
+  EggRedeemReply,
   FurnitureGiftResult,
   GameWall,
   GiftResult,
@@ -292,6 +293,8 @@ export interface CollectionService {
   buy(variant: string): Promise<BuyResult>;
   /** Take today's free gift (once a park day). */
   claimGift(): Promise<GiftResult>;
+  /** Redeem an egg code from the portfolio site (OP-260); a free guest can too. */
+  redeemEgg(code: string): Promise<EggRedeemReply>;
   /**
    * Quests in a room: the room connection's link when the server keeps them, otherwise one in this
    * browser that reads the owl's position from `where` and what it stands on from `ground` (a perch's

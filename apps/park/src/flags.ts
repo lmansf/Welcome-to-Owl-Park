@@ -32,6 +32,7 @@ export const FLAGS = {
   standin: { param: 'standin', note: 'Never a one-owl game (OP-426): an owl alone in the tag ring, or alone at the Old Stump, plays with a park owl (Pip in feather tag) until another owl comes' },
   share: { param: 'share', note: 'Share my owl (OP-392): a button on the Which owl are you result that shares a link to that owl’s own page' },
   golink: { param: 'golink', note: 'Activity links (OP-392): /?go=<place> from a /play/<place> page flies the owl on to that place once it has walked through the turnstiles' },
+  eggcode: { param: 'eggcode', note: 'Egg codes (OP-260): the Redeem a code card in the Menu’s Settings tab, for a code from the portfolio site’s SQL console' },
 } as const satisfies Record<string, FlagSpec>;
 
 export type FlagName = keyof typeof FLAGS;

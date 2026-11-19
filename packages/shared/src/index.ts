@@ -11,6 +11,7 @@ export * from './edge';
 export * from './headers';
 export * from './collectibles';
 export * from './easter';
+export * from './eggCode';
 export * from './book';
 export * from './species';
 export * from './parktime';

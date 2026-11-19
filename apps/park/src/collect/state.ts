@@ -1,4 +1,4 @@
-import { allVariants, type BuyResult, type GiftResult, type Inventory, type ShopView } from '@owl-park/shared';
+import { allVariants, type BuyResult, type EggRedeemReply, type GiftResult, type Inventory, type ShopView } from '@owl-park/shared';
 import type { CollectionService } from './service';
 
 type Listener = (inv: Inventory | null) => void;
@@ -79,6 +79,13 @@ export class CollectionState {
     const res = await this.service.claimGift();
     if (res.ok && !res.dup) this.added(res.variant, res.total);
     else this.setFeathers(res.total);
+    return res;
+  }
+
+  /** Redeem an egg code (OP-260): on a yes the egg goes straight into the collection the page shows. */
+  async redeemEgg(code: string): Promise<EggRedeemReply> {
+    const res = await this.service.redeemEgg(code);
+    if (res.ok) this.added(res.variant, -1);
     return res;
   }
 }
