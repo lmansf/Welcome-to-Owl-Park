@@ -442,6 +442,11 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     return this.pet ? this.pet.middle() : null;
   }
 
+  /** How big this owl's pet is drawn and how wide its own canvas is in the room, or null without a pet (OP-433). */
+  petSize(): { w: number; h: number; owlW: number } | null {
+    return this.pet ? { ...this.pet.drawnSize(), owlW: OWL_W * this.scaleX } : null;
+  }
+
   /** Where this owl's painted egg is drawn (the middle of it), or null without one. */
   eggPos(): { x: number; y: number } | null {
     return this.pet?.isEgg ? this.pet.middle() : null;
