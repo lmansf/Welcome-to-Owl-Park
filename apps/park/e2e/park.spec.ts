@@ -995,3 +995,28 @@ test.describe('Swap pet (OP-263, behind ?petswap=1)', () => {
     expect(await wornPet(page)).toBe('bat~0');
   });
 });
+
+test.describe('Pets stay smaller than their owls (OP-433)', () => {
+  test('a worn pet draws at the owls’ scale, under half its owl’s width, on putting it on and after a reload', async ({ page }) => {
+    const cid = 'e2e-pet-size';
+    // Nothing but what every owl is given: the park’s Halloween Bat is its one pet.
+    await page.addInitScript((id) => {
+      const key = `owl-park:collection:${id}`;
+      if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ collectors: [], owned: [] }));
+    }, cid);
+    const open = () => openPark(page, { collector: cid, tz: 'UTC', room: 'hub' });
+    // A pet's 90 x 90 canvas at the owls' scale against a great horned owl's 200-wide one: 0.45 of the owl's canvas.
+    const sized = async () => {
+      await expect.poll(async () => (await state(page)).petSize).not.toBeNull();
+      const s = (await state(page)).petSize!;
+      expect(s.w / s.owlW).toBeCloseTo(0.45, 2);
+      expect(s.h / s.owlW).toBeCloseTo(0.45, 2);
+    };
+    await open();
+    await expect.poll(() => page.evaluate(() => window.owlPark.equip('bat~0'))).toBe(true);
+    await sized();
+    await open();
+    await expect.poll(async () => (await state(page)).look.wear?.pet ?? null).toBe('bat~0');
+    await sized();
+  });
+});
