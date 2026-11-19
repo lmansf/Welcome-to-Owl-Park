@@ -97,7 +97,9 @@ test.describe('never a one-owl game: Pip stands in (OP-426, behind ?standin=1)',
     const page = await ctx.newPage();
     await openPark(page, { ...HOLLOW, tag: '1', standin: '1' });
     await expect.poll(async () => (await tagOf(page))?.server).toBe(true);
-    await walkAndStop(page, SPOT_A.x, SPOT_A.y);
+    // East of the middle: Pip's round starts at the ring's east end and, by the end of the countdown, is
+    // round at the west end, within a touch of SPOT_A (a pass to Pip before the test can see who holds it).
+    await walkAndStop(page, SPOT_B.x, SPOT_B.y);
     await expect.poll(async () => (await tagOf(page))?.players.length, { timeout: 10_000 }).toBe(1);
     const me = (await tagOf(page))!.players[0]!;
     // Pip steps in after about five seconds alone, and a round starts with this owl holding the feather.
@@ -127,7 +129,7 @@ test.describe('never a one-owl game: Pip stands in (OP-426, behind ?standin=1)',
     // A second owl steps in: Pip plays out the round, then goes home.
     const phone = await hollowPage(browser, true);
     await expect.poll(async () => (await tagOf(phone))?.server).toBe(true);
-    await walkAndStop(phone, SPOT_B.x, SPOT_B.y);
+    await walkAndStop(phone, SPOT_A.x, SPOT_A.y);
     await expect.poll(async () => (await tagOf(page))?.players.length, { timeout: 10_000 }).toBe(3);
     await expect.poll(async () => (await tagOf(page))?.players.includes('npc:pip'), { timeout: 60_000 }).toBe(false);
     expect((await tagOf(page))?.players).toHaveLength(2);
