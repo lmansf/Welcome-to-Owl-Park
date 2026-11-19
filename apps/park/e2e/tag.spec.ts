@@ -2,24 +2,27 @@ import { type Browser, devices, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { FROM_STUMP_AT, STUMP_ROOM } from '../../../packages/shared/src/party/ids';
 import { PARTY_WORDS } from '../../../packages/shared/src/party/words';
+import { TAG_RING, TAG_ROOM } from '../../../packages/shared/src/party/tag';
 import { doAction, openPark, state, walkAndStop } from './helpers';
 
 /**
- * Feather tag in the Party Grove (OP-403, D5), behind `?tag=1` (src/flags.ts), on the room server: a
+ * Feather tag in the Great Hollow (OP-403, D5; the Party Grove's until Nov 19), behind `?tag=1` (src/flags.ts), on the room server: a
  * computer and a phone walk into the tag ring and are in the game; after the countdown one holds the
  * feather, and walking into the other passes it, both pages seeing it; walking out of the ring is out of
  * the game. Its rules are packages/shared/src/party/tag.test.ts; the room's side is
  * apps/edge/test/featherTag.test.ts.
  */
-const GROVE = { transport: 'edge', room: 'hub', spawn: 'default' };
+const HOLLOW = { transport: 'edge', room: TAG_ROOM, spawn: 'default' };
 /** Two spots in the ring, further apart than a touch. */
-const SPOT_A = { x: 3870, y: 1080 };
-const SPOT_B = { x: 4030, y: 1090 };
+const SPOT_A = { x: TAG_RING.x - 80, y: TAG_RING.y - 5 };
+const SPOT_B = { x: TAG_RING.x + 80, y: TAG_RING.y + 5 };
+/** Out on the floor west of the ring, between it and where owls land. */
+const OUTSIDE = { x: TAG_RING.x - TAG_RING.rx - 200, y: TAG_RING.y };
 
-async function grovePage(browser: Browser, phone: boolean): Promise<Page> {
+async function hollowPage(browser: Browser, phone: boolean): Promise<Page> {
   const ctx = await browser.newContext(phone ? { ...devices['Pixel 7'] } : { viewport: { width: 1280, height: 800 } });
   const page = await ctx.newPage();
-  await openPark(page, { ...GROVE, tag: '1' });
+  await openPark(page, { ...HOLLOW, tag: '1' });
   return page;
 }
 
@@ -34,16 +37,16 @@ async function selfIn(page: Page): Promise<string> {
   return mine[0]!;
 }
 
-test.describe('feather tag in the Party Grove (OP-403, behind ?tag=1)', () => {
+test.describe('feather tag in the Great Hollow (OP-403, behind ?tag=1)', () => {
   test('a plain address has no game, and its ring is not drawn', async ({ page }) => {
-    await openPark(page, GROVE);
+    await openPark(page, HOLLOW);
     expect((await state(page)).tag).toBeNull();
   });
 
   test('two owls walk into the ring, and a touch passes the feather on a computer and a phone', async ({ browser }) => {
-    test.slow(); // two parks open, two walks across the grove and a countdown
-    const computer = await grovePage(browser, false);
-    const phone = await grovePage(browser, true);
+    test.slow(); // two parks open, two walks across the hollow and a countdown
+    const computer = await hollowPage(browser, false);
+    const phone = await hollowPage(browser, true);
     for (const page of [computer, phone]) await expect.poll(async () => (await tagOf(page))?.server).toBe(true);
 
     // Outside the ring: not in the game.
@@ -78,7 +81,7 @@ test.describe('feather tag in the Party Grove (OP-403, behind ?tag=1)', () => {
     await expect.poll(async () => (await tagOf(other))?.line).toMatch(/You have the feather/);
 
     // Walking out of the ring is out of the game: the round stops with one owl left in.
-    await walkAndStop(it, 3400, 900);
+    await walkAndStop(it, OUTSIDE.x, OUTSIDE.y);
     for (const page of [computer, phone]) await expect.poll(async () => (await tagOf(page))?.players, { timeout: 10_000 }).toEqual([otherId]);
     await expect.poll(async () => (await tagOf(other))?.phase).toBe('waiting');
     await expect.poll(async () => (await tagOf(other))?.line).toMatch(/Waiting for one more owl/);
@@ -92,9 +95,11 @@ test.describe('never a one-owl game: Pip stands in (OP-426, behind ?standin=1)',
     test.slow(); // a wait alone, a chase round the ring, a round played out and the next begun
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     const page = await ctx.newPage();
-    await openPark(page, { ...GROVE, tag: '1', standin: '1' });
+    await openPark(page, { ...HOLLOW, tag: '1', standin: '1' });
     await expect.poll(async () => (await tagOf(page))?.server).toBe(true);
-    await walkAndStop(page, SPOT_A.x, SPOT_A.y);
+    // East of the middle: Pip's round starts at the ring's east end and, by the end of the countdown, is
+    // round at the west end, within a touch of SPOT_A (a pass to Pip before the test can see who holds it).
+    await walkAndStop(page, SPOT_B.x, SPOT_B.y);
     await expect.poll(async () => (await tagOf(page))?.players.length, { timeout: 10_000 }).toBe(1);
     const me = (await tagOf(page))!.players[0]!;
     // Pip steps in after about five seconds alone, and a round starts with this owl holding the feather.
@@ -122,9 +127,9 @@ test.describe('never a one-owl game: Pip stands in (OP-426, behind ?standin=1)',
     await expect.poll(async () => (await tagOf(page))?.holder, { timeout: 8_000 }).toBe(me);
 
     // A second owl steps in: Pip plays out the round, then goes home.
-    const phone = await grovePage(browser, true);
+    const phone = await hollowPage(browser, true);
     await expect.poll(async () => (await tagOf(phone))?.server).toBe(true);
-    await walkAndStop(phone, SPOT_B.x, SPOT_B.y);
+    await walkAndStop(phone, SPOT_A.x, SPOT_A.y);
     await expect.poll(async () => (await tagOf(page))?.players.length, { timeout: 10_000 }).toBe(3);
     await expect.poll(async () => (await tagOf(page))?.players.includes('npc:pip'), { timeout: 60_000 }).toBe(false);
     expect((await tagOf(page))?.players).toHaveLength(2);

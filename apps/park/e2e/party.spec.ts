@@ -2,7 +2,7 @@ import { FROM_STUMP_AT, STUMP_ROOM } from '../../../packages/shared/src/party/id
 import { expect, test } from './fixtures';
 import { openPark, state, walkAndStop } from './helpers';
 
-// The Old Stump in the Party Grove (OP-314): only the friends preview shows its seats.
+// The Old Stump in the Great Hollow (OP-314): only the friends preview shows its seats.
 test.describe('the Old Stump’s party game', () => {
   test('with ?friends=1, standing by the stump offers a seat', async ({ page }) => {
     await openPark(page, { collector: 'e2e-party-stump', tz: 'UTC', room: STUMP_ROOM, friends: '1' });

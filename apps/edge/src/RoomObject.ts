@@ -186,7 +186,7 @@ export interface Attachment {
   keeper?: true;
   /** Its upgrade came to a host on this machine: only then may a missing signing key fall back to the development key (OP-209). */
   local?: true;
-  /** At the Old Stump in the Party Grove (OP-314): the seat its owl sits in, or null while it only watches the seats. */
+  /** At the Old Stump in the Great Hollow (OP-314): the seat its owl sits in, or null while it only watches the seats. */
   stump?: StumpMark;
 }
 
@@ -1141,7 +1141,7 @@ export class RoomObject extends DurableObject<Env> {
         room.snowball(att.id, frame.at);
         return;
       case 'tag':
-        // Feather tag (OP-403): only the Party Grove plays it (Room.tag), whatever the page's flag says.
+        // Feather tag (OP-403): only the Great Hollow plays it (Room.tag), whatever the page's flag says.
         if (!room.admit(att.id) || room.sessionOf(att.id) !== att.sid) return;
         room.tag(att.id, frame);
         return;
@@ -1186,7 +1186,7 @@ export class RoomObject extends DurableObject<Env> {
 
   // ---------- the party game (OP-314): partyHost.ts keeps the stump's seats and the games ----------
 
-  /** Into a party game's room: only an owl its game invited, while the game goes on; turned back to the Party Grove otherwise. */
+  /** Into a party game's room: only an owl its game invited, while the game goes on; turned back to the Great Hollow otherwise. */
   private async joinParty(ws: WebSocket, att: Attachment, hello: ClientHello): Promise<void> {
     if (!this.party.admits(att)) {
       this.logOf(att).info('room.join', 'room_join_refused', 'An owl was turned away from a party game it was not invited into, or one that is over.', { reason: 'party' });

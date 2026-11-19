@@ -5,7 +5,7 @@ export interface ParkState {
   /** Whether the first snow falls in this room (OP-074, behind ?snow=1). */
   snow: boolean;
   snowballs: { thrown: number; landed: number; hits: string[] };
-  /** Feather tag in the Party Grove (OP-403, behind ?tag=1): the game as the page has it; null elsewhere or without the flag. */
+  /** Feather tag in the Great Hollow (OP-403, behind ?tag=1): the game as the page has it; null elsewhere or without the flag. */
   tag: {
     inRing: boolean;
     phase: 'waiting' | 'countdown' | 'live' | 'over';
@@ -20,7 +20,7 @@ export interface ParkState {
     /** Where Pip stands in the ring while standing in for a missing player (OP-426, behind ?standin=1). */
     standIn: { x: number; y: number } | null;
   } | null;
-  /** Pinecone bowling in the Party Grove (OP-403, behind ?bowl=1): this page's game; null elsewhere or without the flag. */
+  /** Pinecone bowling in the Great Hollow (OP-403, behind ?bowl=1): this page's game; null elsewhere or without the flag. */
   bowl: {
     phase: 'idle' | 'aiming' | 'rolling' | 'settling';
     atSpot: boolean;

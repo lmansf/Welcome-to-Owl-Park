@@ -1,7 +1,7 @@
 import type { Polygon } from '../src/geometry';
 import { isNestRoom } from '../src/homes';
 import { ESCAPE_BACK_SPAWN, ESCAPE_DOOR, ESCAPE_ROOM, isEscapeRoom } from '../src/escape';
-import { FROM_STUMP_AT, FROM_STUMP_SPAWN, isPartyRoom } from '../src/party/ids';
+import { isPartyRoom } from '../src/party/ids';
 import { PARTY_ROOM } from './party';
 import { doorTarget, type WalkMap } from '../src/doorways';
 import { isNewMapRoom } from '../src/newMap';
@@ -221,7 +221,7 @@ export const ROOMS: Record<string, RoomDef> = {
         top: 264,
       },
     ],
-    spawns: { 'default': { x: 2400, y: 730 }, 'from-grove': { x: 1800, y: 740 }, 'from-market': { x: 2990, y: 750 }, 'from-glass': { x: 2665, y: 740 }, [FROM_STUMP_SPAWN]: { ...FROM_STUMP_AT } },
+    spawns: { 'default': { x: 2400, y: 730 }, 'from-grove': { x: 1800, y: 740 }, 'from-market': { x: 2990, y: 750 }, 'from-glass': { x: 2665, y: 740 } },
     doors: [
       // On the new map this is the Party Grove (out of the Great Hollow's trunk door): its doorways carry signs there (labelNew).
       { id: 'to-grove', rect: { x: 1700, y: 610, w: 130, h: 90 }, to: { room: 'grove', spawn: 'default' }, marker: { x: 1765, y: 560 }, labelNew: 'To the treehouse clearing' },

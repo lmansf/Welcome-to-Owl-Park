@@ -55,7 +55,7 @@ export const PARTY_WORDS = {
   youWin: 'You win!',
   tie: 'A tie!',
   goodGame: 'Good game!',
-  leave: 'Back to the Party Grove',
+  leave: 'Back to the Great Hollow',
   parkOwl: 'Park owl',
   ended: 'The game ended: the park closes for the night.',
   empty: 'Everyone left, so the game ended.',

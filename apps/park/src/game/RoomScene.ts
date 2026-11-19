@@ -686,7 +686,7 @@ export class RoomScene extends Phaser.Scene {
   private play: ActivityLayer | null = null;
   /** The party game (OP-314), behind the friends preview: the Old Stump here, or a game's own room. */
   private party: PartyLayer | null = null;
-  /** Feather tag in the Party Grove (OP-403): only there, seen from above, and only behind `?tag=1` (flags.ts). */
+  /** Feather tag in the Great Hollow (OP-403): only there, seen from above, and only behind `?tag=1` (flags.ts). */
   private tag: TagLayer | null = null;
   private bowl: BowlLayer | null = null;
   /** How long this room faded in, and out once it was left (OP-375): shorter in calm motion. */
@@ -2847,7 +2847,7 @@ export class RoomScene extends Phaser.Scene {
     pet: Vec2 | null;
     /** How big the own owl's pet is drawn, beside its owl's canvas width in the room (OP-433); null without one. */
     petSize: { w: number; h: number; owlW: number } | null;
-    /** Feather tag in the Party Grove (OP-403, behind ?tag=1): the game as this page has it; null elsewhere or without the flag. */
+    /** Feather tag in the Great Hollow (OP-403, behind ?tag=1): the game as this page has it; null elsewhere or without the flag. */
     tag: TagDebug | null;
     bowl: BowlDebug | null;
     /** Calm motion (OP-375): whether it is on, and how long this room faded in and (once left) out, in ms. */

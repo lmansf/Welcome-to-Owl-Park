@@ -31,7 +31,7 @@
  * 1, 0, and an owl may be a jump and both flaps above the room's highest perch.
  *
  * The party game (OP-314, party/) adds `party` frames, sent only by a page with the friends preview on:
- * at the Old Stump in the Party Grove `stump` (watch the seats), `sit`, `stand` and `start`, answered
+ * at the Old Stump in the Great Hollow `stump` (watch the seats), `sit`, `stand` and `start`, answered
  * and pushed with `stump`; in a game's own room (`party-<id>`) `in`, an owl's input, and `view`, the
  * game as it stands, pushed as `party`. A room nobody invited the owl into closes with 4019.
  */
@@ -93,7 +93,7 @@ export const CLOSE = {
   SETUP: 4017,
   /** The ticket that let this owl in has run out of time (OP-237): the page goes home, and Play brings it back in through the gate. */
   TICKET_ENDED: 4018,
-  /** A party game's room (OP-314) the owl was not invited into, or whose game is over: the page goes back to the Party Grove. */
+  /** A party game's room (OP-314) the owl was not invited into, or whose game is over: the page goes back to the Great Hollow. */
   PARTY_CLOSED: 4019,
   TOO_LARGE: 1009,
 } as const;
@@ -192,7 +192,7 @@ export interface ClientSnowball {
   at: string;
 }
 /**
- * Feather tag in the Party Grove (OP-403, party/tag.ts): `join` as the owl steps into the tag ring,
+ * Feather tag in the Great Hollow (OP-403, party/tag.ts): `join` as the owl steps into the tag ring,
  * `leave` as it steps out, `pass` the feather to the owl `at` it touched, `view` to be sent the game.
  */
 export type TagOp = 'join' | 'leave' | 'pass' | 'view' | 'standin';
@@ -434,7 +434,7 @@ export interface ServerSnowball {
   at: string;
 }
 /**
- * Feather tag in the Party Grove (OP-403): the game as it now stands, sent to every owl in the room when
+ * Feather tag in the Great Hollow (OP-403): the game as it now stands, sent to every owl in the room when
  * it changes, and to an owl that asked; `refused` says why the room turned down that owl's own frame.
  * Its times are on the room server's clock.
  */

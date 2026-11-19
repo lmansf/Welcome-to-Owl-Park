@@ -1,5 +1,5 @@
 /**
- * Pinecone bowling in the Party Grove (OP-403, Dec 1 plan D5's second game), behind the park's `bowl`
+ * Pinecone bowling in the Great Hollow (OP-403, Dec 1 plan D5's second game), behind the park's `bowl`
  * flag: an owl stands at the head of the bowling lane (BOWLING_LANE, laid out with feather tag), aims,
  * and rolls a pinecone at six pins at the far end. A game is three rolls, the pins set up again before
  * each; the score is how many pins fell in all, out of eighteen. Drawn as size boxes until its art is
