@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { doAction, holdSpace, jumpFlapGlide, openPark, settleCamera, state, steppedFlight, tapRoomPoint, walkAndStop } from './helpers';
+import { doAction, frames, holdSpace, jumpFlapGlide, openGround, openPark, settleCamera, state, steppedFlight, tapRoomPoint, toScreen, walkAndStop } from './helpers';
 
 /**
  * Perches (OP-084): what an owl can land on above the floor. The hub's west wing has the first two,
@@ -172,6 +172,65 @@ test.describe('perches (OP-084)', () => {
       }
       await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-clearing-piles-${size?.width ?? 'phone'}.png` });
     }
+  });
+
+  test('every treehouse leaf pile is reached the way a player gets there: taps on a phone, clicks on a computer at 1024 wide, no walk hook (OP-423, FP-008)', async ({ page, isMobile }) => {
+    test.slow(); // the walk across the clearing
+    if (!isMobile) await page.setViewportSize({ width: 1024, height: 768 });
+    await openPark(page, { room: 'grove' });
+    const press = (s: { x: number; y: number }) => (isMobile ? page.touchscreen.tap(s.x, s.y) : page.mouse.click(s.x, s.y));
+    // The way along the floor from the doorway (the one the hook test above walks), and the three piles on it.
+    const way = [{ x: 2950, y: 868 }, { x: 2890, y: 845 }, { x: 3120, y: 720 }, { x: 3645, y: 725 }, { x: 4200, y: 745 }, { x: 4300, y: 740 }];
+    const piles = [{ id: 'grove-leaves-2', at: 1 }, { id: 'grove-leaves-hut', at: 3 }, { id: 'grove-leaves-porch', at: 5 }];
+    // Points every 20 px along the way up to a given stop, nearest the stop first.
+    const along = (to: number) => {
+      const pts: Array<{ x: number; y: number }> = [];
+      for (let i = 1; i <= to; i++) {
+        const a = way[i - 1]!, b = way[i]!;
+        const n = Math.max(1, Math.round(Math.hypot(b.x - a.x, b.y - a.y) / 20));
+        for (let k = 1; k <= n; k++) pts.push({ x: a.x + ((b.x - a.x) * k) / n, y: a.y + ((b.y - a.y) * k) / n });
+      }
+      return pts.reverse();
+    };
+    const vp = page.viewportSize()!;
+    const shown = async (p: { x: number; y: number }) => {
+      const s = await toScreen(page, p.x, p.y);
+      if (s.x < 24 || s.x > vp.width - 24 || s.y < 90 || s.y > vp.height - 160) return null;
+      const hit = await page.evaluate(([x, y]) => document.elementFromPoint(x!, y!)?.tagName ?? '', [s.x, s.y]);
+      return hit === 'CANVAS' ? s : null;
+    };
+    const stood = async () => {
+      await frames(page, 5);
+      await expect.poll(async () => (await state(page)).walking, { timeout: 15_000, intervals: [50] }).toBe(false);
+      return (await state(page)).pos;
+    };
+    for (const pile of piles) {
+      const pos = way[pile.at]!;
+      let flopped = false;
+      for (let tries = 0; tries < 12 && !flopped; tries++) {
+        await settleCamera(page);
+        const onPile = await shown(pos);
+        if (onPile) {
+          // In view: the player taps the pile itself, and the owl walks over and flops into it.
+          await press(onPile);
+          await expect.poll(async () => (await state(page)).objects.find((o) => o.id === pile.id)?.here, { timeout: 15_000, message: `${pile.id}: tapped, not flopped into, owl at ${JSON.stringify((await state(page)).pos)}` }).toBe(false);
+          flopped = true;
+          break;
+        }
+        // Out of view: a tap on the farthest open floor along the way toward it, as a player walks.
+        const before = (await state(page)).pos;
+        let step: { x: number; y: number } | null = null;
+        for (const p of along(pile.at)) if (await shown(p)) { step = p; break; }
+        expect(step, `${pile.id}: no floor toward it on screen, owl at ${JSON.stringify(before)}`).not.toBeNull();
+        step = await openGround(page, [step!]);
+        await press((await shown(step))!);
+        const after = await stood();
+        expect(Math.hypot(after.x - before.x, after.y - before.y), `${pile.id}: a tap toward it did not move the owl from ${JSON.stringify(before)}`).toBeGreaterThan(4);
+      }
+      expect(flopped, pile.id).toBe(true);
+      await stood();
+    }
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-clearing-piles-tapped.png` });
   });
 
   test('the market’s stall row: a jump up from the curb onto its roof, along it onto the signboards, and the feather shop’s roof at the robot owl’s feet', async ({ page }) => {
