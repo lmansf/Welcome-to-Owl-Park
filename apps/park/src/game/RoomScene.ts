@@ -2845,6 +2845,8 @@ export class RoomScene extends Phaser.Scene {
     egg: { at: Vec2 | null; said: string | null };
     /** Where the own owl's pet is drawn (OP-263), whatever pet it is; null without one. */
     pet: Vec2 | null;
+    /** How big the own owl's pet is drawn, beside its owl's canvas width in the room (OP-433); null without one. */
+    petSize: { w: number; h: number; owlW: number } | null;
     /** Feather tag in the Party Grove (OP-403, behind ?tag=1): the game as this page has it; null elsewhere or without the flag. */
     tag: TagDebug | null;
     bowl: BowlDebug | null;
@@ -2855,6 +2857,7 @@ export class RoomScene extends Phaser.Scene {
     return {
       egg: { at: this.me.eggPos(), said: this.eggSaid },
       pet: this.me.petPos(),
+      petSize: this.me.petSize(),
       tag: this.tag?.state() ?? null,
       bowl: this.bowl?.state() ?? null,
       motion: { calm: this.calm(), fadeInMs: this.fadeInMs, fadeOutMs: this.fadeOutMs },
