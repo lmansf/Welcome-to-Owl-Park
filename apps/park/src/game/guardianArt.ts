@@ -1,5 +1,5 @@
 /**
- * The guardian's lids and its carving (OP-359; behind `?guardian=1`).
+ * The guardian's lids and its carving (OP-359).
  *
  * The guardian is painted in parts (OP-397, idolParts.ts): a head, a body, two wings and its bough,
  * each its own picture, so its head turns and its wings open with nothing cut by rule. What is still

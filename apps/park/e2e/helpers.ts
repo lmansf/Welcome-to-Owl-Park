@@ -111,7 +111,7 @@ export interface ParkState {
   promptShown: string | null;
   /** The tall art gone see-through because the visitor's own owl is behind it (OP-346), by its art's key. */
   seeThrough: string[];
-  /** The guardian at the heart of the Great Hollow (OP-359): null on any address without `?guardian=1`. */
+  /** The guardian at the heart of the Great Hollow (OP-359): null in any other room. */
   guardian: {
     at: { x: number; y: number };
     scale: number;

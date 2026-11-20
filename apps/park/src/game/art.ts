@@ -12,7 +12,6 @@ import { EDGE_ART, FURNITURE, KIT_ART, edgePlaceholder, kitDrawPlan, kitFrames, 
 import { HALL_ROOM } from '@owl-park/shared/rooms';
 import { GAME_ART } from '../arcade/paint';
 import type { ParkConfig } from '../config';
-import { flagOn } from '../flags';
 import { COURSES, ROOMS, TREE_GROUND, roomFor } from '../rooms';
 import { DENSE_SCALE, FLIGHT_LAYERS, OWL_LAYERS, SPECIES_FLIGHT_LAYERS, SPECIES_LAYERS, isFlightLayer, isSpeciesLayer, rasterCandidates, rasterNames, roomScaleCap } from './artFiles';
 import { ART_BYTES, PUBLISHED_ART, versioned } from './publishedArt';
@@ -1050,8 +1049,8 @@ export function roomArtKeys(roomId: string, room: RoomDef | undefined = roomFor(
   // A realm's idol, in the realm or in its Commons (`votesFor`), or each of several (the Great Hollow's, RoomDef.idols).
   const realms = room ? idolRealms(room) : [roomId];
   if (realms.includes('grove')) keys.push('guardian');
-  // The guardian alive at the heart of the Great Hollow (OP-359, behind ?guardian=1) moves in its painted parts (OP-397).
-  if (roomId === HALL_ROOM.id && flagOn('guardian')) keys.push(...partKeys('guardian'));
+  // The guardian alive at the heart of the Great Hollow (OP-359) moves in its painted parts (OP-397).
+  if (roomId === HALL_ROOM.id) keys.push(...partKeys('guardian'));
   if (realms.includes('market')) keys.push('robot-owl');
   if (realms.includes('glass')) keys.push('kit-glass-idol-owl');
   // A realm start's set pieces (OP-276).

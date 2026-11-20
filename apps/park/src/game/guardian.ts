@@ -1,5 +1,5 @@
 /**
- * The guardian alive at the heart of the Great Hollow (OP-359; behind `?guardian=1`, flags.ts).
+ * The guardian alive at the heart of the Great Hollow (OP-359; on for every visitor since Nov 20).
  *
  * The park's story makes its guardians colossal and living. Until this the great horned owl was an
  * idol about four owls tall on the hall's rim. Here it sits at the heart of the hall, about nine owls

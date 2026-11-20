@@ -528,7 +528,7 @@ export class RoomScene extends Phaser.Scene {
   private fallHeld: HeldAtFall | null = null;
   /** The room's tall standing art, each see-through while the visitor's own owl is behind it (seeThrough.ts); none in a room seen from the side. */
   private seeThrough: SeeThrough | null = null;
-  /** The guardian alive at the heart of the Great Hollow (OP-359): only there, and only behind `?guardian=1` (flags.ts). */
+  /** The guardian alive at the heart of the Great Hollow (OP-359): only there, for every visitor since Nov 20 (it was behind `?guardian=1`). */
   private guardian: GuardianView | null = null;
   /** The vote desk in the Great Hollow (OP-288): only there, and only behind `?desk=1` (flags.ts). */
   private desk: VoteDeskView | null = null;
@@ -1220,8 +1220,8 @@ export class RoomScene extends Phaser.Scene {
     setVignette(true);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => setVignette(false));
     this.pieces = addSetPieces(this, room, (pointer, event, realm) => this.onIdolTap(pointer, event, realm));
-    // The guardian at the heart of the Great Hollow (OP-359, behind ?guardian=1): one more tall piece among the owls.
-    if (room.id === GUARDIAN_ROOM && flagOn('guardian') && !this.sideView()) {
+    // The guardian at the heart of the Great Hollow (OP-359, on for every visitor): one more tall piece among the owls.
+    if (room.id === GUARDIAN_ROOM && !this.sideView()) {
       this.guardian = new GuardianView(this, { light: room.bowl?.light, calm: () => this.calm(), onHoot: () => this.sfx.play('guardianHoot') });
       (this.pieces.standing ??= []).push(this.guardian.image);
     }
@@ -2809,7 +2809,7 @@ export class RoomScene extends Phaser.Scene {
     promptShown: string | null;
     /** The tall art gone see-through because the visitor's own owl is behind it (OP-346), by its art's key. */
     seeThrough: string[];
-    /** The guardian at the heart of the Great Hollow (OP-359), where it is: null on any address without `?guardian=1`. */
+    /** The guardian at the heart of the Great Hollow (OP-359), where it is: null in any other room. */
     guardian: GuardianState | null;
     /** The vote desk in the Great Hollow (OP-288): where it stands and what it says; null on any address without `?desk=1`. */
     desk: DeskState | null;

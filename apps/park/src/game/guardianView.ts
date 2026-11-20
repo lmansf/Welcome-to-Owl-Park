@@ -1,5 +1,5 @@
 /**
- * The guardian as it is drawn (OP-359; behind `?guardian=1`): its mind is guardian.ts, its parts are
+ * The guardian as it is drawn (OP-359): its mind is guardian.ts, its parts are
  * painted (OP-397: a head, a body, two wings and its bough, laid out by idolParts.ts), and here they
  * become one picture in the room.
  *
