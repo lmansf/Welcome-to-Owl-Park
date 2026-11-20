@@ -24,9 +24,9 @@ test.describe('the feather trail (OP-307)', () => {
     await expect.poll(async () => (await state(page)).trail?.feathers.length ?? 0, { timeout: 15_000 }).toBeGreaterThan(0);
   });
 
-  test('through the turnstiles the feathers lead a new owl to the Great Hollow’s roots, then on to the arcade’s hatch, a place to play, and no sign names the way back until the owl has stepped away (OP-337, OP-347)', async ({ page }) => {
-    // Two rooms, three walks across the hall and the trail laid twice: more than the suite's 45 s on a slow phone.
-    test.setTimeout(100_000);
+  test('through the turnstiles the feathers lead a new owl to the Great Hollow’s roots, its quiz and its lanterns, then on to the arcade’s hatch, a place to play, and no sign names the way back until the owl has stepped away (OP-337, OP-347, Dec 1 plan D5)', async ({ page }) => {
+    // Two rooms, five walks across the hall and the trail laid four times: more than the suite's 45 s on a slow phone.
+    test.setTimeout(160_000);
     await openPark(page, { room: 'lobby', keeper: '1', newmap: '1' });
     await page.evaluate(() => window.owlPark.walkTo(2595, 800));
     await expect.poll(async () => (await state(page)).walking, { timeout: 15_000 }).toBe(false);
@@ -54,6 +54,8 @@ test.describe('the feather trail (OP-307)', () => {
     expect(Math.hypot(end.x - root.x, end.y - root.y), `the trail ends at ${end.x},${end.y}`).toBeLessThan(260);
     for (const f of trail!.feathers) expect(f.y, `feather at ${f.x},${f.y}`).toBeGreaterThan(pos.y);
     expect(trail!.glints).toContain('play-roots');
+    expect(trail!.glints).toContain('play-quiz');
+    expect(trail!.glints).toContain('play-lanterns');
     expect(trail!.glints).toContain('to-glass');
     expect(trail!.glints).toContain('down');
 
@@ -61,10 +63,34 @@ test.describe('the feather trail (OP-307)', () => {
     await frames(page, 40);
     expect((await state(page)).signShown).toBeNull();
 
-    // Stood at the roots, they are found: the feathers lead on to the hatch at the front, a place to
-    // play, past the realms' doorways either side of the knothole.
+    // Stood at the roots, they are found: the feathers lead on to the hall's own games, the Party Grove's
+    // folded in (Dec 1 plan D5): the quiz plates in front of the heart, the nearer, then the lantern posts
+    // past the grove's roots (QUIZ_STAGES and LANTERN_BEAMS in @owl-park/shared).
+    const leadsTo = (at: { x: number; y: number }) =>
+      expect
+        .poll(
+          async () => {
+            const feathers = (await state(page)).trail?.feathers ?? [];
+            const last = feathers[feathers.length - 1];
+            return feathers.length > 3 && !!last && Math.hypot(last.x - at.x, last.y - at.y) < 300;
+          },
+          { timeout: 20_000 },
+        )
+        .toBe(true);
+    const quiz = { x: 2724, y: 1770 };
+    const lanterns = { x: 4020, y: 1175 };
     await walkAndStop(page, root.x, root.y + 90);
     await expect.poll(async () => (await state(page)).trail?.glints ?? ['play-roots'], { timeout: 10_000 }).not.toContain('play-roots');
+    await leadsTo(quiz);
+    await walkAndStop(page, quiz.x, quiz.y);
+    await expect.poll(async () => (await state(page)).trail?.glints ?? ['play-quiz'], { timeout: 10_000 }).not.toContain('play-quiz');
+    await leadsTo(lanterns);
+    await walkAndStop(page, lanterns.x, lanterns.y);
+    await expect
+      .poll(async () => (await state(page)).trail?.glints ?? ['play-lanterns'], { timeout: 10_000 })
+      .not.toContain('play-lanterns');
+
+    // Every game found: the feathers lead on to the hatch at the front, a place to play.
     const hatch = doors.find((d) => d.id === 'down')!;
     await expect
       .poll(
