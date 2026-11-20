@@ -22,7 +22,7 @@ import {
   NestBook,
   NPC_TALK_RADIUS,
   QUIZ_FEATHERS,
-  QUIZ_ROOM,
+  quizStage,
   QuestBook,
   REACH_SLACK,
   sameLevel,
@@ -648,7 +648,7 @@ export class LocalCollections implements CollectionService {
       armQuiz();
     };
     const armQuiz = () => {
-      if (closed || room !== QUIZ_ROOM) return;
+      if (closed || !quizStage(room)) return;
       quizTimer = setTimeout(settleQuiz, Math.max(0, acts.nextQuizClose() - this.now()) + 50);
     };
     armQuiz();

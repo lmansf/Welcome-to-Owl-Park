@@ -10,7 +10,6 @@ import {
   FISHING_REACH,
   FISHING_ROOM,
   FISHING_SPOT,
-  LANTERNS,
   LANTERN_FEATHERS,
   LANTERN_REACH_X,
   LANTERN_ROOM,
@@ -25,8 +24,12 @@ import {
   getFish,
   quizRound,
   quizRoundAt,
+  lanternBeam,
+  quizStage,
   quizZoneAt,
   underBeam,
+  type LanternBeam,
+  type QuizStageDef,
   variantName,
   type QuizZone,
   type TaskView,
@@ -74,8 +77,16 @@ export interface ActivityAction {
   run: () => void;
 }
 
-/** The stage quiz's card shows while the owl is in the bay before the stage. */
+/** The stage quiz's card shows while the owl is in the plaza's bay before the stage... */
 const QUIZ_BAY_X = Math.min(...Object.values(QUIZ_ZONES).map((r) => r.x)) - 250;
+/** ...or, in any other quiz room (the Great Hollow), within this far of its answer plates. */
+const QUIZ_CARD_REACH = 420;
+
+/** Whether the stage quiz's card shows for an owl at `pos` in `room`. */
+export function quizCardShows(room: string, stage: QuizStageDef, pos: Vec2): boolean {
+  if (room === QUIZ_ROOM) return pos.x >= QUIZ_BAY_X;
+  return Math.min(...Object.values(stage.zones).map((r) => distanceToRect(pos, r))) <= QUIZ_CARD_REACH;
+}
 /** After the bite window, the line comes in by itself this much later. */
 const GONE_AFTER_MS = 900;
 /** Ask for today's tasks again this long after the room did not answer. */
@@ -153,7 +164,9 @@ interface CopyGame extends CopyTune {
 export class ActivityLayer {
   private link: ActivityLink | null = null;
   private readonly lanterns: LanternGlows | null;
+  private readonly beam: LanternBeam | undefined;
   private readonly quiz: QuizPlates | null;
+  private readonly stage: QuizStageDef | undefined;
   private readonly fishing: FishingLine | null;
   private readonly robot: RobotSong | null;
   private copy: CopyGame | null = null;
@@ -170,8 +183,10 @@ export class ActivityLayer {
 
   constructor(private readonly host: ActivityHost) {
     const { scene, room } = host;
-    this.lanterns = room === LANTERN_ROOM ? new LanternGlows(scene) : null;
-    this.quiz = room === QUIZ_ROOM ? new QuizPlates(scene) : null;
+    this.beam = lanternBeam(room);
+    this.lanterns = this.beam ? new LanternGlows(scene, this.beam) : null;
+    this.stage = quizStage(room);
+    this.quiz = this.stage ? new QuizPlates(scene, this.stage) : null;
     this.fishing = room === FISHING_ROOM ? new FishingLine(scene) : null;
     this.robot = room === COPY_ROOM && ANCHORS[room]?.['robot'] ? new RobotSong(scene, () => host.robot()) : null;
     host.hud.onCopy((note) => (note === null ? this.stopCopy() : void this.playNote(note)));
@@ -192,9 +207,9 @@ export class ActivityLayer {
   actions(pos: Vec2): ActivityAction[] {
     const now = this.now();
     const out: ActivityAction[] = [];
-    if (this.lanterns && underBeam(pos) && !this.lanterns.glowing(now)) {
+    if (this.lanterns && this.beam && underBeam(pos, 0, this.beam) && !this.lanterns.glowing(now)) {
       const lit = new Set(this.lanterns.litAt(now));
-      if (LANTERNS.some((l) => !lit.has(l.id) && Math.abs(l.pos.x - pos.x) <= LANTERN_REACH_X)) out.push({ id: 'act:light', label: 'Light a lantern', run: () => void this.light() });
+      if (this.beam.lanterns.some((l) => !lit.has(l.id) && Math.abs(l.pos.x - pos.x) <= LANTERN_REACH_X)) out.push({ id: 'act:light', label: 'Light a lantern', run: () => void this.light() });
     }
     if (this.fishing && distance(pos, FISHING_SPOT) <= FISHING_REACH) {
       const line = this.fishing.status(now);
@@ -232,12 +247,18 @@ export class ActivityLayer {
   private async light(): Promise<void> {
     const res = await this.ask((l) => l.light());
     if (!res || res.ok) return; // the beam's push lights it
+    const posts = this.onPosts();
     this.refused(res.reason, {
-      far: 'Stand on the floor under the lantern beam to light one.',
-      lit: 'The lanterns above you are lit. Find a dark one along the beam.',
+      far: posts ? 'Stand on the floor in front of the lantern posts to light one.' : 'Stand on the floor under the lantern beam to light one.',
+      lit: posts ? 'The lantern by you is lit. Find a dark one along the row.' : 'The lanterns above you are lit. Find a dark one along the beam.',
       busy: 'Give your lantern a moment before lighting the next.',
-      glowing: 'The whole beam is glowing! It goes dark again soon.',
+      glowing: posts ? 'Every lantern is glowing! They go dark again soon.' : 'The whole beam is glowing! It goes dark again soon.',
     });
+  }
+
+  /** The room's lanterns hang on posts (the Great Hollow's), not along the plaza's beam: the words say so. */
+  private onPosts(): boolean {
+    return this.host.room !== LANTERN_ROOM;
   }
 
   onLanterns(beam: { lit: Record<string, number>; glowUntil: number }, lit: { id: string; by: string | null } | null): void {
@@ -250,7 +271,7 @@ export class ActivityLayer {
     (lit.by === null ? this.host.me() : this.host.peer(lit.by))?.playEmote('flap');
     if (!wasGlowing && this.lanterns.glowing(now)) {
       this.lanterns.fill();
-      this.host.hud.toast('The whole lantern beam is lit!', 3200, '#FFB347');
+      this.host.hud.toast(this.onPosts() ? 'Every lantern is lit!' : 'The whole lantern beam is lit!', 3200, '#FFB347');
     }
   }
 
@@ -360,9 +381,10 @@ export class ActivityLayer {
   onPaid(what: 'beam' | 'quiz', feathers: number, total: number, practice = false): void {
     this.host.feathers(total);
     // A spectator's share (OP-191) earned nothing: what it would have (the beam's least share), and the Day Ticket's offer.
-    if (practice) return this.host.spectatorOffer(what === 'beam' ? `You helped light the whole beam! ${wouldHaveEarned(LANTERN_FEATHERS)}` : `Right answer! ${wouldHaveEarned(QUIZ_FEATHERS)}`);
+    const lit = this.onPosts() ? 'You helped light every lantern!' : 'You helped light the whole beam!';
+    if (practice) return this.host.spectatorOffer(what === 'beam' ? `${lit} ${wouldHaveEarned(LANTERN_FEATHERS)}` : `Right answer! ${wouldHaveEarned(QUIZ_FEATHERS)}`);
     const more = feathers > 0 ? ` ${feathersText(feathers)}` : ' (No more feathers from games today.)';
-    this.host.hud.toast(what === 'beam' ? `You helped light the whole beam!${more}` : `Right answer!${more}`, 3600, '#FFD36A');
+    this.host.hud.toast(what === 'beam' ? `${lit}${more}` : `Right answer!${more}`, 3600, '#FFD36A');
   }
 
   private quizView(now: number, pos: Vec2): QuizView {
@@ -370,7 +392,7 @@ export class ActivityLayer {
     if (now >= r.endsAt) return { phase: 'wait', seconds: Math.ceil((quizRound(r.n + 1).startsAt - now) / 1000) };
     const q = QUIZ_BANK[r.question]!;
     const answers = { a: q.answers[r.order[0]]!, b: q.answers[r.order[1]]!, c: q.answers[r.order[2]]! };
-    const mine = quizZoneAt(pos);
+    const mine = this.stage ? quizZoneAt(pos, this.stage) : null;
     if (now < r.revealAt) return { phase: 'open', question: q.text, answers, seconds: Math.ceil((r.revealAt - now) / 1000), mine };
     const settled = this.quizResult?.n === r.n ? this.quizResult : null;
     return { phase: 'reveal', question: q.text, answers, seconds: Math.ceil((r.endsAt - now) / 1000), mine, right: r.right, ...(settled ? { won: settled.won } : {}) };
@@ -411,7 +433,7 @@ export class ActivityLayer {
       const park = this.link?.parkNow() ?? now;
       const view = this.quizView(park, me.pos);
       this.quiz.show(view.phase, view.phase === 'reveal' ? view.right : undefined);
-      this.host.hud.setQuiz(me.pos.x >= QUIZ_BAY_X ? view : null);
+      this.host.hud.setQuiz(this.stage && quizCardShows(this.host.room, this.stage, me.pos) ? view : null);
     }
     if (this.fishing) {
       const line = this.fishing.status(now);

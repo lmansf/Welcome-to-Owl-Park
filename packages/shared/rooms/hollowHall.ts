@@ -53,6 +53,7 @@ import {
   type HallLevel,
   type HallWay,
 } from '../src/hollowOval';
+import { HALL_LANTERN_ART, HALL_LANTERN_POSTS } from '../src/hallLanterns';
 import type { EdgePlacement } from '../src/edges';
 import { GLIDE_SLOPE } from '../src/flight';
 import type { Polygon } from '../src/geometry';
@@ -465,6 +466,8 @@ const ROOT_PIECES: RoomPiece[] = ROOT_RUNS.flatMap((run) =>
   ),
 );
 
+/** The Party Grove's lanterns, on posts out on the floor past the grove's roots (activities.ts, LANTERN_BEAMS). */
+const LANTERN_POSTS: RoomPiece[] = HALL_LANTERN_POSTS.map((p, i) => ({ id: `lantern-post-${i + 1}`, key: HALL_LANTERN_ART, x: p.x, y: p.y, tint: HALL_LIGHT.roots }));
 /** Each plaza's worn ring, and the heart's (edges.ts: walked across, drawn on the floor). */
 export const HALL_EDGES: readonly EdgePlacement[] = HALL_RINGS.map((m) => ({
   id: `ring-${m.id}`,
@@ -586,7 +589,7 @@ export const HALL_ROOM: RoomDef = {
   spawns: SPAWNS,
   spawnTops: { [STUMP_SPAWN]: WEST_STUMP.top },
   doors: DOORS,
-  pieces: [...PIECES, ...ROOT_PIECES],
+  pieces: [...PIECES, ...ROOT_PIECES, ...LANTERN_POSTS],
   perches: [...ROOT_PERCHES],
   thermals: [HEART_THERMAL],
   movers: { downdrafts: [HALL_KNOT_HOLE] },

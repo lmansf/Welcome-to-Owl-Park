@@ -1,6 +1,6 @@
 /**
- * The activities in one room (their rules are in activities.ts): the hub's lantern beam and stage
- * quiz, fishing from the grove's jetty, and the market robot owl's copy game. The room server
+ * The activities in one room (their rules are in activities.ts): the lanterns and stage quiz (the
+ * plaza's on today's park, and the Great Hollow's), fishing from the grove's jetty, and the market robot owl's copy game. The room server
  * (RoomObject) routes `act` frames here, wakes the hub when a quiz question closes, and pays through
  * the ledger; the local mode runs the same class for the one owl on this device. A run in the
  * arcade (arcade.ts) is checked here too, by `startRun` and `endRun`; whoever runs them keeps the
@@ -13,15 +13,15 @@ import {
   FISHING_REACH,
   FISHING_ROOM,
   FISHING_SPOT,
-  LANTERN_ROOM,
-  QUIZ_ROOM,
   biteDelay,
   copyNote,
   darkLanterns,
+  lanternBeam,
   lanternsAt,
   lightLantern,
   quizRound,
   quizRoundAt,
+  quizStage,
   quizZoneAt,
   reelOutcome,
   rollFish,
@@ -93,9 +93,10 @@ export class Activities {
   }
 
   light(id: string): LightAnswer {
-    const pos = this.room.id === LANTERN_ROOM ? this.room.positionOf(id) : null;
-    if (!pos) return { ok: false, reason: 'far' };
-    const r = lightLantern(this.lanterns, id, pos, this.now(), ACT_SLACK);
+    const beam = lanternBeam(this.room.id);
+    const pos = beam ? this.room.positionOf(id) : null;
+    if (!beam || !pos) return { ok: false, reason: 'far' };
+    const r = lightLantern(this.lanterns, id, pos, this.now(), ACT_SLACK, beam);
     if (!r.ok) return r;
     this.lanterns = r.state;
     return { ok: true, id: r.id, full: r.full };
@@ -153,7 +154,7 @@ export class Activities {
 
   /** The round to settle now: its question has closed, its answer still shows, and it is not settled yet. */
   quizDue(): QuizRound | null {
-    if (this.room.id !== QUIZ_ROOM) return null;
+    if (!quizStage(this.room.id)) return null;
     const now = this.now();
     const r = quizRoundAt(now);
     return now >= r.revealAt && now < r.endsAt && r.n > this.quizSettled ? r : null;
@@ -162,9 +163,11 @@ export class Activities {
   /** Settle a round: the owls standing in the right answer's zone right now. */
   settleQuiz(r: QuizRound): { right: QuizZone; winners: string[] } {
     this.quizSettled = Math.max(this.quizSettled, r.n);
+    const stage = quizStage(this.room.id);
+    if (!stage) return { right: r.right, winners: [] };
     const winners = this.room.ids().filter((id) => {
       const pos = this.room.positionOf(id);
-      return !!pos && quizZoneAt(pos) === r.right;
+      return !!pos && quizZoneAt(pos, stage) === r.right;
     });
     return { right: r.right, winners };
   }
