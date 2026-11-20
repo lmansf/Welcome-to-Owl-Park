@@ -83,8 +83,8 @@ def macros(have):
         if "kick" in have:
             out.append(("climb", "climb", d))
         if "glide" in have:
-            for approach in (10, 40, 80):
-                out.append(("ride", "ride", d, approach))
+            for glide_for in (None, 60, 150, 300):
+                out.append(("ride", "ride", d, 240, glide_for))
     out.append(("drop", [(4, {"down": True, "jump": True}), (400, {})]))
     out.append(("up", [(400, J)]))
     if "flap" in have:
@@ -171,7 +171,7 @@ def timed(c, segs, limit=480, let_go=False):
     return "lost"
 
 
-def ride(c, d, approach, limit=2400):
+def ride(c, d, approach, glide_for=None, limit=2400):
     """Ride rising air: head toward it (jumping, then gliding) for `approach` ticks, hover in it
     with no steering while it lifts, then once the owl stops rising, glide off toward d."""
     def go(keys):
@@ -181,9 +181,18 @@ def ride(c, d, approach, limit=2400):
         ev = c.events
         return not (ev and ("hurt" in ev or "faint" in ev))
     lr = {"left": d < 0, "right": d > 0}
-    for _ in range(approach):
+
+    def in_lift():
+        p = c.p
+        return any(c._box_hit(p["x"], p["z"], u["x0"] + 0.6, u["z0"], u["x1"] - 0.6, u["z1"]) for u in c._local()["updrafts"])
+
+    for k in range(approach):          # steer for the rising air until in it (or the approach runs out)
         if not go({**lr, "jump": True}):
             return "hurt"
+        if c.p["ground"] and k > 4:
+            return "rest"
+        if in_lift():
+            break
     best, still, t = c.p["z"], 0, 0
     while t < limit and still < 40:
         if not go({"jump": True}):
@@ -195,10 +204,14 @@ def ride(c, d, approach, limit=2400):
             best, still = c.p["z"], 0
         else:
             still += 1
+    g = 0
     while t < limit + 1200:
-        if not go({**lr, "jump": True}):
+        # glide off toward d; after glide_for ticks, let go and drop onto what is below
+        keys = {**lr, "jump": True} if glide_for is None or g < glide_for else {}
+        if not go(keys):
             return "hurt"
         t += 1
+        g += 1
         if c.p["ground"]:
             return "rest"
     return "lost"
@@ -269,7 +282,7 @@ def explore(world, have):
             elif m[1] == "ride":
                 if not world_has_lift(s, w):
                     continue
-                res = ride(c, m[2], m[3])
+                res = ride(c, m[2], m[3], m[4])
             elif m[0] == "walk":
                 res = timed(c, m[1])
             elif m[0] in ("paddle", "down", "swimup"):
