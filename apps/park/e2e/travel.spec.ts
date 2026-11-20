@@ -199,6 +199,7 @@ test.describe('travel from the map (OP-130)', () => {
 
   test('with the room out of reach the map still travels, trip after trip, once the owl has walked through the turnstiles (OP-358)', async ({ page }) => {
     test.skip(!isEdge(), 'a page the Worker answers while no room lets its owl in');
+    test.slow(); // five rooms come into, each one's art drawn before the Worker is asked: 49 s on a quiet runner
     // A network that lets pages through and not sockets: every room's socket closes as it opens, while
     // the Worker goes on answering. It has seen this owl walk into no room, so its map says "not
     // through the gate"; the page, which walked the owl through, is the one that knows.
@@ -210,8 +211,17 @@ test.describe('travel from the map (OP-130)', () => {
         // A browser that keeps nothing walks today's park.
       }
     });
-    /** The Worker's answer about the map, asked as each room is come into: the test goes on only once the page has had it. */
-    const mapAnswered = () => page.waitForResponse((r) => r.url().includes('/api/travel'), { timeout: 30_000 });
+    /**
+     * The Worker's answer about the map, asked as each room is come into: the test goes on only once the page has had it.
+     * Asked only once the room's art is drawn, in software on a CI runner: a busy runner has taken over 30 s for the
+     * treehouse clearing, so the wait is 60 s, and one that runs out says where the page was.
+     */
+    const mapAnswered = () =>
+      page.waitForResponse((r) => r.url().includes('/api/travel'), { timeout: 60_000 }).catch(async (e: unknown) => {
+        const s = await page.evaluate(() => window.owlPark?.state() ?? null).catch(() => null);
+        const where = s ? { room: s.room, connected: s.connected, travel: s.travel } : 'no room scene';
+        throw new Error(`no answer from /api/travel within 60 s; the page: ${JSON.stringify(where)}`, { cause: e });
+      });
     let answered = mapAnswered();
     // At the front gate, outside the turnstiles, wandering alone.
     const q = new URLSearchParams({ transport: 'edge', room: 'lobby', kit: '0', art: 'old' });
