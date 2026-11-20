@@ -311,7 +311,7 @@ class Sim:
                         p["cutOK"] = True
                         self.events.append("jump")
                     p["buffer"] = 0.0
-                elif self.have["kick"] and p["wallT"] > 0:
+                elif self.have["kick"] and p["wallT"] > 0 and p["vz"] <= 0:   # rising past a wall flaps; falling, it kicks
                     p["vx"] = -p["wallSide"] * T["kick"]["x"]
                     p["vz"] = T["kick"]["z"]
                     p["face"] = -p["wallSide"]
