@@ -65,6 +65,20 @@ export const GUARDIAN_SCALE = 1.06;
 /** The room it lives in. */
 export const GUARDIAN_ROOM = HALL_ROOM.id;
 
+/**
+ * How often its parts are put together into the one picture it is drawn as (guardianView.ts): at most
+ * every `ms`, but a blink or a waking (its lids) at once. Putting it together redraws a picture as big as
+ * the guardian with its wings open, and did so every frame: on a phone the way into the Great Hollow
+ * lagged (Logan, Nov 20). Its breath, its beat and its head move slowly enough that 30 a second shows
+ * no step.
+ */
+export const COMPOSE = { ms: 1000 / 30 } as const;
+
+/** Whether to put its parts together now: the first time, when its lids change, or once `COMPOSE.ms` has passed. */
+export function composeDue(last: { at: number; lids: Lids } | null, now: number, lids: Lids): boolean {
+  return last === null || last.lids !== lids || now - last.at >= COMPOSE.ms - 1;
+}
+
 /** A point of the painting, in the room. */
 export function inRoom(p: Vec2, at: Vec2 = GUARDIAN_AT, scale = GUARDIAN_SCALE): Vec2 {
   return { x: at.x + (p.x - GUARDIAN_ART.foot.x) * scale, y: at.y + (p.y - GUARDIAN_ART.foot.y) * scale };

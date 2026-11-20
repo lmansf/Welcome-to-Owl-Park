@@ -3,6 +3,8 @@ import { distance, pointInRect, type Vec2 } from '@owl-park/shared';
 import { HALL_ROOM, RUN_Y } from '@owl-park/shared/rooms';
 import { PLAY_SPOTS } from './featherTrail';
 import {
+  COMPOSE,
+  composeDue,
   AT_REST,
   CALLS,
   GUARDIAN_ART,
@@ -24,6 +26,7 @@ import {
   seeded,
   seenAt,
   type GuardianFrame,
+  type Lids,
   type OwlSeen,
 } from './guardian';
 import { OWL_BODY, hiddenBehind } from './seeThrough';
@@ -536,3 +539,36 @@ describe('the guardian’s mind', () => {
     expect(Math.abs(late.head.dx)).toBeLessThanOrEqual(Math.abs(goal.dx) + 1e-9);
   });
 });
+
+// Logan, Nov 20, on his phone: lag on the way into the Great Hollow. Its parts were put together into one
+// picture every frame; now at most 30 times a second, a blink at once.
+describe('how often the guardian is put together (COMPOSE)', () => {
+  /** Ten seconds of frames at `hz`, its lids as `lidsAt` says: how many times it is put together. */
+  const composes = (hz: number, lidsAt: (t: number) => Lids = () => 'open') => {
+    let last: { at: number; lids: Lids } | null = null;
+    let n = 0;
+    for (let t = 0; t < 10_000; t += 1000 / hz) {
+      const lids = lidsAt(t);
+      if (composeDue(last, t, lids)) {
+        last = { at: t, lids };
+        n++;
+      }
+    }
+    return n;
+  };
+
+  it('is put together at most 30 times a second on a 60 or 120 a second screen, and on every frame of a 30 a second one', () => {
+    expect(COMPOSE.ms).toBeCloseTo(1000 / 30);
+    // Ten seconds of frames: 300 times, give or take the frame either end.
+    for (const hz of [30, 60, 120]) expect(Math.abs(composes(hz) - 300), `${hz} a second`).toBeLessThanOrEqual(1);
+  });
+
+  it('shows a blink at once, between its usual times', () => {
+    expect(composeDue(null, 0, 'closed')).toBe(true);
+    expect(composeDue({ at: 0, lids: 'open' }, 10, 'open')).toBe(false);
+    expect(composeDue({ at: 0, lids: 'open' }, 10, 'half')).toBe(true);
+    // A blink every second, its lids half for a frame: each one drawn, besides the 30 a second.
+    expect(composes(60, (t) => (Math.round(t) % 1000 < 17 ? 'half' : 'open'))).toBeGreaterThan(300);
+  });
+});
+
