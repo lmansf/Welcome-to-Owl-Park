@@ -6,7 +6,7 @@
  * The room server keeps the seats and the games; this layer asks it (`party` frames through the room's
  * connection) and shows what it says. Without the room server (the local park) the stump says so.
  *
- * Never a one-owl game (OP-426, `?standin=1`): an owl that has sat alone for a few seconds may start
+ * Never a one-owl game (OP-426): an owl that has sat alone for a few seconds may start
  * anyway, and Pip the lantern keeper, a park owl, takes the second seat.
  */
 import Phaser from 'phaser';

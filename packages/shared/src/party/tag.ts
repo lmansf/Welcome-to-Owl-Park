@@ -15,7 +15,7 @@
  * with tagAt, which moves it on by the clock alone (the end of a round, the next one starting). So the
  * room server needs no timer of its own for the game, and a page shows the same moment as everyone else.
  *
- * Never a one-owl game (OP-426, behind `?standin=1`): an owl alone in the ring for TAG_STANDIN_WAIT_MS
+ * Never a one-owl game (OP-426): an owl alone in the ring for TAG_STANDIN_WAIT_MS
  * asks, and Pip, the lantern keeper, steps in as the second player. Pip runs round inside
  * the ring at half an owl's walk, on the clock alone (standInAt), so any owl can catch Pip in a few
  * tries; handed the feather, Pip gives it back after TAG_STANDIN_HOLD_MS. When a second real owl is in,
