@@ -318,9 +318,10 @@ test.describe('puzzle quests (this device, OP-255)', () => {
 
     // A run deals its pieces at random over the room's hiding spots, and a piece dealt where the owl is standing is worked
     // as the run starts: the key is taken, or the dial's pad is up, before anyone has walked. One of this room's spots is
-    // a step from where an owl stands to talk to Pip. So the run starts from where the owl came in, clear of every spot,
-    // and whatever the deal its pieces are found by walking to them.
-    await walkAndStop(page, cameIn.x, cameIn.y);
+    // a step from where an owl stands to talk to Pip, and another (2400,650) is 80 px above where an owl comes in, inside
+    // a piece's reach (96 px). So the run starts a little below where the owl came in, clear of every spot, and whatever
+    // the deal its pieces are found by walking to them.
+    await walkAndStop(page, cameIn.x, cameIn.y + 40);
 
     // The Quests tab shows the puzzle with no run yet; Start a run deals fresh clues and codes.
     await page.keyboard.press('KeyJ');
