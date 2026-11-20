@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw, ImageFont
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from wr.world import build_world  # noqa: E402
-from wr.world.reaches import REGIONS, X0, X1, Z0, Z1  # noqa: E402
+from wr.world.atlas import REGIONS, X0, X1, Z0, Z1  # noqa: E402
 
 S = 2
 for i, a in enumerate(sys.argv):
@@ -33,12 +33,29 @@ def box(x0, z0, x1, z1, fill=None, outline=None, width=1):
     d.rectangle([(x0 - X0) * S, (Z1 - z1) * S, (x1 - X0) * S - 1, (Z1 - z0) * S - 1], fill=fill, outline=outline, width=width)
 
 
-# open air: every zone, tinted, then rock over it
-for key, (title, (a, b, c, dd), *_r) in REGIONS.items():
-    t = REGION_TINT[key]
-    box(a * 32, c * 20, (b + 1) * 32, (dd + 1) * 20, fill=tuple(int(v * 0.55 + 230 * 0.45) for v in t))
-for s in w["solids"]:
-    box(s["x0"], s["z0"], s["x1"], s["z1"], fill=(46, 40, 48))
+# the open air, tinted by reach (caves a little darker than open sky); rock stays dark
+import numpy as np  # noqa: E402
+from wr.world.atlas import Atlas, draw, region_at  # noqa: E402
+
+A = Atlas()
+draw(A)
+rgb = np.zeros((X1 - X0, Z1 - Z0, 3), np.uint8)
+rgb[:] = (46, 40, 48)
+tint = {}
+for ix in range(0, X1 - X0, 4):
+    for iz in range(0, Z1 - Z0, 4):
+        t = REGION_TINT[region_at(ix + X0 + 2, iz + Z0 + 2)]
+        tint[(ix, iz)] = t
+air = ~A.rock
+for (ix, iz), t in tint.items():
+    blk = air[ix:ix + 4, iz:iz + 4]
+    cave = A.cave[ix:ix + 4, iz:iz + 4]
+    for k, mix in ((~cave, 0.4), (cave, 0.7)):
+        m = blk & k
+        rgb[ix:ix + 4, iz:iz + 4][m] = tuple(int(v * mix + 235 * (1 - mix)) for v in t)
+pic = Image.fromarray(np.transpose(rgb, (1, 0, 2))[::-1].copy()).resize((W, H), Image.NEAREST)
+img.paste(pic, (0, 0))
+d = ImageDraw.Draw(img)
 for wt in w["waters"]:
     ov = Image.new("RGBA", img.size, (0, 0, 0, 0))
     ImageDraw.Draw(ov).rectangle([(wt["x0"] - X0) * S, (Z1 - wt["z1"]) * S, (wt["x1"] - X0) * S, (Z1 - wt["z0"]) * S], fill=(40, 120, 230, 90))
@@ -73,8 +90,9 @@ c = w["crown"]
 box(c["x"] - 3, c["z"], c["x"] + 3, c["z"] + 5, fill=(255, 250, 200))
 sp = w["spawn"]
 box(sp["x"] - 1.5, sp["z"], sp["x"] + 1.5, sp["z"] + 3, fill=(120, 255, 160))
-for key, (title, (a, b, cc, dd), *_r) in REGIONS.items():
-    d.text(((a * 32 - X0) * S + 6, (Z1 - (dd + 1) * 20) * S + 4), title, fill=(20, 16, 22), font=big)
+for key, (title, _th, _zm, _o, rs) in REGIONS.items():
+    a, b, cc, dd = rs[0]
+    d.text(((a - X0) * S + 6, (Z1 - dd) * S + 4), title, fill=(20, 16, 22), font=big)
 out = os.path.join(HERE, "..", "build")
 os.makedirs(out, exist_ok=True)
 img.save(os.path.join(out, "map.png"))

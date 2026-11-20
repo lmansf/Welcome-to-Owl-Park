@@ -73,6 +73,7 @@ var mood := "grove"
 var mood_now: Array = []
 var flap_t := 0.0
 var wing_open := 0.0
+var draw_z := 0.0
 var squash := 0.0
 var yaw := 1.0
 var started := false
@@ -532,7 +533,13 @@ func _dress(delta: float) -> void:
 	var p: Dictionary = sim.p
 	var c: Dictionary = sim.cam
 	# the owl
-	owl.position = Vector3(p["x"], p["z"], 0)
+	# a step up a slope is a sudden metre in the rules; drawn, the owl rises over it in a blink
+	var rise: float = p["z"] - draw_z
+	if p["ground"] and rise > 0.0 and rise <= 1.05:
+		draw_z = lerpf(draw_z, p["z"], 1 - exp(-28 * delta))
+	else:
+		draw_z = p["z"]
+	owl.position = Vector3(p["x"], draw_z, 0)
 	var want_yaw: float = float(p["face"]) * (0.25 if p["clinging"] else 1.0)
 	yaw = lerpf(yaw, want_yaw, 1 - exp(-14 * delta))
 	squash = lerpf(squash, 0.0, 1 - exp(-10 * delta))

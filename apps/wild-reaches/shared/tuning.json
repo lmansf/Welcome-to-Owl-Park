@@ -9,6 +9,7 @@
   "kick": { "x": 11, "z": 19, "lock": 0.15, "slide": 3, "grace": 0.1 },
   "pogo": { "speed": 19 },
   "swim": { "speed": 6.5, "accel": 34, "drift": 0.6, "float": 4.0, "damp": 120, "breach": 17, "reach": 0.35 },
+  "step": 1.0,
   "panes": 5,
   "invuln": 1.2,
   "drop": 0.22,

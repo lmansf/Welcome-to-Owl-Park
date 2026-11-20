@@ -362,6 +362,10 @@ class Sim:
                     push += wd["push"] * (0.4 if p["gliding"] else 1.0) * (1.6 if p["gliding"] and wd["push"] * p["face"] > 0 else 1.0)
         nx = p["x"] + (p["vx"] + push) * dt
         s = self._hits_solid(nx, p["z"])
+        if s is not None and p["ground"] and s["z1"] > p["z"] and s["z1"] - p["z"] <= T["step"] + EPS and self._hits_solid(nx, s["z1"]) is None:
+            # a rise of up to a metre is walked up, the way a slope is
+            p["z"] = s["z1"]
+            s = None
         if s is not None:
             if nx > p["x"]:
                 nx = s["x0"] - hw

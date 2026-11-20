@@ -9,7 +9,7 @@ bells to wake the sunwell at the top of the world.
 blender/   Python for Blender: the asset library, the world, and its proofs
   wr/vox.py            sculpt in voxels, skin smooth, paint per vertex (the daylight paint)
   wr/assets/           the library: the kit in ten reach themes, walls, landmarks, idols, props
-  wr/world/reaches.py  the world generator (the plan of reaches, rooms, gates and dressing)
+  wr/world/atlas.py    the world, drawn by hand: ground lines, caves, caverns, gates, islands
   wr/sim/              the rules of movement (with water and the dive) and the camera, in Python
   owl/build_owl.py     the rigged horned owl; owl/bake_owl.py paints it for the game
   check_map.py         plays the world by search to prove every gate and pick-up
@@ -21,32 +21,35 @@ shared/tuning.json     every number that shapes the feel, swimming included
 
 ## The world
 
-The world is laid out on a grid of rooms 32 m wide and 20 m tall (about 1.3 × 1.5 screens). Each
-reach is a block of rooms joined as a maze with loops, with a few rooms opened into great caverns
-that hold the reach's landmark. Every room is carved on a 1 m grid. Ledges are never more than 3 m
-apart (a plain jump is 3.8 m), so any ungated way can be walked with no moves at all. Gates sit in
-the tunnels and shafts between reaches, away from any ledge.
+The world is drawn by hand in `blender/wr/world/atlas.py`. The open-air reaches (the grove, the
+peaks, the canyon, the sky) are lines of ground under open sky. The caves are paths cut through
+rock with caverns on them, each placed and sized for what happens there: the grove's crystal
+grotto, the 26 m waterfall hall, the 74 m hollow of the great tree with its spiral climb, the
+volcano hall, the drowned temple. Slopes rise a metre at a time, and the owl walks up them. Steeper
+ways are shafts with ledges no more than 3 m apart (a plain jump is 3.8 m), and a tunnel that meets
+a cavern high on its wall gets a stair down to the floor. So every way that is not a gate can be
+walked with no moves. The gates are drawn where the reaches meet.
 
 | Reach | Where | Gate in | Guardian grants |
 | --- | --- | --- | --- |
 | Goldleaf Grove (start) | west of the tree, z 0..60 | | flap |
 | The Mistfalls | under the grove | | |
-| The Great Tree | the trunk, z -40..60 | flap (a 6 m step) | |
+| The Great Tree | the trunk's hollow, z -22..60 | flap (a door 6 m up the bark, or a 6 m step from the falls) | |
 | The Ember Deep | far west, low | flap | dash |
 | The Frostfall Peaks | far west, high | dash (a thorn pit under a low roof) | wall kick |
 | The Root Colonnades | east, z -20..60 | dash | dive |
 | The Gloamglow Caves | under the colonnades | | |
-| The Sunken Sea | under everything, z -140..-40 | dive (a flooded sump under a rock lip) | glide |
+| The Sunken Sea | under everything, z -160..-46 | dive (deep water: a floater only bobs at the top) | glide (on the temple floor) |
 | The Heartwood Spire | the trunk, z 60..140 | wall kick (a smooth shaft) | |
 | The Sunstone Canyon | east, high | glide (rising air up a wide shaft) | (a bell) |
 | The Sky Ruins | over everything, z 140..220 | glide, or wall kick from the spire | (two bells, the sunwell) |
 
-Size, measured by `world_size.py` the same way for both games:
-**627 screens with floor in them, 16.3 km of floor**. The Night Tree measures 70 screens and
-1.1 km. There are 238 feathers, 52 benches, 5 guardians, 3 bells and the sunwell.
+Size, measured by `world_size.py` the same way for both games: **514 screens with floor in them,
+9.4 km of floor**. The Night Tree measures 70 screens and 1.1 km. There are 5 guardians, 3 bells,
+the sunwell on the tree's crown, benches along the way and feathers in every cavern.
 
-The map comes from a seed (`SEED` in `reaches.py`). Change the seed, or the region table, and run
-`check_map.py` again before shipping the result.
+To change the world, edit the drawing in `atlas.py`. Then run `map_preview.py` to see it and
+`check_map.py` to prove it.
 
 ## Build it
 

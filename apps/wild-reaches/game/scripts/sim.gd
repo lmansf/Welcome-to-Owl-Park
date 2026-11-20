@@ -380,6 +380,10 @@ func step(inp: Dictionary) -> void:
 				push += wd["push"] * (0.4 if p["gliding"] else 1.0) * (1.6 if p["gliding"] and wd["push"] * p["face"] > 0 else 1.0)
 	var nx: float = p["x"] + (p["vx"] + push) * dt
 	var s: Dictionary = _hits_solid(nx, p["z"])
+	if not s.is_empty() and p["ground"] and s["z1"] > p["z"] and s["z1"] - p["z"] <= T["step"] + EPS and _hits_solid(nx, s["z1"]).is_empty():
+		# a rise of up to a metre is walked up, the way a slope is
+		p["z"] = float(s["z1"])
+		s = {}
 	if not s.is_empty():
 		if nx > p["x"]:
 			nx = s["x0"] - hw

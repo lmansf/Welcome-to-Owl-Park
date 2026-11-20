@@ -250,3 +250,19 @@ class Water(unittest.TestCase):
         s._index()
         run(s, 3.0, down=True)
         self.assertLess(s.p["z"], -7.0)
+
+
+class Slopes(unittest.TestCase):
+    def test_walks_up_a_stair_of_one_metre_steps(self):
+        w = world(solids=[{"x0": -50, "z0": -2, "x1": 50, "z1": 0}] + [{"x0": 2 + 2 * k, "z0": 0, "x1": 50, "z1": k + 1} for k in range(5)])
+        s = Sim(w, T)
+        run(s, 3.0, right=True)
+        self.assertEqual(s.p["z"], 5)
+        self.assertGreater(s.p["x"], 12)
+
+    def test_a_two_metre_step_is_a_wall(self):
+        w = world(solids=[{"x0": -50, "z0": -2, "x1": 50, "z1": 0}, {"x0": 2, "z0": 0, "x1": 50, "z1": 2}])
+        s = Sim(w, T)
+        run(s, 1.0, right=True)
+        self.assertEqual(s.p["z"], 0)
+        self.assertLess(s.p["x"], 2)
