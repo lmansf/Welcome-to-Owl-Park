@@ -8,7 +8,7 @@
  * the point it moves about: the head turns about its neck, a wing opens about its shoulder, the body
  * swells from where it sits. Laid out at these places the parts stand as the idol at rest.
  *
- * Only the guardian moves in parts today (guardianView.ts, behind `?guardian=1`); the robot owl's and
+ * Only the guardian moves in parts today (guardianView.ts); the robot owl's and
  * the glass owl's are here for when they do.
  */
 import type { Vec2 } from '@owl-park/shared';
