@@ -90,10 +90,11 @@ test.describe('the feather trail (OP-307)', () => {
       .poll(async () => (await state(page)).trail?.glints ?? ['play-lanterns'], { timeout: 10_000 })
       .not.toContain('play-lanterns');
 
-    // Every game found, and back at the roots: the feathers lead on to the hatch at the front, a place to
-    // play, past the realms' doorways either side of the knothole. (From the lantern posts the nearest
-    // way to play is the grove's course instead.)
-    await walkAndStop(page, root.x, root.y + 90);
+    // Every game found, and back on the quiz plates: the feathers lead on to the hatch at the front, a
+    // place to play, past the realms' doorways either side of the knothole. (From the lantern posts the
+    // nearest way to play is the grove's course instead.) Polled as a line saying what the trail did, so
+    // a miss shows where the owl stood and where the feathers went.
+    await walkAndStop(page, quiz.x, quiz.y);
     const hatch = doors.find((d) => d.id === 'down')!;
     await expect
       .poll(
@@ -101,11 +102,14 @@ test.describe('the feather trail (OP-307)', () => {
           const s = await state(page);
           const feathers = s.trail?.feathers ?? [];
           const last = feathers[feathers.length - 1];
-          return feathers.length > 3 && !!last && Math.hypot(last.x - hatch.x, last.y - hatch.y) < 260 && feathers.every((f) => f.y > s.pos.y);
+          const ok = feathers.length > 3 && !!last && Math.hypot(last.x - hatch.x, last.y - hatch.y) < 260 && feathers.every((f) => f.y > s.pos.y);
+          return ok
+            ? 'to the hatch'
+            : `owl at ${Math.round(s.pos.x)},${Math.round(s.pos.y)}; ${feathers.length} feathers to ${last ? `${Math.round(last.x)},${Math.round(last.y)}` : 'nowhere'}; glints ${s.trail?.glints.join(' ')}`;
         },
         { timeout: 20_000 },
       )
-      .toBe(true);
+      .toBe('to the hatch');
 
     // Out onto the floor, clear of every doorway, and back: now the knothole is named.
     const up = doors.find((d) => d.id === 'up')!;
