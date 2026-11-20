@@ -104,10 +104,13 @@ test.describe('never a one-owl game: Pip stands in (OP-426, behind ?standin=1)',
     const me = (await tagOf(page))!.players[0]!;
     // Pip steps in after about five seconds alone, and a round starts with this owl holding the feather.
     await expect.poll(async () => (await tagOf(page))?.players, { timeout: 12_000 }).toEqual([me, 'npc:pip']);
+    // Who starts with the feather, read as soon as Pip is in: once the round is live, Pip coming back round
+    // the ring past this owl can take it (a touch passes it either way), and a slow page, reading it only
+    // after it saw the round go live, saw Pip holding it (twice running on Nov 20).
+    expect((await tagOf(page))?.holder).toBe(me);
     await expect(page.getByText('Pip the lantern keeper is joining you!')).toBeVisible();
     expect((await tagOf(page))?.standIn).not.toBeNull();
     await expect.poll(async () => (await tagOf(page))?.phase, { timeout: 10_000 }).toBe('live');
-    expect((await tagOf(page))?.holder).toBe(me);
     await page.screenshot({ path: 'e2e-screenshots/tag-standin.png' });
 
     // The chase, as a child plays it: run at where Pip is going, a few times at most, until the feather is Pip's.
