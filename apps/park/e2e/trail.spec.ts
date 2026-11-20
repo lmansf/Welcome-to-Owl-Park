@@ -66,13 +66,18 @@ test.describe('the feather trail (OP-307)', () => {
     // Stood at the roots, they are found: the feathers lead on to the hall's own games, the Party Grove's
     // folded in (Dec 1 plan D5): the quiz plates in front of the heart, the nearer, then the lantern posts
     // past the grove's roots (QUIZ_STAGES and LANTERN_BEAMS in @owl-park/shared).
+    // Led there: the feathers end by it, or, where it is further than a trail's ten feathers reach
+    // (featherTrail.ts, TRAIL), a full trail ends more than halfway to it from where the owl stands.
     const leadsTo = (at: { x: number; y: number }) =>
       expect
         .poll(
           async () => {
-            const feathers = (await state(page)).trail?.feathers ?? [];
+            const s = await state(page);
+            const feathers = s.trail?.feathers ?? [];
             const last = feathers[feathers.length - 1];
-            return feathers.length > 3 && !!last && Math.hypot(last.x - at.x, last.y - at.y) < 300;
+            if (feathers.length <= 3 || !last) return false;
+            const left = Math.hypot(last.x - at.x, last.y - at.y);
+            return left < 300 || (feathers.length >= 10 && left < Math.hypot(s.pos.x - at.x, s.pos.y - at.y) / 2);
           },
           { timeout: 20_000 },
         )
