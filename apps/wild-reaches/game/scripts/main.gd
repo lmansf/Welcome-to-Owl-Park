@@ -16,8 +16,8 @@ const SAVE := "user://wild-reaches.json"
 const MOODS := {
 	"grove": [Color("f0c27e"), Color("e8b068"), 0.004, Color("a88462"), Color("ffe2a8"), 1.55],
 	"falls": [Color("a6cccc"), Color("cfe6e6"), 0.008, Color("7a9c9c"), Color("fff0d0"), 1.25],
-	"heart": [Color("3a2614"), Color("5a3a20"), 0.010, Color("86603e"), Color("ffd08a"), 1.0],
-	"spire": [Color("4a3018"), Color("6a4628"), 0.008, Color("9a7048"), Color("ffd89a"), 1.15],
+	"heart": [Color("4a3018"), Color("6a4628"), 0.008, Color("c0905e"), Color("ffd08a"), 1.45],
+	"spire": [Color("5a3a1e"), Color("7a5430"), 0.007, Color("c89a66"), Color("ffd89a"), 1.5],
 	"ember": [Color("2a0e08"), Color("5a1c0c"), 0.012, Color("7a3a26"), Color("ff9a50"), 1.0],
 	"frost": [Color("cde2f2"), Color("ddebf6"), 0.006, Color("94aecb"), Color("f4f8ff"), 1.5],
 	"colonnade": [Color("5a3e28"), Color("7a5638"), 0.009, Color("9c7a58"), Color("ffd49a"), 1.1],

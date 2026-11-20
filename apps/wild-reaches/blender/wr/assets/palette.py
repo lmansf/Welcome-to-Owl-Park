@@ -1,7 +1,7 @@
 """The reaches' colours, registered before any pack sculpts with them. Hex, then emission.
 
 Daylight, not night: warm sun on the tops, cool sky in the shadows. Each reach keeps two or three
-accents over the shared earths, barks and mosses (ART-BIBLE.md, section 2).
+accents over the shared earths, barks and mosses (README.md, Art).
 """
 from ..vox import register_colour
 

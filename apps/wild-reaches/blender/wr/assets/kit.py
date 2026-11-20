@@ -158,7 +158,7 @@ def _cap(theme, var):
 def _fill(theme, size, var=""):
     top, body, deep, accent, glow = THEMES[theme]
     seed = sum(map(ord, theme)) + size + (37 if var else 0)
-    v = V((0, -2, 0), (size, 2, size), vpm=8, open="xz+y")   # open at the sides too: packed squares read as one mass
+    v = V((0, -2, 0), (size, 2, size), vpm=8, open="+y")
     X, Y, Z = v.X, v.Y, v.Z
     n = v.noise(1.7, seed)
     n2 = v.noise(0.7, seed + 1)
@@ -205,7 +205,7 @@ def _fill(theme, size, var=""):
             v.paint("snow", v.exposed(2, 1, 1) & (n > 0.4))
         if theme in ("grove", "falls"):
             v.paint(glow, (v.noise(0.4, seed + 9) > 0.88) & (Y < -1.5))   # the odd glowing crystal
-    return v.done_tris(f"fill-{theme}-{size}{var}", {8: 7000, 4: 3000, 2: 1200, 1: 500}[size], relax=1)
+    return v.done_tris(f"fill-{theme}-{size}{var}", {8: 14000, 4: 6000, 2: 2400, 1: 900}[size], relax=1)
 
 
 for _t in THEMES:

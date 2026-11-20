@@ -396,7 +396,7 @@ class Sim:
             else:
                 nz = s["z0"] - T["owl"]["height"]
             p["vz"] = 0.0
-        if p["vz"] <= 0 and not p["ground"] and p["dropT"] <= 0:
+        if p["vz"] <= 0 and not p["ground"] and p["dropT"] <= 0 and not p["wet"]:  # ledges do not catch a swimmer
             best = None
             for i in self._near(self.grid_o, p["x"], p["z"]):
                 o = self.w["oneways"][i]

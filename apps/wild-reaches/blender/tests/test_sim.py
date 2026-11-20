@@ -243,3 +243,10 @@ class Water(unittest.TestCase):
         x0 = s.p["x"]
         run(s, 1.0, right=True)
         self.assertLess(s.p["x"] - x0, T["swim"]["speed"] * 1.05)
+
+    def test_diver_swims_down_through_a_ledge(self):
+        s = self.pool(("dive",))
+        s.w["oneways"].append({"x0": -10, "x1": 10, "z": -4})
+        s._index()
+        run(s, 3.0, down=True)
+        self.assertLess(s.p["z"], -7.0)
