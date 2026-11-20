@@ -90,9 +90,11 @@ class Atlas:
     def carve(self, x0, z0, x1, z1, cave=True):
         a, b, c, d = self._ix(x0, z0, x1, z1)
         if a < b and c < d:
+            if cave:   # only rock newly cut counts as cave; open sky stays sky
+                self.cave[a:b, c:d] |= self.rock[a:b, c:d]
+            else:
+                self.cave[a:b, c:d] = False
             self.rock[a:b, c:d] = False
-            if cave:
-                self.cave[a:b, c:d] = True
 
     def fill(self, x0, z0, x1, z1):
         a, b, c, d = self._ix(x0, z0, x1, z1)
@@ -268,6 +270,7 @@ def draw(A):
     # the crystal grotto under the hills
     A.hall("grotto", -66, 4, -30, 20)
     A.tunnel([(-104, 30), (-98, 26), (-92, 20), (-86, 16), (-72, 13), (-66, 13)])
+    A.ledge(-106, -96, 30)                     # a bough over the grotto's mouth: walk over, or drop through
     A.put("bench", -48, 4)
     A.put("feather", -36, 7.4)
     # ======================= The Mistfalls ========================================================
@@ -280,6 +283,7 @@ def draw(A):
     A.water(-112, -47, -106, -38)
     # the bramble hollow under the west of the grove, and down to the falls
     A.tunnel([(-150, 38), (-146, 34), (-142, 28), (-138, 22), (-134, 18), (-130, 18)])
+    A.ledge(-153, -143, 38)                    # a bough over the bramble hollow's mouth
     A.hall("bramble", -170, 2, -130, 24)
     A.tunnel([(-160, 2), (-160, -6), (-140, -8), (-124, -10)])
     A.tunnel([(-124, -10), (-124, -4)])
@@ -366,7 +370,8 @@ def draw(A):
     A.put("bench", -470, 60)
     A.tunnel([(-428, 166), (-432, 160), (-436, 154), (-440, 150)])
     A.hall("summitcave", -470, 140, -440, 160)
-    A.tunnel([(-300, 100), (-296, 96), (-290, 90), (-284, 84), (-272, 80), (-262, 80)])   # under the slope to the vestibule's roof
+    A.tunnel([(-292, 100), (-288, 96), (-284, 90), (-278, 84), (-272, 80), (-262, 80)])   # under the slope, a burrow
+    A.ledge(-294, -282, 100)                   # a snow bridge over its mouth
     A.hall("frostburrow", -262, 74, -230, 90, rough=True)
 
     # ======================= The Root Colonnades ====================================================
@@ -377,7 +382,7 @@ def draw(A):
     A.tunnel([(176, 6), (196, 8), (214, 8)])
     A.hall("hall2", 214, -12, 300, 30, landmark="root-temple")
     A.put("bench", 230, -12)
-    A.tunnel([(300, 22), (318, 28), (336, 34), (350, 36)])
+    A.tunnel([(300, 22), (318, 22), (319, 40), (336, 40), (350, 36)], bare=(1,), w=4)   # up a smooth shaft (kick)
     A.hall("hall3", 350, 30, 420, 54)
     A.put("bench", 358, 30)
     A.tunnel([(420, 30), (426, 24), (432, 18), (434, 12)])
@@ -392,7 +397,7 @@ def draw(A):
     A.tunnel([(140, 2), (140, -20)])
     A.hall("cellars", 70, -40, 160, -20)
     A.put("bench", 80, -40)
-    A.tunnel([(176, 20), (184, 28), (190, 36), (196, 40)])
+    A.tunnel([(176, 20), (184, 20), (185, 40), (196, 40)], bare=(1,), w=4)               # up a smooth shaft (kick)
     A.hall("clerestory", 196, 38, 340, 56, rough=True)
     A.tunnel([(340, 44), (346, 40), (350, 40)])
     A.put("bench", 260, 38)
@@ -583,7 +588,8 @@ def _dress(A, w):
     for px in range(X0, X1, 10):
         for pz in range(Z0, Z1, 10):
             sub = A.cave[px - X0:px - X0 + 10, pz - Z0:pz - Z0 + 10]
-            if not sub.any():
+            sky = (~A.rock & ~A.cave)[px - X0:px - X0 + 10, pz - Z0:pz - Z0 + 10]
+            if not sub.any() or sky.sum() > sub.sum():
                 continue
             key = region_at(px + 5, pz + 5)
             wall = DRESS[key][0] or DRESS["heart"][0]
