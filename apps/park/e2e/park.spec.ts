@@ -939,6 +939,7 @@ test.describe('Swap pet (OP-263, behind ?petswap=1)', () => {
   const wornPet = async (page: Page) => (await state(page)).look.wear?.pet ?? null;
 
   test('an owl with the egg and the bunny taps its pet and swaps egg, bunny, no pet, egg, and the choice lasts a reload', async ({ page, isMobile }) => {
+    test.slow(); // two page loads and a tap on the pet for each of four swaps: 43 s on a desktop runner, over 45 s on a busy phone one
     const cid = 'e2e-pet-swap';
     await withPets(page, cid, ['painted-egg~0', 'rainbow-bunny~0']);
     const open = () => openPark(page, { collector: cid, tz: 'UTC', room: 'hub', petswap: '1' });
