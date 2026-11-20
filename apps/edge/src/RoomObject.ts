@@ -43,7 +43,6 @@ import {
   distance,
   filterOwnedWear,
   getInteractable,
-  getNpc,
   getQuest,
   hashForLog,
   isDeviceId,
@@ -56,6 +55,7 @@ import {
   leafRespawnMs,
   nestIdOf,
   nestLook,
+  npcIn,
   npcsIn,
   parseClientFrame,
   pointInRect,
@@ -1597,8 +1597,9 @@ export class RoomObject extends DurableObject<Env> {
         case 'quests':
           return this.sendBoard(ws, att, await stub.board(cid), [], { r });
         case 'talk': {
-          const npc = getNpc(frame.npc);
-          if (!npc || npc.room !== att.room) return refuse('unknown');
+          // Where the owl stands in this room: Bramble and Pip stand in the Great Hollow on the new map (NEW_MAP_HOMES).
+          const npc = npcIn(frame.npc, att.room);
+          if (!npc) return refuse('unknown');
           if (!room.near(att.id, npc.pos, NPC_TALK_RADIUS)) return refuse('far');
           const res = await stub.questEvent(cid, { kind: 'talk', npc: npc.id }, att.room, att.spec === true);
           return this.sendBoard(ws, att, res.board ?? (await stub.board(cid)), res.updates, { r });
@@ -1606,8 +1607,8 @@ export class RoomObject extends DurableObject<Env> {
         case 'accept':
         case 'handin': {
           const q = getQuest(frame.quest);
-          const giver = q ? getNpc(q.giver) : undefined;
-          if (!q || !giver || giver.room !== att.room) return refuse('unknown');
+          const giver = q ? npcIn(q.giver, att.room) : undefined;
+          if (!q || !giver) return refuse('unknown');
           if (!room.near(att.id, giver.pos, NPC_TALK_RADIUS)) return refuse('far');
           if (frame.t === 'accept') {
             const res = await stub.accept(cid, q.id, att.room);

@@ -31,7 +31,7 @@ import {
   USE_COOLDOWN_MS,
   distance,
   getInteractable,
-  getNpc,
+  npcIn,
   getQuest,
   isEmoteId,
   lanternFeathers,
@@ -70,6 +70,7 @@ import {
   type EggCodeLedger,
   type EggRedeemReply,
 } from '@owl-park/shared';
+import { walkingMap } from '../game/walkingMap';
 import { LOCAL_COLLECTOR_KEY } from '../identity';
 import type { RoomConnection } from '../net/transport';
 import { COURSES, ROOMS } from '../rooms';
@@ -501,16 +502,15 @@ export class LocalCollections implements CollectionService {
     const near = (p: Vec2, radius: number) => distance(where(), p) <= radius + REACH_SLACK;
     /** The giver of a quest, if it stands in this room. */
     const giverHere = (quest: string): NpcDef | undefined => {
-      const giver = getNpc(getQuest(quest)?.giver ?? '');
-      return giver && giver.room === room ? giver : undefined;
+      return npcIn(getQuest(quest)?.giver ?? '', room, walkingMap());
     };
     // The room server reports used-up objects right after its welcome; so does this.
     queueMicrotask(() => pushes.onObjects?.(this.liveObjects()));
     return {
       board: async () => this.use(({ quests }) => ({ ok: true, board: quests.board(cid, this.now()), updates: [] })),
       talk: async (npcId) => {
-        const npc = getNpc(npcId);
-        if (!npc || npc.room !== room) return refused('unknown');
+        const npc = npcIn(npcId, room, walkingMap());
+        if (!npc) return refused('unknown');
         if (!near(npc.pos, NPC_TALK_RADIUS)) return refused('far');
         return this.use(({ quests }) => {
           const now = this.now();

@@ -9,7 +9,7 @@ import type { Raised } from './perches';
 import { nextParkDayAt, nextParkWeekAt, parkDay, parkWeek } from './parktime';
 import { DAILY_POOL, QUESTS, STORY_QUESTS, WEEKLY_POOL, getQuest } from './questCatalog';
 import { QuestBook, dailyQuestIds, weeklyQuestIds, type QuestSpots } from './questbook';
-import { ACTIVE_SLOTS, CADENCES, DAILY_QUEST_FEATHERS, MAX_ACTIVE_QUESTS, WEEKLY_QUEST_FEATHERS, goalCount, goalText, isRewardItem, questFeathers, type QuestDef } from './quests';
+import { ACTIVE_SLOTS, CADENCES, DAILY_QUEST_FEATHERS, MAX_ACTIVE_QUESTS, WEEKLY_QUEST_FEATHERS, goalCount, goalMatches, goalText, isRewardItem, questFeathers, type QuestDef } from './quests';
 import { DAILY_ITEMS, SHOP_PRICES, WEEKLY_MIX, offerFor, shopRotation } from './shop';
 import { SPECIES, getSpecies, isSpecies, selectableSpecies } from './species';
 import { isLook } from './validate';
@@ -424,5 +424,21 @@ describe('quest ledger', () => {
     expect(goalText(q.steps[0]!.goal)).toBe('Flop into 4 leaf piles');
     expect(getInteractable('grove-leaves-2')!.kind).toBe('leaf-pile');
     expect(NPC_TALK_RADIUS).toBeGreaterThan(KIND_RULES['leaf-pile'].reach);
+  });
+});
+
+describe('the great tree’s quest steps met in the Great Hollow (D5, Nov 19)', () => {
+  it('counts a visit, a flap, a look or a gather in the hollow for a step worded for the hub', () => {
+    expect(goalMatches({ kind: 'visit', room: 'hub' }, { kind: 'visit', room: 'm3-hall' })).toBe(true);
+    expect(goalMatches({ kind: 'emote', emote: 'flap', room: 'hub' }, { kind: 'emote', emote: 'flap', room: 'm3-hall', near: [] })).toBe(true);
+    expect(goalMatches({ kind: 'interact', what: 'telescope', count: 1, room: 'hub' }, { kind: 'interact', what: 'telescope', id: 't', room: 'm3-hall' })).toBe(true);
+    expect(goalMatches({ kind: 'gather', item: 'acorn', count: 1, room: 'hub' }, { kind: 'gather', item: 'acorn', room: 'm3-hall' })).toBe(true);
+  });
+
+  it('still counts the hub itself, and no other room for it, and not the hub for a step worded for the hollow', () => {
+    expect(goalMatches({ kind: 'visit', room: 'hub' }, { kind: 'visit', room: 'hub' })).toBe(true);
+    expect(goalMatches({ kind: 'visit', room: 'hub' }, { kind: 'visit', room: 'market' })).toBe(false);
+    expect(goalMatches({ kind: 'visit', room: 'm3-hall' }, { kind: 'visit', room: 'hub' })).toBe(false);
+    expect(goalMatches({ kind: 'visit', room: 'market' }, { kind: 'visit', room: 'm3-hall' })).toBe(false);
   });
 });

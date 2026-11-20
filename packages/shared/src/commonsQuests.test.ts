@@ -8,12 +8,13 @@ import { HALL_COMMONS, HALL_ID, HALL_ROOM, clearOfRoots, courseDoor, realmDoor }
 import { distance, isWalkable } from './geometry';
 import { commonsS, HALL_LEAVES, HALL_RINGS, ringAt, voteAt, type HallLevel } from './hollowOval';
 import { INTERACTABLES } from './interactables';
-import { NPCS, NPC_TALK_RADIUS, npcsIn, placeName, placeShown } from './npcs';
+import { NPCS, NPC_TALK_RADIUS, placeName, placeShown } from './npcs';
 import { DAILY_POOL, QUESTS, TOWN_NPCS, WEEKLY_POOL } from './questCatalog';
 import { stepTexts } from './quests';
 
 const LEVELS = HALL_COMMONS.map((c) => c.level);
-const hallOwls = npcsIn(HALL_ID);
+// The Commons' own quest owls (the Party Grove's Bramble and Pip, who moved in on Nov 19, are the hollow's too: hollowResidents.test.ts).
+const hallOwls = NPCS.filter((n) => n.room === HALL_ID);
 
 /** The Commons a point belongs to: the one whose middle, round the rim, is nearest it. */
 function commonsOf(p: { x: number; y: number }): HallLevel {

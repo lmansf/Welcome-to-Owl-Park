@@ -2937,7 +2937,7 @@ export class RoomScene extends Phaser.Scene {
   /** The room's residents: NPC owls, leaf piles, glows under the things that stay put, and the light its warm air rises in. */
   private addResidents(): void {
     const scale = itemScale(this.cfg.pixelRatio);
-    for (const def of npcsIn(this.room.id)) this.npcs.set(def.id, new NpcOwl(this, def, scale, (npc, pointer, event) => this.onNpcTap(npc, pointer, event)));
+    for (const def of npcsIn(this.room.id, walkingMap())) this.npcs.set(def.id, new NpcOwl(this, def, scale, (npc, pointer, event) => this.onNpcTap(npc, pointer, event)));
     for (const def of interactablesIn(this.room.id)) {
       if (def.kind === 'leaf-pile') this.piles.set(def.id, new LeafPile(this, def));
       else if (FLOOR_KINDS.has(def.kind)) {

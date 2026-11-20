@@ -75,19 +75,32 @@ export type QuestEvent =
   | { kind: 'gather'; item: QuestItemKind; room: string }
   | { kind: 'puzzle'; puzzle: string };
 
+/**
+ * Rooms that count as another for quest goals: the Great Hollow (`m3-hall`) for `hub`. The Party Grove,
+ * the room `hub` on the new map, was folded into the hollow (Nov 19, the owner's "Fold into the hub"),
+ * and its owls and games moved in there (NEW_MAP_HOMES, party/ids.ts); a step worded for the great tree
+ * ("Visit the great tree", "Flap once in the great tree") is met in the hollow too, as in the hub itself.
+ */
+export const GOAL_ROOM_TOO: Readonly<Record<string, string>> = { hub: 'm3-hall' };
+
+/** Is an event in `room` in the goal's room (`goalRoom`)? */
+export function inGoalRoom(goalRoom: string, room: string): boolean {
+  return room === goalRoom || (Object.hasOwn(GOAL_ROOM_TOO, goalRoom) && GOAL_ROOM_TOO[goalRoom] === room);
+}
+
 /** Does an event count toward a goal? (Counting and distinctness are the ledger's job.) */
 export function goalMatches(goal: Goal, ev: QuestEvent): boolean {
   switch (goal.kind) {
     case 'talk':
       return ev.kind === 'talk' && ev.npc === goal.npc;
     case 'visit':
-      return ev.kind === 'visit' && ev.room === goal.room;
+      return ev.kind === 'visit' && inGoalRoom(goal.room, ev.room);
     case 'interact':
-      return ev.kind === 'interact' && ev.what === goal.what && (goal.room === undefined || ev.room === goal.room);
+      return ev.kind === 'interact' && ev.what === goal.what && (goal.room === undefined || inGoalRoom(goal.room, ev.room));
     case 'emote':
-      return ev.kind === 'emote' && ev.emote === goal.emote && (goal.room === undefined || ev.room === goal.room) && (goal.npc === undefined || ev.near.includes(goal.npc));
+      return ev.kind === 'emote' && ev.emote === goal.emote && (goal.room === undefined || inGoalRoom(goal.room, ev.room)) && (goal.npc === undefined || ev.near.includes(goal.npc));
     case 'gather':
-      return ev.kind === 'gather' && ev.item === goal.item && ev.room === goal.room;
+      return ev.kind === 'gather' && ev.item === goal.item && inGoalRoom(goal.room, ev.room);
     case 'puzzle':
       return ev.kind === 'puzzle' && ev.puzzle === goal.puzzle;
   }
