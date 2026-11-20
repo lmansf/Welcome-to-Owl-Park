@@ -400,6 +400,8 @@ def draw(A):
     A.tunnel([(176, 20), (184, 20), (185, 40), (196, 40)], bare=(1,), w=4)               # up a smooth shaft (kick)
     A.hall("clerestory", 196, 38, 340, 56, rough=True)
     A.tunnel([(340, 44), (346, 40), (350, 40)])
+    A.carve(316, 37, 320, 44)                    # keep the kick shaft's mouth open through the clerestory's floor
+    A.carve(180, 37, 186, 44)
     A.put("bench", 260, 38)
 
     # ======================= The Gloamglow Caves ====================================================
