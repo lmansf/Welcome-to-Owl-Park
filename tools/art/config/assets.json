@@ -6759,6 +6759,174 @@
       "format": "webp",
       "with_2x": true
     },
+    "kit-glass-sign-hanging": {
+      "w": 240,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-sign-arrow": {
+      "w": 240,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-signpost": {
+      "w": 160,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-sign-board": {
+      "w": 160,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-hazard-thorns": {
+      "w": 320,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-hazard-moth": {
+      "w": 120,
+      "h": 100,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-glass-hazard-lantern": {
+      "w": 120,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-sign-hanging": {
+      "w": 240,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-sign-arrow": {
+      "w": 240,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-signpost": {
+      "w": 160,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-sign-board": {
+      "w": 160,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-hazard-thorns": {
+      "w": 320,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-hazard-moth": {
+      "w": 120,
+      "h": 100,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-clearing-hazard-lantern": {
+      "w": 120,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-sign-hanging": {
+      "w": 240,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-sign-arrow": {
+      "w": 240,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-signpost": {
+      "w": 160,
+      "h": 300,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-sign-board": {
+      "w": 160,
+      "h": 240,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-hazard-thorns": {
+      "w": 320,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-hazard-moth": {
+      "w": 120,
+      "h": 100,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "kit-neon-hazard-lantern": {
+      "w": 120,
+      "h": 200,
+      "kind": "piece",
+      "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
     "kit-landmark-pane-cracked": {
       "w": 240,
       "h": 320,

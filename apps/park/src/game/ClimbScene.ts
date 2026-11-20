@@ -47,6 +47,18 @@ const CRUMBLE_GONE_MS = 900;
 const HIT_STOP_MS = 70;
 /** Where each painted piece's standing surface lies, in logical px from its top edge (lanterns and clouds rise above it). */
 const SURFACE: Readonly<Record<string, number>> = { 'climb-ledge-a': 11, 'climb-ledge-b': 11, 'climb-balcony': 36, 'climb-cloud-cap': 135 };
+/**
+ * The glass realm's painted hazards (OP-373): ruby shards for the thorns, a stained-glass moth, a
+ * cracked molten lantern. Each is drawn from its painting once it has come, and from shapes until then.
+ */
+export const CLIMB_HAZARD_ART = { thorns: 'kit-glass-hazard-thorns', moth: 'kit-glass-hazard-moth', lantern: 'kit-glass-hazard-lantern' } as const;
+const CLIMB_LOADS = [...CLIMB_ART_KEYS, ...Object.values(CLIMB_HAZARD_ART)];
+/** The thorns' painting: its 320x120 box (logical px), the row its tallest shards reach (so none looks higher than the bed hurts), and its ends. */
+const THORN_ART = { w: 320, h: 120, top: 50, left: 12, right: 312 };
+/** The lantern's painting is drawn this big (its body about the hit circle with its spikes round it), turning about the middle of its body. */
+const LANTERN_ART = { scale: 0.36, originY: 0.65 };
+/** The moth's painting is drawn this big, about the middle of its wings. */
+const MOTH_ART = { scale: 0.4, originY: 0.585 };
 /** The band's tints, foot to clouds: the tower's glass warms as it rises. */
 const BAND_TINTS = [0x1a2d5a, 0x24366b, 0x3a3f78, 0x58437f, 0x7a4f85, 0x9c6a8f];
 
@@ -103,6 +115,9 @@ export class ClimbScene extends Phaser.Scene {
   private ledgeViews = new Map<Ledge, { view: Phaser.GameObjects.Image | Phaser.GameObjects.Graphics; x: number; y: number }>();
   private moving: Phaser.GameObjects.Graphics | null = null;
   private movingGlow: Phaser.GameObjects.Graphics | null = null;
+  /** The painted lanterns and moths, one for each in the layout, while their paintings have come. */
+  private lanternViews: Phaser.GameObjects.Image[] = [];
+  private mothViews: Phaser.GameObjects.Image[] = [];
   private shade: Phaser.GameObjects.Rectangle | null = null;
   private vignette: Phaser.GameObjects.Graphics | null = null;
   private dust: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
@@ -164,12 +179,14 @@ export class ClimbScene extends Phaser.Scene {
       this.dust = null;
       this.sparks = null;
       this.ledgeViews.clear();
+      this.lanternViews = [];
+      this.mothViews = [];
       this.backdrop = null;
       this.painted = false;
-      releaseArt(this, CLIMB_ART_KEYS);
+      releaseArt(this, CLIMB_LOADS);
     });
     const cfg = this.registry.get('config') as ParkConfig | undefined;
-    void loadArt(this, CLIMB_ART_KEYS, cfg?.pixelRatio ?? 1, cfg?.artScaleMax ?? 1).then(() => {
+    void loadArt(this, CLIMB_LOADS, cfg?.pixelRatio ?? 1, cfg?.artScaleMax ?? 1).then(() => {
       // The pieces came after the tower was drawn: draw it again from them.
       if (this.run && this.tower) this.paint(this.run.layout);
     });
@@ -280,8 +297,13 @@ export class ClimbScene extends Phaser.Scene {
       }
       glow.fillStyle(tint, l.road === 'high' ? 0.26 : 0.18).fillRect(l.x, -l.y - 4, l.w, 6);
     }
-    // The thorns: beds and ceilings of rose shards.
+    // The thorns: beds and ceilings of rose shards, painted where the painting has come.
     for (const th of layout.thorns) {
+      if (this.textures.exists(CLIMB_HAZARD_ART.thorns)) {
+        this.paintThorns(tower, th);
+        glow.fillStyle(THORN, 0.14).fillRect(th.x, -th.y - th.h - 4, th.w, th.h + 8);
+        continue;
+      }
       const g = this.add.graphics();
       g.fillStyle(0x3a1f4a, 1).fillRect(th.x, -th.y - th.h, th.w, th.h);
       g.fillStyle(THORN, 0.95);
@@ -325,12 +347,64 @@ export class ClimbScene extends Phaser.Scene {
       glow.fillStyle(last ? 0xffffff : 0xffd36a, 0.14).fillRect(0, -y - 6, CLIMB_FIELD_W, 8);
       if (!last) glow.fillStyle(LANTERN_GOLD, 0.16).fillEllipse(CLIMB_FIELD_W / 2, -y - 2, 150, 18);
     });
+    this.makeHazardViews(layout);
     // The start ledge: the foot of the tower.
     const foot = this.add.graphics();
     foot.fillStyle(0x2a3b63, 1).fillRect(-40, 0, CLIMB_FIELD_W + 80, 200);
     foot.fillStyle(GLASS, 0.6).fillRect(0, -2, CLIMB_FIELD_W, 4);
     tower.add(foot);
     this.painted = painted && this.textures.exists('climb-cloud-cap');
+  }
+
+  /**
+   * A bed of thorns from the painting: its shards stand along the bed's top, tiled across its width
+   * (each tile a little stretched so whole tiles meet its ends, and nothing is drawn past them). A
+   * ceiling (a deep bed) is a dark slab with shards hanging from its underside and standing on its top.
+   */
+  private paintThorns(tower: Phaser.GameObjects.Container, th: { x: number; y: number; w: number; h: number }): void {
+    const band = THORN_ART.h - THORN_ART.top;
+    const span = THORN_ART.right - THORN_ART.left;
+    const row = (edge: number, reach: number, down: boolean) => {
+      const k = reach / band;
+      const n = Math.max(1, Math.round(th.w / (span * k)));
+      const each = th.w / n;
+      const sx = each / span;
+      for (let i = 0; i < n; i++) {
+        const img = this.add
+          .image(th.x + i * each - THORN_ART.left * sx, edge, CLIMB_HAZARD_ART.thorns)
+          .setOrigin(0, down ? 0 : 1)
+          .setDisplaySize(THORN_ART.w * sx, THORN_ART.h * k)
+          .setFlipY(down)
+          .setFlipX(i % 2 === 1);
+        tower.add(img);
+      }
+    };
+    if (th.h <= 30) {
+      row(-th.y, th.h + 6, false);
+      return;
+    }
+    const slab = this.add.graphics();
+    slab.fillStyle(0x3a1f4a, 1).fillRect(th.x, -th.y - th.h, th.w, th.h);
+    tower.add(slab);
+    row(-th.y - th.h, 30, false);
+    row(-th.y, 30, true);
+  }
+
+  /** One painted lantern for each lantern and one painted moth for each moth, while the paintings have come; none otherwise. */
+  private makeHazardViews(layout: Layout): void {
+    for (const v of [...this.lanternViews, ...this.mothViews]) v.destroy();
+    this.lanternViews = [];
+    this.mothViews = [];
+    if (this.textures.exists(CLIMB_HAZARD_ART.lantern)) {
+      const a = ART[CLIMB_HAZARD_ART.lantern]!;
+      this.lanternViews = layout.lanterns.map(() =>
+        this.add.image(0, 0, CLIMB_HAZARD_ART.lantern).setOrigin(0.5, LANTERN_ART.originY).setDisplaySize(a.w * LANTERN_ART.scale, a.h * LANTERN_ART.scale).setDepth(4),
+      );
+    }
+    if (this.textures.exists(CLIMB_HAZARD_ART.moth)) {
+      const a = ART[CLIMB_HAZARD_ART.moth]!;
+      this.mothViews = layout.moths.map(() => this.add.image(0, 0, CLIMB_HAZARD_ART.moth).setOrigin(0.5, MOTH_ART.originY).setDisplaySize(a.w * MOTH_ART.scale, a.h * MOTH_ART.scale).setDepth(4));
+    }
   }
 
   /** The lanterns on their chains, the moths on their tracks, and the frail glass under the owl, where the clock has them. */
@@ -340,20 +414,36 @@ export class ClimbScene extends Phaser.Scene {
     if (g && glow) {
       g.clear();
       glow.clear();
-      for (const l of layout.lanterns) {
+      layout.lanterns.forEach((l, i) => {
         const b = lanternBob(l, s.t, night.pace);
         g.lineStyle(2, CHAIN, 1).lineBetween(l.x, -l.y, b.x, -b.y);
         g.fillStyle(CHAIN, 1).fillRoundedRect(l.x - 8, -l.y - 3, 16, 6, 2);
+        const view = this.lanternViews[i];
+        if (view) {
+          // The painted lantern hangs along its chain, its glow a hot orange round it.
+          view.setPosition(b.x, -b.y).setRotation(-Math.atan2(b.x - l.x, l.y - b.y));
+          glow.fillStyle(0xff8a3a, 0.22).fillCircle(b.x, -b.y, LANTERN_R + 12);
+          return;
+        }
         // A glass lantern: a dark cap and foot, gold panes between lead lines, a warm glow around it.
         g.fillStyle(CHAIN, 1).fillRoundedRect(b.x - 9, -b.y - LANTERN_R - 2, 18, 6, 2).fillRoundedRect(b.x - 7, -b.y + LANTERN_R - 5, 14, 5, 2);
         g.fillStyle(LANTERN_GOLD, 0.95).fillRoundedRect(b.x - 12, -b.y - LANTERN_R + 3, 24, LANTERN_R * 2 - 7, 6);
         g.lineStyle(1.5, CHAIN, 0.9).strokeRoundedRect(b.x - 12, -b.y - LANTERN_R + 3, 24, LANTERN_R * 2 - 7, 6).lineBetween(b.x, -b.y - LANTERN_R + 3, b.x, -b.y + LANTERN_R - 4);
         g.fillStyle(0xfff2c2, 0.95).fillCircle(b.x, -b.y, 5);
         glow.fillStyle(LANTERN_GOLD, 0.22).fillCircle(b.x, -b.y, LANTERN_R + 12);
-      }
-      for (const m of layout.moths) {
+      });
+      layout.moths.forEach((m, i) => {
         const p = mothAt(m, s.t, night.pace);
         const flap = Math.sin(s.t / 45) * 0.5 + 0.5;
+        const view = this.mothViews[i];
+        if (view) {
+          // The painted moth faces the way it flies, its wings beating, a trail of violet light behind it.
+          const a = ART[CLIMB_HAZARD_ART.moth]!;
+          view.setPosition(p.x, -p.y).setFlipX(p.dir < 0).setDisplaySize(a.w * MOTH_ART.scale, a.h * MOTH_ART.scale * (0.82 + 0.18 * flap));
+          glow.fillStyle(0xc07bff, 0.2).fillCircle(p.x, -p.y, MOTH_R + 10);
+          glow.fillStyle(0xc07bff, 0.12).fillEllipse(p.x - p.dir * 18, -p.y, 30, 8);
+          return;
+        }
         // A glass moth: a slim body, two wings of mint glass beating, a trail of light on its track.
         glow.fillStyle(MOTH, 0.2).fillCircle(p.x, -p.y, MOTH_R + 10);
         glow.fillStyle(MOTH, 0.12).fillEllipse(p.x - p.dir * 18, -p.y, 30, 8);
@@ -361,7 +451,7 @@ export class ClimbScene extends Phaser.Scene {
         g.fillStyle(0xd8fff4, 0.95).fillEllipse(p.x, -p.y, 10, 16);
         g.lineStyle(1, LEAD, 0.8).strokeEllipse(p.x - p.dir * 2, -p.y - 2 - 6 * flap, 26, 10 + 6 * flap);
         g.fillStyle(LEAD, 1).fillCircle(p.x + p.dir * 3, -p.y - 5, 1.6);
-      }
+      });
     }
     // Frail glass shivers under the owl as its time runs out; it falls away when it gives, then returns.
     for (const [l, v] of this.ledgeViews) {

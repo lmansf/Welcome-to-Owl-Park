@@ -98,7 +98,11 @@ const WOOD = 'kit-tex-inner-wood';
 /** The vent each column rises from, at its foot. */
 const vents = (cols: readonly Updraft[]): KitDecal[] => cols.map((u) => ({ piece: 'kit-clearing-updraft-vent', x: u.x + u.w / 2, y: G - 40, scale: 0.6 }));
 
-/** Bramble filling a pit of the ground line, patch by patch, as solid as the thorns it is (OP-343): no walk shows through it. */
+/**
+ * Bramble filling a pit of the ground line, patch by patch, as solid as the thorns it is (OP-343): no walk shows through it.
+ * The clearing's berry-red painted thorns (kit-clearing-hazard-thorns, OP-373) wait in the kit: filling these pits
+ * they are more of the screen off the tree's palette than the screen check allows.
+ */
 function bramble(x0: number, x1: number, piece = 'kit-clearing-bramble-patch', step = 240): KitDecal[] {
   const out: KitDecal[] = [];
   for (let x = x0 + step / 2, i = 0; x < x1; x += step, i++) out.push({ piece, x, y: G - 30, hazard: true, ...(i % 2 ? { flip: true } : {}) });
@@ -215,10 +219,11 @@ const CANOPY_1: RoomKit = {
   ],
   props: [
     { id: 'gate-fern', piece: 'kit-clearing-fern-tall', x: 200, top: 0 },
+    { id: 'way-sign', piece: 'kit-clearing-sign-arrow', x: 470, top: 0, scale: 0.7 },
     { id: 'roots-fern', piece: 'kit-clearing-fern-clump', x: 4470, top: 0, scale: 0.8 },
   ],
   scenes: [
-    { id: 'gate', story: 'A tall fern leans over the curtain of vines where the course begins, the way back to the clearing.', props: ['gate-fern'], about: ['to-commons'] },
+    { id: 'gate', story: 'Where the course begins, a tall fern leans over the vine curtain home, and a mossy arrow sign points on into the canopy.', props: ['gate-fern', 'way-sign'], about: ['to-commons'] },
     { id: 'tiny-door', story: 'Half hidden by a fern among the roots, a tiny door with a warm light behind its crack.', props: ['roots-fern'], about: ['roots'] },
   ],
   decals: [...bramble(2000, ROOTS_MOSS), ...vents(U_ACT1)],
