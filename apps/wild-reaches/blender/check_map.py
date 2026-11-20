@@ -12,6 +12,7 @@ anything that hurts is a dead end. It also measures the world: how many screens 
 
 Run: python check_map.py [--world night-tree]      (uses every core; writes build/reach.json)
 """
+import collections
 import json
 import math
 import multiprocessing
@@ -202,11 +203,11 @@ def explore(world, have):
         root.step({"left": False, "right": False, "up": False, "down": False, "jump": False, "dash": False})
     found = {"shrines": set(), "benches": set(), "zones": set(), "won": False}
     seen = {rest_key(root.p): True}
-    todo = [root]
+    todo = collections.deque([root])
     mac = macros(have)
     smac = swim_macros(have)
     while todo:
-        s = todo.pop()
+        s = todo.popleft()   # breadth first, so a place is first met by its shortest way
         for m in (smac if s.p["wet"] else mac):
             c = s.clone()
             c.p["vx"] = 0.0
@@ -220,6 +221,10 @@ def explore(world, have):
                 res = play(c, m[1])
             if res != "rest":
                 continue
+            if c.p["ground"]:
+                # settle: a rest is a rest once the dash has recharged and a kick's lock has passed
+                for _ in range(24):
+                    _step(c, NOKEYS)
             p = c.p
             for sh in shrines:
                 if abs(sh["x"] - p["x"]) < 1.6 and abs(sh["z"] - p["z"]) < 2.5:
