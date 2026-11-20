@@ -306,11 +306,11 @@ def draw(A):
     A.hall("spire", -8, 72, 48, 140, landmark="heart-lanterns")
     A.tunnel([(48, 96), (70, 96)])                                     # out onto the canyon's first mesa
     A.climb(8, 18, 72, 136)
-    A.tunnel([(13, 136), (13, 154)], w=4, bare=(0,))                   # up the heartwood to the crown (kick)
     A.put("bench", 30, 72)
     A.put("feather", 44, 75.4)
     A.carve(-22, 150, 62, Z1, cave=False)                              # open sky over the tree
     A.island(-34, 74, 154, t=4)                                        # the crown, the top of the world tree
+    A.tunnel([(13, 136), (13, 154)], w=4, bare=(0,))                   # up the heartwood to the crown (kick)
     A.put("crown", 20, 154)
     A.put("bench", 0, 154)
 

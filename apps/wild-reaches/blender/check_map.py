@@ -168,25 +168,36 @@ def timed(c, segs, limit=480, let_go=False):
     return "lost"
 
 
-def climb(c, d, limit=360):
-    """Up a shaft by kicks: jump toward the wall, and kick off each wall as it is touched."""
-    face = d
-    for t in range(limit):
-        p = c.p
-        press = p["wall"] != 0 and t % 6 == 0
-        if p["wall"] != 0:
-            face = -p["wall"]
-        inp = {"left": face < 0 if t > 3 else d < 0, "right": face > 0 if t > 3 else d > 0, "up": False, "down": False,
-               "jump": t < 3 or press or (p["vz"] > 0 and t % 6 != 0), "dash": False}
-        if p["wall"] != 0 and not press:
-            inp["left"] = p["wall"] < 0
-            inp["right"] = p["wall"] > 0
+def climb(c, d, limit=900):
+    """Up a shaft by kicks: straight up first (a jump, then a flap at the top), then toward the
+    wall on side d, kicking off each wall while falling past it and steering for the other."""
+    def go(keys):
+        inp = dict(NOKEYS)
+        inp.update(keys)
         c.step(inp)
         ev = c.events
-        if ev and ("hurt" in ev or "faint" in ev):
-            return "hurt"
-        if t > 10 and c.p["ground"] and abs(c.p["vx"]) < 0.01:
+        return not (ev and ("hurt" in ev or "faint" in ev))
+    lr = {"left": d < 0, "right": d > 0}
+    for n, keys in ((12, {"jump": True}), (28, {**lr, "jump": True}), (2, lr), (10, {**lr, "jump": True})):
+        for _ in range(n):
+            if not go(keys):
+                return "hurt"
+    face = d
+    held = True
+    for t in range(limit):
+        p = c.p
+        if p["ground"] and t > 4:
             return "rest"
+        jump = True                      # jump is held through each rise, so it is not cut short
+        if p["wall"] != 0 and p["vz"] <= 0:
+            if held:
+                jump = False             # let go for a tick, so the next press is a new press: the kick
+            else:
+                face = -p["wall"]
+        keys = {"left": face < 0, "right": face > 0, "jump": jump}
+        held = jump
+        if not go(keys):
+            return "hurt"
     return "lost"
 
 
