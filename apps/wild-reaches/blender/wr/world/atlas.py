@@ -293,7 +293,7 @@ def draw(A):
     # out to the great tree's roots, up a 6 m step (the flap)
     A.tunnel([(-70, -30), (-50, -30), (-34, -28), (-27, -28), (-26, -22), (-14, -22)], bare=(3,), w=5)
     # west to the ember deep, up a smooth shaft (the wall kick)
-    A.tunnel([(-128, -30), (-150, -30), (-170, -34), (-186, -34), (-187, -18), (-206, -18), (-226, -22)], bare=(4,), w=4)
+    A.tunnel([(-128, -30), (-150, -30), (-170, -34), (-186, -34), (-187, -18), (-206, -18), (-226, -22)], bare=(3,), w=4)
 
     # ======================= The Great Tree: the hollow, the spire, the crown ======================
     A.hall("hollow", -14, -22, 54, 60, landmark="heart-roots", rough=True)
