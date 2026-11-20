@@ -62,10 +62,7 @@ describe('the Great Hollow has the Party Grove’s games', () => {
       expect(l.pos.x).toBeLessThanOrEqual(beam.floor.x + beam.floor.w);
       expect(l.pos.y).toBeLessThan(beam.floor.y);
     });
-    for (const p of [beam.floor, ...[0.1, 0.5, 0.9].map((f) => ({ x: beam.floor.x + beam.floor.w * f, y: beam.floor.y + beam.floor.h / 2 }))]) {
-      const at = 'w' in p ? rectCenter(p) : p;
-      expect(isWalkable(at, hall.walkable)).toBe(true);
-    }
+    for (const f of [0.1, 0.5, 0.9]) expect(isWalkable({ x: beam.floor.x + beam.floor.w * f, y: beam.floor.y + beam.floor.h / 2 }, hall.walkable)).toBe(true);
     // Their glows draw over the posts they hang from.
     expect(beam.glowDepth).toBeGreaterThan(Math.max(...posts.map((p) => p.y)));
   });
