@@ -22,6 +22,7 @@ glide (sea floor). Three bells (canyon, two in the sky) wake the sunwell on the 
 """
 import math
 import random
+import zlib
 
 import numpy as np
 
@@ -154,7 +155,7 @@ class Atlas:
 
     def hall(self, name, x0, z0, x1, z1, landmark=None, rough=True, seed=0):
         """A cavern: its floor is z0. A ragged roof and walls; a floor rolling no more than a metre."""
-        rng = random.Random(hash((name, seed)) & 0xFFFFFFFF)
+        rng = random.Random(zlib.crc32(f"{name}:{seed}".encode()))   # stable from run to run (hash() is not)
         self.carve(x0, z0, x1, z1)
         if rough:
             x = x0
