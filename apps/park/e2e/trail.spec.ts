@@ -25,7 +25,7 @@ test.describe('the feather trail (OP-307)', () => {
   });
 
   test('through the turnstiles the feathers lead a new owl to the Great Hollow’s roots, its quiz and its lanterns, then on to the arcade’s hatch, a place to play, and no sign names the way back until the owl has stepped away (OP-337, OP-347, Dec 1 plan D5)', async ({ page }) => {
-    // Two rooms, five walks across the hall and the trail laid four times: more than the suite's 45 s on a slow phone.
+    // Two rooms, six walks across the hall and the trail laid four times: more than the suite's 45 s on a slow phone.
     test.setTimeout(160_000);
     await openPark(page, { room: 'lobby', keeper: '1', newmap: '1' });
     await page.evaluate(() => window.owlPark.walkTo(2595, 800));
@@ -90,7 +90,10 @@ test.describe('the feather trail (OP-307)', () => {
       .poll(async () => (await state(page)).trail?.glints ?? ['play-lanterns'], { timeout: 10_000 })
       .not.toContain('play-lanterns');
 
-    // Every game found: the feathers lead on to the hatch at the front, a place to play.
+    // Every game found, and back at the roots: the feathers lead on to the hatch at the front, a place to
+    // play, past the realms' doorways either side of the knothole. (From the lantern posts the nearest
+    // way to play is the grove's course instead.)
+    await walkAndStop(page, root.x, root.y + 90);
     const hatch = doors.find((d) => d.id === 'down')!;
     await expect
       .poll(
