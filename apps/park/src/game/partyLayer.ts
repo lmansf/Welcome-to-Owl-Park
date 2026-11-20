@@ -1,5 +1,5 @@
 /**
- * The party game in the park (OP-314), behind the friends preview (`?friends=1`): the Old Stump and its
+ * The party game in the park (OP-314), on for every visitor since Nov 20: the Old Stump and its
  * four seats in the Great Hollow, drawn as size boxes; the stump's card, where owls sit, stand and the
  * first to sit starts the game; and, in a game's own room, the party screen over everything.
  *
