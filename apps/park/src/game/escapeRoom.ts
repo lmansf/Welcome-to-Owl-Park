@@ -29,7 +29,6 @@ import {
   type ServerEscape,
   type Vec2,
 } from '@owl-park/shared';
-import { flagOn } from '../flags';
 import type { EscapeLink } from '../net/transport';
 import type { Hud } from '../ui/hud';
 import { createCodePad, type CodePad } from '../ui/puzzle';
@@ -162,7 +161,7 @@ function padLock(l: EscapeLockView): LockView {
 
 // ---------- the doorway in the plaza ----------
 
-/** The doorway on the clearing's front edge, drawn and offered only with `?friends=1`. */
+/** The doorway on the clearing's front edge. */
 export class EscapeDoorway {
   private readonly box: Phaser.GameObjects.Container;
   private sheet: HTMLElement | null = null;
@@ -486,9 +485,8 @@ export class EscapeHollow {
   }
 }
 
-/** The hollow's controller in an escape room, the doorway's in its plaza: only with `?friends=1`. */
+/** The hollow's controller in an escape room, the doorway's in its plaza: on for every visitor since Nov 20. */
 export function escapeFor(room: RoomDef, host: EscapeHost): { hollow: EscapeHollow | null; doorway: EscapeDoorway | null } {
-  if (!flagOn('friends')) return { hollow: null, doorway: null };
   if (isEscapeRoom(room.id)) return { hollow: new EscapeHollow(host), doorway: null };
   if (room.id === ESCAPE_DOOR.room) return { hollow: null, doorway: new EscapeDoorway(host) };
   return { hollow: null, doorway: null };

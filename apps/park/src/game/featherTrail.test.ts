@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { COPY_SPOT, FISHING_REACH, FISHING_SPOT, QUIZ_ZONES, distance, doorTarget, isWalkable, pointInRect, quizZoneAt, underBeam, type DoorDef, type Rect } from '@owl-park/shared';
+import { COPY_SPOT, FISHING_REACH, FISHING_SPOT, QUIZ_ZONES, distance, doorTarget, isWalkable, lanternBeam, pointInRect, quizStage, quizZoneAt, underBeam, type DoorDef, type Rect } from '@owl-park/shared';
 import { ROOMS } from '@owl-park/shared/rooms';
 import {
   DOORS_TRIED_KEY,
@@ -136,8 +136,8 @@ describe('the trail leads to a room’s own games first (OP-338)', () => {
 
   it('knows each room’s games by the floor an owl plays them from', () => {
     expect(Object.keys(PLAY_SPOTS).sort()).toEqual(['grove', 'hub', 'lobby', 'm3-hall', 'market']);
-    // The Great Hollow's roots (OP-347): the floor before each inner run's first root, one find between the two.
-    expect(PLAY_SPOTS['m3-hall']!.map((s) => s.id)).toEqual(['play-roots', 'play-roots']);
+    // The Great Hollow's lanterns and quiz (the Party Grove's, folded in: Dec 1 plan D5), and its roots (OP-347): the floor before each inner run's first root, one find between the two.
+    expect(PLAY_SPOTS['m3-hall']!.map((s) => s.id)).toEqual(['play-lanterns', 'play-quiz', 'play-roots', 'play-roots']);
     // The Treetop Commons' rising air (OP-363): a first flight before the turnstiles.
     expect(PLAY_SPOTS['lobby']!.map((s) => s.id)).toEqual(['play-rise']);
     expect(PLAY_SPOTS['hub']!.map((s) => s.id)).toEqual(['play-lanterns', 'play-quiz']);
@@ -156,9 +156,13 @@ describe('the trail leads to a room’s own games first (OP-338)', () => {
     const spots = PLAY_SPOTS['m3-hall']!;
     const to = trailTo(from, spots, doors, () => true);
     expect(to && 'id' in to ? to.id : null).toBe('play-roots');
-    // Found (one mark for both runs), the trail leads to a doorway.
+    // Found (one mark for both runs), the trail leads on to the hollow's other games, and once those are found too, to a doorway.
     const tried = new TriedDoors(null);
     tried.add('m3-hall', 'play-roots');
+    const after = trailTo(from, spots.filter((s) => !tried.has('m3-hall', s.id)), doors, () => true);
+    expect(after && 'id' in after ? ['play-lanterns', 'play-quiz'].includes(after.id) : false).toBe(true);
+    tried.add('m3-hall', 'play-lanterns');
+    tried.add('m3-hall', 'play-quiz');
     const left = spots.filter((s) => !tried.has('m3-hall', s.id));
     expect(left).toEqual([]);
     const next = trailTo(from, left, doors, () => true);
@@ -172,6 +176,13 @@ describe('the trail leads to a room’s own games first (OP-338)', () => {
     for (const zone of Object.values(QUIZ_ZONES)) for (const p of corners(zone)) expect(pointInRect(p, quiz)).toBe(true);
     for (const p of corners(spot('grove', 'play-fishing').rect)) expect(distance(p, FISHING_SPOT)).toBeLessThanOrEqual(FISHING_REACH);
     expect(spot('market', 'play-copy').rect).toEqual(COPY_SPOT);
+    // The Great Hollow's (Dec 1 plan D5): in front of its lantern posts, and on its answer plates.
+    const hallBeam = lanternBeam('m3-hall')!;
+    for (const p of [mid(spot('m3-hall', 'play-lanterns').rect), ...corners(spot('m3-hall', 'play-lanterns').rect)]) expect(underBeam(p, 0, hallBeam)).toBe(true);
+    const hallStage = quizStage('m3-hall')!;
+    const hallQuiz = spot('m3-hall', 'play-quiz').rect;
+    expect(quizZoneAt(mid(hallQuiz), hallStage)).toBe('b');
+    for (const zone of Object.values(hallStage.zones)) for (const p of corners(zone)) expect(pointInRect(p, hallQuiz)).toBe(true);
   });
 
   it('in the Party Grove leads from where an owl lands to the lantern beam, on to the quiz stage, and only then to a doorway', () => {

@@ -26,9 +26,13 @@ import {
   DEFAULT_LOOK,
   HEARTBEAT_FRAME,
   KIND_RULES,
+  LANTERN_BEAMS,
   LANTERN_ROOM,
   QUIZ_FEATHERS,
   QUIZ_ROOM,
+  QUIZ_STAGES,
+  lanternBeam,
+  quizStage,
   NPC_EMOTE_RADIUS,
   NPC_TALK_RADIUS,
   REALMS_DEFAULTS,
@@ -275,9 +279,17 @@ const OWNED_REFRESH_MS = 2_000;
 const OWNED_CACHE_MAX = 1_000;
 /** Storage key for used-up shared objects (leaf piles): room id -> object id -> when it is back. */
 const OBJECTS_KEY = 'objects';
-/** Storage keys for the hub's lantern beam and the last stage quiz round settled. */
+/**
+ * Storage keys for a room's lanterns and the last stage quiz round it settled: the plaza's keep their
+ * first names, and every other room (the Great Hollow) has its own, as one object may serve several rooms.
+ */
 const LANTERNS_KEY = 'lanterns';
 const QUIZ_KEY = 'quiz';
+const lanternsKey = (room: string): string => (room === LANTERN_ROOM ? LANTERNS_KEY : `${LANTERNS_KEY}:${room}`);
+const quizKey = (room: string): string => (room === QUIZ_ROOM ? QUIZ_KEY : `${QUIZ_KEY}:${room}`);
+/** The rooms with lanterns, and with a stage quiz. */
+const LANTERN_ROOMS = Object.keys(LANTERN_BEAMS);
+const QUIZ_ROOMS = Object.keys(QUIZ_STAGES);
 /** Storage key for the sealed hollows' runs (OP-310), so a group's run outlasts the object's sleep (not the night's restart). */
 const ESCAPES_KEY = 'escapes';
 /** How close to the sealed hollow's doorway an owl asks for its groups (room px from the doorway's middle). */
@@ -495,10 +507,14 @@ export class RoomObject extends DurableObject<Env> {
       const saved = await ctx.storage.get<Record<string, Record<string, number>>>(OBJECTS_KEY);
       for (const [id, until] of Object.entries(saved ?? {})) if (Object.hasOwn(ROOMS, id)) this.room(id).restoreObjects(until);
       // A lantern beam still burning, and the last quiz round paid, so a round is never paid twice.
-      const lanterns = await ctx.storage.get<LanternState>(LANTERNS_KEY);
-      if (lanterns && Object.hasOwn(ROOMS, LANTERN_ROOM)) this.activities(LANTERN_ROOM).restoreLanterns(lanterns);
-      const settled = await ctx.storage.get<number>(QUIZ_KEY);
-      if (typeof settled === 'number' && Object.hasOwn(ROOMS, QUIZ_ROOM)) this.activities(QUIZ_ROOM).quizSettled = settled;
+      for (const id of LANTERN_ROOMS) {
+        const lanterns = await ctx.storage.get<LanternState>(lanternsKey(id));
+        if (lanterns && Object.hasOwn(ROOMS, id)) this.activities(id).restoreLanterns(lanterns);
+      }
+      for (const id of QUIZ_ROOMS) {
+        const settled = await ctx.storage.get<number>(quizKey(id));
+        if (typeof settled === 'number' && Object.hasOwn(ROOMS, id)) this.activities(id).quizSettled = settled;
+      }
       // The realms switch as last heard, so a wake from hibernation does not close an open realm.
       const realms = await ctx.storage.get<unknown>(REALMS_KEY);
       if (realms) this.realms = cleanRealms(realms);
@@ -1344,9 +1360,9 @@ export class RoomObject extends DurableObject<Env> {
     this.accountLook(att, look);
     this.checkDevice(ws, att);
     if (recheck) void this.recheckLook(att, hello.look);
-    // The lantern beam as it burns now; and the hub wakes when its next quiz question closes.
-    if (att.room === LANTERN_ROOM) this.send(ws, this.activities(att.room).lanternFrame());
-    if (att.room === QUIZ_ROOM) await this.scheduleAlarm();
+    // The room's lanterns as they burn now; and a quiz room wakes when its next question closes.
+    if (lanternBeam(att.room)) this.send(ws, this.activities(att.room).lanternFrame());
+    if (quizStage(att.room)) await this.scheduleAlarm();
     // The arcade's score wall as it stands, with this owl's own bests.
     if (isArcadeRoom(att.room)) this.serial(att, () => this.sendWall(ws, att));
     // Into a sealed hollow's group, and everyone inside sees who is waiting (OP-310).
@@ -1984,7 +2000,7 @@ export class RoomObject extends DurableObject<Env> {
           if (!res.ok) return no(res.reason);
           this.send(ws, { t: 'act', r, a, ok: true, id: res.id });
           room.broadcast(acts.lanternFrame({ id: res.id, by: att.id }));
-          this.saveLanterns(acts);
+          this.saveLanterns(att.room, acts);
           // A spectator's light counts toward the beam, and for no task (OP-191).
           if (!practice) this.pushTasks(ws, await this.earnFor(att, 0, { kind: 'light' }));
           if (res.full) await this.payBeam(res.full);
@@ -2128,15 +2144,20 @@ export class RoomObject extends DurableObject<Env> {
     }
   }
 
-  /** A stage quiz question that just closed: the answer for everyone in the hub, and pay for the owls in its zone (a spectator's, nothing: OP-191). */
+  /** A stage quiz question that just closed, in each quiz room with owls in it. */
   private async settleQuiz(): Promise<void> {
-    const hub = this.rooms.get(QUIZ_ROOM);
+    for (const id of QUIZ_ROOMS) await this.settleQuizIn(id);
+  }
+
+  /** The answer for everyone in the room, and pay for the owls in its zone (a spectator's, nothing: OP-191). */
+  private async settleQuizIn(roomId: string): Promise<void> {
+    const hub = this.rooms.get(roomId);
     if (!hub?.count) return;
-    const acts = this.activities(QUIZ_ROOM);
+    const acts = this.activities(roomId);
     const due = acts.quizDue();
     if (!due) return;
     const { right, winners } = acts.settleQuiz(due);
-    await this.ctx.storage.put(QUIZ_KEY, due.n);
+    await this.ctx.storage.put(quizKey(roomId), due.n);
     hub.broadcast({ t: 'quiz', n: due.n, right, winners });
     for (const id of winners) {
       const ws = this.socketOf(id);
@@ -2152,15 +2173,15 @@ export class RoomObject extends DurableObject<Env> {
     }
   }
 
-  private saveLanterns(acts: Activities): void {
-    this.ctx.waitUntil(this.ctx.storage.put(LANTERNS_KEY, acts.lanternState()));
+  private saveLanterns(room: string, acts: Activities): void {
+    this.ctx.waitUntil(this.ctx.storage.put(lanternsKey(room), acts.lanternState()));
   }
 
   /** When the object should wake next: the housekeeping minute, or sooner when a hub quiz question closes. */
   private nextWake(now: number): number {
     let next = now + ALARM_EVERY_MS;
     if (this.closingAt !== null) next = Math.min(next, this.closingAt);
-    if (this.rooms.get(QUIZ_ROOM)?.count) next = Math.min(next, this.activities(QUIZ_ROOM).nextQuizClose());
+    for (const id of QUIZ_ROOMS) if (this.rooms.get(id)?.count) next = Math.min(next, this.activities(id).nextQuizClose());
     const party = this.party.due(now);
     if (party !== null) next = Math.min(next, Math.max(now, party));
     return next;

@@ -4,11 +4,9 @@ import {
   FISHING_REACH,
   FISHING_ROOM,
   FISHING_SPOT,
-  LANTERN_FLOOR,
+  LANTERN_BEAMS,
   LOBBY_ROOM,
-  LANTERN_ROOM,
-  QUIZ_ROOM,
-  QUIZ_ZONES,
+  QUIZ_STAGES,
   distance,
   pointInRect,
   type DoorDef,
@@ -139,13 +137,13 @@ export interface PlaySpot {
 /** Half the side of the square that fits inside the fishing spot's reach. */
 const FISH_HALF = Math.floor(FISHING_REACH / Math.SQRT2);
 
-/** The floor before the stump stage: the quiz's three answer zones, side by side. */
-const QUIZ_FLOOR: Rect = (() => {
-  const zones = Object.values(QUIZ_ZONES);
+/** The floor before a quiz's stage: its three answer zones, side by side. */
+function quizFloor(stage: (typeof QUIZ_STAGES)[string]): Rect {
+  const zones = Object.values(stage.zones);
   const x = Math.min(...zones.map((z) => z.x));
   const y = Math.min(...zones.map((z) => z.y));
   return { x, y, w: Math.max(...zones.map((z) => z.x + z.w)) - x, h: Math.max(...zones.map((z) => z.y + z.h)) - y };
-})();
+}
 
 /**
  * TODO-DOCS (OP-338): docs/ARCHITECTURE.md's note on the feather trail gains its order: a room's own
@@ -167,8 +165,9 @@ const RISE_HALF = Math.floor(COMMONS_THERMAL.r / Math.SQRT2);
 
 export const PLAY_SPOTS: Readonly<Record<string, readonly PlaySpot[]>> = (() => {
   const all: Array<[string, PlaySpot]> = [
-    [LANTERN_ROOM, { id: 'play-lanterns', rect: LANTERN_FLOOR }],
-    [QUIZ_ROOM, { id: 'play-quiz', rect: QUIZ_FLOOR }],
+    // The lanterns and the quiz: the plaza's, and the Great Hollow's since the Party Grove was folded into it (Dec 1 plan D5).
+    ...Object.entries(LANTERN_BEAMS).map(([room, beam]): [string, PlaySpot] => [room, { id: 'play-lanterns', rect: beam.floor }]),
+    ...Object.entries(QUIZ_STAGES).map(([room, stage]): [string, PlaySpot] => [room, { id: 'play-quiz', rect: quizFloor(stage) }]),
     // The square that fits inside the fishing spot's reach: anywhere in it the jetty's Fish is there to press.
     [FISHING_ROOM, { id: 'play-fishing', rect: { x: FISHING_SPOT.x - FISH_HALF, y: FISHING_SPOT.y - FISH_HALF, w: FISH_HALF * 2, h: FISH_HALF * 2 } }],
     [COPY_ROOM, { id: 'play-copy', rect: COPY_SPOT }],

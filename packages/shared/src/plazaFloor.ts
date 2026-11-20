@@ -200,6 +200,13 @@ export const PLAZA_CLUSTERS: readonly FloorCluster[] = [
       { kind: 'shiny', x: 4380, y: 1000 },
     ],
   },
+  // The Great Hollow (Dec 1 plan D5): the Party Grove's telescope came in with its lanterns and quiz.
+  {
+    id: 'hall-stars',
+    room: 'm3-hall',
+    story: 'The Party Grove’s telescope, set up beside the knothole at the back of the hollow and aimed up through it at the owl-shaped stars.',
+    things: [{ kind: 'telescope', x: 2440, y: 380 }],
+  },
 ];
 
 /** A thing's id: its cluster's, its kind and, past the first of its kind there, a number. */
