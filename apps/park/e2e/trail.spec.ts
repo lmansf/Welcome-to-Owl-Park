@@ -24,7 +24,7 @@ test.describe('the feather trail (OP-307)', () => {
     await expect.poll(async () => (await state(page)).trail?.feathers.length ?? 0, { timeout: 15_000 }).toBeGreaterThan(0);
   });
 
-  test('through the turnstiles the feathers lead a new owl to the Great Hollow’s roots, its quiz and its lanterns, then on to the arcade’s hatch, a place to play, and no sign names the way back until the owl has stepped away (OP-337, OP-347, Dec 1 plan D5)', async ({ page }) => {
+  test('through the turnstiles the feathers lead a new owl to the Great Hollow’s roots, its quiz and its lanterns, then on to a doorway into play, and no sign names the way back until the owl has stepped away (OP-337, OP-347, Dec 1 plan D5)', async ({ page }) => {
     // Two rooms, six walks across the hall and the trail laid four times: more than the suite's 45 s on a slow phone.
     test.setTimeout(160_000);
     await openPark(page, { room: 'lobby', keeper: '1', newmap: '1' });
@@ -90,26 +90,26 @@ test.describe('the feather trail (OP-307)', () => {
       .poll(async () => (await state(page)).trail?.glints ?? ['play-lanterns'], { timeout: 10_000 })
       .not.toContain('play-lanterns');
 
-    // Every game found, and back on the quiz plates: the feathers lead on to the hatch at the front, a
-    // place to play, past the realms' doorways either side of the knothole. (From the lantern posts the
-    // nearest way to play is the grove's course instead.) Polled as a line saying what the trail did, so
-    // a miss shows where the owl stood and where the feathers went.
+    // Every game found, and back on the quiz plates: the feathers lead on to a doorway into play (the
+    // arcade's hatch or a course), not a realm's. Which one is nearest depends on where in the hall the
+    // owl stands now its games are spread across it. Polled as a line saying what the trail did, so a
+    // miss shows where the owl stood and where the feathers went.
     await walkAndStop(page, quiz.x, quiz.y);
-    const hatch = doors.find((d) => d.id === 'down')!;
+    const toPlay = doors.filter((d) => d.id === 'down' || d.id.startsWith('course-'));
     await expect
       .poll(
         async () => {
           const s = await state(page);
           const feathers = s.trail?.feathers ?? [];
           const last = feathers[feathers.length - 1];
-          const ok = feathers.length > 3 && !!last && Math.hypot(last.x - hatch.x, last.y - hatch.y) < 260 && feathers.every((f) => f.y > s.pos.y);
+          const ok = feathers.length > 3 && !!last && toPlay.some((d) => Math.hypot(last.x - d.x, last.y - d.y) < 260);
           return ok
-            ? 'to the hatch'
+            ? 'to a place to play'
             : `owl at ${Math.round(s.pos.x)},${Math.round(s.pos.y)}; ${feathers.length} feathers to ${last ? `${Math.round(last.x)},${Math.round(last.y)}` : 'nowhere'}; glints ${s.trail?.glints.join(' ')}`;
         },
         { timeout: 20_000 },
       )
-      .toBe('to the hatch');
+      .toBe('to a place to play');
 
     // Out onto the floor, clear of every doorway, and back: now the knothole is named.
     const up = doors.find((d) => d.id === 'up')!;
