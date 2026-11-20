@@ -698,7 +698,7 @@ export class RoomScene extends Phaser.Scene {
   private climb: Climb | null = null;
   /** The parkour course, in a room that is one of its acts (OP-224); the owl holds the dash there. */
   private course: Course | null = null;
-  /** The sealed hollow (OP-310, `?friends=1`): its run in an escape room, its doorway in the grove; the link to both. */
+  /** The sealed hollow (OP-310): its run in an escape room, its doorway in the grove; the link to both. */
   private hollow: EscapeHollow | null = null;
   private doorway: EscapeDoorway | null = null;
   private escapeLink: EscapeLink | null = null;
@@ -1384,7 +1384,8 @@ export class RoomScene extends Phaser.Scene {
       spectating: () => this.spectator,
       spectatorOffer: (line) => this.afterGameOffer(line),
     });
-    if (flagOn('friends') && (room.id === STUMP_ROOM || isPartyRoom(room.id))) {
+    // The party game (OP-314), on for every visitor since Nov 20.
+    if (room.id === STUMP_ROOM || isPartyRoom(room.id)) {
       this.party = new PartyLayer({
         scene: this,
         room: room.id,
@@ -2665,7 +2666,7 @@ export class RoomScene extends Phaser.Scene {
     // The glass realm's portal: the climb, while the keepers' switch has the portal live.
     portal: { label: 'Climb', run: () => (this.realms.portal ? void this.climb?.play() : this.hud.toast(PORTAL_OFF)) },
     mirror: { label: NEST_WORDS.mirror, run: () => this.lookInMirror() },
-    // The sealed hollow's doorway in the grove (OP-310), there only with `?friends=1`.
+    // The sealed hollow's doorway in the grove (OP-310).
     'escape-door': { label: ESCAPE_WORDS.door, run: () => void this.doorway?.open() },
   };
 
