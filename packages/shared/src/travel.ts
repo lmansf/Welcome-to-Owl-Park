@@ -57,8 +57,9 @@ export const TRAVEL_LANDINGS: Readonly<Record<string, Landing>> = {
 
 /**
  * Where travel lands an owl walking the new map (OP-305): every place on its map, each where walking in
- * by its main way arrives. The Party Grove is its own room here (today's park's great tree lands at
- * the gate), and the Great Hollow is a place of its own (the root stair folded into the arcade, OP-306).
+ * by its main way arrives. The Great Hollow is a place of its own (the root stair folded into the arcade,
+ * OP-306). The Party Grove, the room `hub` here, is no place on it since Nov 21: folded into the hollow
+ * (the owner's Nov 19 "Fold into the hub"), its door grown over.
  */
 export const NEW_MAP_LANDINGS: Readonly<Record<string, Landing>> = {
   lobby: { room: LOBBY_ROOM, spawn: 'default' },
@@ -68,7 +69,6 @@ export const NEW_MAP_LANDINGS: Readonly<Record<string, Landing>> = {
   ink: { room: 'ink', spawn: 'from-hub' },
   grove: { room: 'grove', spawn: 'default' },
   market: { room: 'market', spawn: 'default' },
-  hub: { room: 'hub', spawn: 'default' },
   arcade: { room: 'arcade', spawn: 'from-cavern' },
 };
 

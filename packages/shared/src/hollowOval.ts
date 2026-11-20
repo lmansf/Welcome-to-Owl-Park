@@ -154,8 +154,10 @@ export const wayAt = (id: HallWay, inset = 0): Vec2 => rimAt(wayS(id), inset);
  * come down"): the glass realm has no course (the ink-wash realm's room, the ink garden, opened it way in, OP-402). No doorway, blockade or
  * closed sign stands at one: the tree has grown over it (rooms/hollowHall.ts, HALL_GROWN, which a test
  * holds to what each Commons leads to). A way opens by coming off this list and its Commons gaining the room.
+ * The trunk's door at the front grew over on Nov 21 (Dec 1 plan D5): the Party Grove was folded into the
+ * hollow (the owner's Nov 19 "Fold into the hub"), its owls, games and moonstones moved in, so nothing is out there.
  */
-export const GROWN_WAYS: readonly HallWay[] = ['course-glass'];
+export const GROWN_WAYS: readonly HallWay[] = ['course-glass', 'to-party'];
 
 /** Each Commons' middle round the rim: between its realm's doorway and its course's gate, where its idol stands. */
 export const commonsS = (level: HallLevel): number => (wayS(`to-${level}` as HallWay) + wayS(`course-${level}` as HallWay)) / 2;
@@ -231,7 +233,8 @@ export const HALL_RINGS: ReadonlyArray<{ id: string; pos: Vec2 }> = [
  * would leave them. Two drift either side of the knothole at the back, where it blows in, one lies by the
  * hatch, where they fall through, and one out in front of the heart, between the trunk's door and the hatch.
  * Since Nov 18, when the plazas' moonbeams went, one more: leaves blown in at the trunk's door from the
- * Party Grove drift east along the rim toward the neon Commons, so its side of the floor is no empty walk.
+ * Party Grove drift east along the rim toward the neon Commons, so its side of the floor is no empty walk;
+ * the roots grown over that door since Nov 21 still let the wind through.
  */
 export const HALL_LEAVES: ReadonlyArray<{ id: string; pos: Vec2 }> = [
   { id: 'leaves-hatch', pos: rimAt(wayS('down') + sized(380), 260) },

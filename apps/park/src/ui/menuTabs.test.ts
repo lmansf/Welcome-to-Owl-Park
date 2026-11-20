@@ -57,12 +57,15 @@ describe('the map’s travel cards (OP-130)', () => {
 });
 
 describe('the map on the new map (OP-282)', () => {
-  const NEW_ROOMS = ['homes', 'lobby', 'm3-hall', 'glass', 'ink', 'grove', 'market', 'hub', 'arcade'];
+  // The Party Grove folded into the Great Hollow on Nov 21 (D5): no place of the new map any more.
+  const NEW_ROOMS = ['homes', 'lobby', 'm3-hall', 'glass', 'ink', 'grove', 'market', 'arcade'];
 
   it("shows 'You are here' in every room of the new map, and in a nest", () => {
     for (const room of NEW_ROOMS) expect(mapPlaceOf(room, true, [], 3), room).toBe(room);
     expect(mapPlaceOf('nest-abc', true, [], 3)).toBe('nest');
     expect(mapPlaceOf('nest-abc', false, [], 3)).toBe('homes');
+    expect(mapLayout(3).places.some((p) => p.id === 'hub')).toBe(false);
+    expect(mapLayout(3).paths.some((p) => p.includes('hub'))).toBe(false);
   });
 
   it('has a place for every room an owl can walk into on the new map, from the Treetop Commons on (OP-303)', () => {

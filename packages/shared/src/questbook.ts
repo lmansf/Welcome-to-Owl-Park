@@ -12,7 +12,7 @@ import { variantsByRarity } from './collectibles';
 import { distance } from './geometry';
 import { PICKUP_RADIUS } from './collectibles';
 import { INTERACTABLES, type QuestItemSpot } from './interactables';
-import { NPCS } from './npcs';
+import { npcsIn } from './npcs';
 import { sameLevel, type Raised } from './perches';
 import { nextParkDayAt, nextParkMonthAt, nextParkWeekAt, parkDay, parkMonth, parkWeek, rotationRandom } from './parktime';
 import type { Vec2 } from './protocol';
@@ -24,6 +24,7 @@ import {
   WEEKLY_OFFER_DIFFICULTIES,
   goalCount,
   goalMatches,
+  GOAL_ROOM_TOO,
   goalText,
   pickRewardVariant,
   rewardOdds,
@@ -188,18 +189,28 @@ export class QuestBook {
     };
   }
 
-  /** Spots for a quest's items: away from NPCs and interactables, a stable choice per collector and period. */
+  /**
+   * Spots for a quest's items: away from NPCs and interactables, a stable choice per collector and period.
+   * A step's items lie in its room and, as many again, in the room that counts as it (GOAL_ROOM_TOO): the
+   * moonstones of the great tree's quests lie in the plaza on today's park and in the Great Hollow on the
+   * new map, where the Party Grove that was the room `hub` there was folded in (Nov 19) and its door grew
+   * over (Nov 21). Gathered in either, they count the same (inGoalRoom); the room server knows no map.
+   */
   private placeItems(cid: string, q: QuestDef, period: string): QuestItemSpot[] {
     const out: QuestItemSpot[] = [];
     let n = 0;
     q.steps.forEach((s, step) => {
       const g = s.goal;
       if (g.kind !== 'gather') return;
-      const blockers = [...NPCS.filter((x) => x.room === g.room).map((x) => x.pos), ...INTERACTABLES.filter((x) => x.room === g.room).map((x) => x.pos)];
-      const free = (this.spots[g.room] ?? []).filter((p) => blockers.every((b) => distance(p, b) >= ITEM_CLEARANCE));
-      const pickFrom = free.length >= g.count ? free : [...(this.spots[g.room] ?? [])];
-      const chosen = shuffled(pickFrom, rotationRandom(`owl-park-items|${cid}|${q.id}|${period}|${step}`)).slice(0, g.count);
-      for (const p of chosen) out.push({ n: n++, step, room: g.room, x: p.x, y: p.y, ...(p.top ? { top: p.top } : {}), kind: g.item, taken: false });
+      const twin = Object.hasOwn(GOAL_ROOM_TOO, g.room) ? GOAL_ROOM_TOO[g.room] : undefined;
+      for (const room of twin ? [g.room, twin] : [g.room]) {
+        const blockers = [...npcsIn(room).map((x) => x.pos), ...INTERACTABLES.filter((x) => x.room === room).map((x) => x.pos)];
+        const free = (this.spots[room] ?? []).filter((p) => blockers.every((b) => distance(p, b) >= ITEM_CLEARANCE));
+        const pickFrom = free.length >= g.count ? free : [...(this.spots[room] ?? [])];
+        const seed = room === g.room ? `owl-park-items|${cid}|${q.id}|${period}|${step}` : `owl-park-items|${cid}|${q.id}|${period}|${step}|${room}`;
+        const chosen = shuffled(pickFrom, rotationRandom(seed)).slice(0, g.count);
+        for (const p of chosen) out.push({ n: n++, step, room, x: p.x, y: p.y, ...(p.top ? { top: p.top } : {}), kind: g.item, taken: false });
+      }
     });
     return out;
   }

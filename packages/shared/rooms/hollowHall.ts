@@ -178,6 +178,13 @@ export function grownFoot(id: HallWay): Vec2 {
 
 /** Whether a way stands on the front half of the rim, where an owl sees the near wall's top and not its face. */
 export const atFront = (id: HallWay) => rimNormal(angleAt(wayS(id))).y > 0.7;
+/**
+ * The grown-over ways that roots stand over: at the back and the two ends, over the knothole painted there.
+ * At the front an owl sees the near wall's top, not its face, and a way there was only an opening in that top
+ * (bowl gaps): grown over, the wall's top simply runs on unbroken (the trunk's door, Nov 21), with no roots to
+ * stand up over the floor in front of it and no floor cut in round them.
+ */
+export const HALL_ROOTED: readonly HallWay[] = HALL_GROWN.filter((id) => !atFront(id));
 /** Whether a way stands at one of the oval's two ends, the rim running up and down beside it. */
 const atEnd = (id: HallWay) => {
   const n = rimNormal(angleAt(wayS(id)));
@@ -193,7 +200,7 @@ function hollowFloor(): Polygon {
   const n = Math.round(RIM_LENGTH / 40);
   for (let i = 0; i < n; i++) {
     const s = (i / n) * RIM_LENGTH;
-    out.push(rimAt(s, floorInset(s, IDOL_LEVELS, HALL_GROWN)));
+    out.push(rimAt(s, floorInset(s, IDOL_LEVELS, HALL_ROOTED)));
   }
   return out;
 }
@@ -206,6 +213,7 @@ const END_ART_OUT = -6;
 
 /** The art standing at each way: its realm's doorway, the knothole, the trunk's door, the hatch. */
 function wayArt(id: HallWay): string | null {
+  if (HALL_GROWN.includes(id)) return null;
   if (id === 'up') return 'kit-doorway-knothole';
   if (id === 'to-party') return 'kit-clearing-trunk-entrance';
   if (id === 'down') return 'kit-hatch-down';
@@ -300,8 +308,8 @@ const DOORS: DoorDef[] = [
       ? [{ id: voteDoor(c.level), rect: { x: voteAt(c.level).x - 110, y: voteAt(c.level).y - 35, w: 220, h: 70 }, marker: voteAt(c.level) }]
       : []),
   ]),
-  // Out through the trunk's door at the front: the Party Grove at the tree's foot.
-  rimDoor('to-party', { room: 'hub', spawn: 'default' }, 'Out to the Party Grove'),
+  // The trunk's door at the front, out to the Party Grove, grew over on Nov 21 (HALL_GROWN): its owls and games are in here now.
+  ...(HALL_GROWN.includes('to-party') ? [] : [rimDoor('to-party', { room: 'hub', spawn: 'default' }, 'Out to the Party Grove')]),
   // Down the hatch in the floor at the front: straight into the arcade (OP-306, the root stair folded into it).
   (() => {
     const at = wayAt('down', HATCH_IN);
@@ -323,8 +331,9 @@ const DOORS: DoorDef[] = [
  */
 const PIECES: RoomPiece[] = HALL_WAYS.flatMap((id): RoomPiece[] => {
   const key = wayArt(id);
-  // Grown over: the roots stand over the knothole painted there, their foot a little below its point on the rim.
-  if (!key) return HALL_GROWN.includes(id) ? [{ id: `${id}-grown`, key: GROWN_ART, ...grownFoot(id) }] : [];
+  // Grown over: the roots stand over the knothole painted there, their foot a little below its point on the rim
+  // (at the front the wall's top runs on over it instead, HALL_ROOTED).
+  if (!key) return HALL_ROOTED.includes(id) ? [{ id: `${id}-grown`, key: GROWN_ART, ...grownFoot(id) }] : [];
   if (id === 'down') {
     const at = wayAt('down', HATCH_IN);
     return [{ id: 'root-hatch', key, x: at.x, y: at.y + 50 }];
