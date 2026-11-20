@@ -28,6 +28,18 @@ async function hollowPage(browser: Browser, phone: boolean): Promise<Page> {
 
 const tagOf = async (page: Page) => (await state(page)).tag;
 
+/**
+ * A spot kept well inside the ring: running at where Pip is going can aim past the ring's top or bottom
+ * (Pip's path comes within 35 px of them), and an owl that walks out of the ring is out of the game, and
+ * Pip, with nobody left, goes home (failing on main from Nov 20).
+ */
+function inside(p: { x: number; y: number }): { x: number; y: number } {
+  const dx = (p.x - TAG_RING.x) / TAG_RING.rx;
+  const dy = (p.y - TAG_RING.y) / TAG_RING.ry;
+  const k = Math.hypot(dx, dy) / 0.8;
+  return k <= 1 ? p : { x: TAG_RING.x + (p.x - TAG_RING.x) / k, y: TAG_RING.y + (p.y - TAG_RING.y) / k };
+}
+
 /** This page's own owl's id: the one in the game that is not one of the others it sees. */
 async function selfIn(page: Page): Promise<string> {
   const s = await state(page);
@@ -120,7 +132,7 @@ test.describe('never a one-owl game: Pip stands in (OP-426)', () => {
       await page.waitForTimeout(200);
       const b = (await tagOf(page))!.standIn!;
       const lead = 3; // a little over half a second ahead
-      await page.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), { x: b.x + (b.x - a.x) * lead, y: b.y + (b.y - a.y) * lead });
+      await page.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), inside({ x: b.x + (b.x - a.x) * lead, y: b.y + (b.y - a.y) * lead }));
       await page.waitForTimeout(700);
     }
     await expect.poll(async () => (await tagOf(page))?.holder, { timeout: 5_000 }).toBe('npc:pip');
