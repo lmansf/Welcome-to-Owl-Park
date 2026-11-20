@@ -30,6 +30,8 @@ import {
   NIGHTS,
   PLAY_FEATHERS_PER_DAY,
   QUIZ_ZONES,
+  lanternBeam,
+  quizStage,
   RESTART_NOTICE,
   SETUP_WORDS,
   ROOM_W,
@@ -2876,5 +2878,61 @@ describe('the Realm Vote’s shares in the Great Hollow (OP-288)', () => {
       expect((await shares(obj, bad)).status, JSON.stringify(bad)).toBe(400);
     }
     expect(inHall.of('shares')).toEqual([]);
+  });
+});
+
+describe('the Party Grove’s lanterns and quiz in the Great Hollow (Dec 1 plan D5)', () => {
+  const act = (ws: FakeSocket, r: number) => ws.of('act').find((f) => f.r === r);
+  let seqs = 0;
+  async function walk(obj: Obj, ws: FakeSocket, ...path: Vec2[]) {
+    for (const to of path) {
+      await send(obj, ws, { t: 'move', to, seq: ++seqs });
+      clock += 20_000;
+    }
+  }
+  /** Round the grove's roots, south of them, from wherever the owl came in. */
+  const round = (ws: FakeSocket): Vec2[] => [ws.last('welcome')!.you.pos, { x: 2720, y: 1480 }, { x: 3700, y: 1450 }];
+
+  it('keeps the hollow’s lanterns apart from the plaza’s, lit from the floor in front of the posts', async () => {
+    const beam = lanternBeam('m3-hall')!;
+    const lit: LanternState = { lit: Object.fromEntries(beam.lanterns.slice(1).map((l) => [l.id, clock + 600_000])), glowUntil: 0, helpers: {} };
+    const asked: string[] = [];
+    const puts: string[] = [];
+    state.storage.get = async (key: string) => {
+      asked.push(key);
+      return key === 'lanterns:m3-hall' ? structuredClone(lit) : undefined;
+    };
+    state.storage.put = async (key: string) => void puts.push(key);
+    const obj = roomObject();
+    const ws = await join(obj, 'm3-hall', 'v_hallowl01', OWNER);
+    expect(asked).toEqual(expect.arrayContaining(['lanterns', 'lanterns:m3-hall', 'quiz', 'quiz:m3-hall']));
+    // A newcomer is sent the row as it burns.
+    expect(ws.last('lanterns')).toMatchObject({ t: 'lanterns' });
+    await walk(obj, ws, ...round(ws), { x: beam.lanterns[0]!.pos.x, y: beam.floor.y + 50 });
+    await send(obj, ws, { t: 'act', a: 'light', r: 1 });
+    await settle();
+    expect(act(ws, 1)).toMatchObject({ ok: true, id: 'hall-lantern-1' });
+    // The other three were lit from the hollow's own storage: this one fills the row.
+    expect(ws.last('paid')).toMatchObject({ t: 'paid', what: 'beam' });
+    expect(ws.last('lanterns')!.glowUntil).toBeGreaterThan(clock);
+    expect(puts).toContain('lanterns:m3-hall');
+    expect(puts).not.toContain('lanterns');
+  });
+
+  it('asks the stage quiz in the hollow and pays the owls on the right plate', async () => {
+    const puts: string[] = [];
+    state.storage.put = async (key: string) => void puts.push(key);
+    const obj = roomObject();
+    const ws = await join(obj, 'm3-hall', 'v_hallowl01', OWNER);
+    const q = quizRound(quizRoundAt(clock).n + 2);
+    const zone = quizStage('m3-hall')!.zones[q.right];
+    await walk(obj, ws, ws.last('welcome')!.you.pos, { x: zone.x + zone.w / 2, y: zone.y + zone.h / 2 });
+    clock = q.revealAt + 1;
+    await obj.alarm();
+    await settle();
+    expect(ws.last('quiz')).toMatchObject({ n: q.n, right: q.right, winners: ['v_hallowl01'] });
+    expect(ws.last('paid')).toMatchObject({ what: 'quiz' });
+    expect(puts).toContain('quiz:m3-hall');
+    expect(puts).not.toContain('quiz');
   });
 });

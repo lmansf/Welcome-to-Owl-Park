@@ -6,16 +6,13 @@ import {
   FISHING_ROOM,
   FISHING_SPOT,
   KIND_RULES,
-  LANTERN_FLOOR,
   LANTERN_REACH_X,
-  LANTERN_ROOM,
-  LANTERNS,
   NPC_TALK_RADIUS,
   PICKUP_CLIENT_RADIUS,
-  QUIZ_ROOM,
-  QUIZ_ZONES,
   SPRITES,
   interactablesIn,
+  lanternBeam,
+  quizStage,
   type Rect,
   type RoomDef,
   type Vec2,
@@ -94,11 +91,13 @@ export class FitOverlay {
     // Things up on a perch (OP-084) have their reach drawn up there, where an owl on that perch is drawn.
     for (const def of interactablesIn(room.id)) g.lineStyle(2, C.reach, 0.8).strokeCircle(def.pos.x, def.pos.y - (def.top ?? 0), KIND_RULES[def.kind].reach);
     for (const s of room.spots ?? []) g.lineStyle(1, C.reach, 0.35).strokeCircle(s.x, s.y - (s.top ?? 0), PICKUP_CLIENT_RADIUS);
-    if (room.id === LANTERN_ROOM) {
-      this.rect(LANTERN_FLOOR, C.spot);
-      for (const l of LANTERNS) g.lineStyle(1, C.reach, 0.6).lineBetween(l.pos.x - LANTERN_REACH_X, LANTERN_FLOOR.y, l.pos.x + LANTERN_REACH_X, LANTERN_FLOOR.y);
+    const beam = lanternBeam(room.id);
+    if (beam) {
+      this.rect(beam.floor, C.spot);
+      for (const l of beam.lanterns) g.lineStyle(1, C.reach, 0.6).lineBetween(l.pos.x - LANTERN_REACH_X, beam.floor.y, l.pos.x + LANTERN_REACH_X, beam.floor.y);
     }
-    if (room.id === QUIZ_ROOM) for (const z of Object.values(QUIZ_ZONES)) this.rect(z, C.spot);
+    const stage = quizStage(room.id);
+    if (stage) for (const z of Object.values(stage.zones)) this.rect(z, C.spot);
     if (room.id === FISHING_ROOM) g.lineStyle(2, C.reach, 0.8).strokeCircle(FISHING_SPOT.x, FISHING_SPOT.y, FISHING_REACH);
     if (room.id === COPY_ROOM) this.rect(COPY_SPOT, C.spot);
     for (const n of this.subjects.npcs()) {

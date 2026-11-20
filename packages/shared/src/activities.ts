@@ -7,6 +7,7 @@
  */
 import { CABINETS } from './arcade';
 import { pointInRect, type Rect } from './geometry';
+import { HALL_HEART } from './hollowOval';
 import type { Vec2 } from './protocol';
 
 // ---------- feathers ----------
@@ -33,6 +34,48 @@ export const LANTERNS: readonly { id: string; pos: Vec2 }[] = [
 export const LANTERN_FLOOR: Rect = { x: 670, y: 690, w: 660, h: 150 };
 /** The owl lights the dark lantern nearest above it, at most this far to either side. */
 export const LANTERN_REACH_X = 90;
+
+/** A row of lanterns an owl lights from the floor beside them: the lanterns, where each glows, and that floor. */
+export interface LanternBeam {
+  readonly lanterns: readonly { id: string; pos: Vec2 }[];
+  readonly floor: Rect;
+  /** Where the glows draw among the room's pieces, when the lanterns hang on art standing on the floor (else each lantern's own y). */
+  readonly glowDepth?: number;
+}
+
+/**
+ * The Great Hollow's lantern posts (Dec 1 plan D5): when the Party Grove was folded into the hollow
+ * (Nov 19, the owner's "Fold into the hub"), its lanterns came too, as a row of lamp posts on the open
+ * floor past the end of the grove's roots, toward the neon Commons: four to light together from the
+ * floor in front of them. Each post's foot (room px), for its art (`kit-post-lantern`, 120 x 300), which
+ * hangs its paper lantern from an arm to the left: the lantern glows HALL_LANTERN_AT from the foot,
+ * measured from the art.
+ */
+export const HALL_LANTERN_POSTS: readonly Vec2[] = [
+  { x: 3840, y: 1110 },
+  { x: 3960, y: 1110 },
+  { x: 4080, y: 1110 },
+  { x: 4200, y: 1110 },
+];
+export const HALL_LANTERN_ART = 'kit-post-lantern';
+export const HALL_LANTERN_AT: Vec2 = { x: -19, y: -67 };
+
+/** The lantern rows, by room: the plaza's beam on today's park (`hub`), the posts in the Great Hollow. */
+export const LANTERN_BEAMS: Readonly<Record<string, LanternBeam>> = {
+  [LANTERN_ROOM]: { lanterns: LANTERNS, floor: LANTERN_FLOOR },
+  'm3-hall': {
+    lanterns: HALL_LANTERN_POSTS.map((p, i) => ({ id: `hall-lantern-${i + 1}`, pos: { x: p.x + HALL_LANTERN_AT.x, y: p.y + HALL_LANTERN_AT.y } })),
+    floor: { x: 3800, y: 1120, w: 440, h: 110 },
+    glowDepth: 1112,
+  },
+};
+
+/** A room's lanterns, if it has any. */
+export function lanternBeam(room: string): LanternBeam | undefined {
+  return Object.hasOwn(LANTERN_BEAMS, room) ? LANTERN_BEAMS[room] : undefined;
+}
+
+const HUB_BEAM: LanternBeam = LANTERN_BEAMS[LANTERN_ROOM]!;
 /** A lantern burns this long, unless the whole beam is lit: long enough for one owl alone, walking along the beam, if it keeps at it. */
 export const LANTERN_BURN_MS = 25_000;
 /** One owl lights one lantern this often, so a beam lit together goes quicker than one lit alone. */
@@ -75,17 +118,18 @@ export type LightResult =
     }
   | { ok: false; reason: 'far' | 'lit' | 'busy' | 'glowing' };
 
-/** Whether an owl at `pos` stands on the floor under the beam (`slack`: extra room for latency). */
-export function underBeam(pos: Vec2, slack = 0): boolean {
-  const f = LANTERN_FLOOR;
+/** Whether an owl at `pos` stands on the floor it lights `beam`'s lanterns from (`slack`: extra room for latency). */
+export function underBeam(pos: Vec2, slack = 0, beam: LanternBeam = HUB_BEAM): boolean {
+  const f = beam.floor;
   return pos.x >= f.x - slack && pos.x <= f.x + f.w + slack && pos.y >= f.y - slack && pos.y <= f.y + f.h + slack;
 }
 
-/** An owl at `pos` lights the dark lantern nearest above it. */
-export function lightLantern(prev: LanternState, by: string, pos: Vec2, now: number, slack = 0): LightResult {
+/** An owl at `pos` lights the dark lantern of `beam` nearest it along the row. */
+export function lightLantern(prev: LanternState, by: string, pos: Vec2, now: number, slack = 0, beam: LanternBeam = HUB_BEAM): LightResult {
+  const LANTERNS = beam.lanterns;
   const s = lanternsAt(prev, now);
   if (s.glowUntil) return { ok: false, reason: 'glowing' };
-  if (!underBeam(pos, slack)) return { ok: false, reason: 'far' };
+  if (!underBeam(pos, slack, beam)) return { ok: false, reason: 'far' };
   const last = s.helpers[by];
   if (last !== undefined && now - last < LANTERN_EVERY_MS) return { ok: false, reason: 'busy' };
   const reach = LANTERNS.filter((l) => Math.abs(l.pos.x - pos.x) <= LANTERN_REACH_X + slack);
@@ -120,6 +164,38 @@ export const QUIZ_ZONES: Readonly<Record<QuizZone, Rect>> = {
   b: { x: 3800, y: 750, w: 200, h: 120 },
   c: { x: 4040, y: 750, w: 200, h: 120 },
 };
+/** Where a room's quiz is asked: the stage the question hangs over, and the three answer zones on the floor. */
+export interface QuizStageDef {
+  readonly stage: Vec2;
+  readonly zones: Readonly<Record<QuizZone, Rect>>;
+  readonly depth: number;
+}
+
+/**
+ * The quiz, by room: the plaza's stump stage on today's park (`hub`), and in the Great Hollow (Dec 1 plan
+ * D5, the Party Grove folded into the hub on Nov 19) the heart: the question is asked over the floor at
+ * the heart's foot, where its guardian stands, and the answer plates lie out in front of it, between the
+ * vote desk and the feather tag ring, short of the bowling lane. Every room asks the same question at the
+ * same time (the park clock). `depth` lays the plates on the floor under every owl standing on them.
+ */
+export const QUIZ_STAGES: Readonly<Record<string, QuizStageDef>> = {
+  [QUIZ_ROOM]: { stage: QUIZ_STAGE, zones: QUIZ_ZONES, depth: 560 },
+  'm3-hall': {
+    stage: { x: HALL_HEART.x, y: 1440 },
+    zones: {
+      a: { x: 2462, y: 1720, w: 165, h: 100 },
+      b: { x: 2642, y: 1720, w: 165, h: 100 },
+      c: { x: 2822, y: 1720, w: 165, h: 100 },
+    },
+    depth: 1710,
+  },
+};
+
+/** A room's quiz, if it has one. */
+export function quizStage(room: string): QuizStageDef | undefined {
+  return Object.hasOwn(QUIZ_STAGES, room) ? QUIZ_STAGES[room] : undefined;
+}
+
 /** A question starts this often (on the park clock, the same for everyone)... */
 export const QUIZ_EVERY_MS = 90_000;
 /** ...and stays open this long: where an owl stands when it closes is its answer... */
@@ -197,8 +273,8 @@ export function quizRoundAt(now: number): QuizRound {
 }
 
 /** The answer zone an owl at `p` stands in, if any. */
-export function quizZoneAt(p: Vec2): QuizZone | null {
-  for (const z of QUIZ_ZONE_IDS) if (pointInRect(p, QUIZ_ZONES[z])) return z;
+export function quizZoneAt(p: Vec2, stage: QuizStageDef = QUIZ_STAGES[QUIZ_ROOM]!): QuizZone | null {
+  for (const z of QUIZ_ZONE_IDS) if (pointInRect(p, stage.zones[z])) return z;
   return null;
 }
 

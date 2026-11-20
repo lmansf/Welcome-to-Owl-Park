@@ -1,16 +1,14 @@
 import Phaser from 'phaser';
-import { QUIZ_STAGE, QUIZ_ZONES, QUIZ_ZONE_IDS, rectCenter, type QuizZone } from '@owl-park/shared';
+import { QUIZ_ZONE_IDS, rectCenter, type QuizStageDef, type QuizZone } from '@owl-park/shared';
 import { symbolTexture } from './symbols';
 
 /** The answer zones' colours (the quiz card in the HUD uses the same ones). */
 const TINTS: Record<QuizZone, number> = { a: 0x9fe8ff, b: 0xffd36a, c: 0xff8cc6 };
-/** On the floor: under every owl in the hub (the floor starts at y 566). */
-const DEPTH = 560;
 
 /**
- * The stage quiz in the hub's east bay (activities.ts): the three answer zones on the floor in front
- * of the stump stage, lettered A, B and C, and a spotlight on the stage. The question itself is on
- * the HUD's card, readable on any screen.
+ * The stage quiz (activities.ts, QUIZ_STAGES): in the plaza's east bay before its stump stage, or out in
+ * front of the Great Hollow's heart. The three answer zones on the floor, lettered A, B and C, and a
+ * spotlight on the stage. The question itself is on the HUD's card, readable on any screen.
  */
 export class QuizPlates {
   private readonly glows = new Map<QuizZone, Phaser.GameObjects.Image>();
@@ -19,9 +17,14 @@ export class QuizPlates {
   private readonly spot: Phaser.GameObjects.Image;
   private shown = '';
 
-  constructor(private readonly scene: Phaser.Scene) {
+  constructor(
+    private readonly scene: Phaser.Scene,
+    private readonly stage: QuizStageDef,
+  ) {
+    /** On the floor: under every owl standing on the plates. */
+    const DEPTH = stage.depth;
     for (const z of QUIZ_ZONE_IDS) {
-      const r = QUIZ_ZONES[z];
+      const r = stage.zones[z];
       const c = rectCenter(r);
       this.glows.set(z, scene.add.image(c.x, c.y, 'fx-glow').setTint(TINTS[z]).setScale(r.w / 210, r.h / 230).setAlpha(0.12).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH));
       const ring = scene.add.graphics().setDepth(DEPTH + 1);
@@ -37,7 +40,7 @@ export class QuizPlates {
           .setDepth(DEPTH + 2),
       );
     }
-    this.spot = scene.add.image(QUIZ_STAGE.x, QUIZ_STAGE.y - 40, 'fx-glow').setTint(0xfff1c1).setScale(1.6, 1).setAlpha(0).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH - 1);
+    this.spot = scene.add.image(stage.stage.x, stage.stage.y - 40, 'fx-glow').setTint(0xfff1c1).setScale(1.6, 1).setAlpha(0).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH - 1);
   }
 
   /** While a question is open the zones light up; once it closes the right one glows gold and the others dim. */
@@ -57,7 +60,7 @@ export class QuizPlates {
   }
 
   private sparkle(z: QuizZone): void {
-    const c = rectCenter(QUIZ_ZONES[z]);
+    const c = rectCenter(this.stage.zones[z]);
     const burst = this.scene.add
       .particles(c.x, c.y - 20, symbolTexture(this.scene, 'star4'), {
         emitting: false,
@@ -68,7 +71,7 @@ export class QuizPlates {
         tint: [TINTS[z], 0xffd36a, 0xffffff],
         blendMode: Phaser.BlendModes.ADD,
       })
-      .setDepth(DEPTH + 3);
+      .setDepth(this.stage.depth + 3);
     burst.explode(18);
     this.scene.time.delayedCall(1200, () => burst.destroy());
   }
