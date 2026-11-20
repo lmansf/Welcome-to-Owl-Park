@@ -22,7 +22,7 @@ import { FOOT_SHADOW_DEPTH, footShadow } from './bowlView';
 import { onCanvas } from './canvasTint';
 import { GUARDIAN_ART, GUARDIAN_AT, GUARDIAN_SCALE, GuardianMind, guardianBoxes, inRoom, type Call, type GuardianFrame, type HeadPose, type Lids, type OwlSeen } from './guardian';
 import { carved, lidded, type Pixels } from './guardianArt';
-import { IDOL_PARTS, PARTS, WING_OPEN_MAX, partKey, reach, wingOpen, type IdolPart } from './idolParts';
+import { IDOL_PARTS, PARTS, WING_OPEN_MAX, partKey, reach, tuckedPose, wingOpen, type IdolPart } from './idolParts';
 import { symbolTexture } from './symbols';
 
 /** The guardian's parts as painted, and where each lies in its frame. */
@@ -278,10 +278,13 @@ export class GuardianView {
     whole.beginDraw();
     stamp('base', partKey('guardian', 'base'), P.parts.base.pivot);
     stamp('body', partKey('guardian', 'body'), body.pivot, { scaleX: wide, scaleY: tall });
+    // Each wing and the head tucked into the body (GUARDIAN_TUCK), so the guardian reads as one owl.
     // Phaser turns clockwise: the left wing's tip swings out to the left, the right wing's to the right.
-    stamp('wing-left', partKey('guardian', 'wing-left'), swell(P.parts['wing-left'].pivot), { rotation: open });
-    stamp('wing-right', partKey('guardian', 'wing-right'), swell(P.parts['wing-right'].pivot), { rotation: -open });
-    const neck = swell(P.parts.head.pivot);
+    for (const side of ['wing-left', 'wing-right'] as const) {
+      const w = tuckedPose(side, swell(P.parts[side].pivot), open);
+      stamp(side, partKey('guardian', side), w.at, { rotation: w.rotation });
+    }
+    const neck = tuckedPose('head', swell(P.parts.head.pivot), open).at;
     stamp('head', headKey(f.lids), { x: neck.x + f.head.dx, y: neck.y + f.head.dy }, { rotation: f.head.roll });
     whole.endDraw();
   }
