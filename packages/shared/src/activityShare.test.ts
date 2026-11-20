@@ -45,7 +45,7 @@ describe('activity share links (OP-392)', () => {
 
   it('says the turnstiles come first, in plain words with no grown-up wording', () => {
     const a = shareActivity('party-grove')!;
-    expect(ACTIVITY_SHARE_WORDS.gateFirst(a)).toBe('Walk through the turnstiles, then you fly on to the Party Grove.');
+    expect(ACTIVITY_SHARE_WORDS.gateFirst(a)).toBe('Walk through the turnstiles, then you fly on to the lanterns and the quiz in the Great Hollow.');
     for (const x of SHARE_ACTIVITIES) for (const s of [x.title, x.line, ACTIVITY_SHARE_WORDS.home(x), ACTIVITY_SHARE_WORDS.play(x)]) expect(s.toLowerCase()).not.toContain('grown');
   });
 });

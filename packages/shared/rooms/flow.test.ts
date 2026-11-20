@@ -23,8 +23,9 @@ function doorwaysFrom(start: string): Map<string, number> {
   return far;
 }
 
-/** The areas of the new map a guest goes looking for (OP-305): the realms' Commons, each course's start, the Party Grove and the arcade. */
-const AREAS = ['m3-hall', 'glass', 'ink', 'grove', 'market', 'brush-1', 'canopy-1', 'circuit-1', 'hub', 'arcade'];
+/** The areas of the new map a guest goes looking for (OP-305): the realms' Commons, each course's start and the arcade.
+ *  The Party Grove was one until Nov 21, when it folded into the Great Hollow (D5): its owls and games are in the hall. */
+const AREAS = ['m3-hall', 'glass', 'ink', 'grove', 'market', 'brush-1', 'canopy-1', 'circuit-1', 'arcade'];
 describe('the new map’s flow: hub and spokes from the Treetop Commons (OP-305)', () => {
   it('reaches every area within two doorways of the Commons', () => {
     const far = doorwaysFrom(LOBBY_ROOM);
@@ -37,5 +38,12 @@ describe('the new map’s flow: hub and spokes from the Treetop Commons (OP-305)
 
   it('puts every area but the courses on the map, a tap away', () => {
     for (const room of AREAS.filter((r) => !/-1$/.test(r))) expect(NEW_MAP_LANDINGS[room], room).toBeDefined();
+  });
+
+  it('leaves the Party Grove off the new map since it folded into the hall (Nov 21): no way in, no place to travel to', () => {
+    expect(doorwaysFrom(LOBBY_ROOM).has('hub')).toBe(false);
+    expect(NEW_MAP_LANDINGS['hub']).toBeUndefined();
+    // An owl still standing in it walks out its way into the trunk, into the hall.
+    expect(doorwaysFrom('hub').get('m3-hall')).toBe(1);
   });
 });

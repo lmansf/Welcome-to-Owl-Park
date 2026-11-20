@@ -54,6 +54,8 @@ export const HOLLOW_LIGHT = 0xddd2c6;
  * What the Great Hollow's painting (OP-418, Nov 15) paints in its wall: every way's doorway in its own
  * realm's look (the knothole up, the trunk's door, the hatch, each Commons' realm door and course gate),
  * and the course gate grown over with roots. The root runs across the floor are perches, drawn over it.
+ * The trunk's door grew over on Nov 21 (D5) and has no piece to put away any more; the painting still
+ * shows it at the front until it is painted again.
  */
 export const HOLLOW_PAINTS: readonly string[] = [
   'knothole',
@@ -61,7 +63,6 @@ export const HOLLOW_PAINTS: readonly string[] = [
   'course-grove-door',
   'to-market-door',
   'course-market-door',
-  'trunk-door',
   'root-hatch',
   'course-ink-door',
   'to-ink-door',

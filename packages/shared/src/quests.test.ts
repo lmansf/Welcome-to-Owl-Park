@@ -435,6 +435,39 @@ describe('the great tree’s quest steps met in the Great Hollow (D5, Nov 19)', 
     expect(goalMatches({ kind: 'gather', item: 'acorn', count: 1, room: 'hub' }, { kind: 'gather', item: 'acorn', room: 'm3-hall' })).toBe(true);
   });
 
+  it("lays a moonstone step's stones in the hollow as well as the Party Grove, and either room's stones count (Nov 21)", () => {
+    const { quests } = rig();
+    // The first day a daily quest on offer starts with moonstones to gather in the Party Grove.
+    const firstGather = (q: QuestDef) => q.steps[0]!.goal.kind === 'gather' && q.steps[0]!.goal.room === 'hub';
+    const offered = (at: number) =>
+      Object.values(quests.board('c1', at).offers)
+        .flat()
+        .map((o) => getQuest(o.id)!)
+        .find((x) => x.cadence === 'daily' && firstGather(x));
+    const day = Array.from({ length: 60 }, (_, d) => d).find((d) => offered(MON + d * DAY))!;
+    const at = MON + day * DAY;
+    const q = offered(at);
+    expect(q).toBeDefined();
+    const goal = q!.steps[0]!.goal as Extract<QuestDef['steps'][number]['goal'], { kind: 'gather' }>;
+    expect(goal.item).toBe('moonstone');
+    expect(quests.accept('c1', q!.id, at, 'm3-hall')).toMatchObject({ ok: true });
+    const items = quests.board('c1', at).active.find((a) => a.id === q!.id)!.items;
+    const inHall = items.filter((i) => i.room === 'm3-hall');
+    expect(inHall).toHaveLength(goal.count);
+    expect(items.filter((i) => i.room === 'hub')).toHaveLength(goal.count);
+    expect(new Set(items.map((i) => i.n)).size).toBe(items.length);
+    for (const i of inHall)
+      expect(
+        SPOTS['m3-hall']!.some((p) => p.x === i.x && p.y === i.y),
+        `${i.x},${i.y}`,
+      ).toBe(true);
+    // The stones in the hall finish the step on their own, as on the new map, where the Party Grove has no way in.
+    expect(quests.gather('c1', q!.id, inHall[0]!.n, 'hub', inHall[0]!, at)).toEqual({ ok: false, reason: 'far' });
+    const picked = inHall.map((i) => quests.gather('c1', q!.id, i.n, 'm3-hall', i, at));
+    const last = picked.at(-1)!;
+    expect(last.ok && last.updates[0]!.ready).toBe(true);
+  });
+
   it('still counts the hub itself, and no other room for it, and not the hub for a step worded for the hollow', () => {
     expect(goalMatches({ kind: 'visit', room: 'hub' }, { kind: 'visit', room: 'hub' })).toBe(true);
     expect(goalMatches({ kind: 'visit', room: 'hub' }, { kind: 'visit', room: 'market' })).toBe(false);

@@ -33,7 +33,8 @@ export interface ShareActivity {
 export const SHARE_ACTIVITIES: readonly ShareActivity[] = [
   { id: 'great-hollow', title: 'The Great Hollow', to: 'the Great Hollow', line: 'The moonlit heart of the great tree, where every way to play begins.', place: { newMap: 'm3-hall', oldMap: null } },
   { id: 'arcade', title: `${ARCADE_NAME}, the arcade`, to: 'the arcade', line: 'Skill games in the arcade under the great tree.', place: { newMap: 'arcade', oldMap: 'arcade' } },
-  { id: 'party-grove', title: 'The Party Grove', to: 'the Party Grove', line: 'Lanterns to light together and a quiz on the stump stage.', place: { newMap: 'hub', oldMap: null } },
+  // The Party Grove's games, in the Great Hollow since Nov 21 (folded in); the id stays, for links already shared.
+  { id: 'party-grove', title: 'Lanterns and the quiz', to: 'the lanterns and the quiz in the Great Hollow', line: 'Lanterns to light together and a quiz on the answer plates.', place: { newMap: 'm3-hall', oldMap: null } },
   { id: 'glass-realm', title: 'The glass realm', to: 'the glass realm', line: 'The stained-glass climb, one window at a time.', place: { newMap: 'glass', oldMap: null } },
   { id: 'ink-garden', title: 'The ink garden', to: 'the ink garden', line: 'Brushstroke Bridges, the ink-wash course.', place: { newMap: 'ink', oldMap: null } },
   { id: 'treehouse-clearing', title: 'The treehouse clearing', to: 'the treehouse clearing', line: 'Fishing from the jetty.', place: { newMap: 'grove', oldMap: 'grove' } },

@@ -261,9 +261,8 @@ export const MAP_PATHS: ReadonlyArray<[string, string]> = [
 /**
  * The new map (OP-282), top to bottom as it is walked: the nests and the Treetop Commons with the
  * turnstiles, then down the knothole into the Great Hollow, the four Commons side by side in it with
- * the realms beyond them, the Party Grove out of the trunk's door, and the root stair down to the
- * cavern and its arcade. Every place travels (NEW_MAP_LANDINGS, OP-305), into the park once through the
- * Treetop Commons' turnstiles.
+ * the realms beyond them (the Party Grove folded into it, Nov 21), and the hatch down to the arcade. Every
+ * place travels (NEW_MAP_LANDINGS, OP-305), into the park once through the Treetop Commons' turnstiles.
  */
 export const NEW_MAP_PLACES: readonly Place[] = [
   { id: 'nest', name: NEST_WORDS.yourNest, col: 0, row: 0 },
@@ -275,8 +274,6 @@ export const NEW_MAP_PLACES: readonly Place[] = [
   { id: 'glass', name: 'The glass realm', col: 0, row: 3 },
   { id: 'grove', name: 'The treehouse clearing', col: 1, row: 3 },
   { id: 'market', name: 'The neon street', col: 2, row: 3 },
-  // On the new map 'hub' is the Party Grove, and travel lands in it (NEW_MAP_LANDINGS), not at the gate.
-  { id: 'hub', name: 'The Party Grove', col: 2, row: 2 },
   { id: 'arcade', name: ARCADE_PLACE, col: 2, row: 4 },
 ];
 
@@ -289,7 +286,6 @@ export const NEW_MAP_PATHS: ReadonlyArray<[string, string]> = [
   ['m3-hall', 'glass'],
   ['m3-hall', 'grove'],
   ['m3-hall', 'market'],
-  ['m3-hall', 'hub'],
   ['m3-hall', 'arcade'],
   ['market', 'arcade'],
 ];
@@ -486,7 +482,7 @@ export function renderMap(panel: HTMLElement, here: string | null, open: readonl
   drawCard();
   if (travel) panel.appendChild(note(mapNote(walking)));
   if (walking === 3) {
-    panel.appendChild(note('Through the turnstiles and down the knothole: the Great Hollow, its four Commons side by side, each with a doorway to its realm and its course. In the middle of the hollow, the trunk’s door out to the Party Grove and the hatch down to the arcade. Outside the turnstiles: the Treetop Commons, the nests’ street and your nest.'));
+    panel.appendChild(note('Through the turnstiles and down the knothole: the Great Hollow, its four Commons side by side, each with a doorway to its realm and its course. In the middle of the hollow, its lanterns, its quiz and the hatch down to the arcade. Outside the turnstiles: the Treetop Commons, the nests’ street and your nest.'));
     return;
   }
   panel.appendChild(note('Inside the turnstiles: the great tree, with the treehouse clearing and the neon street on either side, and Neon Roost off the neon street. Outside the gate: the nests’ street and your nest. The boarded arches open as new realms arrive.'));

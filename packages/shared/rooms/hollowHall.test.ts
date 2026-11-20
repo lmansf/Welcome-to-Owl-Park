@@ -18,6 +18,7 @@ import {
   HALL_CX,
   HALL_CY,
   HALL_GROWN,
+  HALL_ROOTED,
   HALL_ID,
   HALL_LIGHT,
   HEART_THERMAL,
@@ -84,7 +85,7 @@ describe('the Great Hollow (Nov 7; an oval, Nov 8)', () => {
     for (const p of hall.walkable[0]!) expect(ovalR(p), `${p.x},${p.y}`).toBeLessThanOrEqual(1.001);
     expect(hall.walkable[0]!.filter((p) => ovalR(p) > 0.995).length / hall.walkable[0]!.length).toBeGreaterThan(0.8);
     // Each way out at the front has its opening in the near wall's top.
-    for (const id of HALL_WAYS.filter((w) => atFront(w) && w !== 'down'))
+    for (const id of HALL_WAYS.filter((w) => atFront(w) && w !== 'down' && !HALL_GROWN.includes(w)))
       expect(
         HALL_BOWL.gaps!.some((g) => Math.hypot(g.x - middle(id).x, g.y - middle(id).y) < 5),
         id,
@@ -136,11 +137,28 @@ describe('the Great Hollow (Nov 7; an oval, Nov 8)', () => {
       }
     }
     expect(HALL_GROWN).toBe(GROWN_WAYS);
-    expect([...HALL_GROWN]).toEqual(['course-glass']);
+    // The trunk's door to the Party Grove grew over on Nov 21 (D5): the grove's owls and games are in the hall now.
+    expect([...HALL_GROWN]).toEqual(['course-glass', 'to-party']);
     // No blockade and no closed sign anywhere in the room (OP-286): every doorway leads somewhere, or is an idol's vote spot.
     expect(hall.doors.filter((d) => d.closedSign)).toEqual([]);
     for (const d of hall.doors) expect(d.to !== undefined || d.id.startsWith('idol-'), d.id).toBe(true);
-    for (const id of HALL_GROWN) {
+    // At the front (the trunk's door, Nov 21) the near wall's top runs on over a grown-over way: no opening
+    // in it, no roots standing up over the floor in front, and the floor running to the rim as along any wall.
+    expect([...HALL_ROOTED]).toEqual(['course-glass']);
+    for (const id of HALL_GROWN.filter((w) => atFront(w))) {
+      expect(
+        hall.pieces!.some((p) => p.id === `${id}-grown`),
+        id,
+      ).toBe(false);
+      expect(
+        HALL_BOWL.gaps!.some((g) => Math.hypot(g.x - rimAt(wayS(id)).x, g.y - rimAt(wayS(id)).y) < 300),
+        id,
+      ).toBe(false);
+      expect(onFloor(rimAt(wayS(id), 30)), id).toBe(true);
+      for (const p of hall.pieces!)
+        expect(Math.hypot(p.x - rimAt(wayS(id)).x, p.y - rimAt(wayS(id)).y), `${id}: ${p.id}`).toBeGreaterThan(200);
+    }
+    for (const id of HALL_ROOTED) {
       // Roots the kit already has stand over the knothole painted at the way...
       const roots = hall.pieces!.find((p) => p.id === `${id}-grown`)!;
       expect(roots.key).toBe(GROWN_ART);
@@ -214,11 +232,13 @@ describe('the Great Hollow (Nov 7; an oval, Nov 8)', () => {
     expect(roomOnMap(hall, 3)).toBe(hall);
   });
 
-  it('names every open way out on a sign in front of it, the Party Grove among them, clear of its doorway’s art', () => {
+  it('names every open way out on a sign in front of it, clear of its doorway’s art', () => {
     const named = hall.doors.filter((d) => d.label);
     for (const d of hall.doors) expect(!!d.label, d.id).toBe(!!d.to && !d.closedSign);
     expect(new Set(named.map((d) => d.label)).size).toBe(named.length);
-    expect(doorOf('to-party').label).toBe('Out to the Party Grove');
+    // The trunk's door grew over on Nov 21, its sign with it: nothing in the hall points out to the Party Grove.
+    expect(hall.doors.some((d) => d.id === 'to-party')).toBe(false);
+    for (const d of named) expect(d.label, d.id).not.toContain('Party Grove');
     expect(doorOf('up').label).toBe('Up to the Treetop Commons');
     expect(doorOf('down').label).toBe('Down to Neon Roost, the arcade');
     for (const d of named) {
@@ -252,13 +272,13 @@ describe('the Great Hollow (Nov 7; an oval, Nov 8)', () => {
     }
   });
 
-  it('puts the way up at the very back, and the ways out to the Party Grove and down to the arcade at the front', () => {
+  it('puts the way up at the very back, and the way down to the arcade and the grown-over trunk door at the front', () => {
     expect(doorOf('up').to).toEqual({ room: 'lobby', spawn: 'from-hub' });
-    expect(doorOf('to-party').to).toEqual({ room: 'hub', spawn: 'default' });
+    expect(HALL_GROWN).toContain('to-party');
     expect(doorOf('down').to).toEqual({ room: 'arcade', spawn: 'from-cavern' });
     expect(middle('up').x).toBe(HALL_MIDDLE);
     expect(Math.min(...hall.doors.map((d) => middle(d.id).y))).toBe(middle('up').y);
-    for (const id of ['to-party', 'down']) expect(middle(id).y, id).toBeGreaterThan(HALL_CY + 0.8 * HALL_RY);
+    for (const id of ['to-party', 'down'] as const) expect(spot(id).y, id).toBeGreaterThan(HALL_CY + 0.8 * HALL_RY);
     // The leaves lie where the wind leaves them (OP-417): by the knothole they blow in at, and by the hatch they fall through.
     const piles = INTERACTABLES.filter((t) => t.room === HALL_ID && t.kind === 'leaf-pile');
     expect(piles.filter((p) => Math.hypot(p.pos.x - middle('up').x, p.pos.y - middle('up').y) < 900).length).toBeGreaterThanOrEqual(2);

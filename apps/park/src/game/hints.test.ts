@@ -107,8 +107,8 @@ describe('hints seen from above (the Great Hollow, a huge oval of doorways)', ()
   });
 
   it('always keeps a doorway it is told to keep, however far', () => {
-    const near = nearestOffSides(doorways, phone, 2, new Set(['to-party']));
-    expect(near.map((t) => t.id)).toContain('to-party');
+    const near = nearestOffSides(doorways, phone, 2, new Set(['to-market']));
+    expect(near.map((t) => t.id)).toContain('to-market');
   });
 });
 
@@ -122,7 +122,7 @@ describe('one doorway sign at a time, seen from above (OP-309)', () => {
   });
 
   it('shows the doorway the owl stands by, and only that one', () => {
-    expect(signFocus(doorways, HALL.spawns['from-party']!, null)).toBe('to-party');
+    expect(signFocus(doorways, HALL.spawns['from-grove']!, null)).toBe('to-grove');
     expect(signFocus(doorways, HALL.spawns['from-lobby']!, null)).toBe('up');
     expect(signFocus(doorways, HALL.spawns['from-under']!, null)).toBe('down');
     expect(signFocus(doorways, { x: HALL.size.w / 2, y: HALL.spawns['from-lobby']!.y + SIGN_REACH + 500 }, null)).toBeNull();
@@ -130,9 +130,9 @@ describe('one doorway sign at a time, seen from above (OP-309)', () => {
 
   it('shows the doorway a tap walk is going to, however far, over the one the owl passes', () => {
     const market = doorways.find((d) => d.id === 'to-market')!;
-    expect(signFocus(doorways, HALL.spawns['from-party']!, { x: market.x - 60, y: market.y })).toBe('to-market');
+    expect(signFocus(doorways, HALL.spawns['from-grove']!, { x: market.x - 60, y: market.y })).toBe('to-market');
     // A walk to open floor names no doorway: the nearest by the owl shows.
-    expect(signFocus(doorways, HALL.spawns['from-party']!, { x: HALL.size.w / 2, y: HALL.size.h / 2 })).toBe('to-party');
+    expect(signFocus(doorways, HALL.spawns['from-grove']!, { x: HALL.size.w / 2, y: HALL.size.h / 2 })).toBe('to-grove');
   });
 
   it('keeps the sign showing between two near doorways until another is clearly nearer, so they never flicker', () => {
@@ -167,7 +167,7 @@ describe('the doorway an owl came in by keeps its sign back (OP-337)', () => {
 
   it('still shows it for a walk to that doorway, and shows any other doorway in reach as ever', () => {
     expect(signFocus(doorways, landing, { x: up.x, y: up.y + 40 }, null, 'up')).toBe('up');
-    expect(signFocus(doorways, HALL.spawns['from-party']!, null, null, 'up')).toBe('to-party');
+    expect(signFocus(doorways, HALL.spawns['from-grove']!, null, null, 'up')).toBe('to-grove');
   });
 
   it('waits until the owl has been out of the sign’s reach once, and not after', () => {
