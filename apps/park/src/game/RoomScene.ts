@@ -1394,7 +1394,9 @@ export class RoomScene extends Phaser.Scene {
         walkTo: (p) => void this.walkTo(p),
         goTo: (to) => void this.goTo(to, 'default', { room: this.room.id, spawn: FROM_STUMP_SPAWN }),
         back: () => void this.goTo(STUMP_ROOM, FROM_STUMP_SPAWN, undefined),
-        standIn: flagOn('standin'),
+        // Never a one-owl game (OP-426): an owl alone at the stump is offered Pip, for every visitor,
+        // like the game itself; without it a lone owl's Start and Fill buttons never wake.
+        standIn: true,
       });
     }
 

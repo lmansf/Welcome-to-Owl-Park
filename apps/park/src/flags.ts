@@ -28,7 +28,7 @@ export const FLAGS = {
   bowl: { param: 'bowl', note: 'Pinecone bowling in the Great Hollow (OP-403): its six pins and the pinecone in code, three rolls a game at the head of the lane, played on this page' },
   petswap: { param: 'petswap', note: 'Swap pet (OP-263): a tap on your own pet, with two pets or more, offers Swap pet for a few seconds, cycling your pets and no pet' },
   tag: { param: 'tag', note: 'Feather tag in the Great Hollow (OP-403): its game spaces as size boxes, and tag for 2 to 8 owls in the ring, played on the room server' },
-  standin: { param: 'standin', note: 'Never a one-owl game (OP-426): an owl alone in the tag ring, or alone at the Old Stump, plays with a park owl (Pip in feather tag) until another owl comes' },
+  standin: { param: 'standin', note: 'Never a one-owl game in feather tag (OP-426): an owl alone in the tag ring plays with Pip until another owl comes (at the Old Stump Pip is offered to every visitor)' },
   share: { param: 'share', note: 'Share my owl (OP-392): a button on the Which owl are you result that shares a link to that owl’s own page' },
   golink: { param: 'golink', note: 'Activity links (OP-392): /?go=<place> from a /play/<place> page flies the owl on to that place once it has walked through the turnstiles' },
   eggcode: { param: 'eggcode', note: 'Egg codes (OP-260): the Redeem a code card in the Menu’s Settings tab, for a code from the portfolio site’s SQL console' },
