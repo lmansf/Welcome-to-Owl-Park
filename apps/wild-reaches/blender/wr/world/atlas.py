@@ -156,8 +156,8 @@ class Atlas:
     def hall(self, name, x0, z0, x1, z1, landmark=None, rough=True, seed=0):
         """A cavern: its floor is z0. A ragged roof and walls; a floor rolling no more than a metre."""
         rng = random.Random(zlib.crc32(f"{name}:{seed}".encode()))   # stable from run to run (hash() is not)
-        a, b, c, d = self._ix(x0 - 1, z0 - 1, x1 + 1, z1 + 4)
-        was_air = ~self.rock[a:b, c:d].copy()            # ways already cut here stay open
+        sa, sb, sc, sd = self._ix(x0 - 1, z0 - 1, x1 + 1, z1 + 4)
+        was_air = ~self.rock[sa:sb, sc:sd].copy()        # ways already cut here stay open
         self.carve(x0, z0, x1, z1)
         if rough:
             x = x0
@@ -180,7 +180,7 @@ class Atlas:
                 if rng.random() < 0.5:
                     self.fill(x, z0, min(x + w, x1 - 9), z0 + 1)
                 x += w + rng.randint(3, 8)
-            self.rock[a:b, c:d] &= ~was_air
+            self.rock[sa:sb, sc:sd] &= ~was_air
         self.halls[name] = (x0, z0, x1, z1)
         if landmark:
             self.landmarks.append((landmark, (x0 + x1) / 2, z0))
