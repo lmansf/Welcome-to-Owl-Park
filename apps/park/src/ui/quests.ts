@@ -1,4 +1,4 @@
-import { ACTIVE_SLOTS, MAX_ACTIVE_QUESTS, TASKS_BONUS, getQuest, questPuzzle, type LockView, type PuzzleSymbol, TASK_FEATHERS, getNpc, placeName, placeWords, type ActiveQuestView, type NpcDef, type QuestOfferView } from '@owl-park/shared';
+import { ACTIVE_SLOTS, MAX_ACTIVE_QUESTS, TASKS_BONUS, getQuest, questPuzzle, type LockView, type PuzzleSymbol, TASK_FEATHERS, getNpc, npcIn, npcRoomOn, placeShown, placeWords, type ActiveQuestView, type NpcDef, type QuestOfferView } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { TaskState } from '../collect/tasks';
 import { walkingMap } from '../game/walkingMap';
@@ -110,7 +110,8 @@ export function timeLeft(at: number, now = Date.now()): string {
 }
 
 const npcName = (id: string) => getNpc(id)?.name ?? 'a friend';
-const npcPlace = (id: string) => placeName(getNpc(id)?.room ?? '');
+/** Where a quest owl stands on the park this owl walks (Bramble and Pip in the Great Hollow on the new map). */
+const npcPlace = (id: string) => placeShown(npcRoomOn(id, walkingMap()) ?? '', walkingMap());
 
 /** A quest's progress in the quests screen: its steps done of all of them ("2/5"), or Done once it is ready to hand in. */
 export function progressText(q: Pick<ActiveQuestView, 'ready' | 'step' | 'steps'>): string {
@@ -237,7 +238,7 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
     if (inJournal && q.ready) {
       const row = el('div', 'collect');
       // The giver hands the reward over: from here when it stands in this room, otherwise it says where.
-      if (getNpc(q.giver)?.room === room) row.append(el('span', '', `Done! ${npcName(q.giver)} has your reward.`), button('Collect', '', () => void run(() => actions.collect(q.id)), pending));
+      if (npcIn(q.giver, room, walkingMap())) row.append(el('span', '', `Done! ${npcName(q.giver)} has your reward.`), button('Collect', '', () => void run(() => actions.collect(q.id)), pending));
       else row.append(el('span', '', `Done! Take it back to ${npcName(q.giver)} at ${npcPlace(q.giver)} to collect.`));
       card.appendChild(row);
     }
