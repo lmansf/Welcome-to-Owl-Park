@@ -63,8 +63,9 @@ test.describe('feather tag in the Great Hollow (OP-403)', () => {
 
     // Outside the ring: not in the game.
     expect((await tagOf(computer))?.inRing).toBe(false);
-    await walkAndStop(computer, SPOT_A.x, SPOT_A.y);
-    await walkAndStop(phone, SPOT_B.x, SPOT_B.y);
+    // Both at once: an owl alone in the ring for five seconds is joined by Pip (OP-426, on for every visitor
+    // since Nov 20), and one walk after the other on a busy runner left the first owl alone that long.
+    await Promise.all([walkAndStop(computer, SPOT_A.x, SPOT_A.y), walkAndStop(phone, SPOT_B.x, SPOT_B.y)]);
     for (const page of [computer, phone]) {
       await expect.poll(async () => (await tagOf(page))?.players.length, { timeout: 10_000 }).toBe(2);
       expect((await tagOf(page))?.inRing).toBe(true);
