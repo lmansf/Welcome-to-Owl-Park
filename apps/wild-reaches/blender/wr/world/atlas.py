@@ -156,6 +156,8 @@ class Atlas:
     def hall(self, name, x0, z0, x1, z1, landmark=None, rough=True, seed=0):
         """A cavern: its floor is z0. A ragged roof and walls; a floor rolling no more than a metre."""
         rng = random.Random(zlib.crc32(f"{name}:{seed}".encode()))   # stable from run to run (hash() is not)
+        a, b, c, d = self._ix(x0 - 1, z0 - 1, x1 + 1, z1 + 4)
+        was_air = ~self.rock[a:b, c:d].copy()            # ways already cut here stay open
         self.carve(x0, z0, x1, z1)
         if rough:
             x = x0
@@ -178,6 +180,7 @@ class Atlas:
                 if rng.random() < 0.5:
                     self.fill(x, z0, min(x + w, x1 - 9), z0 + 1)
                 x += w + rng.randint(3, 8)
+            self.rock[a:b, c:d] &= ~was_air
         self.halls[name] = (x0, z0, x1, z1)
         if landmark:
             self.landmarks.append((landmark, (x0 + x1) / 2, z0))
@@ -459,7 +462,7 @@ def draw(A):
     A.landmarks.append(("sun-arch", 336, 70))
 
     # ======================= The Sky Ruins: islands on rising air ===================================
-    A.updraft(236, 78, 210)                                            # from the canyon up to the first island
+    A.updraft(236, 78, 210, w=6.0)                                     # from the canyon up to the first island
     islands = [(204, 222, 200), (166, 186, 192), (130, 150, 182), (96, 112, 172),        # east, toward the crown
                (-72, -56, 172), (-108, -92, 182), (-150, -126, 194),                     # west, from the crown
                (240, 262, 210)]                                                          # far east
@@ -467,11 +470,11 @@ def draw(A):
         A.island(x0, x1, top)
     for x, z0, z1 in ((82, 150, 186), (120, 166, 196), (158, 176, 206), (194, 186, 214),
                       (-40, 150, 184), (-80, 166, 198), (-116, 176, 210), (230, 194, 224)):
-        A.updraft(x, z0, z1)
+        A.updraft(x, z0, z1, w=6.0)
     for x0, x1, top in ((292, 308, 214), (332, 348, 220), (374, 392, 226), (420, 442, 230)):     # on east over the canyon
         A.island(x0, x1, top)
     for x, z0, z1 in ((280, 198, 226), (320, 202, 232), (362, 208, 238), (408, 214, 242)):
-        A.updraft(x, z0, z1)
+        A.updraft(x, z0, z1, w=6.0)
     A.put("feather", 431, 231.5)
     A.put("bench", 380, 226)
     A.put("bell", -138, 195.5)

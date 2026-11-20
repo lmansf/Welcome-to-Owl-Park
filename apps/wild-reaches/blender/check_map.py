@@ -82,6 +82,9 @@ def macros(have):
             out.append(("dropglide", [(40, lr), (400, {**lr, **J})]))
         if "kick" in have:
             out.append(("climb", "climb", d))
+        if "glide" in have:
+            for approach in (10, 40, 80):
+                out.append(("ride", "ride", d, approach))
     out.append(("drop", [(4, {"down": True, "jump": True}), (400, {})]))
     out.append(("up", [(400, J)]))
     if "flap" in have:
@@ -168,6 +171,39 @@ def timed(c, segs, limit=480, let_go=False):
     return "lost"
 
 
+def ride(c, d, approach, limit=2400):
+    """Ride rising air: head toward it (jumping, then gliding) for `approach` ticks, hover in it
+    with no steering while it lifts, then once the owl stops rising, glide off toward d."""
+    def go(keys):
+        inp = dict(NOKEYS)
+        inp.update(keys)
+        c.step(inp)
+        ev = c.events
+        return not (ev and ("hurt" in ev or "faint" in ev))
+    lr = {"left": d < 0, "right": d > 0}
+    for _ in range(approach):
+        if not go({**lr, "jump": True}):
+            return "hurt"
+    best, still, t = c.p["z"], 0, 0
+    while t < limit and still < 40:
+        if not go({"jump": True}):
+            return "hurt"
+        t += 1
+        if c.p["ground"]:
+            return "rest"
+        if c.p["z"] > best + 0.05:
+            best, still = c.p["z"], 0
+        else:
+            still += 1
+    while t < limit + 1200:
+        if not go({**lr, "jump": True}):
+            return "hurt"
+        t += 1
+        if c.p["ground"]:
+            return "rest"
+    return "lost"
+
+
 def climb(c, d, limit=900):
     """Up a shaft by kicks: straight up first (a jump, then a flap at the top), then toward the
     wall on side d, kicking off each wall while falling past it and steering for the other."""
@@ -201,6 +237,12 @@ def climb(c, d, limit=900):
     return "lost"
 
 
+def world_has_lift(s, w, reach=40.0):
+    """Rides are only worth trying with rising air near."""
+    x, z = s.p["x"], s.p["z"]
+    return any(u["x0"] - reach < x < u["x1"] + reach and u["z0"] - reach < z < u["z1"] for u in w["updrafts"])
+
+
 def explore(world, have):
     w = dict(world)
     shrines = w["shrines"]
@@ -224,6 +266,10 @@ def explore(world, have):
             c.p["vx"] = 0.0
             if m[1] == "climb":
                 res = climb(c, m[2])
+            elif m[1] == "ride":
+                if not world_has_lift(s, w):
+                    continue
+                res = ride(c, m[2], m[3])
             elif m[0] == "walk":
                 res = timed(c, m[1])
             elif m[0] in ("paddle", "down", "swimup"):
