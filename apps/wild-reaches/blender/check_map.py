@@ -299,8 +299,9 @@ def explore(world, have):
             for sh in shrines:
                 if abs(sh["x"] - p["x"]) < 1.6 and abs(sh["z"] - p["z"]) < 2.5:
                     found["shrines"].add(sh["grants"])
-            if c.won:
-                found["won"] = True
+            cw = w["crown"]
+            if abs(cw["x"] - p["x"]) < 1.5 and abs(cw["z"] - p["z"]) < 2.5:
+                found["crown"] = True
             if p["bench"]:
                 found["benches"].add(p["bench"])
             k = rest_key(p)
@@ -311,6 +312,10 @@ def explore(world, have):
             c.won = False
             c.p["bench"] = ""
             todo.append(c)
+    # the sunwell is won if the crown can be reached and every bell can be (in any order: the search
+    # meets the crown long before the last bell, and does not come back to a place it has seen)
+    bells = [r["id"] for r in world["relics"] if r["kind"] == "bell"]
+    found["won"] = found.get("crown", False) and all(b in root.got for b in bells)
     found["feathers"] = sorted(k for k in root.got if k.startswith("feather"))
     found["relics"] = sorted(k for k in root.got if not k.startswith("feather"))
     found["stand"] = sorted({(k[1], int(math.floor(k[2]))) for k in seen})
