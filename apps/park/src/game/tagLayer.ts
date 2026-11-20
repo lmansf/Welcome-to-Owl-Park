@@ -1,5 +1,5 @@
 /**
- * Feather tag in the Great Hollow (OP-403, Dec 1 plan D5), behind `?tag=1` (flags.ts): the hollow's two
+ * Feather tag in the Great Hollow (OP-403, Dec 1 plan D5), on for every visitor since Nov 20: the hollow's two
  * game spaces drawn as size boxes on the plaza's floor (the tag ring and the bowling lane, each with its
  * dimensions on it, until their art is painted), and the game itself.
  *
@@ -12,7 +12,7 @@
  * what it says on the room's clock with tagAt, so every page shows the same moment. Without the room
  * server (the local park) the ring says it needs the server.
  *
- * Never a one-owl game (OP-426, behind `?standin=1`): alone in the ring for a few seconds, the page asks
+ * Never a one-owl game (OP-426): alone in the ring for a few seconds, the page asks
  * the room for Pip, who runs round inside the ring where the clock has Pip (standInAt) on every page;
  * Pip's own NPC owl is drawn there while it plays, and goes home after.
  */
@@ -48,7 +48,7 @@ export interface TagLayerOpts {
   me(): string;
   /** Where an owl here stands now (this page's own owl included), as this page draws it. */
   posOf(id: string): Vec2 | null;
-  /** Whether this page asks for a park owl when its owl is alone in the ring (OP-426, `?standin=1`). */
+  /** Whether this page asks for a park owl when its owl is alone in the ring (OP-426). */
   askStandIn?: boolean;
   /** Draw the park owl `id` standing in at `pos`, or back at its spot (null) (OP-426). */
   standIn?(id: string, pos: Vec2 | null): void;
@@ -229,7 +229,7 @@ export class TagLayer {
   }
 
   /**
-   * Alone in the game with no round going for TAG_STANDIN_WAIT_MS (OP-426, `?standin=1`): ask the room
+   * Alone in the game with no round going for TAG_STANDIN_WAIT_MS (OP-426): ask the room
    * for Pip. The room checks the wait on its own clock; asked again now and then while still alone.
    */
   private askForPip(g: TagState, me: string, now: number): void {

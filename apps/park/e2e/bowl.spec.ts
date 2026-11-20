@@ -4,7 +4,7 @@ import { TAG_ROOM } from '../../../packages/shared/src/party/tag';
 import { doAction, openPark, state, walkAndStop } from './helpers';
 
 /**
- * Pinecone bowling in the Great Hollow (OP-403, D5; the Party Grove's until Nov 19), behind `?bowl=1` (src/flags.ts), on this page alone:
+ * Pinecone bowling in the Great Hollow (OP-403, D5; the Party Grove's until Nov 19), on for every visitor since Nov 20, on this page alone:
  * walk to the head of the lane, Bowl a pinecone, Roll it! three times, and the game's score is said.
  * Its rules are packages/shared/src/party/bowling.test.ts.
  */
@@ -12,15 +12,15 @@ const HOLLOW = { room: TAG_ROOM, spawn: 'default' };
 /** The head of the lane. */
 const SPOT = BOWL_SPOT;
 
-test.describe('pinecone bowling in the Great Hollow (OP-403, behind ?bowl=1)', () => {
-  test('a plain address has no bowling', async ({ page }) => {
+test.describe('pinecone bowling in the Great Hollow (OP-403)', () => {
+  test('a plain address has bowling, on for every visitor', async ({ page }) => {
     await openPark(page, HOLLOW);
-    expect((await state(page)).bowl).toBeNull();
+    await expect.poll(async () => (await state(page)).bowl).not.toBeNull();
   });
 
   test('three rolls at the head of the lane make a game, and every roll knocks pins down', async ({ page }) => {
     test.slow(); // a walk across the hollow and three rolls
-    await openPark(page, { ...HOLLOW, bowl: '1' });
+    await openPark(page, HOLLOW);
     expect((await state(page)).bowl?.atSpot).toBe(false);
     expect((await state(page)).actions).not.toContain('bowl:start');
     await walkAndStop(page, SPOT.x, SPOT.y);

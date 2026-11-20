@@ -686,7 +686,7 @@ export class RoomScene extends Phaser.Scene {
   private play: ActivityLayer | null = null;
   /** The party game (OP-314), behind the friends preview: the Old Stump here, or a game's own room. */
   private party: PartyLayer | null = null;
-  /** Feather tag in the Great Hollow (OP-403): only there, seen from above, and only behind `?tag=1` (flags.ts). */
+  /** Feather tag in the Great Hollow (OP-403): only there, seen from above; on for every visitor since Nov 20. */
   private tag: TagLayer | null = null;
   private bowl: BowlLayer | null = null;
   /** How long this room faded in, and out once it was left (OP-375): shorter in calm motion. */
@@ -1394,11 +1394,12 @@ export class RoomScene extends Phaser.Scene {
         walkTo: (p) => void this.walkTo(p),
         goTo: (to) => void this.goTo(to, 'default', { room: this.room.id, spawn: FROM_STUMP_SPAWN }),
         back: () => void this.goTo(STUMP_ROOM, FROM_STUMP_SPAWN, undefined),
-        standIn: flagOn('standin'),
+        // Never a one-owl game (OP-426): an owl alone at the stump is offered Pip, for every visitor since Nov 20.
+        standIn: true,
       });
     }
 
-    if (flagOn('tag') && room.id === TAG_ROOM && !this.sideView()) {
+    if (room.id === TAG_ROOM && !this.sideView()) {
       this.tag = new TagLayer({
         scene: this,
         hudRoot: () => document.getElementById('hud'),
@@ -1406,11 +1407,11 @@ export class RoomScene extends Phaser.Scene {
         me: () => this.playerId,
         posOf: (id) => (id === this.playerId ? { ...this.me.pos } : this.peers.get(id)?.pos ?? null),
         // Never a one-owl game (OP-426): Pip, the grove's lantern keeper, steps in for a lone owl.
-        askStandIn: flagOn('standin'),
+        askStandIn: true,
         standIn: (id, pos) => this.npcs.get(id.replace(/^npc:/, ''))?.standIn(pos),
       });
     }
-    if (flagOn('bowl') && room.id === TAG_ROOM && !this.sideView()) {
+    if (room.id === TAG_ROOM && !this.sideView()) {
       this.bowl = new BowlLayer({
         scene: this,
         hudRoot: () => document.getElementById('hud'),
@@ -2848,7 +2849,7 @@ export class RoomScene extends Phaser.Scene {
     pet: Vec2 | null;
     /** How big the own owl's pet is drawn, beside its owl's canvas width in the room (OP-433); null without one. */
     petSize: { w: number; h: number; owlW: number } | null;
-    /** Feather tag in the Great Hollow (OP-403, behind ?tag=1): the game as this page has it; null elsewhere or without the flag. */
+    /** Feather tag in the Great Hollow (OP-403): the game as this page has it; null elsewhere. */
     tag: TagDebug | null;
     bowl: BowlDebug | null;
     /** Calm motion (OP-375): whether it is on, and how long this room faded in and (once left) out, in ms. */
