@@ -44,9 +44,11 @@ walked with no moves. The gates are drawn where the reaches meet.
 | The Sunstone Canyon | east, high | glide (rising air up a wide shaft) | (a bell) |
 | The Sky Ruins | over everything, z 140..220 | glide, or wall kick from the spire | (two bells, the sunwell) |
 
-Size, measured by `world_size.py` the same way for both games: **514 screens with floor in them,
-9.4 km of floor**. The Night Tree measures 70 screens and 1.1 km. There are 5 guardians, 3 bells,
-the sunwell on the tree's crown, benches along the way and feathers in every cavern.
+Size, measured by `world_size.py` the same way for both games: **510 screens with floor in them,
+9.4 km of floor**. The Night Tree measures 70 screens and 1.1 km. With every move, `check_map.py`
+finds the owl can stand in 473 screens (39,000 metre places). It reaches all 11 reaches, all 127
+feathers, the 3 bells, all 35 benches and the sunwell. At each stage it reaches the next guardian
+and none past it: flap, dash, wall kick, dive, glide.
 
 To change the world, edit the drawing in `atlas.py`. Then run `map_preview.py` to see it and
 `check_map.py` to prove it.
