@@ -53,7 +53,7 @@ import {
   type HallLevel,
   type HallWay,
 } from '../src/hollowOval';
-import { HALL_LANTERN_ART, HALL_LANTERN_POSTS } from '../src/activities';
+import { HALL_LANTERN_ART, HALL_LANTERN_POSTS } from '../src/hallLanterns';
 import type { EdgePlacement } from '../src/edges';
 import { GLIDE_SLOPE } from '../src/flight';
 import type { Polygon } from '../src/geometry';
