@@ -14,9 +14,9 @@
         "knot-hole": ["kit-doorway-knothole", "kit-clearing-trunk-entrance", "kit-landmark-door-root-tiny", "kit-hatch-down", "kit-clearing-hut-door-open", "kit-clearing-vine-curtain", "kit-landmark-hut-lookout"],
         "roost": ["kit-clearing-checkpoint-bench"],
         "lost-feather": ["kit-clearing-feather-lost"],
-        "hazard": ["kit-clearing-bramble-patch", "kit-clearing-thorn-roots"],
+        "hazard": ["kit-clearing-bramble-patch", "kit-clearing-thorn-roots", "kit-clearing-hazard-thorns"],
         "finish-roost": ["kit-clearing-finish-shrine"],
-        "prop-small": ["kit-clearing-mushroom-cluster", "kit-landmark-bell-hanging", "kit-clearing-acorn-cap", "kit-clearing-hammock"],
+        "prop-small": ["kit-clearing-mushroom-cluster", "kit-landmark-bell-hanging", "kit-clearing-acorn-cap", "kit-clearing-hammock", "kit-clearing-sign-arrow"],
         "plant": ["kit-clearing-fern-clump", "kit-clearing-fern-tall", "kit-under-root-hang"]
       }
     },
@@ -51,10 +51,10 @@
         "knot-hole": ["kit-neon-rooftop-door-open"],
         "roost": ["kit-neon-checkpoint-bench"],
         "lost-feather": ["kit-neon-feather-lost"],
-        "hazard": ["kit-neon-neon-tube-hazard"],
+        "hazard": ["kit-neon-neon-tube-hazard", "kit-neon-hazard-thorns"],
         "finish-roost": ["kit-neon-finish-shrine"],
         "prop-large": ["kit-neon-water-tank", "kit-neon-rooftop-tent", "kit-neon-antenna-mast"],
-        "prop-small": ["kit-neon-rooftop-garden", "kit-neon-pigeon-coop", "kit-neon-chimney-stack"]
+        "prop-small": ["kit-neon-rooftop-garden", "kit-neon-pigeon-coop", "kit-neon-chimney-stack", "kit-neon-sign-arrow"]
       }
     },
     "glass": {

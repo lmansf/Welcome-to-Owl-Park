@@ -88,10 +88,13 @@ const deck = (id: string, x0: number, x1: number) => ({ id, x0, x1, top: 0, row:
  */
 const drop = (id: string, x0: number, x1: number) => ({ id, x0, x1, top: 0, mid: 'kit-tex-neon-corrugated-tin', sunk: STREET_SUNK, shade: 0x4a4470 });
 
-/** Live neon tubes standing up out of the street between two buildings, too close together to land among, their tops over the line of the decks: the drop is a fall. */
-function tubes(x0: number, x1: number, step = 140): KitDecal[] {
+/**
+ * Live neon tubes laid along the street between two buildings, wrapped in sparking wire (the city's
+ * painted hazard, OP-373), their sparks reaching up to the line of the decks: the drop is a fall.
+ */
+function tubes(x0: number, x1: number, step = 300): KitDecal[] {
   const out: KitDecal[] = [];
-  for (let x = x0 + step / 2, i = 0; x < x1; x += step, i++) out.push({ piece: 'kit-neon-neon-tube-hazard', x, y: G + STREET_SUNK - 74, scale: 0.7, hazard: true, ...(i % 2 ? { flip: true } : {}) });
+  for (let x = x0 + step / 2, i = 0; x < x1; x += step, i++) out.push({ piece: 'kit-neon-hazard-thorns', x, y: G + STREET_SUNK - 90, scale: 1.5, hazard: true, ...(i % 2 ? { flip: true } : {}) });
   return out;
 }
 
@@ -162,11 +165,12 @@ const ROOFTOPS: RoomKit = {
   ],
   props: [
     { id: 'garden', piece: 'kit-neon-rooftop-garden', x: 200, top: 0, scale: 0.6 },
+    { id: 'way-sign', piece: 'kit-neon-sign-arrow', x: 600, top: 0, scale: 0.6 },
     { id: 'coop', piece: 'kit-neon-pigeon-coop', x: 1300, top: 420, scale: 0.55 },
     { id: 'tent', piece: 'kit-neon-rooftop-tent', x: 4500, top: 0, scale: 0.75 },
   ],
   scenes: [
-    { id: 'gate', story: 'A rooftop garden of herbs and moss grows beside the door back down to the Commons, where the run over the roofs begins.', props: ['garden'], about: ['to-commons'] },
+    { id: 'gate', story: 'A rooftop herb garden grows by the door down to the Commons, and a neon arrow sign points the run over the roofs.', props: ['garden', 'way-sign'], about: ['to-commons'] },
     { id: 'coop', story: 'On the high roof a pigeon coop faces the street, its pigeons watching the signs blink on and off.', props: ['coop'], about: ['b1'] },
     { id: 'camp', story: 'A little tent pitched on the far roof glows from inside, its lamp lit on its own battery, by the door to the dark block.', props: ['tent'], about: ['to-cut'] },
   ],
