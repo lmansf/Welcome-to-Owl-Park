@@ -113,6 +113,8 @@ NOKEYS = {"left": False, "right": False, "up": False, "down": False, "jump": Fal
 def _step(c, keys):
     inp = dict(NOKEYS)
     inp.update(keys)
+    if c.p["clinging"]:   # an owl that only meant to fall past a wall lets go of it (climbs have their own move)
+        inp["left"] = inp["right"] = False
     c.step(inp)
     ev = c.events
     return not (ev and ("hurt" in ev or "faint" in ev))
