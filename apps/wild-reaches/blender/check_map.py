@@ -4,7 +4,7 @@
   - without them it cannot (every gate really wants its move);
   - with every move, every feather, relic and bench can be reached, and the sunwell won.
 
-The search is a graph of places the owl can rest (standing, clinging or afloat, to the metre),
+The search is a graph of places the owl can rest (standing or afloat, to the metre),
 joined by short runs of held input played through the real sim: walk a metre, jump and steer,
 jump and flap at the top, jump and dash, dash off a ledge, drop through a ledge, climb a shaft by
 wall kicks, swim, breach. Timed things are taken kindly (always on); moths and swings are left out;
@@ -120,7 +120,7 @@ def _step(c, keys):
 
 def play(c, segs, limit=480):
     """Plays the segments in turn, the last held until the owl comes to rest after leaving the
-    ground (standing, clinging, or afloat and still). Returns 'rest', 'hurt' or 'lost'."""
+    ground (standing, or afloat and still). Returns 'rest', 'hurt' or 'lost'."""
     t = 0
     left = False
     for i, (n, keys) in enumerate(segs):
@@ -133,7 +133,7 @@ def play(c, segs, limit=480):
             if not p["ground"]:
                 left = True
             if left and t > 2:
-                if p["ground"] or (p["clinging"] and p["vz"] >= -3.01):
+                if p["ground"]:
                     return "rest"
                 if p["wet"] and abs(p["vz"]) < 1.5:
                     return "rest"
@@ -157,7 +157,7 @@ def timed(c, segs, limit=480, let_go=False):
     keys = {} if let_go else segs[-1][1]
     while t < limit:
         p = c.p
-        if p["ground"] or p["clinging"] or (p["wet"] and abs(p["vz"]) < 1.5):
+        if p["ground"] or (p["wet"] and abs(p["vz"]) < 1.5):
             return "rest"
         if not _step(c, keys):
             return "hurt"
