@@ -2,7 +2,7 @@ import { type Browser, devices, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { FROM_STUMP_AT, STUMP_ROOM } from '../../../packages/shared/src/party/ids';
 import { PARTY_WORDS } from '../../../packages/shared/src/party/words';
-import { TAG_RING, TAG_ROOM, TAG_STANDIN, TAG_STANDIN_HOLD_MS, TAG_WORDS } from '../../../packages/shared/src/party/tag';
+import { TAG_REACH, TAG_RING, TAG_ROOM, TAG_SLACK, TAG_STANDIN, TAG_STANDIN_HOLD_MS, TAG_WORDS } from '../../../packages/shared/src/party/tag';
 import { doAction, openPark, state, walkAndStop } from './helpers';
 
 /**
@@ -79,14 +79,29 @@ test.describe('feather tag across the Great Hollow (OP-434)', () => {
     await computer.screenshot({ path: 'e2e-screenshots/tag-computer.png' });
     await phone.screenshot({ path: 'e2e-screenshots/tag-phone.png' });
 
-    // The holder walks into the other owl: the feather passes, and the score counts it. The owl with the
-    // feather then leaves the hollow at once, read on its own page: the room hands nothing back for
-    // TAG_BACK_MS, so it leaves holding it. (Staying to run off would not do on a busy runner, where a
-    // slow page can still be touching once TAG_BACK_MS is up, and the feather goes back and forth.)
-    const there = (await state(phone)).pos;
-    await computer.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), there);
+    // The holder walks up to the other owl, just within reach: the feather passes, and the score counts
+    // it. Then it walks back off. Touching owls hand the feather back and forth every TAG_BACK_MS, and on a
+    // busy runner a slow page can still be touching then; so the owl with the feather leaves only once its
+    // own page has it and sees the other owl out of reach, and the walk goes again if it went back.
+    const reach = TAG_REACH + TAG_SLACK;
+    const apart = async () => {
+      const s = await state(phone);
+      const c = s.peers.find((o) => o.id === cid);
+      return !!c && Math.hypot(c.pos.x - s.pos.x, c.pos.y - s.pos.y) > reach;
+    };
+    let ready = false;
     try {
-      await expect.poll(async () => (await tagOf(phone))?.holder, { timeout: 15_000, intervals: [100] }).toBe(pid);
+      for (let i = 0; i < 4 && !ready; i++) {
+        const p = (await state(phone)).pos;
+        const near = { x: p.x - (TAG_REACH - 20), y: p.y };
+        const off = { x: p.x - (reach + 60), y: p.y };
+        await computer.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), near);
+        await expect.poll(async () => (await tagOf(phone))?.holder, { timeout: 10_000, intervals: [100] }).toBe(pid);
+        await computer.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), off);
+        await expect.poll(apart, { timeout: 5000, intervals: [100] }).toBe(true);
+        ready = (await tagOf(phone))?.holder === pid;
+      }
+      expect(ready).toBe(true);
     } catch (e) {
       // Where each page saw the owls, and what the room sent each, to say why.
       for (const [name, page] of [['computer', computer], ['phone', phone]] as const) {
@@ -116,8 +131,8 @@ test.describe('feather tag across the Great Hollow (OP-434)', () => {
       throw e;
     }
     const end = (await tagOf(computer))!;
-    // Two owls held it, so the score is the passes times two: one pass, or more if the feather had gone
-    // back and forth before the walk ended on a touch.
+    // Two owls held it, so the score is the passes times two: one pass, or more if the feather went back
+    // and forth before the owls were apart.
     expect(end.score).toBeGreaterThanOrEqual(2);
     expect(end.score % 2).toBe(0);
     expect(end.prize).toBeNull();
