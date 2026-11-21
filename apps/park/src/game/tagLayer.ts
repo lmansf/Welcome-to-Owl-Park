@@ -70,6 +70,8 @@ export interface TagDebug {
   /** Whether this page's owl stands at the feather station. */
   atStation: boolean;
   phase: TagPhase;
+  /** This owl's id in the game, as the page reads it. */
+  self: string;
   players: string[];
   holder: string | null;
   round: number;
@@ -430,6 +432,7 @@ export class TagLayer {
     return {
       atStation: pos ? atTagStation(pos) : false,
       phase: tagPhase(g, now),
+      self: this.me(),
       players: [...g.players],
       holder: g.holder,
       round: g.round,

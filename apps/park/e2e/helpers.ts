@@ -9,6 +9,7 @@ export interface ParkState {
   tag: {
     atStation: boolean;
     phase: 'waiting' | 'call' | 'countdown' | 'live' | 'over';
+    self: string;
     players: string[];
     holder: string | null;
     round: number;

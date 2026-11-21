@@ -88,8 +88,16 @@ test.describe('feather tag across the Great Hollow (OP-434)', () => {
     await phone.context().close();
     expect((await tagOf(computer))!.passesAsked).toBeGreaterThanOrEqual(1);
     // The game ends at once, with no prizes.
-    await expect.poll(async () => (await tagOf(computer))?.phase, { timeout: 10_000 }).toBe('over');
-    await expect.poll(async () => (await tagOf(computer))?.line).toBe(TAG_WORDS.holderLeft);
+    // Read together, and all of it, so a miss shows who the page still counts in the game.
+    await expect
+      .poll(
+        async () => {
+          const t = await tagOf(computer);
+          return { phase: t?.phase, line: t?.line, players: t?.players, holder: t?.holder, self: t?.self };
+        },
+        { timeout: 10_000 },
+      )
+      .toEqual({ phase: 'over', line: TAG_WORDS.holderLeft, players: [cid], holder: null, self: cid });
     const end = (await tagOf(computer))!;
     expect(end.score).toBe(2);
     expect(end.prize).toBeNull();
