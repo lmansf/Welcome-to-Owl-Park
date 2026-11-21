@@ -1,4 +1,4 @@
-import type { PartyKey, PartyOp, ServerParty, ServerStump, ServerTag, TagOp } from '@owl-park/shared';
+import type { PartyKey, PartyOp, ServerParty, ServerStump, ServerTag, ServerTagPrize, TagOp } from '@owl-park/shared';
 import type { Air, ClosedView, EscapeAct, FeedbackDraft, LineStatus, OwlAccount, OwlLook, OwlPicture, ParkMessage, PlayerState, PortraitLook, PuzzleSymbol, RealmsSettings, ReferralRefusal, ReferralView, ServerEscape, Vec2, Walk } from '@owl-park/shared';
 import type { ActivityLink, ActivityPushes, CourseLink, NestLink, NestPushes, QuestLink, QuestPushes } from '../collect/service';
 import type { TicketLink } from './ticketLinks';
@@ -73,6 +73,8 @@ export interface RoomHandlers extends QuestPushes, ActivityPushes, NestPushes {
   onPartyClosed?(): void;
   /** Feather tag in the Great Hollow (OP-403): the game as it now stands, or why the room turned this owl's frame down. */
   onTag?(frame: ServerTag): void;
+  /** What a finished game of feather tag earned this owl (OP-434). */
+  onTagPrize?(frame: ServerTagPrize): void;
 }
 
 /** Feather tag (OP-403) through the room server: step in, step out, pass the feather, or ask for the game. */

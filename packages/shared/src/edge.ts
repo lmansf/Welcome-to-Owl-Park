@@ -51,6 +51,7 @@ import type { CoursePaid, CourseRefusal, CourseView } from './coursebook';
 import { PUZZLE_SYMBOLS, type PuzzleSymbol, type PuzzleView } from './puzzles';
 import { PARTY_KEYS, type PartyKey, type PartyLook, type PartyView } from './party/game';
 import type { TagRefusal, TagState } from './party/tag';
+import type { TagPrize, TagTier } from './tagPrize';
 import { isEmoteId, isId, isLook, isObj, isVec2 } from './validate';
 
 /** Raised whenever a page and the room server must agree on something new (5: the wider rooms, 6: the activities, 7: the nests, 8: prewritten chat, 9: the arcade, 10: the stained-glass climb and the realms switch, 11: owls asleep, 12: flight, 13: travel from the map, 14: owls standing on perches, 15: spectators, 16: closed for setup, 17: the courses and the dash, 18: the triple jump), so a stale page reloads. */
@@ -192,11 +193,11 @@ export interface ClientSnowball {
   at: string;
 }
 /**
- * Feather tag in the Great Hollow (OP-403, party/tag.ts): `join` as the owl steps into the tag ring,
- * `leave` as it steps out, `pass` the feather to the owl `at` it touched, `view` to be sent the game.
+ * Feather tag across the Great Hollow (OP-434, party/tag.ts): `join` to start a game or join the call,
+ * `leave` to be out of it, `pass` the feather to the owl `at` it touched, `view` to be sent the game.
  */
-export type TagOp = 'join' | 'leave' | 'pass' | 'view' | 'standin';
-export const TAG_OPS: readonly TagOp[] = ['join', 'leave', 'pass', 'view', 'standin'];
+export type TagOp = 'join' | 'leave' | 'pass' | 'view';
+export const TAG_OPS: readonly TagOp[] = ['join', 'leave', 'pass', 'view'];
 export interface ClientTag {
   t: 'tag';
   op: TagOp;
@@ -442,6 +443,20 @@ export interface ServerTag {
   t: 'tag';
   tag: TagState;
   refused?: TagRefusal;
+}
+/**
+ * What a finished game of feather tag earned this owl (OP-434, tagPrize.ts): the round, its score and
+ * tier, the prize and the owl's feathers after it. `practice`: a guest's game earning a feather prize,
+ * which a guest doesn't keep.
+ */
+export interface ServerTagPrize {
+  t: 'tagPrize';
+  round: number;
+  score: number;
+  tier: TagTier;
+  prize: TagPrize;
+  total: number;
+  capped?: true;
 }
 /** An owl said a prewritten phrase (its number; the page shows the phrase in a bubble above the owl). */
 export interface ServerSay {
@@ -737,6 +752,7 @@ export type ServerFrame =
   | ServerEmote
   | ServerSnowball
   | ServerTag
+  | ServerTagPrize
   | ServerSay
   | ServerQuests
   | ServerHandIn
@@ -959,7 +975,7 @@ export function parseClientFrame(text: string, maxBytes = MAX_FRAME_BYTES): Clie
   }
 }
 
-const SERVER_FRAME_TYPES = new Set(['escape', 'stump', 'party', 'puzzle', 'welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'snowball', 'tag', 'say', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'wall', 'closed', 'notice', 'restart', 'realms', 'shares', 'rest', 'air', 'admitted', 'course']);
+const SERVER_FRAME_TYPES = new Set(['escape', 'stump', 'party', 'puzzle', 'welcome', 'enter', 'move', 'look', 'leave', 'counts', 'full', 'emote', 'snowball', 'tag', 'tagPrize', 'say', 'quests', 'handin', 'objects', 'used', 'useResult', 'refused', 'lanterns', 'quiz', 'paid', 'tasks', 'act', 'nest', 'street', 'wall', 'closed', 'notice', 'restart', 'realms', 'shares', 'rest', 'air', 'admitted', 'course']);
 
 /** Loose check for server frames on the client (a trusted source, but never crash on garbage). */
 export function parseServerFrame(text: string): ServerFrame | null {

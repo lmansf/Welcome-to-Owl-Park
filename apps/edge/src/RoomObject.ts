@@ -29,6 +29,9 @@ import {
   LANTERN_BEAMS,
   LANTERN_ROOM,
   QUIZ_FEATHERS,
+  TAG_ROOM,
+  tagTier,
+  type TagRoundResult,
   QUIZ_ROOM,
   QUIZ_STAGES,
   lanternBeam,
@@ -285,6 +288,8 @@ const OBJECTS_KEY = 'objects';
  */
 const LANTERNS_KEY = 'lanterns';
 const QUIZ_KEY = 'quiz';
+/** Storage key for feather tag in the Great Hollow and its last round paid (OP-434), so a wake from hibernation carries the game on. */
+const TAG_KEY = 'tag';
 const lanternsKey = (room: string): string => (room === LANTERN_ROOM ? LANTERNS_KEY : `${LANTERNS_KEY}:${room}`);
 const quizKey = (room: string): string => (room === QUIZ_ROOM ? QUIZ_KEY : `${QUIZ_KEY}:${room}`);
 /** The rooms with lanterns, and with a stage quiz. */
@@ -515,6 +520,9 @@ export class RoomObject extends DurableObject<Env> {
         const settled = await ctx.storage.get<number>(quizKey(id));
         if (typeof settled === 'number' && Object.hasOwn(ROOMS, id)) this.activities(id).quizSettled = settled;
       }
+      // Feather tag as it stood, and its last round paid, so a game outlasts the object's sleep and no round is paid twice (OP-434).
+      const tag = await ctx.storage.get<unknown>(TAG_KEY);
+      if (tag) this.room(TAG_ROOM).restoreTag(tag);
       // The realms switch as last heard, so a wake from hibernation does not close an open realm.
       const realms = await ctx.storage.get<unknown>(REALMS_KEY);
       if (realms) this.realms = cleanRealms(realms);
@@ -557,6 +565,9 @@ export class RoomObject extends DurableObject<Env> {
         counts: () => this.counts(),
         log: this.log,
         rejected: (owl, why) => this.positionRejected(id, owl, why),
+        // A round of feather tag over (OP-434): its owls are paid, after the frame or wake that settled it.
+        tagRound: (result) => void this.payTag(id, result),
+        tagSaved: (kept) => void this.ctx.storage.put(TAG_KEY, kept),
       });
       this.rooms.set(id, r);
       const kept = this.leftBehind.get(id);
@@ -1159,7 +1170,8 @@ export class RoomObject extends DurableObject<Env> {
       case 'tag':
         // Feather tag (OP-403): only the Great Hollow plays it (Room.tag), whatever the page's flag says.
         if (!room.admit(att.id) || room.sessionOf(att.id) !== att.sid) return;
-        room.tag(att.id, frame);
+        // A round starting or a call going out is a round to wake for and pay (OP-434).
+        if (room.tag(att.id, frame)) void this.scheduleAlarm();
         return;
       case 'say':
         // Every phrase is everyone's: no collection is needed to say one.
@@ -2144,6 +2156,33 @@ export class RoomObject extends DurableObject<Env> {
     }
   }
 
+  /**
+   * A round of feather tag over (OP-434, tagPrize.ts): every owl still in it earns the round's tier from
+   * the collections object, a free guest its items only. A round with no pass earns nothing and is told
+   * nowhere: the page shows its own result from the game.
+   */
+  private async payTag(roomId: string, result: TagRoundResult): Promise<void> {
+    const tier = tagTier(result.score);
+    if (!tier) return;
+    for (const id of result.players) {
+      const ws = this.socketOf(id);
+      const att = ws?.deserializeAttachment() as Attachment | null | undefined;
+      if (!ws || !att?.cid || att.room !== roomId) continue;
+      try {
+        const paid = await this.collections().tagPrize(att.cid, tier, !!att.spec);
+        this.send(ws, { t: 'tagPrize', round: result.round, score: result.score, tier, prize: paid.prize, total: paid.total, ...(paid.capped ? { capped: true as const } : {}) });
+      } catch (e) {
+        // The game is over either way; pay is best effort.
+        this.logOf(att).error('room.play', 'write_failed', 'An owl in a finished game of feather tag was not paid: the collections object did not answer.', { tier, error: e });
+      }
+    }
+  }
+
+  /** Settle a round of feather tag whose time ran out while no frame came (OP-434). */
+  private settleTag(): void {
+    this.rooms.get(TAG_ROOM)?.settleTag(Date.now());
+  }
+
   /** A stage quiz question that just closed, in each quiz room with owls in it. */
   private async settleQuiz(): Promise<void> {
     for (const id of QUIZ_ROOMS) await this.settleQuizIn(id);
@@ -2182,6 +2221,9 @@ export class RoomObject extends DurableObject<Env> {
     let next = now + ALARM_EVERY_MS;
     if (this.closingAt !== null) next = Math.min(next, this.closingAt);
     for (const id of QUIZ_ROOMS) if (this.rooms.get(id)?.count) next = Math.min(next, this.activities(id).nextQuizClose());
+    // A round of feather tag running out (OP-434): wake to pay it even if no frame comes.
+    const tagDue = this.rooms.get(TAG_ROOM)?.tagDue() ?? 0;
+    if (tagDue > 0) next = Math.min(next, Math.max(now, tagDue));
     const party = this.party.due(now);
     if (party !== null) next = Math.min(next, Math.max(now, party));
     return next;
@@ -2368,6 +2410,8 @@ export class RoomObject extends DurableObject<Env> {
       }
       // A connection lost (not a goodbye, not sent away): one back soon has reconnected.
       room?.leave(att.id, att.sid, !att.kicked && (why.reason === 'dropped' || why.reason === 'timeout'));
+      // An owl whose line dropped mid feather tag is out once its grace runs out (OP-434): wake for that.
+      if (att.room === TAG_ROOM) void this.scheduleAlarm();
       if (owns) {
         this.keepLeavers(att.room);
         this.party.left(att, room, Date.now());
@@ -2405,6 +2449,7 @@ export class RoomObject extends DurableObject<Env> {
   override async alarm(): Promise<void> {
     await this.closeForRestart(Date.now());
     await this.settleQuiz();
+    this.settleTag();
     // The party games move on (OP-314); a wake for a game's step alone, between the minutes, does no more.
     this.party.tick(Date.now());
     if (this.party.due(Date.now()) !== null && Date.now() < this.housekeptAt + ALARM_EVERY_MS) {

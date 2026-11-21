@@ -85,6 +85,9 @@ import {
   type TaskView,
   type Vec2,
   type Wear,
+  payTagPrize,
+  type TagPrizeResult,
+  type TagTier,
 } from '@owl-park/shared';
 import { AccountBook, type CarriedEmail, type GoogleFor, type GoogleLink, type LinkKind, type Protected, type Restored } from './accountBook';
 import { ReferralBook, type Credited, type InviteResult } from './referralBook';
@@ -410,6 +413,11 @@ export class Collections extends DurableObject<Env> {
    */
   async partyGame(cid: string, place: number): Promise<{ added: number; total: number; games: number }> {
     return this.book.partyGame(cid, place, Date.now());
+  }
+
+  /** What a finished game of feather tag earns this owl (OP-434): its tier's prize; `guest`, a free guest's (items only). */
+  async tagPrize(cid: string, tier: TagTier, guest: boolean): Promise<TagPrizeResult> {
+    return payTagPrize(this.book, this.nests, cid, tier, guest, Date.now(), secureRandom);
   }
 
   /** The collector's feather balance, and nothing more: a spectator's practice answers carry it (OP-191). */

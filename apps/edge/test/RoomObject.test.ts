@@ -57,6 +57,7 @@ import {
   type RunResult,
   type ServerFrame,
   type Vec2,
+  TAG_ROOM,
 } from '@owl-park/shared';
 import type { Env } from '../src/env';
 import { captureLogs, loggerFor } from '../src/logs';
@@ -1063,6 +1064,28 @@ describe('the realms switch (the stained-glass climb)', () => {
     expect(b.closed?.code).toBe(CLOSE.REALM_CLOSED);
     await tell(obj, 'nonsense');
     expect((await join(obj, 'l3', 'v_d')).closed?.code).toBe(CLOSE.REALM_CLOSED);
+  });
+});
+
+describe('feather tag through a wake from hibernation (OP-434)', () => {
+  it('keeps the game and its last round paid in storage, so a woken object carries the game on', async () => {
+    state = new KeepingState();
+    const obj = roomObject();
+    const a = await join(obj, TAG_ROOM, 'v_a');
+    await send(obj, a, { t: 'tag', op: 'join' });
+    expect(a.last('tag')?.tag.players).toEqual(['v_a']);
+    expect((state as KeepingState).kept.get('tag')).toMatchObject({ game: { players: ['v_a'] }, settled: 0 });
+    // The object sleeps through the call with the owl's socket open, and wakes on the same storage.
+    const woken = roomObject();
+    await settle(); // the constructor reads its storage
+    await send(woken, a, { t: 'tag', op: 'view' });
+    expect(a.last('tag')?.tag).toMatchObject({ players: ['v_a'], round: 0 });
+    // Nonsense in storage is dropped, never a reason to fail the wake.
+    (state as KeepingState).kept.set('tag', { game: { players: 'x' }, settled: -1 });
+    const again = roomObject();
+    await settle();
+    await send(again, a, { t: 'tag', op: 'view' });
+    expect(a.last('tag')?.tag.players).toEqual([]);
   });
 });
 

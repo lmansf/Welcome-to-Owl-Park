@@ -1406,9 +1406,13 @@ export class RoomScene extends Phaser.Scene {
         toast: (m, ms) => this.hud.toast(m, ms),
         me: () => this.playerId,
         posOf: (id) => (id === this.playerId ? { ...this.me.pos } : this.peers.get(id)?.pos ?? null),
-        // Never a one-owl game (OP-426): Pip, the grove's lantern keeper, steps in for a lone owl.
-        askStandIn: true,
+        // Never a one-owl game (OP-426): Pip, the lantern keeper, steps in for a lone owl.
         standIn: (id, pos) => this.npcs.get(id.replace(/^npc:/, ''))?.standIn(pos),
+        // A prize (OP-434): the feathers shown, and the collection and nest read again for a pet, a look or a piece.
+        prized: (total, item) => {
+          this.collection.setFeathers(total);
+          if (item) void this.collection.refresh();
+        },
       });
     }
     if (room.id === TAG_ROOM && !this.sideView()) {
@@ -1653,6 +1657,7 @@ export class RoomScene extends Phaser.Scene {
       onParty: (f) => live() && this.party?.onParty(f),
       onPartyClosed: () => live() && this.party?.onClosed(),
       onTag: (f) => live() && this.tag?.onTag(f),
+      onTagPrize: (f) => live() && this.tag?.onPrize(f),
       onPeerSay: (id, n) => {
         if (!live()) return;
         const owl = this.peers.get(id);

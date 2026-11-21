@@ -41,19 +41,23 @@ import {
   SNOWBALL_EVERY_MS,
   SNOWBALL_REACH,
   TAG_ROOM,
+  TAG_COUNTDOWN_MS,
+  TAG_ROUND_MS,
   TAG_SLACK,
-  inTagRing,
   newTag,
   tagAt,
   tagJoin,
   tagLeave,
+  TAG_GRACE_MS,
+  isTagState,
   tagPass,
-  tagStandIn,
+  tagResult,
   tagTouches,
   standInAt,
   isStandIn,
   type ClientTag,
   type TagRefusal,
+  type TagRoundResult,
   type TagState,
   WALK_SPEED,
   EDGE_PROTOCOL_VERSION,
@@ -156,6 +160,21 @@ export interface RoomOptions {
   rejected?: (id: string, why: PositionRejection) => void;
   /** Told each dash the room would not take (OP-224), with why: for the tests and the room object. */
   dashRefused?: (id: string, why: DashRefusal) => void;
+  /** Told each round of feather tag whose time ran out (OP-434), once: the room object pays its owls. */
+  tagRound?: (result: TagRoundResult) => void;
+  /**
+   * Told feather tag as it now stands, and the last round paid, on each change (OP-434): the room object
+   * keeps it in storage, so a wake from hibernation carries the game on and never pays a round twice.
+   */
+  tagSaved?: (kept: TagKept) => void;
+}
+
+/** Feather tag as the room object keeps it in storage (OP-434). */
+export interface TagKept {
+  game: TagState | null;
+  settled: number;
+  /** Owls whose line dropped, and when they are out if not back (TAG_GRACE_MS). */
+  away?: Record<string, number>;
 }
 
 /**
@@ -230,8 +249,10 @@ export class Room {
   private readonly leavers = new Map<string, Leaver>();
   /** Feather tag (OP-403, party/tag.ts): only in the Great Hollow. Plain data, moved on by the clock wherever it is read. */
   private tagGame: TagState | null = null;
-  /** When each owl in feather tag stepped into the ring, for Pip's wait (OP-426). */
-  private readonly tagJoinedAt = new Map<string, number>();
+  /** The last round of feather tag told to the room object to pay (OP-434). */
+  private tagSettled = 0;
+  /** Owls in the game whose connection dropped: id -> server ms by which they must be back, or they have left it (OP-434). */
+  private tagAway = new Map<string, number>();
   private readonly opts: RoomOptions;
   /** Shared interactables used up for now (leaf piles): id -> server ms when they are back. */
   private readonly objects = new Map<string, number>();
@@ -483,6 +504,8 @@ export class Room {
     const v: Visitor = { peer, sid, st: { id, look: hello.look, pos, walk: null }, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, snowballAt: 0, airTokens: LIMITS.airBurst, airRefilledAt: now, saidAt: 0, usedAt: 0, arrangedAt: 0, dash: { ...FRESH_DASH } };
     if (hello.spawn !== undefined && Object.hasOwn(this.def.spawns, hello.spawn)) v.cameIn = hello.spawn;
     this.visitors.set(id, v);
+    // Back before its grace ran out (OP-434): still in the game of feather tag.
+    if (this.tagAway.delete(id)) this.saveTag();
     this.leavers.delete(id);
     peer.persist?.(v.st);
 
@@ -824,48 +847,35 @@ export class Room {
   }
 
   /**
-   * Feather tag in the Great Hollow (OP-403): an owl steps into the tag ring (`join`, where the room has
-   * it standing in the ring, give or take TAG_SLACK), steps out (`leave`), passes the feather to an owl
-   * it touches (`pass`: it holds the feather, and the room has the two within TAG_REACH and TAG_SLACK,
-   * the owl touched still in the ring) or asks to see the game (`view`). Every change goes to everyone
-   * here; a refusal, or a view, to the asker alone. Whether the park plays it at all is the page's flag;
-   * the room only ever plays it in the Great Hollow. Returns whether the game changed.
+   * Feather tag across the Great Hollow (OP-434): an owl here starts a game or joins its call (`join`,
+   * from anywhere in the hollow), leaves it (`leave`), passes the feather to an owl it touches (`pass`: it
+   * holds the feather, and the room has the two within TAG_REACH and TAG_SLACK) or asks to see the game
+   * (`view`). Every change goes to everyone here; a refusal, or a view, to the asker alone. The room only
+   * ever plays it in the Great Hollow. A round over is settled first, so its result is never lost to a new
+   * game. Returns whether the game changed.
    */
   tag(id: string, f: ClientTag): boolean {
     const v = this.visitors.get(id);
     if (!v || this.def.id !== TAG_ROOM) return false;
     const now = this.now();
+    this.settleTag(now);
     const game = tagAt(this.tagGame ?? newTag(), now);
     const refuse = (reason: TagRefusal, state: TagState) => (this.send(v, { t: 'tag', tag: state, refused: reason }), false);
-    const here = this.positionOf(id);
     switch (f.op) {
       case 'view':
         this.send(v, { t: 'tag', tag: game });
         return false;
       case 'leave':
-        this.tagJoinedAt.delete(id);
         return this.setTag(tagLeave(game, id, now));
       case 'join': {
-        if (!here || !inTagRing(here, TAG_SLACK)) return refuse('far', game);
-        const r = tagJoin(game, id, now, (n) => Math.floor(this.rnd() * n));
-        if (r.ok && !game.players.includes(id)) this.tagJoinedAt.set(id, now);
-        return r.ok ? this.setTag(r.state) : refuse(r.reason, r.state);
-      }
-      case 'standin': {
-        // Pip steps in for an owl alone in the ring (OP-426): still standing in it, alone there long enough.
-        if (!here || !inTagRing(here, TAG_SLACK)) return refuse('far', game);
-        const r = tagStandIn(game, id, now, this.tagJoinedAt.get(id) ?? now);
+        const r = tagJoin(game, id, now);
         return r.ok ? this.setTag(r.state) : refuse(r.reason, r.state);
       }
       case 'pass': {
         const at = f.at ?? '';
-        // Pip stands where the clock has Pip, inside the ring (OP-426).
+        const here = this.positionOf(id);
+        // Pip stands where the clock has Pip, round the feather station (OP-426).
         const there = isStandIn(at) ? (game.players.includes(at) ? standInAt(game, now) : null) : this.positionOf(at);
-        // An owl touched that has walked out of the ring is out of the game: told to everyone, and no pass.
-        if (there && !inTagRing(there, TAG_SLACK) && game.players.includes(at)) {
-          this.setTag(tagLeave(game, at, now));
-          return refuse('not-player', this.tagGame ?? game);
-        }
         if (!here || !there || !tagTouches(here, there, TAG_SLACK)) return refuse('far', game);
         const r = tagPass(game, id, at, now);
         return r.ok ? this.setTag(r.state) : refuse(r.reason, r.state);
@@ -873,13 +883,77 @@ export class Room {
     }
   }
 
+  /**
+   * A round of feather tag whose time has run out is told to the room object once (OP-434), by its round
+   * number, so its owls are paid: on every tag frame here and at the room object's wake. A round the owl
+   * with the feather left is never paid.
+   */
+  settleTag(now: number): TagRoundResult | null {
+    // An owl whose line dropped and that is not back in time has left the game (OP-434).
+    for (const [id, until] of [...this.tagAway]) if (until <= now && !this.visitors.has(id)) this.tagOut(id, now);
+    for (const [id] of [...this.tagAway]) if (this.visitors.has(id) || !this.tagGame?.players.includes(id)) this.tagAway.delete(id);
+    return this.settleRound(now);
+  }
+
+  /** An owl out of the game: a round already over is settled first, so leaving never takes its prize away. */
+  private tagOut(id: string, now: number): void {
+    this.tagAway.delete(id);
+    this.settleRound(now);
+    if (this.tagGame) this.setTag(tagLeave(this.tagGame, id, now));
+    else this.saveTag();
+  }
+
+  private settleRound(now: number): TagRoundResult | null {
+    if (!this.tagGame) return null;
+    const result = tagResult(this.tagGame, now);
+    if (!result || result.round <= this.tagSettled) return null;
+    this.tagSettled = result.round;
+    this.saveTag();
+    this.opts.tagRound?.(result);
+    return result;
+  }
+
+  /** When the round of feather tag on now runs out (0 while there is none to settle), for the room object's wake. */
+  tagDue(): number {
+    const due = this.roundDue();
+    const away = this.tagAway.size ? Math.min(...this.tagAway.values()) : 0;
+    return due === 0 ? away : away === 0 ? due : Math.min(due, away);
+  }
+
+  private roundDue(): number {
+    const g = this.tagGame;
+    if (!g) return 0;
+    if (g.callEndsAt !== 0) return g.callEndsAt + TAG_COUNTDOWN_MS + TAG_ROUND_MS;
+    if (g.startsAt === 0 || g.ended === 'left' || g.round <= this.tagSettled) return 0;
+    return g.endsAt;
+  }
+
+
   /** Feather tag as it now stands, told to everyone here when it changed. */
   private setTag(next: TagState): boolean {
     const before = this.tagGame ?? newTag();
     this.tagGame = next;
     if (JSON.stringify(before) === JSON.stringify(next)) return false;
+    this.saveTag();
     this.broadcast({ t: 'tag', tag: next });
     return true;
+  }
+
+  private saveTag(): void {
+    this.opts.tagSaved?.({ game: this.tagGame, settled: this.tagSettled, ...(this.tagAway.size ? { away: Object.fromEntries(this.tagAway) } : {}) });
+  }
+
+  /** Feather tag as the room object kept it, after a wake from hibernation (OP-434); anything that does not look like it is dropped. */
+  restoreTag(kept: unknown): void {
+    if (this.def.id !== TAG_ROOM || typeof kept !== 'object' || kept === null) return;
+    const k = kept as Record<string, unknown>;
+    const settled = k['settled'];
+    if (typeof settled === 'number' && Number.isInteger(settled) && settled >= 0) this.tagSettled = Math.max(this.tagSettled, settled);
+    if (this.tagGame === null && isTagState(k['game'])) this.tagGame = k['game'];
+    const away = k['away'];
+    if (typeof away === 'object' && away !== null)
+      for (const [id, until] of Object.entries(away as Record<string, unknown>))
+        if (typeof until === 'number' && Number.isFinite(until) && this.tagGame?.players.includes(id)) this.tagAway.set(id, until);
   }
 
   /** Feather tag as the room keeps it (null before anyone played here), for the tests. */
@@ -1063,8 +1137,13 @@ export class Room {
       if (oldest !== undefined) this.leavers.delete(oldest);
     }
     this.broadcast({ t: 'leave', id });
-    // Out of the room is out of feather tag (OP-403).
-    this.tagJoinedAt.delete(id);
-    if (this.tagGame?.players.includes(id)) this.setTag(tagLeave(this.tagGame, id, this.now()));
+    // Out of the room is out of feather tag (OP-403); with the feather, that ends the game with no prizes (OP-434).
+    // A line that dropped has TAG_GRACE_MS to come back first.
+    if (this.tagGame?.players.includes(id)) {
+      if (dropped) {
+        this.tagAway.set(id, this.now() + TAG_GRACE_MS);
+        this.saveTag();
+      } else this.tagOut(id, this.now());
+    }
   }
 }
