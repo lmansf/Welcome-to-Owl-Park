@@ -2,7 +2,7 @@ import { type Browser, devices, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { FROM_STUMP_AT, STUMP_ROOM } from '../../../packages/shared/src/party/ids';
 import { PARTY_WORDS } from '../../../packages/shared/src/party/words';
-import { TAG_RING, TAG_ROOM, TAG_STANDIN, TAG_STANDIN_HOLD_MS, TAG_WORDS } from '../../../packages/shared/src/party/tag';
+import { TAG_BACK_MS, TAG_RING, TAG_ROOM, TAG_STANDIN, TAG_STANDIN_HOLD_MS, TAG_WORDS } from '../../../packages/shared/src/party/tag';
 import { doAction, openPark, state, walkAndStop } from './helpers';
 
 /**
@@ -80,11 +80,17 @@ test.describe('feather tag across the Great Hollow (OP-434)', () => {
     await phone.screenshot({ path: 'e2e-screenshots/tag-phone.png' });
 
     // The holder walks into the other owl: the feather passes, and the score counts it.
+    // Then it walks straight off again: still touching once TAG_BACK_MS is up, the phone's owl would hand
+    // the feather back, and back and forth, and the owl leaving might not be the one holding it.
     const there = (await state(phone)).pos;
-    await computer.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), there);
-    await expect.poll(async () => (await tagOf(computer))?.holder, { timeout: 10_000 }).toBe(pid);
-    // The owl with the feather leaves the hollow at once: still touching, it would hand the feather
-    // straight back once TAG_BACK_MS is up, and then it would not be the holder leaving.
+    for (let i = 0; i < 4 && (await tagOf(computer))?.holder !== pid; i++) {
+      await computer.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), there);
+      await expect.poll(async () => (await tagOf(computer))?.holder, { timeout: 10_000 }).toBe(pid);
+      await computer.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), SPOT_A);
+      await computer.waitForTimeout(TAG_BACK_MS + 800);
+    }
+    expect((await tagOf(computer))!.holder).toBe(pid);
+    // The owl with the feather leaves the hollow.
     await phone.context().close();
     expect((await tagOf(computer))!.passesAsked).toBeGreaterThanOrEqual(1);
     // The game ends, with no prizes.
