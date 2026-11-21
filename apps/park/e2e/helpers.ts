@@ -5,20 +5,24 @@ export interface ParkState {
   /** Whether the first snow falls in this room (OP-074, behind ?snow=1). */
   snow: boolean;
   snowballs: { thrown: number; landed: number; hits: string[] };
-  /** Feather tag in the Great Hollow (OP-403): the game as the page has it; null elsewhere. */
+  /** Feather tag across the Great Hollow (OP-434): the game as the page has it; null elsewhere. */
   tag: {
-    inRing: boolean;
-    phase: 'waiting' | 'countdown' | 'live' | 'over';
+    atStation: boolean;
+    phase: 'waiting' | 'call' | 'countdown' | 'live' | 'over';
     players: string[];
     holder: string | null;
     round: number;
     left: string | null;
+    score: number;
     line: string;
+    button: string;
     passesAsked: number;
     refused: string[];
     server: boolean;
-    /** Where Pip stands in the ring while standing in for a missing player (OP-426). */
+    /** Where Pip stands while standing in for a missing player (OP-426). */
     standIn: { x: number; y: number } | null;
+    /** What the last finished game earned this owl, as the room said. */
+    prize: { tier: 'low' | 'middle' | 'high'; score: number; total: number } | null;
   } | null;
   /** Pinecone bowling in the Great Hollow (OP-403): this page's game; null elsewhere. */
   bowl: {

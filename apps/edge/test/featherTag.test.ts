@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { EDGE_PROTOCOL_VERSION, TAG_COUNTDOWN_MS, TAG_REACH, TAG_RING, TAG_ROUND_MS, TAG_REST_MS, TAG_STANDIN, TAG_STANDIN_HOLD_MS, TAG_ROOM, TAG_STANDIN_WAIT_MS, standInAt, tagAt, type ClientHello, type ServerFrame, type Vec2 } from '@owl-park/shared';
+import { EDGE_PROTOCOL_VERSION, TAG_CALL_MS, TAG_COUNTDOWN_MS, TAG_MAX_OWLS, TAG_REACH, TAG_RING, TAG_ROUND_MS, TAG_REST_MS, TAG_STANDIN, TAG_STANDIN_HOLD_MS, TAG_ROOM, standInAt, tagAt, type ClientHello, type ServerFrame, type TagRoundResult, type Vec2 } from '@owl-park/shared';
 import { ROOMS } from '@owl-park/shared/rooms';
 import { Room, type Peer } from '../src/Room';
 
 /**
- * Feather tag in the Great Hollow on the room server (OP-403, D5; the Party Grove's until Nov 19): the room lets an owl into the game only
- * standing in the tag ring, passes the feather only from its holder to an owl it touches in the ring,
- * tells everyone each change, and takes an owl out of the game when it leaves the room. Its rules are
- * packages/shared/src/party/tag.test.ts; the park's side is apps/park/e2e/tag.spec.ts.
+ * Feather tag across the Great Hollow on the room server (OP-434): any owl in the hollow starts a game
+ * or joins its call from wherever it stands, the feather passes only from its holder to an owl it
+ * touches, everyone is told each change, a round whose time runs out is handed to the room object once
+ * to be paid, and a round is void when the owl with the feather leaves. Its rules are
+ * packages/shared/src/party/tag.test.ts; the prizes, packages/shared/src/tagPrize.test.ts; the park's
+ * side, apps/park/e2e/tag.spec.ts.
  */
 class FakePeer implements Peer {
   frames: ServerFrame[] = [];
@@ -33,7 +35,8 @@ const OUT = { ...ROOMS[TAG_ROOM]!.spawns['default']! };
 
 function hollow() {
   let now = 5_000_000;
-  const room = new Room(ROOMS[TAG_ROOM]!, { now: () => now, random: () => 0, cap: 80 });
+  const rounds: TagRoundResult[] = [];
+  const room = new Room(ROOMS[TAG_ROOM]!, { now: () => now, random: () => 0, cap: 80, tagRound: (r) => rounds.push(r) });
   const owl = (id: string, at: Vec2) => {
     const p = new FakePeer();
     expect(room.join(p, id, hello(OUT))).toBe('ok');
@@ -42,28 +45,49 @@ function hollow() {
     expect(room.positionOf(id)).toEqual(at);
     return p;
   };
-  return { room, owl, tick: (ms: number) => (now += ms), now: () => now };
+  return { room, owl, rounds, tick: (ms: number) => (now += ms), now: () => now };
 }
 
-describe('feather tag on the room server (OP-403)', () => {
-  it('lets an owl in only standing in the ring, and starts the countdown with two', () => {
+/** From the start of a game's call to its round being live. */
+const TO_LIVE = TAG_CALL_MS + TAG_COUNTDOWN_MS;
+
+describe('feather tag on the room server (OP-434)', () => {
+  it('lets any owl in the hollow start a game, and others join the call from anywhere in it', () => {
     const g = hollow();
-    const a = g.owl('a', IN_A);
-    const b = g.owl('b', IN_B);
-    const out = g.owl('o', OUT);
-    g.room.tag('o', { t: 'tag', op: 'join' });
-    expect(out.lastTag()).toMatchObject({ refused: 'far' });
-    expect(g.room.tagNow()).toBeNull();
+    const a = g.owl('a', OUT);
+    const b = g.owl('b', IN_C);
     g.room.tag('a', { t: 'tag', op: 'join' });
-    expect(out.lastTag()?.tag.players).toEqual(['a']);
+    expect(b.lastTag()?.tag).toMatchObject({ players: ['a'], callEndsAt: g.now() + TAG_CALL_MS });
+    g.tick(4000);
     g.room.tag('b', { t: 'tag', op: 'join' });
-    const seen = a.lastTag()!.tag;
-    expect(seen).toMatchObject({ players: ['a', 'b'], holder: 'a', round: 1, startsAt: g.now() + TAG_COUNTDOWN_MS });
-    expect(b.lastTag()?.tag).toEqual(seen);
-    expect(out.lastTag()?.tag).toEqual(seen);
+    expect(a.lastTag()?.tag.players).toEqual(['a', 'b']);
+    g.tick(TAG_CALL_MS);
+    g.room.tag('b', { t: 'tag', op: 'view' });
+    expect(b.lastTag()?.tag).toMatchObject({ players: ['a', 'b'], holder: 'a', round: 1, callEndsAt: 0 });
   });
 
-  it('passes the feather when its holder touches another owl in the ring, and not from afar or before the round', () => {
+  it('closes the game to new owls once the call is over, and to a twenty-first owl', () => {
+    const g = hollow();
+    g.owl('a', IN_A);
+    g.owl('b', IN_B);
+    const late = g.owl('late', OUT);
+    g.room.tag('a', { t: 'tag', op: 'join' });
+    g.room.tag('b', { t: 'tag', op: 'join' });
+    g.tick(TAG_CALL_MS);
+    g.room.tag('late', { t: 'tag', op: 'join' });
+    expect(late.lastTag()).toMatchObject({ refused: 'closed' });
+
+    const h = hollow();
+    for (let i = 0; i < TAG_MAX_OWLS; i++) {
+      h.owl(`o${i}`, OUT);
+      h.room.tag(`o${i}`, { t: 'tag', op: 'join' });
+    }
+    const extra = h.owl('extra', OUT);
+    h.room.tag('extra', { t: 'tag', op: 'join' });
+    expect(extra.lastTag()).toMatchObject({ refused: 'full' });
+  });
+
+  it('passes the feather when its holder touches another owl, and not from afar or before the round', () => {
     const g = hollow();
     const a = g.owl('a', IN_A);
     g.owl('b', IN_B);
@@ -71,41 +95,81 @@ describe('feather tag on the room server (OP-403)', () => {
     for (const id of ['a', 'b', 'c']) g.room.tag(id, { t: 'tag', op: 'join' });
     g.room.tag('a', { t: 'tag', op: 'pass', at: 'b' });
     expect(a.lastTag()).toMatchObject({ refused: 'not-live' });
-    g.tick(TAG_COUNTDOWN_MS);
+    g.tick(TO_LIVE);
     g.room.tag('a', { t: 'tag', op: 'pass', at: 'c' });
     expect(a.lastTag()).toMatchObject({ refused: 'far' });
     g.room.tag('b', { t: 'tag', op: 'pass', at: 'a' });
-    expect(g.room.tagNow()?.holder).toBe('a');
+    expect(tagAt(g.room.tagNow()!, g.now()).holder).toBe('a');
     g.room.tag('a', { t: 'tag', op: 'pass', at: 'b' });
-    expect(g.room.tagNow()).toMatchObject({ holder: 'b', from: 'a' });
+    expect(g.room.tagNow()).toMatchObject({ holder: 'b', from: 'a', passes: 1, holders: ['a', 'b'] });
     // Straight back is refused.
     g.room.tag('b', { t: 'tag', op: 'pass', at: 'a' });
     expect(g.room.tagNow()?.holder).toBe('b');
   });
 
-  it('leaves the holder at the end holding it, by the clock, and starts the next round with them', () => {
+  it('hands a round whose time ran out to the room object once, with its owls and score', () => {
     const g = hollow();
     g.owl('a', IN_A);
-    const b = g.owl('b', IN_B);
-    g.room.tag('a', { t: 'tag', op: 'join' });
-    g.room.tag('b', { t: 'tag', op: 'join' });
-    g.tick(TAG_COUNTDOWN_MS + TAG_ROUND_MS + TAG_REST_MS);
-    g.room.tag('b', { t: 'tag', op: 'view' });
-    expect(b.lastTag()?.tag).toMatchObject({ round: 2, holder: 'a', left: 'a' });
-  });
-
-  it('takes an owl out of the game when it leaves the room, and stops the round below two', () => {
-    const g = hollow();
-    const a = g.owl('a', IN_A);
     g.owl('b', IN_B);
     g.room.tag('a', { t: 'tag', op: 'join' });
     g.room.tag('b', { t: 'tag', op: 'join' });
+    expect(g.room.tagDue()).toBe(g.now() + TO_LIVE + TAG_ROUND_MS);
+    g.tick(TO_LIVE);
+    g.room.tag('a', { t: 'tag', op: 'pass', at: 'b' });
+    g.tick(TAG_ROUND_MS - 1);
+    expect(g.room.settleTag(g.now())).toBeNull();
+    g.tick(1);
+    expect(g.room.settleTag(g.now())).toEqual({ round: 1, players: ['a', 'b'], score: 2 });
+    // Never twice: not at the next wake, nor on the next tag frame, nor after the rest.
+    expect(g.room.settleTag(g.now() + 1)).toBeNull();
+    g.room.tag('a', { t: 'tag', op: 'view' });
+    g.tick(TAG_REST_MS);
+    g.room.tag('a', { t: 'tag', op: 'view' });
+    expect(g.rounds).toEqual([{ round: 1, players: ['a', 'b'], score: 2 }]);
+    expect(g.room.tagDue()).toBe(0);
+  });
+
+  it('settles the last round first when a new game starts after it, so its result is not lost', () => {
+    const g = hollow();
+    g.owl('a', IN_A);
+    g.owl('b', IN_B);
+    g.room.tag('a', { t: 'tag', op: 'join' });
+    g.room.tag('b', { t: 'tag', op: 'join' });
+    g.tick(TO_LIVE + TAG_ROUND_MS + TAG_REST_MS);
+    g.room.tag('b', { t: 'tag', op: 'join' });
+    expect(g.rounds).toEqual([{ round: 1, players: ['a', 'b'], score: 0 }]);
+    expect(g.room.tagNow()).toMatchObject({ players: ['b'], round: 1 });
+  });
+
+  it('ends the round with no prizes when the owl holding the feather leaves the room', () => {
+    const g = hollow();
+    const a = g.owl('a', IN_A);
+    g.owl('b', IN_B);
+    g.owl('c', IN_C);
+    for (const id of ['a', 'b', 'c']) g.room.tag(id, { t: 'tag', op: 'join' });
+    g.tick(TO_LIVE);
+    g.room.tag('a', { t: 'tag', op: 'pass', at: 'b' });
     g.room.leave('b');
-    expect(a.lastTag()?.tag).toMatchObject({ players: ['a'], holder: null, startsAt: 0 });
+    expect(a.lastTag()?.tag).toMatchObject({ ended: 'left', holder: null, players: ['a', 'c'] });
+    expect(g.room.tagDue()).toBe(0);
+    g.tick(TAG_ROUND_MS + TAG_REST_MS);
+    g.room.tag('a', { t: 'tag', op: 'view' });
+    expect(g.rounds).toEqual([]);
+  });
+
+  it('plays on when an owl without the feather leaves', () => {
+    const g = hollow();
+    const a = g.owl('a', IN_A);
+    g.owl('b', IN_B);
+    g.owl('c', IN_C);
+    for (const id of ['a', 'b', 'c']) g.room.tag(id, { t: 'tag', op: 'join' });
+    g.tick(TO_LIVE);
+    g.room.tag('c', { t: 'tag', op: 'leave' });
+    expect(a.lastTag()?.tag).toMatchObject({ ended: null, holder: 'a', players: ['a', 'b'] });
   });
 
   it('plays only in the Great Hollow: no longer in the Party Grove, nor anywhere else', () => {
-    let now = 1;
+    const now = 1;
     for (const id of ['hub', 'grove']) {
       const room = new Room(ROOMS[id]!, { now: () => now, cap: 80 });
       const p = new FakePeer();
@@ -113,70 +177,48 @@ describe('feather tag on the room server (OP-403)', () => {
       expect(room.tag('a', { t: 'tag', op: 'view' })).toBe(false);
       expect(p.tags()).toEqual([]);
     }
-    const room = new Room(ROOMS['grove']!, { now: () => now, cap: 80 });
-    const p = new FakePeer();
-    room.join(p, 'a', { t: 'hello', v: EDGE_PROTOCOL_VERSION, look });
-    expect(room.tag('a', { t: 'tag', op: 'view' })).toBe(false);
-    expect(p.tags()).toEqual([]);
-    now += 1;
   });
 });
 
-describe('Pip stands in on the room server (OP-426)', () => {
-  it('steps in for an owl alone in the ring a few seconds, and not sooner, nor for an owl outside it or with company', () => {
+describe('Pip stands in on the room server (OP-426, OP-434)', () => {
+  it('joins an owl that started a game no one else joined, once the call is over', () => {
     const g = hollow();
     const a = g.owl('a', IN_A);
-    g.owl('o', OUT);
     g.room.tag('a', { t: 'tag', op: 'join' });
-    g.tick(TAG_STANDIN_WAIT_MS - 1000);
-    g.room.tag('a', { t: 'tag', op: 'standin' });
-    expect(a.lastTag()).toMatchObject({ refused: 'early' });
-    g.room.tag('o', { t: 'tag', op: 'standin' });
-    expect(g.room.tagNow()?.players).toEqual(['a']);
-    g.tick(1000);
-    g.room.tag('a', { t: 'tag', op: 'standin' });
-    expect(g.room.tagNow()).toMatchObject({ players: ['a', TAG_STANDIN], holder: 'a', round: 1 });
-    // Everyone here is told: the other page draws Pip in the ring too.
-    expect(a.lastTag()?.tag.players).toEqual(['a', TAG_STANDIN]);
+    g.tick(TAG_CALL_MS);
+    g.room.tag('a', { t: 'tag', op: 'view' });
+    expect(a.lastTag()?.tag).toMatchObject({ players: ['a', TAG_STANDIN], holder: 'a', round: 1 });
   });
 
-  it('lets the owl catch Pip where the clock has Pip, gives the feather back by itself, and lets go when the owl leaves', () => {
+  it('lets the owl catch Pip where the clock has Pip, and gives the feather back by itself; Pip adds no multiplier', () => {
     const g = hollow();
     g.owl('a', IN_A);
     g.room.tag('a', { t: 'tag', op: 'join' });
-    g.tick(TAG_STANDIN_WAIT_MS);
-    g.room.tag('a', { t: 'tag', op: 'standin' });
-    g.tick(TAG_COUNTDOWN_MS + 1500);
+    g.tick(TO_LIVE + 1500);
+    g.room.tag('a', { t: 'tag', op: 'view' });
     // Away from Pip: no pass. Then put right beside Pip: the feather goes.
-    const pip = standInAt(g.room.tagNow()!, g.now());
+    const pip = standInAt(tagAt(g.room.tagNow()!, g.now()), g.now());
     g.room.place('a', { x: TAG_RING.x - (pip.x - TAG_RING.x), y: TAG_RING.y - (pip.y - TAG_RING.y) });
     g.room.tag('a', { t: 'tag', op: 'pass', at: TAG_STANDIN });
-    expect(g.room.tagNow()?.holder).toBe('a');
+    expect(tagAt(g.room.tagNow()!, g.now()).holder).toBe('a');
     g.room.place('a', { x: pip.x + 20, y: pip.y });
     g.room.tag('a', { t: 'tag', op: 'pass', at: TAG_STANDIN });
     expect(g.room.tagNow()?.holder).toBe(TAG_STANDIN);
     g.tick(TAG_STANDIN_HOLD_MS);
-    g.room.tag('a', { t: 'tag', op: 'view' });
-    // Read on the clock, as every page reads it: back with the owl.
-    expect(g.room.tagNow()).toBeTruthy();
     expect(tagAt(g.room.tagNow()!, g.now()).holder).toBe('a');
-    g.room.tag('a', { t: 'tag', op: 'leave' });
-    expect(g.room.tagNow()?.players).toEqual([]);
+    g.tick(TAG_ROUND_MS);
+    g.room.tag('a', { t: 'tag', op: 'view' });
+    expect(g.rounds).toEqual([{ round: 1, players: ['a'], score: 1 }]);
   });
 
-  it('plays out the round when a second owl steps in, then steps out', () => {
+  it('comes in when every other owl leaves a round but one', () => {
     const g = hollow();
-    g.owl('a', IN_A);
+    const a = g.owl('a', IN_A);
     g.owl('b', IN_B);
-    g.room.place('b', OUT);
     g.room.tag('a', { t: 'tag', op: 'join' });
-    g.tick(TAG_STANDIN_WAIT_MS);
-    g.room.tag('a', { t: 'tag', op: 'standin' });
-    g.room.place('b', IN_B);
     g.room.tag('b', { t: 'tag', op: 'join' });
-    expect(g.room.tagNow()?.players).toEqual(['a', TAG_STANDIN, 'b']);
-    g.tick(TAG_COUNTDOWN_MS + TAG_ROUND_MS + TAG_REST_MS);
-    g.room.tag('b', { t: 'tag', op: 'view' });
-    expect(tagAt(g.room.tagNow()!, g.now()).players).toEqual(['a', 'b']);
+    g.tick(TO_LIVE);
+    g.room.leave('b');
+    expect(a.lastTag()?.tag).toMatchObject({ players: ['a', TAG_STANDIN], holder: 'a', ended: null });
   });
 });

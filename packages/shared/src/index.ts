@@ -28,6 +28,7 @@ export * from './activities';
 export * from './roomActivities';
 export * from './homes';
 export * from './nestbook';
+export * from './tagPrize';
 export * from './styles';
 export * from './feedback';
 export * from './feedbackRewards';
