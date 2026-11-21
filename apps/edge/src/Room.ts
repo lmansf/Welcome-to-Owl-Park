@@ -48,6 +48,7 @@ import {
   tagAt,
   tagJoin,
   tagLeave,
+  TAG_GRACE_MS,
   isTagState,
   tagPass,
   tagResult,
@@ -172,6 +173,8 @@ export interface RoomOptions {
 export interface TagKept {
   game: TagState | null;
   settled: number;
+  /** Owls whose line dropped, and when they are out if not back (TAG_GRACE_MS). */
+  away?: Record<string, number>;
 }
 
 /**
@@ -248,6 +251,8 @@ export class Room {
   private tagGame: TagState | null = null;
   /** The last round of feather tag told to the room object to pay (OP-434). */
   private tagSettled = 0;
+  /** Owls in the game whose connection dropped: id -> server ms by which they must be back, or they have left it (OP-434). */
+  private tagAway = new Map<string, number>();
   private readonly opts: RoomOptions;
   /** Shared interactables used up for now (leaf piles): id -> server ms when they are back. */
   private readonly objects = new Map<string, number>();
@@ -499,6 +504,8 @@ export class Room {
     const v: Visitor = { peer, sid, st: { id, look: hello.look, pos, walk: null }, seq: -1, tokens: LIMITS.moveBurst, refilledAt: now, strikes: [], frames: [], emotedAt: 0, snowballAt: 0, airTokens: LIMITS.airBurst, airRefilledAt: now, saidAt: 0, usedAt: 0, arrangedAt: 0, dash: { ...FRESH_DASH } };
     if (hello.spawn !== undefined && Object.hasOwn(this.def.spawns, hello.spawn)) v.cameIn = hello.spawn;
     this.visitors.set(id, v);
+    // Back before its grace ran out (OP-434): still in the game of feather tag.
+    if (this.tagAway.delete(id)) this.saveTag();
     this.leavers.delete(id);
     peer.persist?.(v.st);
 
@@ -882,6 +889,21 @@ export class Room {
    * with the feather left is never paid.
    */
   settleTag(now: number): TagRoundResult | null {
+    // An owl whose line dropped and that is not back in time has left the game (OP-434).
+    for (const [id, until] of [...this.tagAway]) if (until <= now && !this.visitors.has(id)) this.tagOut(id, now);
+    for (const [id] of [...this.tagAway]) if (this.visitors.has(id) || !this.tagGame?.players.includes(id)) this.tagAway.delete(id);
+    return this.settleRound(now);
+  }
+
+  /** An owl out of the game: a round already over is settled first, so leaving never takes its prize away. */
+  private tagOut(id: string, now: number): void {
+    this.tagAway.delete(id);
+    this.settleRound(now);
+    if (this.tagGame) this.setTag(tagLeave(this.tagGame, id, now));
+    else this.saveTag();
+  }
+
+  private settleRound(now: number): TagRoundResult | null {
     if (!this.tagGame) return null;
     const result = tagResult(this.tagGame, now);
     if (!result || result.round <= this.tagSettled) return null;
@@ -893,6 +915,12 @@ export class Room {
 
   /** When the round of feather tag on now runs out (0 while there is none to settle), for the room object's wake. */
   tagDue(): number {
+    const due = this.roundDue();
+    const away = this.tagAway.size ? Math.min(...this.tagAway.values()) : 0;
+    return due === 0 ? away : away === 0 ? due : Math.min(due, away);
+  }
+
+  private roundDue(): number {
     const g = this.tagGame;
     if (!g) return 0;
     if (g.callEndsAt !== 0) return g.callEndsAt + TAG_COUNTDOWN_MS + TAG_ROUND_MS;
@@ -912,7 +940,7 @@ export class Room {
   }
 
   private saveTag(): void {
-    this.opts.tagSaved?.({ game: this.tagGame, settled: this.tagSettled });
+    this.opts.tagSaved?.({ game: this.tagGame, settled: this.tagSettled, ...(this.tagAway.size ? { away: Object.fromEntries(this.tagAway) } : {}) });
   }
 
   /** Feather tag as the room object kept it, after a wake from hibernation (OP-434); anything that does not look like it is dropped. */
@@ -922,6 +950,10 @@ export class Room {
     const settled = k['settled'];
     if (typeof settled === 'number' && Number.isInteger(settled) && settled >= 0) this.tagSettled = Math.max(this.tagSettled, settled);
     if (this.tagGame === null && isTagState(k['game'])) this.tagGame = k['game'];
+    const away = k['away'];
+    if (typeof away === 'object' && away !== null)
+      for (const [id, until] of Object.entries(away as Record<string, unknown>))
+        if (typeof until === 'number' && Number.isFinite(until) && this.tagGame?.players.includes(id)) this.tagAway.set(id, until);
   }
 
   /** Feather tag as the room keeps it (null before anyone played here), for the tests. */
@@ -1106,9 +1138,12 @@ export class Room {
     }
     this.broadcast({ t: 'leave', id });
     // Out of the room is out of feather tag (OP-403); with the feather, that ends the game with no prizes (OP-434).
+    // A line that dropped has TAG_GRACE_MS to come back first.
     if (this.tagGame?.players.includes(id)) {
-      this.settleTag(this.now());
-      this.setTag(tagLeave(this.tagGame, id, this.now()));
+      if (dropped) {
+        this.tagAway.set(id, this.now() + TAG_GRACE_MS);
+        this.saveTag();
+      } else this.tagOut(id, this.now());
     }
   }
 }

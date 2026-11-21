@@ -107,6 +107,8 @@ let styled = false;
 const LOOK_EVERY_MS = 100;
 /** How long the layer waits before asking the room the same thing again (ms). */
 const ASK_AGAIN_MS = 1500;
+/** How long a Start or Join pressed is asked again while the room has not taken it (ms). */
+const JOIN_KEEP_MS = 6000;
 const PASS_AGAIN_MS = 400;
 
 /** What a prize says to the owl that won it. */
@@ -141,6 +143,8 @@ export class TagLayer {
   private btnText = '';
   private lookedAt = 0;
   private askedJoin = 0;
+  /** Until when a Start or Join pressed is asked again, should it be lost on a line that dropped (OP-434). */
+  private joinUntil = 0;
   private askedPass = 0;
   private passesAsked = 0;
   private readonly refused: TagRefusal[] = [];
@@ -202,6 +206,7 @@ export class TagLayer {
     this.heard.push(`${tagPhase(t, this.now())} r${t.round} [${t.players.join(',')}] h=${t.holder ?? '-'} e=${t.ended ?? '-'}${f.refused ? ` x=${f.refused}` : ''}`);
     if (this.heard.length > 10) this.heard.shift();
     if (f.refused) {
+      this.joinUntil = 0;
       this.refused.push(f.refused);
       if (f.refused === 'full') this.o.toast(TAG_WORDS.full, 3500);
       else if (f.refused === 'closed') this.o.toast(TAG_WORDS.closed, 3500);
@@ -243,6 +248,15 @@ export class TagLayer {
     const pos = this.posOf(me);
     const now = this.now();
     const g = tagAt(this.game, now);
+    // A Start or Join the room has not answered (its frame lost to a dropped line): asked again while it can still be.
+    if (now < this.joinUntil) {
+      const phase = tagPhase(g, now);
+      if (this.mine(g) || (phase !== 'waiting' && phase !== 'call')) this.joinUntil = 0;
+      else if (now - this.askedJoin >= ASK_AGAIN_MS) {
+        this.askedJoin = now;
+        this.conn?.tag?.send('join');
+      }
+    }
     if (pos && time - this.lookedAt >= LOOK_EVERY_MS) {
       this.lookedAt = time;
       const target = this.touching(g, me, pos, now);
@@ -262,6 +276,7 @@ export class TagLayer {
     const now = this.now();
     if (now - this.askedJoin < ASK_AGAIN_MS / 3) return;
     this.askedJoin = now;
+    this.joinUntil = now + JOIN_KEEP_MS;
     link.send('join');
   }
 

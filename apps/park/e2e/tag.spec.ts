@@ -2,7 +2,7 @@ import { type Browser, devices, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { FROM_STUMP_AT, STUMP_ROOM } from '../../../packages/shared/src/party/ids';
 import { PARTY_WORDS } from '../../../packages/shared/src/party/words';
-import { TAG_RING, TAG_ROOM, TAG_WORDS } from '../../../packages/shared/src/party/tag';
+import { TAG_RING, TAG_ROOM, TAG_STANDIN, TAG_WORDS } from '../../../packages/shared/src/party/tag';
 import { doAction, openPark, state, walkAndStop } from './helpers';
 
 /**
@@ -40,7 +40,7 @@ function inside(p: { x: number; y: number }): { x: number; y: number } {
 async function selfIn(page: Page): Promise<string> {
   const s = await state(page);
   const others = new Set(s.peers.map((p) => p.id));
-  const mine = s.tag?.players.filter((id) => !others.has(id)) ?? [];
+  const mine = s.tag?.players.filter((id) => !others.has(id) && id !== TAG_STANDIN) ?? [];
   expect(mine).toHaveLength(1);
   return mine[0]!;
 }
@@ -87,7 +87,7 @@ test.describe('feather tag across the Great Hollow (OP-434)', () => {
     // straight back once TAG_BACK_MS is up, and then it would not be the holder leaving.
     await phone.context().close();
     expect((await tagOf(computer))!.passesAsked).toBeGreaterThanOrEqual(1);
-    // The game ends at once, with no prizes.
+    // The game ends, with no prizes.
     try {
       // Read together, and all of it, so a miss shows who the page still counts in the game.
       await expect
@@ -96,7 +96,8 @@ test.describe('feather tag across the Great Hollow (OP-434)', () => {
             const t = await tagOf(computer);
             return { phase: t?.phase, line: t?.line, players: t?.players, holder: t?.holder, self: t?.self };
           },
-          { timeout: 10_000 },
+          // A goodbye ends it at once; a page that went without one is out once TAG_GRACE_MS is up.
+          { timeout: 20_000 },
         )
         .toEqual({ phase: 'over', line: TAG_WORDS.holderLeft, players: [cid], holder: null, self: cid });
     } catch (e) {

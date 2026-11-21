@@ -2410,6 +2410,8 @@ export class RoomObject extends DurableObject<Env> {
       }
       // A connection lost (not a goodbye, not sent away): one back soon has reconnected.
       room?.leave(att.id, att.sid, !att.kicked && (why.reason === 'dropped' || why.reason === 'timeout'));
+      // An owl whose line dropped mid feather tag is out once its grace runs out (OP-434): wake for that.
+      if (att.room === TAG_ROOM) void this.scheduleAlarm();
       if (owns) {
         this.keepLeavers(att.room);
         this.party.left(att, room, Date.now());

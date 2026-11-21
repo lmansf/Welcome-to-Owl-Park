@@ -76,6 +76,11 @@ export const TAG_REACH = 90;
 export const TAG_SLACK = 60;
 /** How long the owl that just passed the feather can't be handed it straight back (ms). */
 export const TAG_BACK_MS = 2000;
+/**
+ * How long an owl whose connection dropped (no goodbye) stays in the game (ms): a phone that loses its
+ * line for a moment and comes back is still playing; one not back by then has left (OP-434).
+ */
+export const TAG_GRACE_MS = 8000;
 
 /** The park's own owl who stands in for a missing second player (OP-426): Pip, by the id the page draws NPC owls under. */
 export const TAG_STANDIN = 'npc:pip';

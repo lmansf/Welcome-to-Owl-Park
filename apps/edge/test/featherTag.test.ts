@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EDGE_PROTOCOL_VERSION, TAG_CALL_MS, TAG_COUNTDOWN_MS, TAG_MAX_OWLS, TAG_REACH, TAG_RING, TAG_ROUND_MS, TAG_REST_MS, TAG_STANDIN, TAG_STANDIN_HOLD_MS, TAG_ROOM, standInAt, tagAt, type ClientHello, type ServerFrame, type TagRoundResult, type Vec2 } from '@owl-park/shared';
+import { EDGE_PROTOCOL_VERSION, TAG_CALL_MS, TAG_COUNTDOWN_MS, TAG_GRACE_MS, TAG_MAX_OWLS, TAG_REACH, TAG_RING, TAG_ROUND_MS, TAG_REST_MS, TAG_STANDIN, TAG_STANDIN_HOLD_MS, TAG_ROOM, standInAt, tagAt, type ClientHello, type ServerFrame, type TagRoundResult, type Vec2 } from '@owl-park/shared';
 import { ROOMS } from '@owl-park/shared/rooms';
 import { Room, type Peer } from '../src/Room';
 
@@ -152,6 +152,41 @@ describe('feather tag on the room server (OP-434)', () => {
     g.room.leave('b');
     expect(a.lastTag()?.tag).toMatchObject({ ended: 'left', holder: null, players: ['a', 'c'] });
     expect(g.room.tagDue()).toBe(0);
+    g.tick(TAG_ROUND_MS + TAG_REST_MS);
+    g.room.tag('a', { t: 'tag', op: 'view' });
+    expect(g.rounds).toEqual([]);
+  });
+
+  it('keeps an owl whose line dropped in the game while it comes back within its grace, the feather and all', () => {
+    const g = hollow();
+    const a = g.owl('a', IN_A);
+    g.owl('b', IN_B);
+    for (const id of ['a', 'b']) g.room.tag(id, { t: 'tag', op: 'join' });
+    g.tick(TO_LIVE);
+    g.room.tag('a', { t: 'tag', op: 'pass', at: 'b' });
+    g.room.leave('b', undefined, true);
+    expect(a.lastTag()?.tag).toMatchObject({ ended: null, holder: 'b', players: ['a', 'b'] });
+    expect(g.room.tagDue()).toBe(g.now() + TAG_GRACE_MS);
+    g.tick(TAG_GRACE_MS - 1000);
+    expect(g.room.join(new FakePeer(), 'b', hello(IN_B))).toBe('ok');
+    g.tick(2000);
+    g.room.settleTag(g.now());
+    g.room.tag('a', { t: 'tag', op: 'view' });
+    expect(a.lastTag()?.tag).toMatchObject({ ended: null, holder: 'b', players: ['a', 'b'] });
+  });
+
+  it('ends the round once the grace of a holder whose line dropped runs out, with no prizes', () => {
+    const g = hollow();
+    const a = g.owl('a', IN_A);
+    g.owl('b', IN_B);
+    for (const id of ['a', 'b']) g.room.tag(id, { t: 'tag', op: 'join' });
+    g.tick(TO_LIVE);
+    g.room.tag('a', { t: 'tag', op: 'pass', at: 'b' });
+    g.room.leave('b', undefined, true);
+    g.tick(TAG_GRACE_MS);
+    // The room object's wake comes at the grace's end, and settles it.
+    g.room.settleTag(g.now());
+    expect(a.lastTag()?.tag).toMatchObject({ ended: 'left', holder: null, players: ['a'] });
     g.tick(TAG_ROUND_MS + TAG_REST_MS);
     g.room.tag('a', { t: 'tag', op: 'view' });
     expect(g.rounds).toEqual([]);
