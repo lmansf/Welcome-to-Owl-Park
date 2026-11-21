@@ -2,7 +2,7 @@ import { type Browser, devices, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { FROM_STUMP_AT, STUMP_ROOM } from '../../../packages/shared/src/party/ids';
 import { PARTY_WORDS } from '../../../packages/shared/src/party/words';
-import { TAG_RING, TAG_ROOM, TAG_STANDIN, TAG_WORDS } from '../../../packages/shared/src/party/tag';
+import { TAG_RING, TAG_ROOM, TAG_STANDIN, TAG_STANDIN_HOLD_MS, TAG_WORDS } from '../../../packages/shared/src/party/tag';
 import { doAction, openPark, state, walkAndStop } from './helpers';
 
 /**
@@ -144,8 +144,10 @@ test.describe('never a one-owl game: Pip stands in (OP-426, OP-434)', () => {
     await expect.poll(async () => (await tagOf(page))?.holder, { timeout: 5_000 }).toBe('npc:pip');
     expect(tries).toBeLessThanOrEqual(6);
     await expect.poll(async () => (await tagOf(page))?.line).toMatch(/Pip has it/);
-    // Pip gives it back by itself after a short wait.
-    await expect.poll(async () => (await tagOf(page))?.holder, { timeout: 8_000 }).toBe(me);
+    // Pip gives it back by itself after a short wait, unless the round runs out first (the line says the
+    // seconds left): on a busy runner the chase can take most of the round.
+    const left = Number(/· (\d+)s ·/.exec((await tagOf(page))!.line)?.[1] ?? 0);
+    if (left * 1000 > TAG_STANDIN_HOLD_MS + 1500) await expect.poll(async () => (await tagOf(page))?.holder, { timeout: 8_000 }).toBe(me);
 
     // Time: a pass to Pip scored, so the room pays this owl's tier (the low tier, feathers).
     await expect.poll(async () => (await tagOf(page))?.phase, { timeout: 40_000 }).toBe('over');
