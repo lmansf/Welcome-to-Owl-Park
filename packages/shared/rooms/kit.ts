@@ -111,8 +111,7 @@ const L1_KIT: RoomKit = {
   backdrops: [
     { key: 'kit-ground-sky-b', rate: 0.5, screens: [2, 3] },
     { key: 'kit-ground-sky-a', rate: 0.5, screens: [0, 1], fade: { right: SKY_FADE } },
-    { key: 'kit-ground-far-b', rate: 0.6, screens: [2, 3], fade: { left: MID_FADE, right: MID_FADE } },
-    { key: 'kit-ground-far-a', rate: 0.6, screens: [0, 1], fade: { left: MID_FADE, right: MID_FADE } },
+    { key: 'kit-ground-far-a', rate: 0.6, screens: [0, 3], fade: { left: MID_FADE, right: MID_FADE } },
     { key: 'kit-ground-mid-a', rate: 0.75, screens: [0, 0], fade: { left: MID_FADE, right: MID_FADE } },
     { key: 'kit-ground-mid-b', rate: 0.75, screens: [2, 2], fade: { left: MID_FADE, right: MID_FADE } },
     { key: 'kit-ground-mid-c', rate: 0.75, screens: [3, 3], fade: { left: MID_FADE, right: MID_FADE } },
@@ -138,6 +137,10 @@ const L1_KIT: RoomKit = {
     { id: 'steps-2', x0: 2 * ROOM_W + 412, x1: 2 * ROOM_W + 476, top: 238, cap: 'kit-step-stone', mid: 'kit-tex-stone', depth: 228 },
     { id: 'steps-3', x0: 2 * ROOM_W + 434, x1: 2 * ROOM_W + 496, top: 285, cap: 'kit-step-stone', mid: 'kit-tex-stone', depth: 275 },
   ],
+  // The level's first hill (OP-238): on the way to the market the lane rises gently over a knoll, 80 up
+  // at its top, and down again before the archway; the hand cart was left at its foot. Drawn under the path,
+  // so its ends run under the path's edge; a fern grown on its top.
+  hills: [{ id: 'knoll', material: 'earth', x0: 3 * ROOM_W + 300, top0: 0, steps: ['slope-gentle-up', 'slope-gentle-down'] }],
   doors: [
     { door: 'closed-west', piece: 'kit-ground-sign-board', scale: 0.75 },
     { door: 'stair-l1-l0', piece: 'kit-doorway-stone', scale: 0.85 },
@@ -158,8 +161,8 @@ const L1_KIT: RoomKit = {
     { id: 'plinth-lantern', piece: 'kit-ground-lantern-post', x: 2 * ROOM_W + 530, top: 152, scale: 0.6 },
     { id: 'stall', piece: 'kit-ground-market-stall', x: 2 * ROOM_W + 855, top: 0, scale: 1.15 },
     { id: 'sacks', piece: 'kit-sack-pile', x: 2 * ROOM_W + 1060, top: 0, scale: 0.7 },
-    { id: 'cart', piece: 'kit-ground-hand-cart', x: 3 * ROOM_W + 500, top: 0 },
-    { id: 'cart-crates', piece: 'kit-ground-crate-stack', x: 3 * ROOM_W + 670, top: 0, scale: 0.8 },
+    { id: 'cart', piece: 'kit-ground-hand-cart', x: 3 * ROOM_W, top: 0 },
+    { id: 'cart-crates', piece: 'kit-ground-crate-stack', x: 3 * ROOM_W + 170, top: 0, scale: 0.8 },
     { id: 'arch-lantern-west', piece: 'kit-ground-lantern-post', x: 3 * ROOM_W + 1150, top: 0 },
     { id: 'arch-lantern-east', piece: 'kit-ground-lantern-post', x: 3 * ROOM_W + 1520, top: 0, flip: true },
   ],
@@ -200,7 +203,7 @@ const L1_KIT: RoomKit = {
     },
     {
       id: 'hand-cart',
-      story: 'A hand cart left half unloaded on the way to the market, its crates stacked beside it.',
+      story: 'A hand cart left half unloaded at the foot of the knoll on the way to the market, its crates stacked beside it.',
       props: ['cart', 'cart-crates'],
     },
     {
@@ -213,9 +216,9 @@ const L1_KIT: RoomKit = {
   decals: [
     { piece: 'kit-ground-fern-clump', x: 300, y: TREE_GROUND - 40, front: true },
     { piece: 'kit-ground-fern-clump', x: 1520, y: TREE_GROUND - 40, front: true, flip: true },
-    { piece: 'kit-trim-moss-hanging', x: ROOM_W + 420, y: 160 },
-    { piece: 'kit-trim-moss-hanging', x: ROOM_W + 1180, y: 120, flip: true },
-    { piece: 'kit-ground-fern-clump', x: 3 * ROOM_W + 120, y: TREE_GROUND - 40, front: true },
+    { piece: 'kit-ground-fern-clump', x: 3 * ROOM_W + 990, y: TREE_GROUND - 40, front: true },
+    // A fern grown on top of the knoll.
+    { piece: 'kit-ground-fern-clump', x: 3 * ROOM_W + 620, y: TREE_GROUND - 68, scale: 0.9, front: true },
   ],
 };
 
