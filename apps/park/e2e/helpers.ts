@@ -10,6 +10,7 @@ export interface ParkState {
     atStation: boolean;
     phase: 'waiting' | 'call' | 'countdown' | 'live' | 'over';
     self: string;
+    heard: string[];
     players: string[];
     holder: string | null;
     round: number;

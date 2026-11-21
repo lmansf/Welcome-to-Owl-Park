@@ -88,16 +88,22 @@ test.describe('feather tag across the Great Hollow (OP-434)', () => {
     await phone.context().close();
     expect((await tagOf(computer))!.passesAsked).toBeGreaterThanOrEqual(1);
     // The game ends at once, with no prizes.
-    // Read together, and all of it, so a miss shows who the page still counts in the game.
-    await expect
-      .poll(
-        async () => {
-          const t = await tagOf(computer);
-          return { phase: t?.phase, line: t?.line, players: t?.players, holder: t?.holder, self: t?.self };
-        },
-        { timeout: 10_000 },
-      )
-      .toEqual({ phase: 'over', line: TAG_WORDS.holderLeft, players: [cid], holder: null, self: cid });
+    try {
+      // Read together, and all of it, so a miss shows who the page still counts in the game.
+      await expect
+        .poll(
+          async () => {
+            const t = await tagOf(computer);
+            return { phase: t?.phase, line: t?.line, players: t?.players, holder: t?.holder, self: t?.self };
+          },
+          { timeout: 10_000 },
+        )
+        .toEqual({ phase: 'over', line: TAG_WORDS.holderLeft, players: [cid], holder: null, self: cid });
+    } catch (e) {
+      // What the room sent the page, to say why.
+      console.log('tag heard:', JSON.stringify((await tagOf(computer))?.heard));
+      throw e;
+    }
     const end = (await tagOf(computer))!;
     expect(end.score).toBe(2);
     expect(end.prize).toBeNull();

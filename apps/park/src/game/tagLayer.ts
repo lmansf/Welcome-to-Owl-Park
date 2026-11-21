@@ -72,6 +72,8 @@ export interface TagDebug {
   phase: TagPhase;
   /** This owl's id in the game, as the page reads it. */
   self: string;
+  /** The last few games the room sent, in short, oldest first: for a test that misses to say what came. */
+  heard: string[];
   players: string[];
   holder: string | null;
   round: number;
@@ -131,6 +133,7 @@ export class TagLayer {
   private readonly feather: Phaser.GameObjects.Graphics;
   private conn: RoomConnection | null = null;
   private game: TagState = newTag();
+  private heard: string[] = [];
   private line: HTMLElement | null = null;
   private lineText = '';
   private lineYou = false;
@@ -195,6 +198,9 @@ export class TagLayer {
   /** The room's word about the game: an answer or a push. */
   onTag(f: ServerTag): void {
     this.game = f.tag;
+    const t = f.tag;
+    this.heard.push(`${tagPhase(t, this.now())} r${t.round} [${t.players.join(',')}] h=${t.holder ?? '-'} e=${t.ended ?? '-'}${f.refused ? ` x=${f.refused}` : ''}`);
+    if (this.heard.length > 10) this.heard.shift();
     if (f.refused) {
       this.refused.push(f.refused);
       if (f.refused === 'full') this.o.toast(TAG_WORDS.full, 3500);
@@ -433,6 +439,7 @@ export class TagLayer {
       atStation: pos ? atTagStation(pos) : false,
       phase: tagPhase(g, now),
       self: this.me(),
+      heard: [...this.heard],
       players: [...g.players],
       holder: g.holder,
       round: g.round,

@@ -261,7 +261,6 @@ export class NestBook {
     return pool.slice(0, k).map((d) => ({ nestId: d.nestId, look: sanitizeNestLook(d.look) }));
   }
 
-  /** Take today's furniture gift, once a park day: a piece the owl does not own yet, or feathers once it owns them all. */
   /**
    * A furniture piece won as a prize (OP-434's middle tier): one the collector does not own yet, drawn as
    * the day's gift draws one, kept as a gift; null when it owns every piece. Leaves the day's gift alone.
@@ -280,6 +279,7 @@ export class NestBook {
     return furnitureGift(this.owned(cid, now), () => 0).item !== null;
   }
 
+  /** Take today's furniture gift, once a park day: a piece the owl does not own yet, or feathers once it owns them all. */
   claimGift(cid: string, now: number): FurnitureGiftResult {
     const row = this.ensure(cid, null, now);
     const next = nextParkDayAt(now);
