@@ -8,6 +8,7 @@ import { gateMode } from '../gate';
 import { type GateSet, forgetGate, gateFrom } from '../gateSwitch';
 import { passLinkReady, storeCatalogue } from '../opening';
 import { forgetOverflow } from '../overflowState';
+import { EXPORTED_OBJECTS, EXPORT_KINDS, type ExportKind, bucketOf, copierOf, exportPark, isDay, lastExport } from '../parkExport';
 import { KEEPER_TTL_S, isCollectorId, mintKeeper, requireSecret } from '../pass';
 import { ROOMS, roomCap } from '../rooms';
 import { KINDS, type TicketLine } from '../shopify';
@@ -222,6 +223,51 @@ export async function adminRestart(c: RouteCtx): Promise<Response> {
   if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
   if (request.method !== 'POST' || !isAdmin(request, env, log)) return json({ error: 'forbidden' }, 403);
   return json(await restartPark(env, log, 'key'));
+}
+
+// ---- The weekly export (OP-185): the last one, one now, and a file loaded back into a fresh object ----
+export async function adminExport(c: RouteCtx): Promise<Response> {
+  const { request, env, log } = c;
+  if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
+  if (!isAdmin(request, env, log)) return json({ error: 'forbidden' }, 403);
+  const bucket = bucketOf(env);
+  if (request.method === 'POST') {
+    const done = await exportPark(env, log, 'key');
+    return done ? json(done) : json({ error: 'no bucket' }, 503);
+  }
+  if (request.method !== 'GET') return json({ error: 'not found' }, 404);
+  if (!bucket) {
+    log.warn('worker.admin', 'park_export_skipped', 'The last export was asked for, but the Worker has no PARK_EXPORTS bucket bound.', { by: 'key', reason: 'no-bucket' });
+    return json({ error: 'no bucket' }, 503);
+  }
+  return json(await lastExport(bucket));
+}
+
+/** A restore's refusal as the keepers' route answers it. */
+const RESTORE_STATUS = { 'no-bucket': 503, 'no-file': 404, 'bad-file': 422, 'not-empty': 409 } as const;
+
+export async function adminRestore(c: RouteCtx): Promise<Response> {
+  const { request, env, log } = c;
+  // {kind, date, force?}: that day's file for the object of that kind, loaded back into it. Refused
+  // while the object holds records, unless force is true: then what it holds is replaced by the file.
+  if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
+  if (request.method !== 'POST' || !isAdmin(request, env, log)) return json({ error: 'forbidden' }, 403);
+  const body = await readJson(request);
+  const kind = body?.['kind'] as ExportKind;
+  const date = body?.['date'];
+  const force = body?.['force'] ?? false;
+  if (!EXPORT_KINDS.includes(kind) || !isDay(date) || typeof force !== 'boolean') return json({ error: 'bad request', kinds: EXPORT_KINDS }, 400);
+  const name = EXPORTED_OBJECTS.find((o) => o.kind === kind)!.name;
+  const r = await copierOf(env, kind, name).restoreCopy({ kind, name, date }, force);
+  if (!r.ok) {
+    log.warn('worker.admin', 'park_restore_refused', 'A restore was refused: the object is as it was.', { object: `${kind}:${name}`, date, force, reason: r.reason, ...(r.rows !== undefined ? { rows: r.rows } : {}) });
+    return json(r, RESTORE_STATUS[r.reason]);
+  }
+  // The Worker's own copies of what the object keeps: read afresh.
+  if (kind === 'overflow') forgetOverflow();
+  if (kind === 'votes') forgetGate();
+  log.info('worker.admin', 'park_restore', 'An export was loaded back into its object.', { object: `${kind}:${name}`, date, force, tables: r.tables, rows: r.rows, skipped: r.skipped.length });
+  return json(r);
 }
 
 export async function adminCapacity(c: RouteCtx): Promise<Response> {

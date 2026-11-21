@@ -56,6 +56,7 @@ import { roomObjectNames, withCopy } from './copies';
 import { Line, type LineEntry } from './line';
 import { loggerFor, moduleLog } from './logs';
 import { ROOMS, paintableRoom } from './rooms';
+import { type CopyOut, type ExportTarget, type RestoreResult, bucketOf, copyIn, copyOut } from './parkExport';
 import type { Env } from './env';
 
 /** A count older than this is taken again before the line decides anything with it. */
@@ -321,6 +322,15 @@ export class Overflow extends DurableObject<Env> {
     }
     if (e.state === 'claimed') return { state: 'go' };
     return this.answer(n, e, now);
+  }
+
+  /** The weekly export (OP-185, parkExport.ts): this object's tables to its dated file in the park's bucket, and back into a fresh object. */
+  async exportCopy(t: ExportTarget): Promise<CopyOut | null> {
+    return copyOut(this.ctx.storage, bucketOf(this.env), t);
+  }
+
+  async restoreCopy(t: ExportTarget, force: boolean): Promise<RestoreResult> {
+    return copyIn(this.ctx.storage, bucketOf(this.env), t, force);
   }
 
   override async fetch(request: Request): Promise<Response> {
