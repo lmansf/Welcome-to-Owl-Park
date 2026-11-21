@@ -288,6 +288,8 @@ const OBJECTS_KEY = 'objects';
  */
 const LANTERNS_KEY = 'lanterns';
 const QUIZ_KEY = 'quiz';
+/** Storage key for feather tag in the Great Hollow and its last round paid (OP-434), so a wake from hibernation carries the game on. */
+const TAG_KEY = 'tag';
 const lanternsKey = (room: string): string => (room === LANTERN_ROOM ? LANTERNS_KEY : `${LANTERNS_KEY}:${room}`);
 const quizKey = (room: string): string => (room === QUIZ_ROOM ? QUIZ_KEY : `${QUIZ_KEY}:${room}`);
 /** The rooms with lanterns, and with a stage quiz. */
@@ -518,6 +520,9 @@ export class RoomObject extends DurableObject<Env> {
         const settled = await ctx.storage.get<number>(quizKey(id));
         if (typeof settled === 'number' && Object.hasOwn(ROOMS, id)) this.activities(id).quizSettled = settled;
       }
+      // Feather tag as it stood, and its last round paid, so a game outlasts the object's sleep and no round is paid twice (OP-434).
+      const tag = await ctx.storage.get<unknown>(TAG_KEY);
+      if (tag) this.room(TAG_ROOM).restoreTag(tag);
       // The realms switch as last heard, so a wake from hibernation does not close an open realm.
       const realms = await ctx.storage.get<unknown>(REALMS_KEY);
       if (realms) this.realms = cleanRealms(realms);
@@ -562,6 +567,7 @@ export class RoomObject extends DurableObject<Env> {
         rejected: (owl, why) => this.positionRejected(id, owl, why),
         // A round of feather tag over (OP-434): its owls are paid, after the frame or wake that settled it.
         tagRound: (result) => void this.payTag(id, result),
+        tagSaved: (kept) => void this.ctx.storage.put(TAG_KEY, kept),
       });
       this.rooms.set(id, r);
       const kept = this.leftBehind.get(id);

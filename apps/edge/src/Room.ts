@@ -48,6 +48,7 @@ import {
   tagAt,
   tagJoin,
   tagLeave,
+  isTagState,
   tagPass,
   tagResult,
   tagTouches,
@@ -160,6 +161,17 @@ export interface RoomOptions {
   dashRefused?: (id: string, why: DashRefusal) => void;
   /** Told each round of feather tag whose time ran out (OP-434), once: the room object pays its owls. */
   tagRound?: (result: TagRoundResult) => void;
+  /**
+   * Told feather tag as it now stands, and the last round paid, on each change (OP-434): the room object
+   * keeps it in storage, so a wake from hibernation carries the game on and never pays a round twice.
+   */
+  tagSaved?: (kept: TagKept) => void;
+}
+
+/** Feather tag as the room object keeps it in storage (OP-434). */
+export interface TagKept {
+  game: TagState | null;
+  settled: number;
 }
 
 /**
@@ -874,6 +886,7 @@ export class Room {
     const result = tagResult(this.tagGame, now);
     if (!result || result.round <= this.tagSettled) return null;
     this.tagSettled = result.round;
+    this.saveTag();
     this.opts.tagRound?.(result);
     return result;
   }
@@ -893,8 +906,22 @@ export class Room {
     const before = this.tagGame ?? newTag();
     this.tagGame = next;
     if (JSON.stringify(before) === JSON.stringify(next)) return false;
+    this.saveTag();
     this.broadcast({ t: 'tag', tag: next });
     return true;
+  }
+
+  private saveTag(): void {
+    this.opts.tagSaved?.({ game: this.tagGame, settled: this.tagSettled });
+  }
+
+  /** Feather tag as the room object kept it, after a wake from hibernation (OP-434); anything that does not look like it is dropped. */
+  restoreTag(kept: unknown): void {
+    if (this.def.id !== TAG_ROOM || typeof kept !== 'object' || kept === null) return;
+    const k = kept as Record<string, unknown>;
+    const settled = k['settled'];
+    if (typeof settled === 'number' && Number.isInteger(settled) && settled >= 0) this.tagSettled = Math.max(this.tagSettled, settled);
+    if (this.tagGame === null && isTagState(k['game'])) this.tagGame = k['game'];
   }
 
   /** Feather tag as the room keeps it (null before anyone played here), for the tests. */
