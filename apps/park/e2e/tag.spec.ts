@@ -17,6 +17,8 @@ const HOLLOW = { transport: 'edge', room: TAG_ROOM, spawn: 'default' };
 /** Two spots near the feather station, further apart than a touch. */
 const SPOT_A = { x: TAG_RING.x - 80, y: TAG_RING.y - 5 };
 const SPOT_B = { x: TAG_RING.x + 80, y: TAG_RING.y + 5 };
+/** Where the owl that has just been given the feather runs to, well out of the other's reach. */
+const SPOT_FAR = { x: TAG_RING.x + 200, y: TAG_RING.y + 150 };
 
 async function hollowPage(browser: Browser, phone: boolean): Promise<Page> {
   const ctx = await browser.newContext(phone ? { ...devices['Pixel 7'] } : { viewport: { width: 1280, height: 800 } });
@@ -79,17 +81,30 @@ test.describe('feather tag across the Great Hollow (OP-434)', () => {
     await computer.screenshot({ path: 'e2e-screenshots/tag-computer.png' });
     await phone.screenshot({ path: 'e2e-screenshots/tag-phone.png' });
 
-    // The holder walks into the other owl: the feather passes, and the score counts it.
-    // Then it walks straight off again: still touching once TAG_BACK_MS is up, the phone's owl would hand
-    // the feather back, and back and forth, and the owl leaving might not be the one holding it.
-    const there = (await state(phone)).pos;
-    for (let i = 0; i < 4 && (await tagOf(computer))?.holder !== pid; i++) {
-      await computer.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), there);
-      await expect.poll(async () => (await tagOf(computer))?.holder, { timeout: 10_000 }).toBe(pid);
-      await computer.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), SPOT_A);
-      await computer.waitForTimeout(TAG_BACK_MS + 800);
+    // The holder walks into the other owl: the feather passes, and the score counts it. Then the new
+    // holder runs off, as a player would, and the other owl turns back: still touching once TAG_BACK_MS is
+    // up (on a busy runner a page can see the other owl where it was a second or two ago), the feather
+    // would go back, and back and forth, and the owl leaving might not be the one holding it.
+    try {
+      for (let i = 0; i < 4 && (await tagOf(phone))?.holder !== pid; i++) {
+        const there = (await state(phone)).pos;
+        await computer.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), there);
+        await expect.poll(async () => (await tagOf(phone))?.holder, { timeout: 10_000, intervals: [100] }).toBe(pid);
+        await Promise.all([
+          phone.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), SPOT_FAR),
+          computer.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), SPOT_A),
+        ]);
+        await computer.waitForTimeout(TAG_BACK_MS + 800);
+      }
+      await expect.poll(async () => (await tagOf(computer))?.holder).toBe(pid);
+    } catch (e) {
+      // Where each page saw the owls, and what the room sent each, to say why.
+      for (const [name, page] of [['computer', computer], ['phone', phone]] as const) {
+        const s = await state(page);
+        console.log(`tag ${name}:`, JSON.stringify({ pos: s.pos, peers: s.peers.map((o) => ({ id: o.id, pos: o.pos })), heard: s.tag?.heard }));
+      }
+      throw e;
     }
-    expect((await tagOf(computer))!.holder).toBe(pid);
     // The owl with the feather leaves the hollow.
     await phone.context().close();
     expect((await tagOf(computer))!.passesAsked).toBeGreaterThanOrEqual(1);
