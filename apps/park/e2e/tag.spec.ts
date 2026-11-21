@@ -79,19 +79,20 @@ test.describe('feather tag across the Great Hollow (OP-434)', () => {
     await computer.screenshot({ path: 'e2e-screenshots/tag-computer.png' });
     await phone.screenshot({ path: 'e2e-screenshots/tag-phone.png' });
 
-    // The holder walks into the other owl: the feather passes, on both pages, and the score counts it.
+    // The holder walks into the other owl: the feather passes, and the score counts it.
     const there = (await state(phone)).pos;
     await computer.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), there);
-    for (const page of [computer, phone]) await expect.poll(async () => (await tagOf(page))?.holder, { timeout: 10_000 }).toBe(pid);
-    expect((await tagOf(computer))!.passesAsked).toBeGreaterThanOrEqual(1);
-    await expect.poll(async () => (await tagOf(computer))?.score).toBe(2);
-    await expect.poll(async () => (await tagOf(phone))?.line).toMatch(/You have the feather/);
-
-    // The owl with the feather leaves the hollow: the game ends at once, with no prizes.
+    await expect.poll(async () => (await tagOf(computer))?.holder, { timeout: 10_000 }).toBe(pid);
+    // The owl with the feather leaves the hollow at once: still touching, it would hand the feather
+    // straight back once TAG_BACK_MS is up, and then it would not be the holder leaving.
     await phone.context().close();
+    expect((await tagOf(computer))!.passesAsked).toBeGreaterThanOrEqual(1);
+    // The game ends at once, with no prizes.
     await expect.poll(async () => (await tagOf(computer))?.phase, { timeout: 10_000 }).toBe('over');
     await expect.poll(async () => (await tagOf(computer))?.line).toBe(TAG_WORDS.holderLeft);
-    expect((await tagOf(computer))?.prize).toBeNull();
+    const end = (await tagOf(computer))!;
+    expect(end.score).toBe(2);
+    expect(end.prize).toBeNull();
     await computer.context().close();
   });
 });
