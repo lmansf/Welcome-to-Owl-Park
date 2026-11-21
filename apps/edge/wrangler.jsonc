@@ -51,9 +51,10 @@
   // Each cron runs only its own job (src/crons.ts).
   "triggers": { "crons": ["5 5 1 * *", "0 9 * * *"] },
   "vars": {
-    // "single": the whole park lives in one Durable Object (cheapest on the free tier).
-    // "room": one object per room (more fan-out capacity, more awake-time billed).
-    "ROOM_SHARDING": "single",
+    // "room" (since OP-106, before the full opening): one object per room and per copy of a room, the
+    // nests sharing one (each room holds its own cap; more awake-time billed). "single": the whole park
+    // in one Durable Object (cheapest, but it holds only about 80 owls walking at once; docs/CAPACITY.md).
+    "ROOM_SHARDING": "room",
     // Every visitor arrives in the lobby. "open": the turnstiles let everyone through. "ticket"
     // (once tickets sell): only a pass the gate admitted with a ticket goes beyond the lobby.
     "GATE": "open",

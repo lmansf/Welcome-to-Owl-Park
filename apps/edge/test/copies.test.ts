@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CLOSE, LINE_CALL_ZONE, LINE_DEFAULTS, REALMS_DEFAULTS, RIBBON_DEFAULTS, waitMinutes, type Copies } from '@owl-park/shared';
-import { copiesIn, copyObjectName, pickCopy, withCopy } from '../src/copies';
+import { NESTS_OBJECT, copiesIn, copyObjectName, pickCopy, roomObjectName, roomObjectNames, withCopy } from '../src/copies';
 import type { Env } from '../src/env';
 import type { OverflowState } from '../src/Overflow';
 import { forgetCounts, forgetOverflow } from '../src/overflowState';
@@ -19,6 +19,24 @@ describe('copies of a room (OP-075)', () => {
     expect(c).toEqual({});
     expect(copyObjectName('hub', 1)).toBe('room:hub');
     expect(copyObjectName('hub', 2)).toBe('room:hub~2');
+  });
+
+  it('names every room object: the park’s one, or each room’s and copy’s with the nests sharing one (OP-106)', () => {
+    const copies: Copies = { hub: { '2': 'open', '3': 'draining' } };
+    expect(roomObjectNames('single', ['lobby', 'hub'], copies)).toEqual(['park']);
+    expect(roomObjectNames(undefined, ['lobby', 'hub'], copies)).toEqual(['park']);
+    expect(roomObjectNames('room', ['lobby', 'hub'], copies)).toEqual(['room:lobby', 'room:hub', 'room:hub~2', 'room:hub~3', NESTS_OBJECT]);
+    expect(roomObjectName('single', 'nest-k3x9q2ab')).toBe('park');
+    expect(roomObjectName('single', 'hub', 2)).toBe('park');
+    expect(roomObjectName('room', 'hub')).toBe('room:hub');
+    expect(roomObjectName('room', 'hub', 2)).toBe('room:hub~2');
+    // Every nest in the one object the park lists, never one of its own that nothing reaches.
+    expect(roomObjectName('room', 'nest-k3x9q2ab')).toBe(NESTS_OBJECT);
+    expect(roomObjectName('room', 'nest-zzzzzzzz')).toBe(NESTS_OBJECT);
+    expect(roomObjectNames('room', ['hub'], {})).toContain(roomObjectName('room', 'nest-k3x9q2ab'));
+    // The street of nests is a room of the park, not a nest.
+    expect(roomObjectName('room', 'homes')).toBe('room:homes');
+    expect(NESTS_OBJECT.startsWith('room:')).toBe(false);
   });
 
   it('sends a newcomer to the copy with the most free places, back to its own copy while it is there, and never to a draining one', () => {
@@ -155,6 +173,37 @@ describe('the Worker sends owls across two copies of a room (OP-075)', () => {
     forgetOverflow();
     await arrive(env({ copies: {} }), '&copy=2');
     expect(rooms.arrivals.at(-1)?.name).toBe('room:hub');
+  });
+
+  it('sends every nest to the one object the nests share, with one object per room (OP-106)', async () => {
+    const e = env({});
+    for (const nest of ['nest-k3x9q2ab', 'nest-zzzzzzzz']) {
+      const p = await pass(`c_owl${String(n + 1).padStart(5, '0')}`);
+      await worker.fetch(new Request(`https://park.example/ws/${nest}?pass=${encodeURIComponent(p)}`, { headers: { Upgrade: 'websocket', Origin: 'https://park.example' } }), e, CTX);
+    }
+    expect(rooms.arrivals.map((a) => a.name)).toEqual([NESTS_OBJECT, NESTS_OBJECT]);
+  });
+
+  it('adds up every room, its copies and the nests in the park’s counts, with one object per room (OP-106)', async () => {
+    const counted: Record<string, Record<string, number>> = { 'room:hub': { hub: 5 }, 'room:hub~2': { hub: 3 }, 'room:lobby': { lobby: 2 }, [NESTS_OBJECT]: { nests: 4 } };
+    const asked: string[] = [];
+    const ROOMS = {
+      idFromName: (name: string) => name,
+      get: (name: string) => ({
+        fetch: async () => {
+          asked.push(name);
+          return Response.json(counted[name] ?? {});
+        },
+      }),
+    };
+    const e = { ...env({ copies: { hub: { '2': 'open' } } }), ROOMS } as unknown as Env;
+    const r = await worker.fetch(new Request('https://park.example/api/counts'), e, CTX);
+    const body = (await r.json()) as Record<string, number>;
+    expect(body).toMatchObject({ hub: 8, lobby: 2, grove: 0, nests: 4 });
+    expect(asked).toContain(NESTS_OBJECT);
+    // No owl in a nest: no `nests` key, as with the whole park in one object.
+    counted[NESTS_OBJECT] = {};
+    expect((await (await worker.fetch(new Request('https://park.example/api/counts'), e, CTX)).json()) as Record<string, number>).not.toHaveProperty('nests');
   });
 
   it('keeps every room in one object while the park runs that way, copies or not', async () => {

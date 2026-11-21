@@ -12,8 +12,7 @@ import type { RouteCtx } from './router';
 
 /**
  * An owl restored on another screen (OP-139): every room object hears it, and sends the moved card to
- * the owl's sockets from any other device at once (with one object per room, a nest's object hears
- * nothing: its owl is sent the card at its next hello).
+ * the owl's sockets from any other device at once (with one object per room, the nests' one too).
  */
 export async function tellMoved(env: Env, log: Logger, cid: string, dev: string): Promise<void> {
   const copies = await overflowOf(env)

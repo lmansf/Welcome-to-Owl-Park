@@ -77,11 +77,10 @@ count too (Cloudflare's pricing counts twenty of them as one request). Watch Wor
 the daily cap (`docs/DEPLOY.md`, Operations). The fix is Workers Paid at $5 a month, which lifts the
 daily caps: a Money call, the owner's.
 
-A busy day is a different limit. With the room server in one object, as today, the whole park holds
-about 80 owls walking at once (`docs/ARCHITECTURE.md`, section 6); past that, moves lag and then
-every owl is dropped at once and reconnects. Before a day that may bring more, such as opening
-night, set `ROOM_SHARDING` to `room` in `apps/edge/wrangler.jsonc` and deploy: each room then holds
-its own cap of 80. For a night busier still, the keepers' capacity page (`/admin/capacity`, no
+A busy day is a different limit. The room server runs one object per room (`ROOM_SHARDING=room`,
+since OP-106), so each room holds its own cap of 80 walking owls (`docs/ARCHITECTURE.md`, section 6);
+with the whole park in one object it held about 80 in all. More objects awake at once also spend
+more of the free plan's daily object duration (13,000 GB-s): a busy day is the time for Workers Paid. For a night busier still, the keepers' capacity page (`/admin/capacity`, no
 deploy) puts a line in front of the park, turns on the busy ribbon and opens copies of a busy room:
 when and how in `docs/CAPACITY.md`.
 
