@@ -111,8 +111,8 @@ test.describe('feather tag across the Great Hollow (OP-434)', () => {
     await expect.poll(async () => (await tagOf(phone))?.holder).toBe(cid);
     await expect.poll(async () => (await tagOf(computer))?.line).toMatch(/You have the feather/);
     await expect.poll(async () => (await tagOf(phone))?.line).toMatch(/Run!/);
-    await computer.screenshot({ path: 'e2e-screenshots/tag-computer.png' });
-    await phone.screenshot({ path: 'e2e-screenshots/tag-phone.png' });
+    // Both at once: the round's clock runs on, and a slow runner's screenshots eat into it.
+    await Promise.all([computer.screenshot({ path: 'e2e-screenshots/tag-computer.png' }), phone.screenshot({ path: 'e2e-screenshots/tag-phone.png' })]);
 
     // The holder walks up to the other owl, just within reach: the feather passes, and the score counts
     // it. Then it walks back off. Touching owls hand the feather back and forth every TAG_BACK_MS, and on a
@@ -145,7 +145,12 @@ test.describe('feather tag across the Great Hollow (OP-434)', () => {
       }
       throw e;
     }
-    await phone.context().close();
+    // The owl with the feather leaves while the round is still on: a round that ran out first ends by its
+    // time, which is the other test's ending, not this one.
+    expect((await tagOf(computer))?.phase, 'the round still on when the owl with the feather leaves').toBe('live');
+    // It closes its tab the way a player does, so its page says goodbye and the room has it out at once
+    // (a page that went without one is out only once TAG_GRACE_MS is up, by when the round may be over).
+    await phone.close({ runBeforeUnload: true });
     expect((await tagOf(computer))!.passesAsked).toBeGreaterThanOrEqual(1);
     // The game ends, with no prizes.
     try {
@@ -171,6 +176,7 @@ test.describe('feather tag across the Great Hollow (OP-434)', () => {
     expect(end.score).toBeGreaterThanOrEqual(2);
     expect(end.score % 2).toBe(0);
     expect(end.prize).toBeNull();
+    await phone.context().close();
     await computer.context().close();
   });
 });
