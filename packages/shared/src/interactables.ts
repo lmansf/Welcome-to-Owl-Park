@@ -35,6 +35,12 @@ export interface InteractableDef extends Raised {
   flip?: true;
   /** The action button's words for this one where its kind's would be wrong: "Splash in the fountain" (OP-416). */
   label?: string;
+  /**
+   * Where the painting draws it, for a thing the painting has (plazaFloor.ts, PAINTED_THINGS): a tap
+   * anywhere on what the player sees walks the owl over and uses it (OP-436), not only a tap on the
+   * floor in front of it.
+   */
+  tap?: { x: number; y: number; w: number; h: number };
 }
 
 export interface KindRules {
