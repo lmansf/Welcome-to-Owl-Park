@@ -85,12 +85,16 @@ const letter = (z: QuizZone) => z.toUpperCase();
  * The activity cards under the top bar: the stage quiz's question while the owl is by the stage, and
  * the robot owl's tune while its copy game runs. The quest tracker steps aside while one shows.
  */
+/** How long a measure of where the cards stand is kept (ms). */
+const BOX_MS = 250;
+
 export function createActivityCards(root: HTMLElement, bar: HTMLElement): ActivityCards {
   const style = document.createElement('style');
   style.textContent = CSS;
   document.head.appendChild(style);
 
   const cards = el('div', 'cards');
+  let boxed: { at: number; kids: number; w: number; h: number; box: { left: number; top: number; right: number; bottom: number } | null } = { at: 0, kids: -1, w: 0, h: 0, box: null };
   bar.insertAdjacentElement('afterend', cards);
   const quizCard = el('section', 'play-card quiz');
   quizCard.setAttribute('aria-label', 'Stage quiz');
@@ -199,9 +203,16 @@ export function createActivityCards(root: HTMLElement, bar: HTMLElement): Activi
       copyCb = cb;
     },
     box() {
-      if (!cards.childElementCount) return null;
+      const kids = cards.childElementCount;
+      if (!kids) return null;
+      // Asked every frame (the hint chips keep off it, OP-435): measured at most every BOX_MS, and again at
+      // once when a card comes or goes or the window changes size, so a frame never forces a layout.
+      const now = performance.now();
+      if (kids === boxed.kids && boxed.w === window.innerWidth && boxed.h === window.innerHeight && now - boxed.at < BOX_MS) return boxed.box;
       const r = cards.getBoundingClientRect();
-      return r.width > 0 && r.height > 0 ? { left: r.left, top: r.top, right: r.right, bottom: r.bottom } : null;
+      const box = r.width > 0 && r.height > 0 ? { left: r.left, top: r.top, right: r.right, bottom: r.bottom } : null;
+      boxed = { at: now, kids, w: window.innerWidth, h: window.innerHeight, box };
+      return box;
     },
   };
 }
