@@ -100,10 +100,9 @@ const vents = (cols: readonly Updraft[]): KitDecal[] => cols.map((u) => ({ piece
 
 /**
  * Bramble filling a pit of the ground line, patch by patch, as solid as the thorns it is (OP-343): no walk shows through it.
- * The clearing's berry-red painted thorns (kit-clearing-hazard-thorns, OP-373) wait in the kit: filling these pits
- * they are more of the screen off the tree's palette than the screen check allows.
+ * The clearing's painted thorns (kit-clearing-hazard-thorns, OP-373), recoloured into the tree's palette, fill the course's pits.
  */
-function bramble(x0: number, x1: number, piece = 'kit-clearing-bramble-patch', step = 240): KitDecal[] {
+function bramble(x0: number, x1: number, piece = 'kit-clearing-hazard-thorns', step = 240): KitDecal[] {
   const out: KitDecal[] = [];
   for (let x = x0 + step / 2, i = 0; x < x1; x += step, i++) out.push({ piece, x, y: G - 30, hazard: true, ...(i % 2 ? { flip: true } : {}) });
   return out;
