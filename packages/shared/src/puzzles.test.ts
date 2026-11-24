@@ -3,7 +3,7 @@ import { ROOMS } from '../rooms';
 import { CollectionBook, MemoryCollectionStore } from './book';
 import { distance } from './geometry';
 import { INTERACTABLES } from './interactables';
-import { NPCS } from './npcs';
+import { NPCS, npcsIn } from './npcs';
 import { nextParkMonthAt, parkMonth, parkWeek } from './parktime';
 import { MONTHLY_POOL, MONTHLY_PUZZLE_POOL, PUZZLE_QUESTS, QUESTS, TOWN_NPCS, WEEKLY_PUZZLE_POOL, getQuest, questPuzzle } from './questCatalog';
 import { QuestBook, monthlyQuestIds, weeklyPuzzleIds, weeklyQuestIds, type QuestSpots } from './questbook';
@@ -18,6 +18,8 @@ import {
   PuzzleBook,
   getPuzzle,
   layoutRun,
+  puzzlePieceIn,
+  type PuzzlePiece,
   type PuzzleView,
 } from './puzzles';
 
@@ -233,6 +235,53 @@ describe('puzzle runs (OP-255)', () => {
     if (again.ok) expect(again.view.locks.find((l) => l.id === 'bark-latch')!.open).toBe(true);
     // And a friend joins that run, ahead of where a fresh one would be.
     expect(book.join('eli', 'ann', 'lockbox', MONTH, NOW + 2 * DAY)).toMatchObject({ ok: true, view: { mine: 0 } });
+  });
+
+  it("lays every Party Grove piece in the Great Hollow too, and only those (the grove folded into the hollow)", () => {
+    for (const p of PUZZLES) {
+      for (const seed of ['x', 'y', 'z']) {
+        const lay = layoutRun(p, seed, SPOTS);
+        const pieces = lay.flatMap((l) => [l.post, ...l.hidden]);
+        const twins = pieces.flatMap((q) => (q.also ? [q.also] : []));
+        expect(new Set(twins.map((t) => `${t.x}:${t.y}`)).size).toBe(twins.length);
+        for (const q of pieces) {
+          if (q.room !== 'hub') {
+            expect(q.also, `${p.id} ${q.room}`).toBeUndefined();
+            continue;
+          }
+          const t = q.also!;
+          expect(t.room).toBe('m3-hall');
+          expect(SPOTS['m3-hall']!.some((s) => s.x === t.x && s.y === t.y)).toBe(true);
+          // Clear of the hollow's owls where they stand on the new map (Bramble, Pip) and its interactables.
+          for (const b of [...npcsIn('m3-hall', 3), ...INTERACTABLES.filter((b) => b.room === 'm3-hall')]) expect(distance(t, b.pos), `${p.id} ${b.id}`).toBeGreaterThanOrEqual(90);
+          expect(puzzlePieceIn(q, 'm3-hall')).toBe(t);
+          expect(puzzlePieceIn(q, 'hub')).toBe(q);
+          expect(puzzlePieceIn(q, 'grove')).toBeUndefined();
+        }
+      }
+    }
+  });
+
+  it('opens every lock for an owl working the Party Grove pieces in the Great Hollow (new map)', () => {
+    const { book, store } = rig();
+    expect(book.start('ann', 'moon-gate', MONTH, NOW).ok).toBe(true);
+    const view = book.view('ann', 'moon-gate', MONTH, NOW)!;
+    const lay = layoutOf(book, store, view);
+    const p = getPuzzle('moon-gate')!;
+    const at = (q: PuzzlePiece) => q.also ?? q;
+    p.locks.forEach((def, i) => {
+      const l = lay[i]!;
+      if (def.kind === 'code') {
+        for (const [n, h] of l.hidden.entries()) expect(book.look('ann', 'moon-gate', def.id, n, at(h).room, at(h), at(h).top ?? 0, MONTH, NOW).ok, `${def.id} ${n}`).toBe(true);
+      }
+      else expect(book.take('ann', 'moon-gate', def.id, at(l.hidden[0]!).room, at(l.hidden[0]!), at(l.hidden[0]!).top ?? 0, MONTH, NOW).ok).toBe(true);
+      const code = def.kind === 'code' ? book.view('ann', 'moon-gate', MONTH, NOW)!.locks[i]!.clues.map((c) => c.symbol!) : undefined;
+      expect(book.open('ann', 'moon-gate', def.id, code, at(l.post).room, at(l.post), at(l.post).top ?? 0, MONTH, NOW).ok, def.id).toBe(true);
+    });
+    expect(book.view('ann', 'moon-gate', MONTH, NOW)!.complete).toBe(true);
+    // The twin is no use from the other room: its spot in the hollow is not the piece's spot in the hub.
+    const hubPiece = lay.flatMap((l) => [l.post, ...l.hidden]).find((q) => q.room === 'hub')!;
+    expect(puzzlePieceIn(hubPiece, 'hub')).not.toEqual(hubPiece.also);
   });
 
   it('checks reach, order and keys on the server side', () => {

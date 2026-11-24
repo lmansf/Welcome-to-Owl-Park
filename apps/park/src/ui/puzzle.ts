@@ -5,9 +5,13 @@
  * slots, Clear and Try. Placeholder look (OP-256 brings the art): the symbols are drawn as emoji with
  * their names for screen readers. Nothing here knows a code: the room server checks every try.
  */
-import { PUZZLE_SYMBOLS, type LockView, type PuzzleSymbol, type PuzzleView } from '@owl-park/shared';
+import { PUZZLE_SYMBOLS, placeWords, type LockView, type PuzzleSymbol, type PuzzleView } from '@owl-park/shared';
 import type { PuzzleNeighbour } from '../collect/service';
 import { publishedArtUrl } from '../game/art';
+import { walkingMap } from '../game/walkingMap';
+
+/** Places as this owl's park names them: on the new map the great tree's pieces lie in the Great Hollow (placeWords). */
+const shown = (text: string) => placeWords(text, walkingMap());
 
 export const SYMBOL_FACE: Record<PuzzleSymbol, string> = { moon: '🌙', leaf: '🍃', feather: '🪶', acorn: '🌰', star: '⭐', mushroom: '🍄' };
 export const SYMBOL_WORD: Record<PuzzleSymbol, string> = { moon: 'Moon', leaf: 'Leaf', feather: 'Feather', acorn: 'Acorn', star: 'Star', mushroom: 'Mushroom' };
@@ -74,7 +78,7 @@ export function lockStatus(l: LockView, now = Date.now()): string {
   if (l.open) return l.mine ? 'Open' : 'Open (opened before you joined: open it in your own run to count it)';
   if (!l.available) return 'Opens once the locks before it are open';
   if (l.jammedUntil > now) return 'Jammed for a moment';
-  if (l.kind === 'key') return l.hasKey ? `Key in hand: take it to ${l.place}` : 'Find its key';
+  if (l.kind === 'key') return l.hasKey ? `Key in hand: take it to ${shown(l.place)}` : 'Find its key';
   const read = l.clues.filter((c) => c.symbol).length;
   return `${read} of ${l.length} clues read`;
 }
@@ -116,8 +120,8 @@ export function puzzleBox(view: PuzzleView | undefined, near: PuzzleNeighbour[] 
   for (const l of view.locks) {
     const row = el('div', `lock${l.open ? ' open' : l.available ? '' : ' waiting'}`);
     row.dataset['lock'] = l.id;
-    row.append(el('b', '', `${l.name} · ${l.place}`), el('span', '', lockStatus(l)));
-    if (!l.open && l.available) row.append(el('span', 'hint', l.hint));
+    row.append(el('b', '', `${l.name} · ${shown(l.place)}`), el('span', '', lockStatus(l)));
+    if (!l.open && l.available) row.append(el('span', 'hint', shown(l.hint)));
     if (l.kind === 'code' && l.available && !l.open) {
       const syms = el('div', 'syms');
       for (const c of l.clues) syms.appendChild(symbolSpan(c.symbol));

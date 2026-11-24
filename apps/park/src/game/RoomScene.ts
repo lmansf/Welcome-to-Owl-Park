@@ -167,6 +167,7 @@ import {
   eggBubble,
   SNOWBALL_EVERY_MS,
   SNOWBALL_REACH,
+  puzzlePieceIn,
   quizStage,
 } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
@@ -3243,10 +3244,16 @@ export class RoomScene extends Phaser.Scene {
     for (const [quest, view] of this.spectator ? [] : this.quests.puzzles) {
       if (!view.run) continue;
       for (const l of view.locks) {
-        if (l.post.room === room) add(quest, l.id, 'lock', 0, l.post, { kind: 'lock', state: l.open ? 'open' : l.available ? 'ready' : 'waiting' });
+        // A piece in the Party Grove's room lies in the Great Hollow too (puzzlePieceIn), where the new map's owls find it.
+        const post = puzzlePieceIn(l.post, room);
+        if (post) add(quest, l.id, 'lock', 0, post, { kind: 'lock', state: l.open ? 'open' : l.available ? 'ready' : 'waiting' });
         if (l.open || !l.available) continue;
-        for (const c of l.clues) if (c.room === room) add(quest, l.id, 'clue', c.n, c, { kind: 'clue', symbol: c.symbol });
-        if (l.key && !l.hasKey && l.key.room === room) add(quest, l.id, 'key', 0, l.key, { kind: 'key' });
+        for (const c of l.clues) {
+          const at = puzzlePieceIn(c, room);
+          if (at) add(quest, l.id, 'clue', c.n, at, { kind: 'clue', symbol: c.symbol });
+        }
+        const key = l.key && !l.hasKey ? puzzlePieceIn(l.key, room) : undefined;
+        if (key) add(quest, l.id, 'key', 0, key, { kind: 'key' });
       }
     }
     for (const [key, m] of this.puzzleMarks) {
