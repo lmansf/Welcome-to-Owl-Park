@@ -89,12 +89,12 @@ const deck = (id: string, x0: number, x1: number) => ({ id, x0, x1, top: 0, row:
 const drop = (id: string, x0: number, x1: number) => ({ id, x0, x1, top: 0, mid: 'kit-tex-neon-corrugated-tin', sunk: STREET_SUNK, shade: 0x4a4470 });
 
 /**
- * Live neon tubes standing up out of the street between two buildings, too close together to land among, their tops over the line of the decks: the drop is a fall.
- * The city's painted neon hazard (kit-neon-hazard-thorns, OP-373) waits in the kit: laid along these drops it is more of the screen off the tree's palette than the screen check allows.
+ * The city's painted neon tubes (kit-neon-hazard-thorns, OP-373), live and wrapped in wire, laid along the street between two buildings,
+ * too close together to land among, their sparks over the line of the decks: the drop is a fall. Recoloured into the tree's palette.
  */
-function tubes(x0: number, x1: number, step = 140): KitDecal[] {
+function tubes(x0: number, x1: number, step = 300): KitDecal[] {
   const out: KitDecal[] = [];
-  for (let x = x0 + step / 2, i = 0; x < x1; x += step, i++) out.push({ piece: 'kit-neon-neon-tube-hazard', x, y: G + STREET_SUNK - 74, scale: 0.7, hazard: true, ...(i % 2 ? { flip: true } : {}) });
+  for (let x = x0 + step / 2, i = 0; x < x1; x += step, i++) out.push({ piece: 'kit-neon-hazard-thorns', x, y: G + STREET_SUNK - 90, scale: 1.5, hazard: true, ...(i % 2 ? { flip: true } : {}) });
   return out;
 }
 
