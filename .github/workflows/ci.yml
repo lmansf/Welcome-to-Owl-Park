@@ -268,10 +268,10 @@ jobs:
     name: Browser suite ${{ matrix.shard }}/12
     needs: build
     runs-on: ubuntu-latest
-    # A shard runs a twelfth of the suite: about 4 minutes of tests on a quick runner, and up to 7 on the
-    # slowest seen (some runners are two thirds slower). Whole shards, setup included, have taken up to 16
-    # minutes, so the limit stays at 30.
-    timeout-minutes: 30
+    # A shard runs a twelfth of the suite, measured at about 13 minutes of tests (e2e/shard.mjs). Runners
+    # in late Nov 2026 took up to two and a half times that, and shards on main and on pull requests were
+    # cut off at the old 30 minute limit with their last tests unrun, so the limit is 45.
+    timeout-minutes: 45
     strategy:
       fail-fast: true
       matrix:
