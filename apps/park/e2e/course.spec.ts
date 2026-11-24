@@ -172,7 +172,6 @@ test.describe('the parkour courses (OP-224)', () => {
   });
 
   test('the Next part chip walks the owl to the first hazard’s edge, never into it, and says a jump crosses, in every course at every width (OP-422)', async ({ page, isMobile }) => {
-    test.slow(); // three courses, at each width
     // Each course's first room: its way on, and where its first pit starts.
     const courses = [
       { room: 'canopy-1', on: 'to-trunk', pit: 2000 },
@@ -181,6 +180,9 @@ test.describe('the parkour courses (OP-224)', () => {
     ];
     // A computer at the QA walk's two widths; a phone held on its side, as a course asks (held upright, its card covers the chip).
     const sizes = isMobile ? [{ width: 915, height: 412 }] : [{ width: 1440, height: 900 }, { width: 1024, height: 768 }];
+    // Each visit opens a whole park, so the time grows with the visits: three on a phone, six on a computer
+    // (a computer's six ran past a flat 135 s on a slow runner).
+    test.setTimeout(45_000 * sizes.length * courses.length);
     for (const size of sizes) {
       await page.setViewportSize(size);
       for (const c of courses) {
