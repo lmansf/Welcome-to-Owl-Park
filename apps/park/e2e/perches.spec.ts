@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { doAction, holdSpace, jumpFlapGlide, openPark, settleCamera, state, steppedFlight, tapRoomPoint, walkAndStop } from './helpers';
+import { actionButton, doAction, frames, holdSpace, jumpFlapGlide, openGround, openPark, settleCamera, state, steppedFlight, tapRoomPoint, walkAndStop } from './helpers';
 
 /**
  * Perches (OP-084): what an owl can land on above the floor. The hub's west wing has the first two,
@@ -172,6 +172,82 @@ test.describe('perches (OP-084)', () => {
       }
       await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-clearing-piles-${size?.width ?? 'phone'}.png` });
     }
+  });
+
+  test('every treehouse leaf pile is reached the way a player gets there: taps on a phone, clicks on a computer at 1024 wide, no walk hook (OP-423, FP-008)', async ({ page, isMobile }) => {
+    test.slow(); // the walk across the clearing
+    if (!isMobile) await page.setViewportSize({ width: 1024, height: 768 });
+    await openPark(page, { room: 'grove' });
+    const press = (s: { x: number; y: number }) => (isMobile ? page.touchscreen.tap(s.x, s.y) : page.mouse.click(s.x, s.y));
+    // The way along the floor from where the owl comes in (the one the hook test above walks), and the three piles on it.
+    const start = (await state(page)).pos;
+    const way = [start, { x: 2950, y: 868 }, { x: 2890, y: 845 }, { x: 3120, y: 720 }, { x: 3645, y: 725 }, { x: 4200, y: 745 }, { x: 4300, y: 740 }];
+    const piles = [{ id: 'grove-leaves-2', at: 2 }, { id: 'grove-leaves-hut', at: 4 }, { id: 'grove-leaves-porch', at: 6 }];
+    // Points every 20 px along the way up to a given stop, nearest the stop first.
+    const along = (to: number) => {
+      const pts: Array<{ x: number; y: number }> = [];
+      for (let i = 1; i <= to; i++) {
+        const a = way[i - 1]!, b = way[i]!;
+        const n = Math.max(1, Math.round(Math.hypot(b.x - a.x, b.y - a.y) / 20));
+        for (let k = 1; k <= n; k++) pts.push({ x: a.x + ((b.x - a.x) * k) / n, y: a.y + ((b.y - a.y) * k) / n });
+      }
+      return pts.reverse();
+    };
+    const vp = page.viewportSize()!;
+    // Where these room points are drawn on screen (CSS px), for those in view with nothing of the HUD over them; in one look.
+    const shownAll = (pts: Array<{ x: number; y: number }>) =>
+      page.evaluate(({ pts, w, h }) => {
+        const cam = window.owlPark.camera();
+        if (!cam) return pts.map(() => null);
+        return pts.map((p) => {
+          const x = ((p.x - cam.viewX) * cam.zoom) / cam.dpr, y = ((p.y - cam.viewY) * cam.zoom) / cam.dpr;
+          if (x < 24 || x > w - 24 || y < 90 || y > h - 160) return null;
+          return document.elementFromPoint(x, y)?.tagName === 'CANVAS' ? { x, y } : null;
+        });
+      }, { pts, w: vp.width, h: vp.height });
+    const shown = async (p: { x: number; y: number }) => (await shownAll([p]))[0] ?? null;
+    const stood = async () => {
+      await frames(page, 5);
+      await expect.poll(async () => (await state(page)).walking, { timeout: 15_000, intervals: [50] }).toBe(false);
+      return (await state(page)).pos;
+    };
+    for (const pile of piles) {
+      const pos = way[pile.at]!;
+      let flopped = false;
+      for (let tries = 0; tries < 12 && !flopped; tries++) {
+        await settleCamera(page);
+        const onPile = await shown(pos);
+        if (onPile) {
+          // In view: the player taps the pile itself and the owl walks onto it, on the floor; the prompt
+          // shows, and a tap (or a click) on its button flops the owl into the leaves.
+          await press(onPile);
+          const at = await stood();
+          expect((await where(page)).z, `${pile.id}: owl at ${JSON.stringify(at)}`).toBe(0);
+          await expect.poll(async () => (await state(page)).actions, { timeout: 10_000, message: `${pile.id}: no Flop here, owl at ${JSON.stringify(at)}` }).toContain(`use:${pile.id}`);
+          await expect.poll(async () => (await state(page)).promptShown, { timeout: 10_000 }).toBe(isMobile ? 'Flop into the leaves' : 'E: Flop into the leaves');
+          const button = actionButton(page, `use:${pile.id}`);
+          await (isMobile ? button.tap() : button.click());
+          await expect.poll(async () => (await state(page)).objects.find((o) => o.id === pile.id)?.here, { timeout: 15_000, message: `${pile.id}: its button pressed, not flopped into` }).toBe(false);
+          flopped = true;
+          break;
+        }
+        // Out of view: a tap on the farthest open floor along the way toward it, as a player walks.
+        const before = (await state(page)).pos;
+        // (Not on an owl to talk to or anything else in the room that takes a tap: the farthest open point.)
+        const pts = along(pile.at);
+        const seen = await shownAll(pts);
+        const onScreen = pts.filter((_, i) => seen[i]);
+        expect(onScreen.length, `${pile.id}: no floor toward it on screen, owl at ${JSON.stringify(before)}`).toBeGreaterThan(0);
+        const step = await openGround(page, onScreen);
+        await press((await shown(step))!);
+        const after = await stood();
+        expect(Math.hypot(after.x - before.x, after.y - before.y), `${pile.id}: a tap toward it did not move the owl from ${JSON.stringify(before)}`).toBeGreaterThan(4);
+      }
+      expect(flopped, pile.id).toBe(true);
+      test.info().annotations.push({ type: 'flopped', description: pile.id });
+      await stood();
+    }
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-clearing-piles-tapped.png` });
   });
 
   test('the market’s stall row: a jump up from the curb onto its roof, along it onto the signboards, and the feather shop’s roof at the robot owl’s feet', async ({ page }) => {
