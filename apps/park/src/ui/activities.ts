@@ -38,6 +38,8 @@ export interface ActivityCards {
   setCopy(view: CopyView | null): void;
   /** A note button (an emote), or null for Stop. */
   onCopy(cb: (note: string | null) => void): void;
+  /** Where the cards stand on the screen (CSS px), or null while none shows. */
+  box(): { left: number; top: number; right: number; bottom: number } | null;
 }
 
 const ZONE_TINTS: Record<QuizZone, string> = { a: '#9FE8FF', b: '#FFD36A', c: '#FF8CC6' };
@@ -195,6 +197,11 @@ export function createActivityCards(root: HTMLElement, bar: HTMLElement): Activi
     },
     onCopy(cb) {
       copyCb = cb;
+    },
+    box() {
+      if (!cards.childElementCount) return null;
+      const r = cards.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 ? { left: r.left, top: r.top, right: r.right, bottom: r.bottom } : null;
     },
   };
 }

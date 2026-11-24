@@ -46,6 +46,8 @@ export interface HintTarget {
   id: string;
   x: number;
   y: number;
+  /** How far its chip reaches in from its arrow (CSS px, chipReach), where it matters what the chip covers (OP-435). */
+  reach?: number;
 }
 
 /** The part of the room the camera shows, in room pixels. */
@@ -75,17 +77,80 @@ export interface HintPlace {
 
 type Edge = 'left' | 'right' | 'top' | 'bottom';
 
+/** A box on the screen in CSS pixels that no chip may cover: a card the HUD shows, the stage quiz's answer plates (OP-435). */
+export interface ScreenRect {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+/** A chip's half height and the gap it keeps from a box it must not cover (CSS px; HUD .hint is 44 tall). */
+export const CHIP_HALF = 22;
+export const CHIP_GAP = 10;
+/** How far a worded chip can reach in from its arrow when its words aren't known (CSS px): a long doorway name at 14px bold. */
+export const CHIP_REACH = 260;
+
+/** How far a chip reaches in from its arrow (CSS px), as the HUD lays it (hud.ts, .hint.say): its arrow, its padding and its words at 14px bold. */
+export function chipReach(words?: string): number {
+  return words ? CHIP_HALF + 8 + Math.ceil(words.length * 8.4) + 14 : CHIP_HALF;
+}
+
+/**
+ * Where a chip at (x, y) covers the screen, as the HUD lays it (hud.ts, setHints): its arrow at x, and its
+ * words, if any, toward the middle of the screen, `reach` in from the arrow.
+ */
+export function chipBox(p: { x: number; y: number; reach?: number }, screenW: number): ScreenRect {
+  const reach = p.reach ?? CHIP_REACH;
+  const flip = p.x > screenW / 2;
+  return { left: flip ? p.x - reach : p.x - CHIP_HALF, right: flip ? p.x + CHIP_HALF : p.x + reach, top: p.y - CHIP_HALF, bottom: p.y + CHIP_HALF };
+}
+
+const meets = (a: ScreenRect, b: ScreenRect, gap: number) => a.left < b.right + gap && a.right > b.left - gap && a.top < b.bottom + gap && a.bottom > b.top - gap;
+
+type Placed = HintPlace & { edge: Edge; reach?: number };
+
+/**
+ * A chip moved off every box it would cover (OP-435: the walk-there chip for a doorway off screen to the
+ * right sat over the stage quiz's answer B). A chip on a side edge slides along it, below the box or else
+ * above it. One on the top or bottom edge slides along that edge to the nearest spot clear of every box,
+ * or else off the edge, below the box for the top edge (a phone's cards run the screen's whole width) and
+ * above it for the bottom. Kept inside `box`.
+ */
+function clearOf(p: Placed, keepOut: readonly ScreenRect[], box: ScreenRect, screenW: number): void {
+  const clear = (q: { x: number; y: number }) => !keepOut.some((r) => meets(chipBox({ ...q, ...(p.reach !== undefined ? { reach: p.reach } : {}) }, screenW), r, CHIP_GAP));
+  if (clear(p)) return;
+  if (p.edge === 'left' || p.edge === 'right') {
+    const ys = keepOut.flatMap((r) => [r.bottom + CHIP_GAP + CHIP_HALF + 1, r.top - CHIP_GAP - CHIP_HALF - 1]).filter((y) => y >= box.top && y <= box.bottom && clear({ x: p.x, y }));
+    ys.sort((a, b) => Math.abs(a - p.y) - Math.abs(b - p.y));
+    if (ys.length) p.y = ys[0]!;
+    return;
+  }
+  const reach = p.reach ?? CHIP_REACH;
+  const xs = keepOut
+    .flatMap((r) => [r.left - CHIP_GAP - CHIP_HALF - 1, r.left - CHIP_GAP - reach - 1, r.right + CHIP_GAP + CHIP_HALF + 1, r.right + CHIP_GAP + reach + 1])
+    .filter((x) => x >= box.left && x <= box.right && clear({ x, y: p.y }));
+  xs.sort((a, b) => Math.abs(a - p.x) - Math.abs(b - p.x));
+  if (xs.length) {
+    p.x = xs[0]!;
+    return;
+  }
+  const ys = keepOut.map((r) => (p.edge === 'top' ? r.bottom + CHIP_GAP + CHIP_HALF + 1 : r.top - CHIP_GAP - CHIP_HALF - 1)).filter((y) => y >= box.top && y <= box.bottom && clear({ x: p.x, y }));
+  ys.sort((a, b) => Math.abs(a - p.y) - Math.abs(b - p.y));
+  if (ys.length) p.y = ys[0]!;
+}
+
 /**
  * A chip for every target outside the view: on the line from the middle of the screen toward the
  * target, where it meets the inset edge, its arrow pointing that way. Chips on the same edge keep
- * `spacing` apart.
+ * `spacing` apart, and none covers a box in `keepOut` (OP-435).
  */
-export function placeHints(targets: HintTarget[], view: ViewRect, screen: ScreenBox, spacing = 52): HintPlace[] {
+export function placeHints(targets: HintTarget[], view: ViewRect, screen: ScreenBox, spacing = 52, keepOut: readonly ScreenRect[] = []): HintPlace[] {
   const box = { left: screen.side, right: screen.w - screen.side, top: screen.top, bottom: screen.h - screen.bottom };
   if (box.right <= box.left || box.bottom <= box.top) return [];
   const cx = (box.left + box.right) / 2;
   const cy = (box.top + box.bottom) / 2;
-  const placed: Array<HintPlace & { edge: Edge }> = [];
+  const placed: Placed[] = [];
   for (const t of targets) {
     if (t.x >= view.x && t.x <= view.x + view.w && t.y >= view.y && t.y <= view.y + view.h) continue; // on screen
     const dx = ((t.x - view.x) / view.w) * screen.w - cx;
@@ -96,7 +161,7 @@ export function placeHints(targets: HintTarget[], view: ViewRect, screen: Screen
     const sy = dy > 0 ? (box.bottom - cy) / dy : dy < 0 ? (box.top - cy) / dy : Infinity;
     const s = Math.min(sx, sy);
     const edge: Edge = sx <= sy ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'bottom' : 'top';
-    placed.push({ id: t.id, x: cx + dx * s, y: cy + dy * s, angle: Math.atan2(dy, dx), edge });
+    placed.push({ id: t.id, x: cx + dx * s, y: cy + dy * s, angle: Math.atan2(dy, dx), edge, ...(t.reach !== undefined ? { reach: t.reach } : {}) });
   }
   for (const edge of ['left', 'right', 'top', 'bottom'] as const) {
     const along = edge === 'left' || edge === 'right' ? 'y' : 'x';
@@ -107,7 +172,8 @@ export function placeHints(targets: HintTarget[], view: ViewRect, screen: Screen
     const over = row.length ? row[row.length - 1]![along] - hi : 0;
     if (over > 0) for (const p of row) p[along] = Math.max(lo, p[along] - over);
   }
-  return placed.map(({ edge: _edge, ...p }) => p);
+  if (keepOut.length) for (const p of placed) clearOf(p, keepOut, box, screen.w);
+  return placed.map(({ edge: _edge, reach: _reach, ...p }) => p);
 }
 
 /** A doorway as hint targets see it: its id, its floor rect and, seen from the side, its height over the ground line. */

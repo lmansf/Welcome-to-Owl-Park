@@ -167,6 +167,7 @@ import {
   eggBubble,
   SNOWBALL_EVERY_MS,
   SNOWBALL_REACH,
+  quizStage,
 } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { ActivityLink, ActivityPushes, CourseLink, NestLink, NestPushes, NestSeen, PuzzleArgs, PuzzleReply, QuestLink, QuestPushes, QuestReply } from '../collect/service';
@@ -231,7 +232,7 @@ import { enteredRoom, walkingMap } from './walkingMap';
 import { storedKeeper } from '../net/keeper';
 import { FitOverlay } from './fitOverlay';
 import type { LedgePainter, PaintDebug } from './ledgePainter';
-import { doorHintTarget, nearTargets, placeHints, sideChipWords, signFocus, signWaits, signedDoors, touchBottom } from './hints';
+import { chipReach, doorHintTarget, nearTargets, placeHints, type ScreenRect, sideChipWords, signFocus, signWaits, signedDoors, touchBottom } from './hints';
 import { firstWays, type FirstDoor } from './firstWays';
 import { itemScale } from './items';
 import { FLOOR_KINDS, FloorThing } from './FloorThing';
@@ -2087,7 +2088,9 @@ export class RoomScene extends Phaser.Scene {
     const owlAt = `${Math.round(this.me.pos.x / 20)},${Math.round(this.me.pos.y / 20)},${goal ? `${Math.round(goal.x)},${Math.round(goal.y)}` : '-'}`;
     const signSeen = this.signFocused && this.doorSigns?.onScreen(this.signFocused) ? 1 : 0;
     const namedSeen = [...this.firstNamed].map((id) => (this.doorSigns?.onScreen(id) ? 1 : 0)).join('');
-    const at = `${v.x},${v.y},${v.width},${v.height},${window.innerWidth},${window.innerHeight},${owlAt},${signSeen},${namedSeen}`;
+    const keepOut = this.hintsKeepOut(v);
+    const keptKey = keepOut.map((r) => `${Math.round(r.left)},${Math.round(r.top)},${Math.round(r.right)},${Math.round(r.bottom)}`).join(';');
+    const at = `${v.x},${v.y},${v.width},${v.height},${window.innerWidth},${window.innerHeight},${owlAt},${signSeen},${namedSeen},${keptKey}`;
     if (at === this.hintsFor.at && this.room.doors === this.hintsFor.doors) return;
     this.hintsFor = { at, doors: this.room.doors };
     // Seen from the side, each doorway is pointed at on its own landing, and only the near ones (hints.ts).
@@ -2109,7 +2112,15 @@ export class RoomScene extends Phaser.Scene {
       // Its sign on the floor names it once it is on screen: then no chip repeats it at the screen's edge.
       targets = all.filter((t) => ((t.id === focus || named.has(t.id)) && !this.doorSigns?.onScreen(t.id)) || keep.has(t.id));
     } else targets = nearTargets(all, view, SIDE_HINT_REACH);
-    const places = placeHints(targets, view, { w: window.innerWidth, h: window.innerHeight, ...HINT_INSETS, ...(TOUCH_SCREEN ? { bottom: touchBottom(TOUCH_HINT_BOTTOM, window.innerHeight) } : {}) });
+    // Each chip's words, so it is known how far it reaches when it must keep off the quiz (OP-435).
+    const chipText = (id: string): string | undefined => {
+      const door = this.room.doors.find((d) => d.id === id);
+      if (!door) return undefined;
+      if (door.id === toPark) return NEST_WORDS.toPark;
+      return door.to ? (doorLabel(door, this.walking()) ?? (ground !== null ? this.sideChip(door) : undefined)) : undefined;
+    };
+    if (keepOut.length) targets = targets.map((t) => ({ ...t, reach: chipReach(chipText(t.id)) }));
+    const places = placeHints(targets, view, { w: window.innerWidth, h: window.innerHeight, ...HINT_INSETS, ...(TOUCH_SCREEN ? { bottom: touchBottom(TOUCH_HINT_BOTTOM, window.innerHeight) } : {}) }, undefined, keepOut);
     const shown = places.map((p) => `${p.id}:${Math.round(p.x)},${Math.round(p.y)},${p.angle.toFixed(2)}`).join('|');
     if (shown === this.hintsShown) return;
     this.hintsShown = shown;
@@ -2137,6 +2148,23 @@ export class RoomScene extends Phaser.Scene {
         };
       }),
     );
+  }
+
+  /**
+   * What the hint chips keep off (OP-435): the activity cards while one shows, and while the stage quiz's
+   * card shows, its answer plates on the floor, so a chip never hides an answer or the plate to stand on.
+   */
+  private hintsKeepOut(v: Phaser.Geom.Rectangle): ScreenRect[] {
+    const card = this.hud.cardsBox();
+    if (!card) return [];
+    const out: ScreenRect[] = [card];
+    const stage = quizStage(this.room.id);
+    if (stage && v.width > 0 && v.height > 0) {
+      const sx = window.innerWidth / v.width;
+      const sy = window.innerHeight / v.height;
+      for (const r of Object.values(stage.zones)) out.push({ left: (r.x - v.x) * sx, top: (r.y - v.y) * sy, right: (r.x + r.w - v.x) * sx, bottom: (r.y + r.h - v.y) * sy });
+    }
+    return out;
   }
 
   /** The words on the chip for a doorway of this room seen from the side (hints.ts, sideChipWords). */

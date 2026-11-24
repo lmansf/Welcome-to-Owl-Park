@@ -265,6 +265,8 @@ export interface Hud {
   closePanels(): void;
   /** The off-screen hint chips; an empty list clears them. */
   setHints(hints: HudHint[]): void;
+  /** Where the activity cards (the stage quiz's question, the robot owl's tune) stand on the screen, or null while none shows: the hint chips keep off them (OP-435). */
+  cardsBox(): { left: number; top: number; right: number; bottom: number } | null;
   /**
    * Where the visitor's own owl's feet (and the top of its head) are on the screen (CSS px), or null for
    * nowhere (OP-349): the thumbstick goes quiet while the owl is under it (joystick.ts, underStick), and
@@ -1474,6 +1476,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     onLookChange(cb) {
       lookCb = cb;
     },
+    cardsBox: () => cards.box(),
     setQuiz: (v) => cards.setQuiz(v),
     setCopy: (v) => cards.setCopy(v),
     onCopy: (cb) => cards.onCopy(cb),
