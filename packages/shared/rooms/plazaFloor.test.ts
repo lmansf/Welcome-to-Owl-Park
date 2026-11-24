@@ -227,6 +227,20 @@ describe("one story per room, not the same props in every one (OP-416, the owner
     }
   });
 
+  it('takes a tap on the entrance fountain anywhere on it as painted, from the owl on its top to its steps (OP-436)', () => {
+    const f = PAINTED_THINGS.find((t) => t.id === 'lobby-fountain')!;
+    const tap = f.tap!;
+    const inTap = (p: { x: number; y: number }) => p.x >= tap.x && p.x <= tap.x + tap.w && p.y >= tap.y && p.y <= tap.y + tap.h;
+    // Measured on lobby-west.webp: the owl on top, the upper bowl, the basin's rim and the foot of the steps.
+    for (const p of [{ x: 662, y: 530 }, { x: 665, y: 635 }, { x: 520, y: 690 }, { x: 815, y: 715 }]) expect(inTap(p), `${p.x},${p.y}`).toBe(true);
+    // Its painted body is off the floor an owl walks (the walk goes round its front), and where it stands to splash is on it.
+    const lobby = getRoom('lobby')!;
+    expect(lobby.walkable.some((poly) => pointInPolygon({ x: 665, y: 635 }, poly))).toBe(false);
+    expect(lobby.walkable.some((poly) => pointInPolygon(f.pos, poly))).toBe(true);
+    // The splash reaches from the foot of its steps.
+    expect(f.pos.y - (tap.y + tap.h)).toBeLessThan(KIND_RULES[f.kind].reach);
+  });
+
   it('leaves the end of the jetty to fishing: nothing else to use is in reach there, so Interact or E reels in on a bite', () => {
     for (const def of interactablesIn(FISHING_ROOM)) {
       const d = Math.hypot(def.pos.x - FISHING_SPOT.x, def.pos.y - FISHING_SPOT.y);

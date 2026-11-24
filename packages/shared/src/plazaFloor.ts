@@ -227,7 +227,8 @@ const perchId = (c: FloorCluster, i: number) => (i === 0 ? `${c.id}-perch` : `${
  * each and the show when it is used; a sticker of the same thing beside its painted twin is gone.
  */
 export const PAINTED_THINGS: readonly InteractableDef[] = [
-  { id: 'lobby-fountain', kind: 'bird-bath', room: 'lobby', pos: { x: 665, y: 775 }, label: 'Splash in the fountain' },
+  // The fountain as painted (lobby-west): from the owl on its top to the foot of its steps (OP-436).
+  { id: 'lobby-fountain', kind: 'bird-bath', room: 'lobby', pos: { x: 665, y: 775 }, label: 'Splash in the fountain', tap: { x: 488, y: 505, w: 354, h: 232 } },
   // On the pond's near bank east of the jetty, out of reach from the jetty's end, so E there always reels in.
   { id: 'grove-pond-bank', kind: 'bird-bath', room: 'grove', pos: { x: 1250, y: 685 }, label: 'Splash in the pond' },
   { id: 'grove-glowcaps', kind: 'mushroom', room: 'grove', pos: { x: 3420, y: 850 }, label: 'Bounce on the glowing mushrooms' },
