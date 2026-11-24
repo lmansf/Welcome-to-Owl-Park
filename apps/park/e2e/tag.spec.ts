@@ -36,13 +36,40 @@ function inside(p: { x: number; y: number }): { x: number; y: number } {
   return k <= 1 ? p : { x: TAG_RING.x + (p.x - TAG_RING.x) / k, y: TAG_RING.y + (p.y - TAG_RING.y) / k };
 }
 
-/** This page's own owl's id: the one in the game that is not one of the others it sees. */
+/** This page's own owl's id in the game, as the page has it (the room's id for it), and in the game. */
 async function selfIn(page: Page): Promise<string> {
-  const s = await state(page);
-  const others = new Set(s.peers.map((p) => p.id));
-  const mine = s.tag?.players.filter((id) => !others.has(id) && id !== TAG_STANDIN) ?? [];
-  expect(mine).toHaveLength(1);
-  return mine[0]!;
+  const t = await tagOf(page);
+  expect(t?.self).toBeTruthy();
+  expect(t?.players, `the page's own owl ${t?.self} in the game; heard ${JSON.stringify(t?.heard)}`).toContain(t!.self);
+  expect(t!.self).not.toBe(TAG_STANDIN);
+  return t!.self;
+}
+
+/**
+ * Press Join on this page the moment its button offers it, in the page itself. The call lasts
+ * TAG_CALL_MS (10 s); on a busy runner a round trip from the test can take seconds, so a press sent
+ * from the test after it sees the call can land once the call has closed, with Pip in the seat.
+ * Resolves with the game's phase as the page had it when Join was pressed, or 'missed'.
+ */
+function joinWhenCalled(page: Page): Promise<string> {
+  return page.evaluate(
+    ({ join, waitMs }) =>
+      new Promise<string>((done) => {
+        const until = Date.now() + waitMs;
+        const look = () => {
+          const b = document.querySelector<HTMLButtonElement>('#hud .tag-btn[data-tag="join"]');
+          if (b && b.offsetParent !== null && (b.textContent ?? '').includes(join)) {
+            const phase = window.owlPark.state()?.tag?.phase ?? 'none';
+            b.click();
+            return done(phase);
+          }
+          if (Date.now() > until) return done('missed');
+          requestAnimationFrame(look);
+        };
+        look();
+      }),
+    { join: TAG_WORDS.join, waitMs: 30_000 },
+  );
 }
 
 test.describe('feather tag across the Great Hollow (OP-434)', () => {
@@ -59,12 +86,20 @@ test.describe('feather tag across the Great Hollow (OP-434)', () => {
     for (const page of [computer, phone]) await expect.poll(async () => (await tagOf(page))?.server).toBe(true);
     await Promise.all([walkAndStop(computer, SPOT_A.x, SPOT_A.y), walkAndStop(phone, SPOT_B.x, SPOT_B.y)]);
 
-    // Start, from wherever the owl stands: the call goes out to the whole hollow.
+    // Start, from wherever the owl stands: the call goes out to the whole hollow, and the other owl's
+    // button offers Join during it. Pressed there as soon as it does (joinWhenCalled).
+    await expect(tagButton(phone)).toHaveText(TAG_WORDS.start);
+    const joined = joinWhenCalled(phone);
     await tagButton(computer).click();
-    await expect.poll(async () => (await tagOf(phone))?.phase).toBe('call');
-    await expect(tagButton(phone)).toContainText(TAG_WORDS.join);
-    await tagButton(phone).click();
-    for (const page of [computer, phone]) await expect.poll(async () => (await tagOf(page))?.players.length).toBe(2);
+    expect(await joined).toBe('call');
+    for (const page of [computer, phone]) {
+      await expect
+        .poll(async () => {
+          const t = await tagOf(page);
+          return { players: t?.players.length, pip: t?.players.includes(TAG_STANDIN) };
+        }, { timeout: 20_000 })
+        .toEqual({ players: 2, pip: false });
+    }
     await expect(tagButton(phone)).toBeHidden();
     const cid = await selfIn(computer);
     const pid = await selfIn(phone);

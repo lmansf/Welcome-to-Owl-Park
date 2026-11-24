@@ -46,6 +46,30 @@ async function jumpAndDash(page: Page, phone: boolean): Promise<void> {
   if (!phone) await page.evaluate(() => window.dispatchEvent(new KeyboardEvent('keyup', { code: 'ShiftLeft', key: 'Shift' })));
 }
 
+type Heard = { text: string; walking: boolean | null };
+
+/**
+ * From here on, the page keeps every tip it shows, with whether the owl was walking when it came up.
+ * A tip is gone after a few seconds; on a busy runner the test can come round to look later than that.
+ */
+async function hearTips(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const w = window as unknown as { tipsHeard?: Heard[]; tipsEar?: MutationObserver };
+    w.tipsEar?.disconnect();
+    const heard: Heard[] = [];
+    w.tipsHeard = heard;
+    const box = document.querySelector('[data-toasts]');
+    if (!box) return;
+    w.tipsEar = new MutationObserver((changes) => {
+      for (const c of changes) for (const n of c.addedNodes) heard.push({ text: n.textContent ?? '', walking: window.owlPark.state()?.walking ?? null });
+    });
+    w.tipsEar.observe(box, { childList: true });
+  });
+}
+
+/** The tips the page has shown since hearTips. */
+const tipsHeard = (page: Page) => page.evaluate(() => (window as unknown as { tipsHeard?: Heard[] }).tipsHeard ?? []);
+
 /** Down on the ground again. */
 const landed = (page: Page) => expect.poll(async () => (await state(page)).air.s, { timeout: 5_000, intervals: [50] }).toBe(0);
 
@@ -165,6 +189,7 @@ test.describe('the parkour courses (OP-224)', () => {
         await expect(page.locator('[data-turn-phone]')).toBeHidden();
         const chip = page.locator(`[data-hint="${c.on}"]`);
         await expect(chip).toHaveText('Next part');
+        await hearTips(page);
         await chip.click();
         await expect.poll(async () => (await state(page)).walking, { timeout: 15_000, intervals: [50] }).toBe(false);
         // Stood at the edge, on the floor, not put back: the walk never reached the hazard.
@@ -173,7 +198,11 @@ test.describe('the parkour courses (OP-224)', () => {
         expect(s.pos.x, `${c.room} at ${size.width}`).toBeGreaterThan(c.pit - 60);
         expect(s.air.z).toBe(0);
         expect(s.course?.falls ?? 0).toBe(0);
-        await expect(page.locator('[data-toasts]')).toContainText(touch ? 'Jump here to cross: tap Jump.' : 'Jump here to cross: press Space.');
+        // Said once the owl stood at the edge, not as it set off. Read from what the page heard, since the
+        // tip shows for 3.5 s and a slow runner's round trips can take longer than that to come round to it.
+        await expect
+          .poll(() => tipsHeard(page), { timeout: 10_000, intervals: [100] })
+          .toContainEqual({ text: touch ? 'Jump here to cross: tap Jump.' : 'Jump here to cross: press Space.', walking: false });
         // Pressed again from the edge: it stays at the edge and says so again, rather than walking in.
         await chip.click();
         await page.waitForTimeout(600);
