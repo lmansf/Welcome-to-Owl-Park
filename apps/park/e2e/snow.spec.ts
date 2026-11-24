@@ -2,21 +2,33 @@ import { expect, test } from './fixtures';
 import { openPark, state } from './helpers';
 
 /**
- * The first snow (OP-074, D6), behind ?snow=1: falling in the rooms open to the sky, none inside, and
- * nothing without the flag. The snowfall itself is drawn by the room; the screenshots are for a look.
+ * The first snow (OP-074, D6): for everyone from Dec 1, and before then behind ?snow=1. Falling in the
+ * rooms open to the sky, none inside. The snowfall itself is drawn by the room; the screenshots are for a look.
  */
-test.describe('the first snow (OP-074, behind ?snow=1)', () => {
-  test('falls at the tree’s foot and in the lobby, never inside the arcade, and not without the flag', async ({ page }) => {
+test.describe('the first snow (OP-074, from Dec 1)', () => {
+  test('falls at the tree’s foot and in the lobby, never inside the arcade', async ({ page }) => {
     await openPark(page, { collector: 'e2e-snow', tz: 'UTC', snow: '1' });
     expect((await state(page)).snow).toBe(true);
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-snow-hub.png` });
 
     await openPark(page, { collector: 'e2e-snow', tz: 'UTC', snow: '1', room: 'arcade' });
     expect((await state(page)).room).toBe('arcade');
-    expect((await state(page)).snow).toBe(false);
+    expect((await state(page)).snow).toBe(false);  });
 
-    await openPark(page, { collector: 'e2e-snow', tz: 'UTC', room: 'lobby' });
-    expect((await state(page)).snow).toBe(false);
+  test('starts for everyone at midnight Eastern on Dec 1, with no flag (Logan, Nov 24: "Snow on Dec 1")', async ({ context }) => {
+    // The page's clock starts at the moment given and runs on from there.
+    const before = await context.newPage();
+    await before.clock.install({ time: new Date('2026-12-01T04:58:00Z') }); // 23:58 Eastern on Nov 30
+    await openPark(before, { collector: 'e2e-snow', tz: 'UTC', room: 'lobby' });
+    expect((await state(before)).snow).toBe(false);
+    await before.close();
+
+    const after = await context.newPage();
+    await after.clock.install({ time: new Date('2026-12-01T05:01:00Z') }); // 00:01 Eastern on Dec 1
+    await openPark(after, { collector: 'e2e-snow', tz: 'UTC', room: 'lobby' });
+    expect((await state(after)).snow).toBe(true);
+    await after.screenshot({ path: `e2e-screenshots/${test.info().project.name}-snow-dec1-lobby.png` });
+    await after.close();
   });
 
   test('a snowball thrown from the action button flies to the other owl, who shivers on both pages; one every two seconds', async ({ context, isMobile }) => {

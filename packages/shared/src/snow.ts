@@ -6,11 +6,21 @@
  * hall off the neon street (its mood says indoors) and the Great Hollow inside the old tree (the one
  * room with a wall all round its floor). A room with its own rain keeps its rain.
  *
- * Drawn in code for now, behind the park's ?snow=1, with no painted snow and no spend: the painted
- * edits wait for Logan's yes to their cost.
+ * Drawn in code, with no painted snow and no spend: the painted edits wait for Logan's yes to their
+ * cost. It starts for everyone on the park day SNOW_FROM (Logan, Nov 24: "Snow on Dec 1"); before
+ * then the park's ?snow=1 shows it.
  */
 import { isNestRoom } from './homes';
+import { parkDay } from './parktime';
 import type { RoomDef } from './room';
+
+/** The park day the first snow starts for everyone, at midnight Eastern (Logan, Nov 24: "Snow on Dec 1"). */
+export const SNOW_FROM = '2026-12-01';
+
+/** Whether it is snow time for everyone at `at`: from SNOW_FROM on, by the park's day. */
+export function snowSeason(at: number): boolean {
+  return parkDay(at) >= SNOW_FROM;
+}
 
 /** Whether snow falls in a room. */
 export function snowsIn(room: Pick<RoomDef, 'id' | 'mood' | 'bowl' | 'weather'>): boolean {
