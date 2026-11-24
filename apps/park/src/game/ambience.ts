@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { KIT_ART, ROOM_W, WAY_OUT_DOOR, idolRealms, kitFilesOf, seenFromSide, snowTints, snowsIn, type RoomDef } from '@owl-park/shared';
+import { KIT_ART, ROOM_W, WAY_OUT_DOOR, idolRealms, kitFilesOf, seenFromSide, snowSeason, snowTints, snowsIn, type RoomDef } from '@owl-park/shared';
 import { flagOn } from '../flags';
 import { ANCHORS } from '../rooms';
 import { ART, blockadeKey } from './art';
@@ -415,9 +415,10 @@ export function addAmbience(scene: Phaser.Scene, room: RoomDef): Ambience {
       .setDepth(h + 20);
     drifting.push(rain);
   }
-  // The first snow (OP-074, D6, behind ?snow=1): falling in every room open to the sky (snowsIn), and
-  // seen from above lying thin on the floor. Drawn in code: no painted snow until its spend is approved.
-  const snowing = flagOn('snow') && snowsIn(room);
+  // The first snow (OP-074, D6): falling in every room open to the sky (snowsIn), and seen from above
+  // lying thin on the floor. For everyone from Dec 1 (snowSeason), and before then on ?snow=1. Drawn in
+  // code: no painted snow until its spend is approved.
+  const snowing = (snowSeason(Date.now()) || flagOn('snow')) && snowsIn(room);
   if (snowing) {
     const snow = scene.add
       .particles(0, 0, 'fx-dot', {
