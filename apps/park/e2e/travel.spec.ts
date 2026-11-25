@@ -185,6 +185,9 @@ test.describe('travel from the map (OP-130)', () => {
   test('the new map has all three courses by name; a tap and Go, or Enter and Enter, travels to each, and inside one You are here names it (OP-385)', async ({ page, isMobile }) => {
     test.skip(isEdge(), 'on this device');
     test.slow(); // four rooms drawn with software WebGL on CI runners
+    // A phone on its side, as a course plays: held upright, a course shows only the turn-your-phone card
+    // (OP-155), which lies over the Menu button.
+    if (isMobile) await page.setViewportSize({ width: 915, height: 412 });
     await page.addInitScript(() => {
       try {
         sessionStorage.setItem('owl-park-map', '3');
