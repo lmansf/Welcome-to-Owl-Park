@@ -72,6 +72,56 @@ function joinWhenCalled(page: Page): Promise<string> {
   );
 }
 
+/** How a page's own play of the round's pass came out (playPass): its walks up to the other owl, and why it stopped. */
+type PassPlayed = { walks: number; end: string };
+
+/**
+ * The round's pass, played by a page itself, frame by frame, the way joinWhenCalled presses Join. The
+ * round lasts TAG_ROUND_MS (30 s) by the room's clock, and touching owls hand the feather straight back
+ * once TAG_BACK_MS (2 s) is up. On a busy runner a round trip from the test takes seconds: a walk
+ * steered from the test steps off too late, the feather goes back, and the round runs out over the retry.
+ *  - 'give', on the page of the owl that starts with the feather: while its owl holds it, the owl walks
+ *    up to the other, just within reach; the moment the feather is the other owl's, it walks back off,
+ *    out of reach; and up again if the feather came back. Resolves 'over' once the round has ended.
+ *  - 'keep', on the other owl's page: resolves 'apart' once its owl holds the feather and the page draws
+ *    the giver out of reach, so nothing hands it back; 'over' if the round ended first.
+ * 'timeout' if neither came; 'lost: …' if the page went.
+ */
+function playPass(page: Page, role: 'give' | 'keep'): Promise<PassPlayed> {
+  return page
+    .evaluate(
+      ({ give, near, off, reach, waitMs }) =>
+        new Promise<PassPlayed>((done) => {
+          const until = Date.now() + waitMs;
+          let walks = 0;
+          let aim = 0;
+          const look = () => {
+            const s = window.owlPark.state();
+            const t = s?.tag;
+            if (s && t) {
+              if (t.phase !== 'live') return done({ walks, end: 'over' });
+              const peer = s.peers.find((o) => o.id !== t.self && t.players.includes(o.id));
+              const mine = t.holder === t.self;
+              if (peer && give) {
+                // Just within reach while this owl holds the feather; out of reach once it is handed on.
+                const want = mine ? near : off;
+                if (aim !== want) {
+                  aim = want;
+                  if (mine) walks += 1;
+                  window.owlPark.walkTo(peer.pos.x - want, peer.pos.y);
+                }
+              } else if (peer && mine && Math.hypot(peer.pos.x - s.pos.x, peer.pos.y - s.pos.y) > reach) return done({ walks, end: 'apart' });
+            }
+            if (Date.now() > until) return done({ walks, end: 'timeout' });
+            requestAnimationFrame(look);
+          };
+          look();
+        }),
+      { give: role === 'give', near: TAG_REACH - 20, off: TAG_REACH + TAG_SLACK + 60, reach: TAG_REACH + TAG_SLACK, waitMs: 45_000 },
+    )
+    .catch((e: unknown) => ({ walks: 0, end: `lost: ${e instanceof Error ? e.message : String(e)}` }));
+}
+
 test.describe('feather tag across the Great Hollow (OP-434)', () => {
   test('a plain address has the game and its Start button, on for every visitor', async ({ page }) => {
     await openPark(page, HOLLOW);
@@ -105,38 +155,29 @@ test.describe('feather tag across the Great Hollow (OP-434)', () => {
     const pid = await selfIn(phone);
     expect(cid).not.toBe(pid);
 
-    // The call closes, the countdown runs, and the owl that started it holds the feather.
-    await expect.poll(async () => (await tagOf(computer))?.phase, { timeout: 20_000 }).toBe('live');
-    expect((await tagOf(computer))!.holder).toBe(cid);
-    await expect.poll(async () => (await tagOf(phone))?.holder).toBe(cid);
-    await expect.poll(async () => (await tagOf(computer))?.line).toMatch(/You have the feather/);
-    await expect.poll(async () => (await tagOf(phone))?.line).toMatch(/Run!/);
-    // Both at once: the round's clock runs on, and a slow runner's screenshots eat into it.
+    // The pictures of the game on both screens, taken here in the call and not in the round: a slow
+    // runner takes ten seconds and more over the two, and the round's thirty are for the play below.
     await Promise.all([computer.screenshot({ path: 'e2e-screenshots/tag-computer.png' }), phone.screenshot({ path: 'e2e-screenshots/tag-phone.png' })]);
 
-    // The holder walks up to the other owl, just within reach: the feather passes, and the score counts
-    // it. Then it walks back off. Touching owls hand the feather back and forth every TAG_BACK_MS, and on a
-    // busy runner a slow page can still be touching then; so the owl with the feather leaves only once its
-    // own page has it and sees the other owl out of reach, and the walk goes again if it went back.
-    const reach = TAG_REACH + TAG_SLACK;
-    const apart = async () => {
-      const s = await state(phone);
-      const c = s.peers.find((o) => o.id === cid);
-      return !!c && Math.hypot(c.pos.x - s.pos.x, c.pos.y - s.pos.y) > reach;
+    // The call closes, the countdown runs, and the owl that started it holds the feather: each page has
+    // the round on and its line says so. Read together on a page, and the two pages at once.
+    const roundOn = async (page: Page) => {
+      const t = await tagOf(page);
+      return { phase: t?.phase, holder: t?.holder, say: t?.line.split(' · ')[0] };
     };
-    let ready = false;
+    await Promise.all([
+      expect.poll(() => roundOn(computer), { timeout: 20_000 }).toEqual({ phase: 'live', holder: cid, say: TAG_WORDS.youHave }),
+      expect.poll(() => roundOn(phone), { timeout: 20_000 }).toEqual({ phase: 'live', holder: cid, say: TAG_WORDS.theyHave }),
+    ]);
+
+    // The holder walks up to the other owl, just within reach: the feather passes, and the score counts
+    // it. Then it walks back off, out of reach, before the feather can be handed back. The two pages play
+    // that themselves (playPass), and the owl with the feather leaves only once its own page has it and
+    // sees the other owl out of reach.
+    const giving = playPass(computer, 'give');
+    const kept = await playPass(phone, 'keep');
     try {
-      for (let i = 0; i < 4 && !ready; i++) {
-        const p = (await state(phone)).pos;
-        const near = { x: p.x - (TAG_REACH - 20), y: p.y };
-        const off = { x: p.x - (reach + 60), y: p.y };
-        await computer.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), near);
-        await expect.poll(async () => (await tagOf(phone))?.holder, { timeout: 10_000, intervals: [100] }).toBe(pid);
-        await computer.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), off);
-        await expect.poll(apart, { timeout: 5000, intervals: [100] }).toBe(true);
-        ready = (await tagOf(phone))?.holder === pid;
-      }
-      expect(ready).toBe(true);
+      expect(kept.end, 'the other owl holds the feather, out of reach of the one that gave it').toBe('apart');
     } catch (e) {
       // Where each page saw the owls, and what the room sent each, to say why.
       for (const [name, page] of [['computer', computer], ['phone', phone]] as const) {
@@ -176,6 +217,10 @@ test.describe('feather tag across the Great Hollow (OP-434)', () => {
     expect(end.score).toBeGreaterThanOrEqual(2);
     expect(end.score % 2).toBe(0);
     expect(end.prize).toBeNull();
+    // The giver's page played until the round was over, and walked up at least once.
+    const gave = await giving;
+    expect(gave.end).toBe('over');
+    expect(gave.walks).toBeGreaterThanOrEqual(1);
     await phone.context().close();
     await computer.context().close();
   });
