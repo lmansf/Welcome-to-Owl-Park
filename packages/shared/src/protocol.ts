@@ -40,6 +40,8 @@ export interface Walk {
   startedAt: number;
   /** A dash (OP-224, dash.ts): walked at AIR_DASH_SPEED, not the walk's pace. */
   dash?: true;
+  /** A glide lane's carry (OP-287, movers.ts): walked at LANE_SPEED, not the walk's pace. */
+  lane?: true;
 }
 
 export interface PlayerState {

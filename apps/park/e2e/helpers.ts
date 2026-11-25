@@ -67,6 +67,8 @@ export interface ParkState {
     owlWorn: string;
     /** Its head frame as drawn (OP-289): 'front' at rest, then '3q', 'side' and 'back' as it looks around. */
     head: string;
+    /** The pace of the walk it is on as this page draws it (room px a second; 0 standing): a walk's, a dash's or a glide lane's (OP-287). */
+    pace: number;
   }>;
   /** This visitor's owl's head frame as drawn (OP-289), and whether its body (the pose emotes move) is at rest. */
   head: { frame: string; bodyAtRest: boolean };
@@ -109,8 +111,15 @@ export interface ParkState {
     diving: string | null;
     /** The last dive a downdraft took the owl on, as its flight stepped it: which, from how high (room px), and how long the fall was (ms). */
     dove: { id: string; z: number; ms: number } | null;
+    /** The lanes ridden on this page, and the walks the lanes have started on it: one a ride, and one more each time a push turns it round. */
     laneRides: number;
+    carries: number;
     laneTo: { x: number; y: number } | null;
+    /** The last ride as the owl's flight stepped it: which lane, how far it took the owl from where it caught it (room px), in how long (ms), and whether at the lane's pace. */
+    rode: { id: string; px: number; ms: number; fast: boolean } | null;
+    /** The share of the way to the owl the camera's follow goes each frame, and the pace of the walk the owl is on (room px a second; 0 standing). */
+    ease: number;
+    pace: number;
     cameBy: 'dive' | 'tunnel' | null;
   } | null;
   /** The words of the prompt over the visitor's own owl (OP-344), if any. */

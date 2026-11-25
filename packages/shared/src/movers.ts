@@ -24,15 +24,20 @@
  * What the room server has to know of each. Of a dive, nothing: an owl falling is an air state the room
  * takes anywhere (flight.ts, checkAir), and DIVE_SPEED is under the fastest fall it takes. Of a tunnel,
  * nothing: a change of room is a new hello. A lane holds an owl up, so, as with a thermal, the room
- * takes a lifted owl at a lane's height only inside one (laneHolds, Room.ts), and the carry is the owl's
- * own walk at the walk's pace, checked as any walk: the wind's way (wind.ts).
+ * takes a lifted owl at a lane's height only inside one (laneHolds, Room.ts). The carry is the owl's
+ * own walk, checked as any walk (the wind's way, wind.ts), at the lane's pace (walk.ts, LANE_SPEED): a
+ * pace the room gives only to an owl it holds up on that lane, between two points within the lane's
+ * reach (laneCarrying), and takes back when the owl leaves the lane's air. A lane's reach is floor all
+ * over (moverProblems), so from anywhere in it the way to either end is clear. And as the room's place
+ * for an owl can be a moment behind its page's, a carry asked for from just outside the reach starts
+ * at the nearest spot inside it (laneInto, Room.ts): the floor's edge stops no carry short of its end.
  *
  * TODO-DOCS (OP-287): docs/ARCHITECTURE.md's flight notes gain the three movers beside the updraft, the
  * wind and the thermal, and that a lane's lifted owl is held to the lane by the room; docs/MAP.md's
  * Great Hollow and arcade gain the knot hole, the tunnel and the lane once the flag is on for everyone.
  */
 import { AIRBORNE, JUMP_RISE, type Air, type Flaps } from './flight';
-import { closestPointOnSegment, distance, isWalkable, pointInRect, type Polygon, type Rect } from './geometry';
+import { closestPointOnSegment, distance, isWalkable, pointInPolygon, pointInRect, type Polygon, type Rect } from './geometry';
 import { MAX_FALL } from './jump';
 import type { Vec2 } from './protocol';
 import { WIND_CATCH_ABOVE, WIND_CATCH_BELOW } from './wind';
@@ -197,6 +202,28 @@ export function laneHolds(lanes: readonly GlideLane[] | undefined, p: Vec2, top:
   return (lanes ?? []).some((l) => l.z === top && laneOff(l, p) <= l.r + slack);
 }
 
+/**
+ * The lane whose carry a walk from `from` to `to` is, by an owl held at `top`: one of that height with
+ * both the walk's ends within its reach (the room server's check, with its slack for latency). A lane's
+ * reach has no dents, so a straight walk between two points in it never leaves it.
+ */
+export function laneCarrying(lanes: readonly GlideLane[] | undefined, from: Vec2, to: Vec2, top: number, slack = 0): GlideLane | undefined {
+  return (lanes ?? []).find((l) => l.z === top && laneOff(l, from) <= l.r + slack && laneOff(l, to) <= l.r + slack);
+}
+
+/**
+ * The point of a lane's reach nearest `p`: `p` itself inside the reach, and from outside it the spot
+ * `inset` px in from the reach's edge, straight toward the lane's line (so the spot is still inside
+ * once it is rounded to whole pixels).
+ */
+export function laneInto(lane: GlideLane, p: Vec2, inset = 0): Vec2 {
+  const on = closestPointOnSegment(p, lane.a, lane.b);
+  const off = distance(p, on);
+  if (off <= lane.r) return p;
+  const k = Math.max(0, lane.r - inset) / off;
+  return { x: on.x + (p.x - on.x) * k, y: on.y + (p.y - on.y) * k };
+}
+
 /** The highest any lane of a room holds an owl: 0 for a room with none. */
 export function laneTop(room: { movers?: Movers | undefined }): number {
   return Math.max(0, ...(room.movers?.lanes ?? []).map((l) => l.z));
@@ -220,12 +247,58 @@ export interface MoverRoom {
 /** How far apart the points along a lane's line are checked for floor (room px): under the room server's own step along a walk. */
 const LANE_SAMPLE = 20;
 
+/** Which side of the line through `a` and `b` a point is on: over 0 on one, under 0 on the other, 0 on the line. */
+function sideOf(a: Vec2, b: Vec2, p: Vec2): number {
+  return (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+}
+
+/**
+ * How near one stretch of a floor's edge, from `c` to `d`, comes to the line from `a` to `b` (room px),
+ * and the point of the edge where it does: 0 where the two cross.
+ */
+function edgeGap(a: Vec2, b: Vec2, c: Vec2, d: Vec2): { gap: number; at: Vec2 } {
+  const sc = sideOf(a, b, c);
+  const sd = sideOf(a, b, d);
+  if (sc * sd < 0 && sideOf(c, d, a) * sideOf(c, d, b) < 0) {
+    const t = sc / (sc - sd);
+    return { gap: 0, at: { x: c.x + (d.x - c.x) * t, y: c.y + (d.y - c.y) * t } };
+  }
+  // Two stretches that do not cross are nearest at an end of one of them.
+  let best = { gap: Number.POSITIVE_INFINITY, at: c };
+  for (const at of [c, d, closestPointOnSegment(a, c, d), closestPointOnSegment(b, c, d)]) {
+    const gap = distance(at, closestPointOnSegment(at, a, b));
+    if (gap < best.gap) best = { gap, at };
+  }
+  return best;
+}
+
+/**
+ * How near the floor's edge comes to a lane's line (room px), and where: the edge of the shape of the
+ * floor the lane starts on (where two of its shapes overlap there, the one that keeps farther off).
+ * A lane whose reach is no wider than that is over floor all over: its line starts on that shape, and
+ * the shape's edge comes nowhere inside its reach. 0 for a lane that starts off the floor.
+ */
+export function laneClear(lane: GlideLane, floor: readonly Polygon[]): { gap: number; at: Vec2 } {
+  let best: { gap: number; at: Vec2 } | null = null;
+  for (const shape of floor) {
+    if (!pointInPolygon(lane.a, shape)) continue;
+    let near = { gap: Number.POSITIVE_INFINITY, at: lane.a };
+    for (let i = 0, j = shape.length - 1; i < shape.length; j = i++) {
+      const edge = edgeGap(lane.a, lane.b, shape[j]!, shape[i]!);
+      if (edge.gap < near.gap) near = edge;
+    }
+    if (!best || near.gap > best.gap) best = near;
+  }
+  return best ?? { gap: 0, at: lane.a };
+}
+
 /**
  * Whether a room's movers make sense, each problem in words: a downdraft over a doorway that leads
  * somewhere, wide enough to stand in, its dive under the room's fastest fall; a lane long enough to be
- * worth riding, over floor all its length (its carry is a walk), at a height a held jump from the floor
- * is caught at; a tunnel at a doorway that leads somewhere, its mouth by that doorway; and each piece a
- * mover hides one the room has.
+ * worth riding, over floor all its length and all its reach (its carry is a walk, from anywhere in its
+ * reach straight to one of its ends), at a height a held jump from the floor is caught at; a tunnel at
+ * a doorway that leads somewhere, its mouth by that doorway; and each piece a mover hides one the room
+ * has.
  */
 export function moverProblems(room: MoverRoom): string[] {
   const out: string[] = [];
@@ -265,12 +338,19 @@ export function moverProblems(room: MoverRoom): string[] {
     if (!(l.z >= LANE_CATCH_BELOW)) out.push(`${room.id}/${l.id}: lower than its catch (${LANE_CATCH_BELOW})`);
     if (!(l.z - LANE_CATCH_BELOW <= JUMP_RISE - 10)) out.push(`${room.id}/${l.id}: too high for a held jump from the floor to be caught`);
     const steps = Math.max(1, Math.ceil(length / LANE_SAMPLE));
+    let onFloor = true;
     for (let i = 0; i <= steps; i++) {
       const p = { x: l.a.x + ((l.b.x - l.a.x) * i) / steps, y: l.a.y + ((l.b.y - l.a.y) * i) / steps };
       if (!isWalkable(p, room.walkable)) {
         out.push(`${room.id}/${l.id}: off the floor at ${Math.round(p.x)},${Math.round(p.y)}`);
+        onFloor = false;
         break;
       }
+    }
+    if (onFloor) {
+      // Its reach is floor all over: a dent in it would stop a carry short of the lane's end (resolveTarget), at whatever stands in the dent.
+      const edge = laneClear(l, room.walkable);
+      if (edge.gap < l.r) out.push(`${room.id}/${l.id}: its reach leaves the floor it starts on at ${Math.round(edge.at.x)},${Math.round(edge.at.y)}`);
     }
   }
   for (const t of movers.tunnels ?? []) {
