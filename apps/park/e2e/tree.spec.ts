@@ -123,8 +123,9 @@ test.describe('the tree, map 2 (OP-156, OP-162)', () => {
     // The fronts: the west path's lamps, the square's post, the stair's banister (raised) and the tower's railing.
     // The way down to level 0 is a doorway now (OP-163), marked and no longer shaded.
     // The stair's treads, its balcony and the roof run's climb are no ledges (OP-220); the closed gate's
-    // locked gate and the rope across the roof run's foot are drawn.
-    expect((await state(page)).tree).toEqual({ fronts: 23, raised: 8, shades: 5, lips: 14, marks: 3, barriers: 2, landings: 0, behind: false });
+    // locked gate and the rope across the roof run's foot are drawn. The knoll on the way to the market
+    // (OP-238) has its edge too, so it shows where the owl walks over the painting.
+    expect((await state(page)).tree).toEqual({ fronts: 23, raised: 8, shades: 5, lips: 15, marks: 3, barriers: 2, landings: 0, behind: false });
   });
 
   test('the stair’s banister stays behind an owl walking by on the floor, at the stair’s foot and past it (OP-173, OP-220)', async ({ page }) => {

@@ -176,7 +176,7 @@ describe.each(Object.keys(KIT_DEMOS))('the %s demo drawn from the kit (OP-234)',
     const plan = kitDrawPlan(kit);
     for (const d of kit.doors) expect(plan.some((p) => p.role === 'door' && p.id === d.id), d.id).toBe(true);
     const stairOf = new Map((kit.kit?.stairs ?? []).flatMap((s) => s.treads.map((t) => [t, s.id] as const)));
-    for (const p of kit.perches ?? []) expect(plan.some((d) => (d.role === 'ledge' && d.id === p.id) || (d.role === 'stair' && d.id === stairOf.get(p.id))), p.id).toBe(true);
+    for (const p of kit.perches ?? []) expect(plan.some((d) => ((d.role === 'ledge' || d.role === 'hill') && d.id === p.id) || (d.role === 'stair' && d.id === stairOf.get(p.id))), p.id).toBe(true);
   });
 
   it("signs every way not open yet over a barrier the kit draws there", () => {
