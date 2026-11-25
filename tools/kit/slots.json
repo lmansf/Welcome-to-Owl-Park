@@ -24,6 +24,7 @@
       "rows": ["kit-cut-ink-bank", "kit-cut-ink-bank-thin", "kit-cut-ink-plank", "kit-cut-plank", "kit-cut-plank-thin", "kit-cut-stone", "kit-cut-stone-mossy"],
       "slots": {
         "texture-ground": ["kit-tex-ink-ink-stone", "kit-tex-planks"],
+        "hazard": ["kit-tex-ink-river"],
         "perch-small": ["kit-ink-reed-tuft", "kit-ink-paper-cliff", "kit-ink-pine-bough", "kit-ink-rock-pillar"],
         "sky": ["kit-ink-sky-b"],
         "far": ["kit-ink-far-a", "kit-ink-far-b"],
