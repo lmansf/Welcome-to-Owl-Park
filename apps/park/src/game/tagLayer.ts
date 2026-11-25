@@ -13,7 +13,7 @@
  *
  * The room server keeps the game and checks every step (party/tag.ts); this layer only asks it, and reads
  * what it says on the room's clock with tagAt, so every page shows the same moment. Without the room
- * server (the local park) the button says it needs the server.
+ * server (the local park, or a park that could not connect) the button says the park could not connect.
  *
  * Never a one-owl game (OP-426): if no one joins the call, Pip, the lantern keeper, plays, running round
  * the feather station where the clock has Pip (standInAt) on every page; Pip's own NPC owl is drawn
@@ -44,6 +44,7 @@ import {
   type Vec2,
 } from '@owl-park/shared';
 import type { RoomConnection } from '../net/transport';
+import { ROOM_DOWN, roomReachable } from './roomDown';
 
 export interface TagLayerOpts {
   scene: Phaser.Scene;
@@ -148,7 +149,6 @@ export class TagLayer {
   private askedPass = 0;
   private passesAsked = 0;
   private readonly refused: TagRefusal[] = [];
-  private toldNoServer = false;
   private pipShown = false;
   private toldPip = false;
   private prize: ServerTagPrize | null = null;
@@ -268,9 +268,11 @@ export class TagLayer {
   /** Start a game, or join the one calling (OP-434): from the button or the station. */
   join(): void {
     const link = this.conn?.tag;
-    if (!link) {
-      if (!this.toldNoServer) this.o.toast(TAG_WORDS.noServer, 4000);
-      this.toldNoServer = true;
+    // With no room server to ask (the park could not connect, or the local park), every press says so
+    // in the line Play and Talk use (OP-434, OP-407's pattern), never nothing.
+    if (!link || !roomReachable(link)) {
+      this.joinUntil = 0;
+      this.o.toast(ROOM_DOWN, 3200);
       return;
     }
     const now = this.now();

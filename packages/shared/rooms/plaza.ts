@@ -33,6 +33,12 @@ export interface PlazaSpec {
   texture: string;
   /** A colour the texture is drawn multiplied by, so it sits in the painting's light (KitSurface.tint). */
   tint?: number;
+  /**
+   * How far the painting's foot runs on over the plaza (KitSurface.skirt; PLAZA_SKIRT unless said):
+   * shorter where its foot has things in it that would show upside down (the grove's lit doorway and
+   * mushrooms, OP-488), so it only eases the join and the floor's own texture does the rest.
+   */
+  skirt?: number;
   /** The worn ring laid round each gathering spot, its middle on each of `rings`. */
   ring: string;
   rings: Vec2[];
@@ -96,7 +102,7 @@ export function growToPlaza(room: RoomDef, spec: PlazaSpec): RoomDef {
       // the join (a painted screen is drawn a pixel taller than its tile, so no gap shows either).
       surfaces: [
         ...(room.kit?.surfaces ?? []),
-        { id: 'plaza-floor', texture: spec.texture, rect: { x: 0, y: ROOM_H, w: room.size.w, h: h - ROOM_H }, ...(spec.tint !== undefined ? { tint: spec.tint } : {}), skirt: PLAZA_SKIRT },
+        { id: 'plaza-floor', texture: spec.texture, rect: { x: 0, y: ROOM_H, w: room.size.w, h: h - ROOM_H }, ...(spec.tint !== undefined ? { tint: spec.tint } : {}), skirt: spec.skirt ?? PLAZA_SKIRT },
       ],
     },
   };

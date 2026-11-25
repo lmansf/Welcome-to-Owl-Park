@@ -63,21 +63,32 @@ export function drawKit(scene: Phaser.Scene, room: RoomDef, depths: KitDepths): 
   // A flooded walk's still water (OP-343): over the walk and what stands in it, under the pieces on it and the owls.
   const ground = room.kit?.ground ?? room.size.h;
   for (const p of room.kit?.paths ?? []) {
-    if (p.flood) drawWater(scene, p.x0, p.x1, ground - p.top - KIT_FLOOD_OVER, ground - p.top + p.flood.depth, p.flood.color, (depths.play + depths.piece) / 2);
+    if (p.flood) drawWater(scene, p.x0, p.x1, ground - p.top - KIT_FLOOD_OVER, ground - p.top + p.flood.depth, p.flood.color, (depths.play + depths.piece) / 2, p.flood.art);
   }
   return { pieces: plan.length, images, frames };
 }
 
 /**
- * Still water from `y0` down to `y1`, in plain shapes until a realm has art for it: its colour, a
- * pale line where its surface is, darker towards its foot, and a few short ripples (the same ones on
- * every visit: they are placed by where they are, not by chance).
+ * Still water from `y0` down to `y1`. Painted (OP-485) where the run names its water's art and it has
+ * loaded: one band of water scaled to the water's height and repeated along it, lined up with the room
+ * so two pools of the same water match. The band is a square kit texture's top eighth (the ink river,
+ * standing in for the realm's hazard slot), or the whole of a strip (the realm's own hazard art, once
+ * delivered). Otherwise in plain shapes:
+ * its colour, a pale line where its surface is, darker towards its foot, and a few short ripples (the
+ * same ones on every visit: they are placed by where they are, not by chance).
  */
-function drawWater(scene: Phaser.Scene, x0: number, x1: number, y0: number, y1: number, color: number, depth: number): void {
+function drawWater(scene: Phaser.Scene, x0: number, x1: number, y0: number, y1: number, color: number, depth: number, art?: string): void {
   if (x1 <= x0 || y1 <= y0) return;
-  const g = scene.add.graphics().setDepth(depth);
   const w = x1 - x0;
   const h = y1 - y0;
+  if (art && scene.textures.exists(art)) {
+    const frame = scene.textures.getFrame(art);
+    const band = frame.width === frame.height ? frame.height / 8 : frame.height;
+    const scale = h / band;
+    scene.add.tileSprite(x0, y0, w, h, art).setOrigin(0).setTileScale(scale).setTilePosition(x0 / scale, 0).setDepth(depth);
+    return;
+  }
+  const g = scene.add.graphics().setDepth(depth);
   g.fillStyle(color, 1).fillRect(x0, y0, w, h);
   g.fillStyle(0x000000, 0.1).fillRect(x0, y0 + h * 0.45, w, h * 0.55);
   g.fillStyle(0x000000, 0.1).fillRect(x0, y0 + h * 0.75, w, h * 0.25);

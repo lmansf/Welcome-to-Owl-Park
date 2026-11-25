@@ -40,44 +40,6 @@ const actionButton = (label: string, screen: string, onClick: () => void, ghost 
   return b;
 };
 
-/** How long a travel button is held before the owl goes (OP-114, OP-130): long enough that a stray tap mid-quest does nothing. */
-const HOLD_MS = 350;
-
-/**
- * A button that acts once held for HOLD_MS, a fill running across it meanwhile (travel, OP-130, as
- * Go home was, OP-114); let go sooner and it empties, and `early` is told. A key's press is meant: it
- * acts at once.
- */
-const holdButton = (label: string, onHold: () => void, early: () => void): HTMLButtonElement => {
-  const b = el('button', 'mbtn hold', label);
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  const letGo = (): boolean => {
-    if (!timer) return false;
-    clearTimeout(timer);
-    timer = null;
-    b.classList.remove('holding');
-    return true;
-  };
-  b.addEventListener('pointerdown', () => {
-    letGo();
-    b.classList.add('holding');
-    timer = setTimeout(() => {
-      timer = null;
-      b.classList.remove('holding');
-      onHold();
-    }, HOLD_MS);
-  });
-  b.addEventListener('pointerup', () => {
-    if (letGo()) early();
-  });
-  for (const t of ['pointercancel', 'pointerleave'] as const) b.addEventListener(t, () => void letGo());
-  b.addEventListener('click', (e) => {
-    if (e.detail === 0) onHold();
-  });
-  b.addEventListener('contextmenu', (e) => e.preventDefault()); // a long press is the hold, not the browser's menu
-  return b;
-};
-
 // ---------- Collection ----------
 
 const KIND_NAMES: Record<ItemKind, string> = { wear: 'Things to wear', pet: 'Pets', fx: 'Effects', emote: 'Emotes' };
@@ -264,30 +226,44 @@ export const MAP_PATHS: ReadonlyArray<[string, string]> = [
  * the realms beyond them (the Party Grove folded into it, Nov 21), and the hatch down to the arcade. Every
  * place travels (NEW_MAP_LANDINGS, OP-305), into the park once through the Treetop Commons' turnstiles.
  */
+/**
+ * A realm's or a course's name as the sign at its doorway in the Great Hollow shows it (its Commons' way
+ * to the realm, `to-<realm>`, and to its course, `course-<realm>`), so the map and the rooms say the same (OP-385).
+ */
+const hallSign = (door: string, fallback: string) => ROOMS['m3-hall']?.doors.find((d) => d.id === door)?.label ?? fallback;
+const realmName = (level: string, fallback: string) => hallSign(`to-${level}`, fallback);
+const courseName = (level: string, fallback: string) => hallSign(`course-${level}`, fallback);
+
 export const NEW_MAP_PLACES: readonly Place[] = [
   { id: 'nest', name: NEST_WORDS.yourNest, col: 0, row: 0 },
   { id: 'homes', name: 'The nests’ street', col: 1, row: 0 },
   { id: 'lobby', name: 'The Treetop Commons', col: 1, row: 1 },
+  { id: 'glass', name: realmName('glass', 'The glass realm'), col: 0, row: 2 },
   { id: 'm3-hall', name: 'The Great Hollow', col: 1, row: 2 },
-  // The ink-wash realm's place is its room, the ink garden (OP-402), and its course Brushstroke Bridges with it (OP-303).
-  { id: 'ink', name: 'The ink garden', col: 0, row: 2 },
-  { id: 'glass', name: 'The glass realm', col: 0, row: 3 },
-  { id: 'grove', name: 'The treehouse clearing', col: 1, row: 3 },
-  { id: 'market', name: 'The neon street', col: 2, row: 3 },
-  { id: 'arcade', name: ARCADE_PLACE, col: 2, row: 4 },
+  { id: 'arcade', name: ARCADE_PLACE, col: 2, row: 2 },
+  // The realms, side by side as their Commons stand in the hollow; the ink-wash realm's place is its room, the ink garden (OP-402).
+  { id: 'ink', name: realmName('ink', 'The ink garden'), col: 0, row: 3 },
+  { id: 'grove', name: realmName('grove', 'The treehouse clearing'), col: 1, row: 3 },
+  { id: 'market', name: realmName('market', 'The neon street'), col: 2, row: 3 },
+  // Each realm's parkour course under it, by its own name (OP-385): its gate stands in the realm's Commons.
+  { id: 'brush-1', name: courseName('ink', 'Brushstroke Bridges'), col: 0, row: 4 },
+  { id: 'canopy-1', name: courseName('grove', 'Updraft Canopy'), col: 1, row: 4 },
+  { id: 'circuit-1', name: courseName('market', 'Blackout Circuit'), col: 2, row: 4 },
 ];
 
-/** The new map's paths, as its doorways join the places. */
+/** The new map's paths, as its doorways join the places; a course hangs under its realm, whose Commons has its gate. */
 export const NEW_MAP_PATHS: ReadonlyArray<[string, string]> = [
   ['nest', 'homes'],
   ['homes', 'lobby'],
   ['lobby', 'm3-hall'],
-  ['m3-hall', 'ink'],
   ['m3-hall', 'glass'],
+  ['m3-hall', 'arcade'],
+  ['m3-hall', 'ink'],
   ['m3-hall', 'grove'],
   ['m3-hall', 'market'],
-  ['m3-hall', 'arcade'],
-  ['market', 'arcade'],
+  ['ink', 'brush-1'],
+  ['grove', 'canopy-1'],
+  ['market', 'circuit-1'],
 ];
 
 /** The map's places and paths for the park the owl walks: the new map (3), or today's park and the tree. */
@@ -295,8 +271,11 @@ export function mapLayout(walking: number): { places: readonly Place[]; paths: R
   return walking === 3 ? { places: NEW_MAP_PLACES, paths: NEW_MAP_PATHS, cols: 3, rows: 5 } : { places: MAP_PLACES, paths: MAP_PATHS, cols: 3, rows: 5 };
 }
 
-/** On the new map, a parkour course's rooms are its realm's place, by course id (OP-303): each is entered from that realm's Commons. */
-export const NEW_MAP_COURSE_PLACES: Readonly<Record<string, string>> = { brush: 'ink', canopy: 'grove', circuit: 'market' };
+/**
+ * On the new map, a parkour course's rooms are the course's own place, by course id (OP-385; they were its
+ * realm's, OP-303): inside Brushstroke Bridges the map says so. Each place is the course's first room, where its gate lands.
+ */
+export const NEW_MAP_COURSE_PLACES: Readonly<Record<string, string>> = { brush: 'brush-1', canopy: 'canopy-1', circuit: 'circuit-1' };
 
 /** The map's place for a room the owl is in: any owl's nest is "a nest"; the owl's own is Your nest. */
 export function mapPlaceOf(room: string, ownNest: boolean, open: readonly string[] = [], walking = 1): string | null {
@@ -387,7 +366,7 @@ export function newlyLit(storage: Pick<Storage, 'getItem' | 'setItem'> | null, p
 /**
  * `open`: the gated realms the keepers have opened (the realms switch); their arches draw as doorways.
  * With `travel` (OP-130) each open place is a button: lit once walked into (the nest always), and a
- * tap opens its card below the map, with the hold that travels.
+ * tap opens its card below the map, whose travel button asks once and travels on Go (OP-385).
  */
 export function renderMap(panel: HTMLElement, here: string | null, open: readonly string[] = [], travel: MapTravel | null = null, walking = 1): void {
   const map = el('div', 'mmap');
@@ -417,29 +396,46 @@ export function renderMap(panel: HTMLElement, here: string | null, open: readonl
     box.appendChild(said);
     const go = what.button;
     if (go) {
-      const hint = note(TRAVEL_WORDS.hold);
-      hint.hidden = true;
-      let hide: ReturnType<typeof setTimeout> | undefined;
-      const tooQuick = () => {
-        hint.hidden = false;
-        clearTimeout(hide);
-        hide = setTimeout(() => (hint.hidden = true), 2500);
-      };
-      const b = holdButton(
-        go.label,
-        () => {
-          const why = travel.go(go.to);
-          if (!why) return;
-          said.textContent = REFUSAL_WORDS[why];
-          said.hidden = false;
-        },
-        tooQuick,
-      );
+      // A tap, a click or Enter on the travel button asks once (OP-385, in place of a hold nobody was told
+      // about): its own words as the question, then Go, which travels, or Not now, which puts it back.
+      const b = el('button', 'mbtn', go.label);
+      b.type = 'button';
       b.dataset['travel'] = go.to;
       b.dataset['key'] = 'travel';
       const row = el('div', 'mrow');
       row.appendChild(b);
-      box.append(row, hint);
+      const ask = el('div', 'mrow');
+      ask.dataset['travelAsk'] = go.to;
+      ask.hidden = true;
+      const question = el('span', '', `${go.label}?`);
+      const yes = el('button', 'mbtn', TRAVEL_WORDS.go);
+      yes.type = 'button';
+      yes.dataset['travelGo'] = go.to;
+      yes.dataset['key'] = 'travel-go';
+      const no = el('button', 'mbtn ghost', TRAVEL_WORDS.stay);
+      no.type = 'button';
+      no.dataset['travelStay'] = '';
+      no.dataset['key'] = 'travel-stay';
+      ask.append(question, yes, no);
+      b.addEventListener('click', () => {
+        row.hidden = true;
+        ask.hidden = false;
+        yes.focus({ preventScroll: true });
+      });
+      no.addEventListener('click', () => {
+        ask.hidden = true;
+        row.hidden = false;
+        b.focus({ preventScroll: true });
+      });
+      yes.addEventListener('click', () => {
+        const why = travel.go(go.to);
+        if (!why) return;
+        said.textContent = REFUSAL_WORDS[why];
+        said.hidden = false;
+        ask.hidden = true;
+        row.hidden = false;
+      });
+      box.append(row, ask);
     }
     cardBox.appendChild(box);
   };
@@ -482,7 +478,7 @@ export function renderMap(panel: HTMLElement, here: string | null, open: readonl
   drawCard();
   if (travel) panel.appendChild(note(mapNote(walking)));
   if (walking === 3) {
-    panel.appendChild(note('Through the turnstiles and down the knothole: the Great Hollow, its four Commons side by side, each with a doorway to its realm and its course. In the middle of the hollow, its lanterns, its quiz and the hatch down to the arcade. Outside the turnstiles: the Treetop Commons, the nests’ street and your nest.'));
+    panel.appendChild(note('Through the turnstiles and down the knothole: the Great Hollow, its four Commons side by side, each with a doorway to its realm, and three with the gate to its course, drawn under the realm. In the middle of the hollow, its lanterns, its quiz and the hatch down to the arcade. Outside the turnstiles: the Treetop Commons, the nests’ street and your nest.'));
     return;
   }
   panel.appendChild(note('Inside the turnstiles: the great tree, with the treehouse clearing and the neon street on either side, and Neon Roost off the neon street. Outside the gate: the nests’ street and your nest. The boarded arches open as new realms arrive.'));
@@ -501,8 +497,8 @@ export interface SettingsTabDeps {
   tickets(): Promise<WalletEntry[] | null>;
   /** Shown where the owl is: leaving the park (inside it). */
   canLeave: boolean;
-  /** Opens the Feedback form: Send feedback, the tab's first row (OP-167). */
-  feedback(): void;
+  /** Opens the Feedback form: Send feedback, the tab's first row (OP-167); null once Feedback is no longer offered (OP-449), with no row. */
+  feedback: (() => void) | null;
   title(): void;
   leave(): void;
   /** The owl's account (OP-139): where the player protects the owl. Null while accounts are off. */

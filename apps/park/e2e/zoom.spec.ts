@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { openGround, openPark, settleCamera, state, toScreen, waitForArrival, walkToDoor, actionButton } from './helpers';
+import { feedbackOffered, openGround, openPark, settleCamera, state, toScreen, waitForArrival, walkToDoor, actionButton } from './helpers';
 
 /**
  * A touch never zooms the page (OP-104): a double tap zoomed the park on an iPhone, and nothing took
@@ -102,12 +102,18 @@ test.describe('a touch never zooms the page (OP-104)', () => {
       await expect(menu.locator(`[data-tab="${tab}"]`)).toHaveAttribute('aria-selected', 'true');
       expect(await zoomable(page), `the Menu: ${tab}`).toEqual([]);
     }
-    await menu.locator('[data-screen="feedback"]').tap();
-    const feedback = page.getByRole('dialog', { name: 'Feedback' });
-    await expect(feedback).toBeVisible();
-    expect(await zoomable(page), 'Feedback').toEqual([]);
-    await page.keyboard.press('Escape');
-    await expect(feedback).toBeHidden();
+    // Feedback until the full opening, which takes it from Settings (OP-449).
+    if (feedbackOffered()) {
+      await menu.locator('[data-screen="feedback"]').tap();
+      const feedback = page.getByRole('dialog', { name: 'Feedback' });
+      await expect(feedback).toBeVisible();
+      expect(await zoomable(page), 'Feedback').toEqual([]);
+      await page.keyboard.press('Escape');
+      await expect(feedback).toBeHidden();
+    } else {
+      await page.keyboard.press('Escape');
+      await expect(menu).toBeHidden();
+    }
     await page.locator('[data-say-btn]').tap();
     const say = page.getByRole('dialog', { name: 'Say' });
     await expect(say).toBeVisible();

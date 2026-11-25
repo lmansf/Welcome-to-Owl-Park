@@ -74,7 +74,13 @@ describe('travel from the map (OP-130)', () => {
   it('turns a travel away with its own close code, and says why in plain words', () => {
     expect(CLOSE.NOT_THROUGH_GATE).toBe(4015);
     expect(TRAVEL_WORDS.gateFirst).toBe('Enter the park through the gate first.');
-    expect(TRAVEL_WORDS.hold).toBe('Hold to travel.');
+    // A travel button asks once before the owl goes (OP-385): no hold, and the map's line says so.
+    expect(TRAVEL_WORDS).not.toHaveProperty('hold');
+    expect([TRAVEL_WORDS.go, TRAVEL_WORDS.stay]).toEqual(['Go', 'Not now']);
+    for (const line of [TRAVEL_WORDS.map, TRAVEL_WORDS.newMap]) {
+      expect(line).toMatch(/^Tap a place, then its travel button, then Go\./);
+      expect(line).not.toMatch(/hold/i);
+    }
   });
 });
 

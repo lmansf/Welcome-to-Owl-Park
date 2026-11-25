@@ -51,6 +51,10 @@ describe('the home screen (OP-065)', () => {
     expect(walletSummary([ticket({ status: 'used' })], 'ticket', T0)).toBe(HOME_WORDS.none);
   });
 
+  it('invites an owl with no ticket in, with where to get one (OP-460)', () => {
+    expect(walletSummary([], 'ticket', T0)).toBe('No ticket yet? Come on in and get one at the turnstiles.');
+  });
+
   it('shows nothing for a ticket that is fine as it is (OP-172)', () => {
     // A ready ticket, its night on, a running annual pass, a running ticket with an hour or more left.
     expect(walletSummary([ticket()], 'ticket', T0)).toBeNull();
