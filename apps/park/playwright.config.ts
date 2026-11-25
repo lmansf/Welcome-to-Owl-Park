@@ -34,9 +34,11 @@ export default defineConfig({
   timeout: 45_000,
   expect: { timeout: 10_000 },
   // One test at a time on a machine. In CI the suite is split across runners one test at a time, not
-  // a file at a time, so the slow files (the climb, the arcade, the room server) spread out (OP-123).
+  // a file at a time, so the slow files (the climb, the arcade, the room server) spread out (OP-123),
+  // and each runner runs PW_WORKERS tests at once (3 by default), the room server project's one at a
+  // time (its `workers` below), so a pull request's browser suite takes minutes, not half an hour.
   fullyParallel: !!process.env['CI'],
-  workers: 1,
+  workers: process.env['CI'] ? Number(process.env['PW_WORKERS'] || 3) : 1,
   retries: process.env['CI'] ? 1 : 0,
   // A shard's report is a blob, merged with the others' into one HTML report by the CI's report job.
   reporter: process.env['CI'] ? [['list'], process.env['PW_BLOB'] ? ['blob'] : ['html', { open: 'never' }]] : 'list',
@@ -47,10 +49,6 @@ export default defineConfig({
   },
   // OP-218: the level specs must join tree.spec.ts on both devices; CI shards use this discovery list.
   projects: [
-    // Collectibles run on the desktop project only: the phone project repeats the park suite's layout checks.
-    { name: 'desktop', testMatch: /(park|collect|lobby|activities|escape|party|nests|arcade|climb|chat|leave|home|feedback|pad|mirror|sleep|flight|perches|loader|travel|tree(?:L[2-5])?|whichOwl|course|air|realmStart|sizes|skin|trail|wayBack|townView|thermal|guardian|movers|look|snow|bowl|calm|textSize|goLink|eggCode)\.spec\.ts/, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } } },
-    // Zooming by touch (OP-104) and the thumbstick letting go under two thumbs (stick.spec.ts, OP-242) are checked on the phone only.
-    { name: 'phone', testMatch: /(park|lobby|escape|party|nests|arcade|climb|chat|leave|home|feedback|pad|mirror|zoom|stick|sleep|flight|perches|loader|travel|tree(?:L[2-5])?|whichOwl|course|air|realmStart|sizes|skin|trail|wayBack|townView|thermal|guardian|movers|look|snow|bowl|calm|textSize|goLink)\.spec\.ts/, use: { ...devices['Pixel 7'], browserName: 'chromium' } },
     // The room server suite: the built client served by the Worker (wrangler dev), real WebSockets.
     // Two browser contexts, real sockets, two walks and a room change per test: on a loaded CI runner
     // that chain runs close to a minute, so this project gets a longer per-test budget.
@@ -59,7 +57,14 @@ export default defineConfig({
     // store (storecard.spec.ts, OP-153), whose ways need the store's pages, the keepers' entries
     // setting (entries.spec.ts, OP-156), which the Worker reads when it writes a pass, and spectators
     // (spectator.spec.ts, OP-191), and the vote desk, which moves when a vote lands (voteDesk.spec.ts, OP-288).
-    { name: 'edge', testMatch: /(edge|opening|gate|turnstiles|checkout|overflow|climb|accounts|travel|policy|paint|feedback|storecard|restart|entries|spectator|setup|hudStack|voteDesk|tag|eggCode)\.spec\.ts/, timeout: 90_000, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 }, baseURL: 'http://localhost:8787' } },
+    // Its tests share the one room server, whose gate and scores one test can change for the next, so they
+    // run one at a time; it comes first so that, in CI, one worker starts on them while the others take
+    // the device tests, rather than leaving them all to the end.
+    { name: 'edge', workers: 1, testMatch: /(edge|opening|gate|turnstiles|checkout|overflow|climb|accounts|travel|policy|paint|feedback|storecard|restart|entries|spectator|setup|hudStack|voteDesk|tag|eggCode)\.spec\.ts/, timeout: 90_000, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 }, baseURL: 'http://localhost:8787' } },
+    // Collectibles run on the desktop project only: the phone project repeats the park suite's layout checks.
+    { name: 'desktop', testMatch: /(park|collect|lobby|activities|escape|party|nests|arcade|climb|chat|leave|home|feedback|pad|mirror|sleep|flight|perches|loader|travel|tree(?:L[2-5])?|whichOwl|course|air|realmStart|sizes|skin|trail|wayBack|townView|thermal|guardian|movers|look|snow|bowl|calm|textSize|goLink|eggCode)\.spec\.ts/, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } } },
+    // Zooming by touch (OP-104) and the thumbstick letting go under two thumbs (stick.spec.ts, OP-242) are checked on the phone only.
+    { name: 'phone', testMatch: /(park|lobby|escape|party|nests|arcade|climb|chat|leave|home|feedback|pad|mirror|zoom|stick|sleep|flight|perches|loader|travel|tree(?:L[2-5])?|whichOwl|course|air|realmStart|sizes|skin|trail|wayBack|townView|thermal|guardian|movers|look|snow|bowl|calm|textSize|goLink)\.spec\.ts/, use: { ...devices['Pixel 7'], browserName: 'chromium' } },
   ],
   webServer: [
     {

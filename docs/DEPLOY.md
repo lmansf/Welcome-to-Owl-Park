@@ -404,12 +404,18 @@ section 10.
   `pnpm e2e --grep @smoke --project=desktop --project=edge`, so a smoke test must sit in a spec file
   one of those two projects matches (`apps/park/playwright.config.ts`). Keep the set small: the quick
   tier is meant to finish in under five minutes.
-- **The shard timings**: `apps/park/e2e/shard.mjs` shares the suite out by
-  `apps/park/e2e/durations.json` (seconds per test on a CI runner), longest first onto the shard with
-  the least so far; a test with no measured time counts as the median. A full run that passes uploads
-  a refreshed copy as the `durations` artifact (one run's times averaged with the table's). When tests
-  are added, take that artifact from a passing full run and commit it as `apps/park/e2e/durations.json`
-  (or run `node e2e/shard.mjs durations <report.json>` in `apps/park` on a merged JSON report).
+- **The shard timings**: `apps/park/e2e/shard.mjs` shares the suite out by measured seconds per test
+  on a CI runner, longest first onto the shard that would finish soonest with it; a test with no
+  measured time counts as the median. Each shard runs three tests at once (`PW_WORKERS`, set in
+  `ci.yml`), but the room server project's one at a time (`workers: 1` on the `edge` project, which
+  comes first so one worker starts on it while the others take the device tests), so a shard takes
+  the longer of its room server tests end to end and all its tests over three workers. The build job
+  makes the plan once (`node e2e/shard.mjs plan 12 3 shard-plan`, the `shard-plan` artifact) so every
+  shard works from the same table. The table is the newest one main has kept in the Actions cache
+  (`e2e-durations-v1-*`: each passing run on main averages its times in and saves it), and
+  `apps/park/e2e/durations.json` when there is none. Refresh the committed copy now and then from the
+  `durations` artifact of a passing run on main, or with `node e2e/shard.mjs durations <report.json>`
+  in `apps/park` on a merged JSON report.
 - **Waiting in browser tests**: a test waits on the park's own state (`window.owlPark.state()`,
   through `state` in `apps/park/e2e/helpers.ts`, `expect.poll` or `page.waitForFunction`) or on the
   game's frames (`frames` in `helpers.ts`, counted in the game's updates, so a slow runner gets as many
