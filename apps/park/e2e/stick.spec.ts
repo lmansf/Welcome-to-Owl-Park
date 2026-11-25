@@ -197,6 +197,10 @@ test.describe('the phone held sideways (OP-349)', () => {
   test('the pad\'s label is read whole: no word cut short where two lines hold it', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'the pad is for touch screens');
     await openPark(page, { room: 'market' });
+    // The first stall stands a few steps east of the arrival spot, out of reach of an owl just in at the
+    // door (the Nov 25 QA walk): walk up to it for its prompt.
+    await page.evaluate(() => window.owlPark.walkTo(500, window.owlPark.state()!.pos.y));
+    await expect.poll(async () => (await state(page)).pos.x, { timeout: 15_000 }).toBeGreaterThan(450);
     const label = page.locator('[data-pad-interact-label]');
     await expect(label).toHaveText('Browse the stall', { timeout: 15_000 });
     // Nothing clipped: the words' own box is no taller or wider than what shows.
