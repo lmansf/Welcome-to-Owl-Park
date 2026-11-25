@@ -83,6 +83,17 @@ describe('Feedback goes at the full opening (OP-449)', () => {
     expect(gone).toHaveBeenCalledTimes(1);
   });
 
+  it('gives way to the open Menu by a class on the HUD, never a :has() rule, which costs the whole HUD on every change', () => {
+    const styles: string[] = [];
+    const el = () => ({ dataset: {}, hidden: false, textContent: '', setAttribute: () => undefined, addEventListener: () => undefined, appendChild: () => undefined });
+    vi.stubGlobal('document', { createElement: el, head: { appendChild: (s: { textContent: string }) => styles.push(s.textContent) } });
+    createFeedbackBug(el() as unknown as HTMLElement, () => undefined, () => Date.parse('2026-11-25T12:00:00-05:00'));
+    const css = styles.join('\n');
+    expect(css).toContain('#hud.menu-open .fb-bug');
+    expect(css).toContain('#hud.menu-open .fb-card');
+    expect(css).not.toContain(':has(');
+  });
+
   it('starts with no bug, and tells the HUD at once, in a page opened after the opening', () => {
     const el = () => ({ dataset: {}, hidden: false, setAttribute: () => undefined, addEventListener: () => undefined, appendChild: () => undefined });
     vi.stubGlobal('document', { createElement: el, head: { appendChild: () => undefined } });

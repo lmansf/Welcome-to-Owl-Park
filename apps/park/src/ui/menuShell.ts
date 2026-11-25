@@ -360,6 +360,7 @@ export function createMenuShell(root: HTMLElement, tabs: readonly MenuTab[], opt
     closeTimer = null;
     if (!isOpen()) return;
     layer.classList.remove('open', 'closing');
+    root.classList.remove('menu-open');
     for (const cb of closers) cb();
     if (back?.isConnected) back.focus({ preventScroll: true });
     back = null;
@@ -412,6 +413,7 @@ export function createMenuShell(root: HTMLElement, tabs: readonly MenuTab[], opt
       if (closeTimer) clearTimeout(closeTimer);
       closeTimer = null;
       layer.classList.remove('open', 'closing');
+      root.classList.remove('menu-open');
       for (const cb of closers) cb();
       if (back?.isConnected) back.focus({ preventScroll: true });
       back = null;
@@ -441,6 +443,9 @@ export function createMenuShell(root: HTMLElement, tabs: readonly MenuTab[], opt
       back = opener ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
       const already = isOpen();
       layer.classList.add('open');
+      // A mark on the HUD's root while the Menu is open, for what gives way to it (the feedback button, OP-449):
+      // a class, not a :has() rule, whose checks would run on every change anywhere in the HUD.
+      root.classList.add('menu-open');
       show(tab && byId.has(tab) ? tab : current);
       if (already) return;
       if (!pushed) {

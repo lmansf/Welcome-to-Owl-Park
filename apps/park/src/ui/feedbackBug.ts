@@ -59,7 +59,7 @@ const CSS = `
 #hud.at-home:not(.covered) .fb-bug{left:auto;right:max(6px,env(safe-area-inset-right))}
 #hud .fb-bug[hidden]{display:none}
 /* The Menu has its own Send feedback by Close (OP-242): while it is open the bug and its card never float over its sheet (OP-449). */
-#hud:has(.menu-layer.open) .fb-bug,#hud:has(.menu-layer.open) .fb-card{display:none}
+#hud.menu-open .fb-bug,#hud.menu-open .fb-card{display:none}
 /* A phone's park view keeps it in the Menu, by Close (OP-242); on the home screen and over a covering screen it stays. */
 @media (pointer:coarse){#hud:not(.at-home):not(.covered) .fb-bug{display:none}}
 `;
