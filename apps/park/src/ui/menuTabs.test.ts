@@ -87,17 +87,38 @@ describe('the map on the new map (OP-282)', () => {
     for (const room of seen) expect(mapPlaceOf(room, true, [], 3), room).not.toBeNull();
   });
 
-  it("puts the ink-wash realm's room on the map, and each course's rooms at its realm (OP-303, OP-402)", () => {
+  it("puts the ink-wash realm's room on the map, and each course's rooms at the course's own place (OP-402, OP-385)", () => {
     const ink = mapLayout(3).places.find((p) => p.id === 'ink');
     expect(ink).toMatchObject({ name: 'The ink garden' });
     expect(ink?.noTravel).toBeUndefined();
     expect(mapLayout(3).paths).toContainEqual(['m3-hall', 'ink']);
-    for (const room of ['brush-1', 'brush-2', 'brush-falls', 'brush-3a', 'brush-3b']) expect(mapPlaceOf(room, true, [], 3), room).toBe('ink');
-    expect(mapPlaceOf('canopy-hut', true, [], 3)).toBe('grove');
-    expect(mapPlaceOf('circuit-3', true, [], 3)).toBe('market');
+    // Inside Brushstroke Bridges, You are here is Brushstroke Bridges, not the ink garden (OP-385).
+    for (const room of ['brush-1', 'brush-2', 'brush-falls', 'brush-3a', 'brush-3b']) expect(mapPlaceOf(room, true, [], 3), room).toBe('brush-1');
+    expect(mapPlaceOf('canopy-hut', true, [], 3)).toBe('canopy-1');
+    expect(mapPlaceOf('circuit-3', true, [], 3)).toBe('circuit-1');
     for (const place of Object.values(NEW_MAP_COURSE_PLACES)) expect(mapLayout(3).places.some((p) => p.id === place), place).toBe(true);
     // The old map keeps its places: a course room there is no place.
     expect(mapPlaceOf('brush-1', true, [], 1)).toBeNull();
+  });
+
+  it('names all three courses, each under its realm, with the names their gates show in the Great Hollow (OP-385)', () => {
+    const names = Object.fromEntries(mapLayout(3).places.map((p) => [p.id, p.name]));
+    expect(names).toMatchObject({ 'brush-1': 'Brushstroke Bridges', 'canopy-1': 'Updraft Canopy', 'circuit-1': 'Blackout Circuit' });
+    // The realms and the hollow by the names their doorways and signs carry in the rooms.
+    expect(names).toMatchObject({ lobby: 'The Treetop Commons', 'm3-hall': 'The Great Hollow', ink: 'The ink garden', grove: 'The treehouse clearing', market: 'The neon street', glass: 'The glass realm' });
+    const hall = ROOMS['m3-hall']!;
+    for (const door of hall.doors.filter((d) => d.to && /^(to|course)-/.test(d.id))) {
+      const place = mapPlaceOf(door.to!.room, true, [], 3);
+      expect(place, door.id).not.toBeNull();
+      expect(names[place!], door.id).toBe(doorLabel(door, 3) ?? door.label);
+    }
+    for (const [realm, course] of [['ink', 'brush-1'], ['grove', 'canopy-1'], ['market', 'circuit-1']] as const) expect(mapLayout(3).paths).toContainEqual([realm, course]);
+    // Each travels from the start, to its gate, once the owl is through the turnstiles.
+    for (const course of Object.values(NEW_MAP_COURSE_PLACES)) {
+      expect(placeCard(course, 'grove', walked([], true), 3), course).toEqual({ line: null, button: { label: TRAVEL_WORDS.here, to: course } });
+      expect(placeCard(course, 'homes', walked([]), 3), course).toEqual({ line: TRAVEL_WORDS.newGateFirst, button: { label: TRAVEL_WORDS.newGate, to: 'lobby' } });
+      expect(placeCard(course, course, walked([], true), 3), course).toEqual({ line: TRAVEL_WORDS.youAreHere, button: null });
+    }
   });
 
   it('leaves the old map as it was (?newmap=0): the Great Hollow is not on it', () => {

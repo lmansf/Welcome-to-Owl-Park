@@ -1,7 +1,7 @@
 import type { APIRequestContext, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { autoClimbTo, climbRun, climbState, openClimb, startClimb, tapKey, toPortal } from './climbPlay';
-import { E2E_ADMIN_KEY, openPark, state, actionButton } from './helpers';
+import { E2E_ADMIN_KEY, feedbackOffered, openPark, state, actionButton } from './helpers';
 
 /**
  * The stained-glass climb (designs/the-stained-glass-climb.md). On this device (the local mode, the
@@ -81,6 +81,7 @@ test.describe('the stained-glass climb', () => {
 
   test('the Feedback form opened over the climb types every key, and the owl stays put', async ({ page }) => {
     test.skip(isEdge(), 'the same in every suite');
+    test.skip(!feedbackOffered(), 'the feedback bug goes at the full opening (OP-449)');
     await atThePortal(page, `e2e-climb-typing-${test.info().project.name}`);
     await openClimb(page);
     await startClimb(page);
