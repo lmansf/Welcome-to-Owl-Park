@@ -78,11 +78,15 @@ test.describe('busy nights (OP-075)', () => {
     expect((await request.get('/api/admin/capacity')).status()).toBe(403);
     expect((await request.post('/api/admin/capacity', { data: { line: { mode: 'on' } } })).status()).toBe(403);
     const now = (await (await request.get('/api/admin/capacity', { headers: ADMIN })).json()) as Record<string, unknown>;
-    expect(now).toMatchObject({ line: { mode: 'off', threshold: 80, holdMin: 3 }, active: false, ribbon: { on: false, words: null }, copies: {}, sharding: 'single' });
+    expect(now).toMatchObject({ line: { mode: 'off', threshold: 80, holdMin: 3 }, active: false, ribbon: { on: false, words: null }, copies: {}, sharding: 'room' });
     expect((now['rooms'] as Array<{ room: string }>).map((r) => r.room)).toContain('hub');
     expect((await request.post('/api/admin/capacity', { headers: ADMIN, data: { line: { threshold: -1 } } })).status()).toBe(400);
-    // Copies of a room need one object per room; the test server runs the park in one.
-    expect((await request.post('/api/admin/capacity', { headers: ADMIN, data: { copy: { room: 'hub', n: 2, state: 'open' } } })).status()).toBe(409);
+    // The park runs one object per room (OP-106), so a copy of a room opens, shows its count, and closes again.
+    const opened = await capacity(request, { copy: { room: 'hub', n: 2, state: 'open' } });
+    expect(opened['copies']).toEqual({ hub: { '2': 'open' } });
+    const hub = (opened['rooms'] as Array<{ room: string; copies: Array<{ n: number; state: string; count: number }> }>).find((r) => r.room === 'hub');
+    expect(hub?.copies.map((c) => [c.n, c.state])).toEqual([[1, 'room'], [2, 'open']]);
+    expect((await capacity(request, { copy: { room: 'hub', n: 2, state: 'closed' } }))['copies']).toEqual({});
     expect(await (await request.get('/api/notice')).json()).toEqual({ words: null });
 
     const keeper = await (await browser.newContext(COMPUTER)).newPage();
@@ -95,7 +99,7 @@ test.describe('busy nights (OP-075)', () => {
     await expect(keeper.locator('#line-state')).toContainText('A line starts by itself once the park holds 80 owls.');
     await keeper.locator('[data-ribbon="on"]').click();
     await expect(keeper.locator('#ribbon-state')).toHaveText(`On for everyone: "${RIBBON}"`);
-    await expect(keeper.locator('#copies-note')).toContainText('The whole park runs in one object');
+    await expect(keeper.locator('#copies-note')).toContainText('One object per room: a room can open copies.');
     await keeper.screenshot({ path: 'e2e-screenshots/capacity-page.png', fullPage: true });
     expect(await (await request.get('/api/notice')).json()).toEqual({ words: RIBBON });
     await keeper.context().close();
