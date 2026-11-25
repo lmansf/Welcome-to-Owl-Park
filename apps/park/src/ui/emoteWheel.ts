@@ -1,7 +1,6 @@
 import { CATALOGUE, EMOTE_IDS, type ItemDef } from '@owl-park/shared';
 import type { CollectionState } from '../collect/state';
 import { lookIcon, variantIcon } from './itemIcon';
-import { flagOn } from '../flags';
 import { LOOK_EMOTE, LOOK_NAME } from '../game/headTurn';
 import { createModal, type Modal } from './modal';
 import { typingInField } from './typing';
@@ -26,12 +25,11 @@ export function wheelPage<T>(items: readonly T[], page: number, per = WHEEL_SLOT
 export const LOOK_ITEM: ItemDef = { id: LOOK_EMOTE, kind: 'emote', name: LOOK_NAME, rarity: 'common' };
 
 /**
- * The owl's emotes in the wheel's order: the first eight are its first page, and keys 1 to 8. With
- * ?look=1 the look around comes first (key 1), so it is the one to find while it is tried out.
+ * The owl's emotes in the wheel's order: the first eight are its first page, and keys 1 to 8. The look
+ * around, which every owl has, comes first (key 1).
  */
-export function wheelEmotes(state: CollectionState, look: boolean = flagOn('look')): ItemDef[] {
-  const owned = CATALOGUE.filter((i) => i.kind === 'emote' && state.owns(i.id));
-  return look ? [LOOK_ITEM, ...owned] : owned;
+export function wheelEmotes(state: CollectionState): ItemDef[] {
+  return [LOOK_ITEM, ...CATALOGUE.filter((i) => i.kind === 'emote' && state.owns(i.id))];
 }
 
 /**

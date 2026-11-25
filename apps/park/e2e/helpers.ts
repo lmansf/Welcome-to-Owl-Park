@@ -131,7 +131,7 @@ export interface ParkState {
     alpha: number;
     boxes: Array<{ x: number; y: number; w: number; h: number }>;
   } | null;
-  /** The vote desk in the Great Hollow (OP-288): null on any address without `?desk=1`. */
+  /** The vote desk in the Great Hollow (OP-288): null in any other room. */
   desk: { at: { x: number; y: number }; month: string | null; shares: Record<string, number> | null; lines: string[] } | null;
   /** The sounds played for the visitor's own owl on this page, the newest last (OP-350). */
   sounds: string[];

@@ -17,7 +17,7 @@ import { DEFAULT_ANCHORS, type OwlAnchors } from '../collect/pixels';
 export const HEAD_FRAMES = ['front', '3q', 'side', 'back'] as const;
 export type HeadFrame = (typeof HEAD_FRAMES)[number];
 
-/** The emote's id (shared FREE_EMOTES): every owl has it, behind the park's ?look=1 flag for now. */
+/** The emote's id (shared FREE_EMOTES): every owl has it. */
 export const LOOK_EMOTE = 'look';
 /** What the wheel calls it. */
 export const LOOK_NAME = 'Look around';
