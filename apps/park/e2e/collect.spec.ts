@@ -251,9 +251,10 @@ test.describe('quests, NPC owls and leaf piles (this device)', () => {
     await page.locator('[data-emotes-btn]').click();
     const wheel = page.getByRole('dialog', { name: 'Emotes' });
     await expect(page.locator('[data-emotes-btn]')).toHaveAttribute('aria-expanded', 'true');
-    // The starter pack's two and the one earned, in the catalogue's order.
-    await expect(wheel.locator('[data-emote]')).toHaveCount(3);
-    await expect(wheel.locator('[data-emote]').first()).toHaveAttribute('data-emote', 'hoot');
+    // The look around every owl has (OP-289), then the starter pack's two and the one earned, in the catalogue's order.
+    await expect(wheel.locator('[data-emote]')).toHaveCount(4);
+    await expect(wheel.locator('[data-emote]').first()).toHaveAttribute('data-emote', 'look');
+    await expect(wheel.locator('[data-emote]').nth(1)).toHaveAttribute('data-emote', 'hoot');
     const order = await wheel.locator('[data-emote]').evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset['emote']));
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-emote-wheel.png` });
     await wheel.locator('[data-emote="dance"]').click();
@@ -263,20 +264,20 @@ test.describe('quests, NPC owls and leaf piles (this device)', () => {
     // Open again, a number on a keyboard plays that slot. (T is Say's key, C44.)
     await page.locator('[data-emotes-btn]').click();
     await expect(wheel).toBeVisible();
-    await page.keyboard.press('Digit1');
+    await page.keyboard.press('Digit2');
     await expect(wheel).toBeHidden();
     await expect.poll(seen, { timeout: 10_000 }).toBe('hoot');
     // With nothing open a number plays that emote at once (after the room's pause between emotes).
     await page.waitForTimeout(1_600);
-    await page.keyboard.press('Digit2');
-    await expect.poll(seen, { timeout: 10_000 }).toBe(order[1]);
+    await page.keyboard.press('Digit3');
+    await expect.poll(seen, { timeout: 10_000 }).toBe(order[2]);
     // While another screen is open the numbers are left alone.
     await page.waitForTimeout(1_600);
     await page.keyboard.press('KeyM');
-    await page.keyboard.press('Digit1');
+    await page.keyboard.press('Digit2');
     await expect(page.getByRole('dialog', { name: 'Menu' })).toBeVisible();
     await frames(page, 30);
-    expect(await seen()).toBe(order[1]);
+    expect(await seen()).toBe(order[2]);
     await page.keyboard.press('Escape');
   });
 
