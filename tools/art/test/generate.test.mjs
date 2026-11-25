@@ -1023,8 +1023,9 @@ test('the art kit (OP-229): kit.json, the jobs, the loader table and the assets 
   // The area sets: accent textures, prop sheets and seven sideways-repeating backdrop layers each.
   for (const [areaName, area] of Object.entries(K.KIT_AREAS)) {
     assert.deepEqual(Object.keys(area.layers), ['sky-a', 'sky-b', 'far-a', 'far-b', 'mid-a', 'mid-b', 'mid-c'], `${areaName}: seven layers`);
-    // Three accent textures each; the neon street has a fourth, the wall of its own buildings (OP-348).
-    assert.equal(Object.keys(area.textures).length, areaName === 'neon' ? 4 : 3); assert.equal(Object.keys(area.sheets).length, 3);
+    // Three accent textures each; the neon street has a fourth, the wall of its own buildings (OP-348); the
+    // clearing its meadow (OP-488); the ink realm its river and its garden flagstones (OP-485, OP-487).
+    assert.equal(Object.keys(area.textures).length, { neon: 4, clearing: 4, ink: 5 }[areaName] ?? 3); assert.equal(Object.keys(area.sheets).length, 3);
     for (const name of Object.keys(area.layers)) {
       const key = `kit-${areaName}-${name}`;
       const [w, h] = K.LAYER_SIZES[name.split('-')[0]];
