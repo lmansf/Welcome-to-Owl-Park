@@ -4,7 +4,7 @@ import { ROOMS } from '@owl-park/shared/rooms';
 import { FLAGS, flagOn } from '../flags';
 import { ART } from './art';
 import { carryOn, arrivalAir } from '@owl-park/shared';
-import { INTO_HOLE_PX, INTO_MOUTH_MS, MOVER_ART, MOVER_FADE_IN_MS, MOVER_WORDS, headingOf, roomWithMovers, streamerSpots } from './movers';
+import { INTO_HOLE_PX, INTO_MOUTH_MS, MOVER_ART, MOVER_FADE_IN_MS, MOVER_WORDS, headingOf, lanePush, roomWithMovers, streamerSpots } from './movers';
 
 // The art list comes with the engine it draws with: nothing here draws.
 vi.mock('phaser', () => ({ default: {} }));
@@ -78,6 +78,31 @@ describe('the movers on a page (OP-287)', () => {
     expect(headingOf({ from: { x: 5, y: 5 }, to: { x: 5, y: 5 } }, null)).toBeNull();
     expect(headingOf(null, { x: 0, y: 0 })).toBeNull();
     expect(headingOf(null, null)).toBeNull();
+  });
+
+  it('a push along a lane chooses its end, one straight across is the owl’s way out, and a diagonal goes along', () => {
+    const lane = ROOMS['arcade']!.movers!.lanes![0]!;
+    const d = Math.SQRT1_2;
+    // The arcade's lane runs west to east: the eight ways a thumbstick or the keys push.
+    expect(lanePush(lane, { x: 1, y: 0 })).toBe('b');
+    expect(lanePush(lane, { x: -1, y: 0 })).toBe('a');
+    expect(lanePush(lane, { x: 0, y: -1 })).toBe('out');
+    expect(lanePush(lane, { x: 0, y: 1 })).toBe('out');
+    expect(lanePush(lane, { x: d, y: -d })).toBe('b');
+    expect(lanePush(lane, { x: d, y: d })).toBe('b');
+    expect(lanePush(lane, { x: -d, y: -d })).toBe('a');
+    expect(lanePush(lane, { x: -d, y: d })).toBe('a');
+    // A lane that runs north to south turns them round; one on a slant takes the push nearer its line.
+    const down = { a: { x: 500, y: 200 }, b: { x: 500, y: 900 } };
+    expect(lanePush(down, { x: 0, y: 1 })).toBe('b');
+    expect(lanePush(down, { x: 0, y: -1 })).toBe('a');
+    expect(lanePush(down, { x: 1, y: 0 })).toBe('out');
+    expect(lanePush(down, { x: -d, y: d })).toBe('b');
+    const slant = { a: { x: 0, y: 0 }, b: { x: 400, y: 100 } };
+    expect(lanePush(slant, { x: 1, y: 0 })).toBe('b');
+    expect(lanePush(slant, { x: 0, y: 1 })).toBe('out');
+    expect(lanePush(slant, { x: -d, y: d })).toBe('out');
+    expect(lanePush(slant, { x: -d, y: -d })).toBe('a');
   });
 
   it('the lane’s line of words is the thermal’s, for a lane', () => {

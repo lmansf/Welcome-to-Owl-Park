@@ -2,8 +2,9 @@
  * The position overlay (OP-138, `?pos=1`, for the park's keepers): where the room last said the own
  * owl stands (its welcome and the echoes of the owl's walks, the last five, with their age) beside
  * where the owl is drawn, and a red flash and a count each time the owl moves further than an owl's
- * width between two frames beyond what its walk covers in that time, which no walk does. It asks once
- * a tab for the keepers' key and checks it with the room server; without it nothing shows.
+ * width between two frames beyond what it covers in that time at the pace it is going (a walk's, a
+ * glide lane's or a dash's), which no walk does. It asks once a tab for the keepers' key and checks
+ * it with the room server; without it nothing shows.
  */
 import { WALK_SPEED, type Vec2 } from '@owl-park/shared';
 
@@ -25,8 +26,8 @@ const REDRAW_MS = 250;
 export interface PosOverlay {
   /** The room says the own owl stands at `to` (its welcome), or walks from `from` to `to` (an echo); or the owl was moved from `from` to the room's `to`, the room unable to walk it over. */
   told(kind: keyof typeof SAID, to: Vec2, from?: Vec2): void;
-  /** The own owl as drawn this frame in `room`, at `now` (ms); going into another room is no jump. */
-  frame(pos: Vec2, now: number, room: string): void;
+  /** The own owl as drawn this frame in `room`, at `now` (ms), going at `pace` (room px a second; a walk's unless given); going into another room is no jump. */
+  frame(pos: Vec2, now: number, room: string, pace?: number): void;
   /** Jumps seen so far. */
   readonly jumps: number;
   destroy(): void;
@@ -36,15 +37,16 @@ const xy = (p: Vec2) => `${Math.round(p.x)},${Math.round(p.y)}`;
 
 /**
  * Counts the own owl's jumps, frame by frame (`now` in ms): further between two frames in one room
- * than JUMP_PX beyond what a walk covers in that frame's time, up to WALK_FRAME_MS of it.
+ * than JUMP_PX beyond what the owl covers in that frame's time at `pace` (a walk's unless given: a
+ * glide lane's carry and a dash go faster), up to WALK_FRAME_MS of it.
  */
-export function jumpWatch(): { see(pos: Vec2, room: string, now: number): boolean; readonly count: number } {
+export function jumpWatch(): { see(pos: Vec2, room: string, now: number, pace?: number): boolean; readonly count: number } {
   let last: { pos: Vec2; at: number } | null = null;
   let lastRoom = '';
   let count = 0;
   return {
-    see(pos, room, now) {
-      const walked = last ? (WALK_SPEED * Math.min(Math.max(now - last.at, 0), WALK_FRAME_MS)) / 1000 : 0;
+    see(pos, room, now, pace = WALK_SPEED) {
+      const walked = last ? (pace * Math.min(Math.max(now - last.at, 0), WALK_FRAME_MS)) / 1000 : 0;
       const jumped = room === lastRoom && last !== null && Math.hypot(pos.x - last.pos.x, pos.y - last.pos.y) > JUMP_PX + walked;
       if (jumped) count += 1;
       last = { pos: { ...pos }, at: now };
@@ -118,9 +120,9 @@ export function mountPosOverlay(): PosOverlay {
       said.unshift({ kind, to: { ...to }, ...(from ? { from: { ...from } } : {}), at: Date.now() });
       said.length = Math.min(said.length, SHOWN);
     },
-    frame(pos, now, room) {
+    frame(pos, now, room, pace) {
       here = { ...pos };
-      if (watch.see(pos, room, now)) {
+      if (watch.see(pos, room, now, pace)) {
         flashUntil = now + FLASH_MS;
         draw(now);
       }

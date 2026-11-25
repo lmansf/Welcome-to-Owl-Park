@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { ROOM_H } from '@owl-park/shared';
+import { LANE_SPEED, ROOM_H, WALK_SPEED } from '@owl-park/shared';
 import { ROOMS } from '../rooms';
-import { cameraBounds, coveredBy, followLead } from './hudInset';
+import { FOLLOW_EASE, cameraBounds, coveredBy, followEaseAt, followLead } from './hudInset';
 
 describe('the HUD safe area (OP-278)', () => {
   it('a side-view room lets the camera scroll past its top and bottom by what the HUD covers', () => {
@@ -84,5 +84,19 @@ describe('the camera in a room taller than a screen (a plaza, Nov 8)', () => {
     expect(play.filter((y) => y > midY).length).toBeGreaterThan(play.filter((y) => y <= midY).length);
     // A plaza keeps its lead.
     expect(followLead(ROOMS['market']!.size.h, false, ROOM_H, ROOM_H)).toBeGreaterThan(0);
+  });
+
+  it('eases to a carried owl by the share that keeps it where a walking owl is in the view (OP-287)', () => {
+    // How far ahead of the middle of the view the follow leaves an owl, in frames of its own going.
+    const ahead = (pace: number, share: number) => (pace * (1 - share)) / share;
+    expect(followEaseAt(WALK_SPEED)).toBeCloseTo(FOLLOW_EASE, 12);
+    const lane = followEaseAt(LANE_SPEED);
+    expect(lane).toBeCloseTo(3 / 14, 12);
+    expect(ahead(LANE_SPEED, lane)).toBeCloseTo(ahead(WALK_SPEED, FOLLOW_EASE), 6);
+    // At the walk's share the carried owl would be twice as far ahead.
+    expect(ahead(LANE_SPEED, FOLLOW_EASE)).toBeCloseTo(2 * ahead(WALK_SPEED, FOLLOW_EASE), 6);
+    // The faster the owl the nearer the camera keeps to it, and never past it.
+    expect(followEaseAt(LANE_SPEED * 4)).toBeGreaterThan(lane);
+    expect(followEaseAt(LANE_SPEED * 4)).toBeLessThan(1);
   });
 });
