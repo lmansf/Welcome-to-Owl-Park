@@ -17,10 +17,13 @@ import { ROOMS } from './index';
 const room = ROOMS[FISHING_ROOM]!;
 const floor = footing(room, 0);
 
-/** Where an owl held toward `dir` from `from` ends up after `frames` frames of a few px each. */
-function held(from: Vec2, dir: Vec2, frames = 700): Vec2 {
+/**
+ * Where an owl held toward `dir` from `from` ends up after `frames` frames of a few px each, or as soon
+ * as it is `past` (each frame is costly when the floor's code is instrumented for mutation testing).
+ */
+function held(from: Vec2, dir: Vec2, frames = 700, past?: (p: Vec2) => boolean): Vec2 {
   let p = { ...from };
-  for (let i = 0; i < frames; i++) {
+  for (let i = 0; i < frames && !past?.(p); i++) {
     const to = steerTarget(p, dir, floor.walkable, undefined, floor.shut);
     if (!to) break;
     const d = distance(p, to);
@@ -51,22 +54,27 @@ describe('the treehouse clearing: the feathers to the jetty can be followed', ()
     }
   });
 
-  it('carries an owl held west from in front of the treehouse doorway past the lantern’s mound to the jetty, from any row of the path (it snagged on the mound’s corner)', () => {
+  it('carries an owl held west along the path past the lantern’s mound to the jetty, from any row of the path (it snagged on the mound’s corner)', () => {
+    // From the open path just east of the mound, between it and the treehouse doorway (the one west of
+    // the doorway, test below, walks the open stretch before it).
     const doorway = room.doors.find((d) => d.id === 'to-hub')!;
-    const startX = doorway.rect.x - 100;
+    const mound = room.perches!.find((p) => p.id === 'grove-lantern-mound')!;
+    const startX = Math.max(...mound.area.map((p) => p.x)) + 100;
+    expect(startX).toBeLessThan(doorway.rect.x);
+    // West of the jetty's east end: the fishing spot is then a step up the floor.
+    const atJetty = (p: Vec2) => p.x <= FISHING_SPOT.x + 100;
     const stuck: string[] = [];
     for (let y = 740; y <= 890; y += 10) {
       const from = { x: startX, y };
       if (!isWalkable(from, floor.walkable, floor.shut)) continue;
-      const end = held(from, { x: -1, y: 0 });
-      // West of the jetty's east end: the fishing spot is then a step up the floor.
-      if (end.x > FISHING_SPOT.x + 100) stuck.push(`from ${from.x},${y}: stopped at ${Math.round(end.x)},${Math.round(end.y)}`);
+      const end = held(from, { x: -1, y: 0 }, 700, atJetty);
+      if (!atJetty(end)) stuck.push(`from ${from.x},${y}: stopped at ${Math.round(end.x)},${Math.round(end.y)}`);
     }
     expect(stuck).toEqual([]);
   });
 
   it('carries an owl held west, then up, from the doorway to the fishing spot', () => {
-    const west = held(room.spawns['default']!, { x: -1, y: 0 });
+    const west = held(room.spawns['default']!, { x: -1, y: 0 }, 700, (p) => p.x <= FISHING_SPOT.x);
     expect(west.x).toBeLessThan(FISHING_SPOT.x + 100);
     // Back east to the jetty's foot, then up onto it.
     const under = held(west, { x: 1, y: 0 }, Math.max(0, Math.round((FISHING_SPOT.x - west.x) / 6)));
