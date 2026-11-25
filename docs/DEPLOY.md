@@ -391,7 +391,7 @@ section 10.
 | Tier | When | What runs |
 | --- | --- | --- |
 | Quick | a push to a branch other than `main` | typecheck, unit tests and build as three jobs at once, then the browser smoke set: the tests tagged `@smoke`, on the `desktop` and `edge` projects; under five minutes |
-| Full | a pull request, a push to `main`, the nightly run (07:00 UTC) and a run by hand | the same three jobs, then the whole browser suite split across twelve runners by the tests' measured times, their reports merged into one; and mutation testing (OP-131, `docs/TESTING.md`) |
+| Full | a pull request, a push to `main`, the nightly run (07:00 UTC) and a run by hand | the same three jobs, then the whole browser suite split across twenty runners, one test at a time on each, by the tests' measured times, their reports merged into one; and mutation testing (OP-131, `docs/TESTING.md`) |
 
 - A push that changes only `docs/` or Markdown files runs nothing (`paths-ignore`). A pull request
   always runs.
