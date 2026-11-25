@@ -20,6 +20,8 @@
  * there while it plays, and goes home after.
  */
 import Phaser from 'phaser';
+import { standIn } from './standIn';
+import { workBoxesShown } from './workBoxes';
 import {
   BOWLING_LANE,
   FURNITURE,
@@ -169,9 +171,22 @@ export class TagLayer {
     return this.conn?.serverNow?.() ?? Date.now();
   }
 
-  /** The feather station and the bowling lane as size boxes on the floor, each with its dimensions on it. */
+  /**
+   * The feather station and the bowling lane. On a painter's or a keeper's tab, size boxes on the floor,
+   * each with its dimensions on it (workBoxes.ts); for every other visitor the park's own signboard,
+   * the game's name on it, at the station's foot, and the lane a soft worn strip with no outline or words.
+   */
   private drawSpaces(): void {
     const s = this.o.scene;
+    if (!workBoxesShown()) {
+      const st = TAG_STATION;
+      standIn(s, 'kit-clearing-sign-board', { x: st.x, y: st.y }, 140, st.y, this.drawn, { text: TAG_WORDS.ring, up: 130 });
+      const lane = s.add.graphics();
+      lane.fillStyle(0xffd36a, 0.07).fillRoundedRect(BOWLING_LANE.x, BOWLING_LANE.y, BOWLING_LANE.w, BOWLING_LANE.h, BOWLING_LANE.h / 2);
+      lane.setDepth(BOWLING_LANE.y);
+      this.drawn.push(lane);
+      return;
+    }
     const label = (x: number, y: number, words: string, depth: number) =>
       s.add.text(x, y, words, { fontFamily: 'system-ui, sans-serif', fontSize: '15px', color: '#ffd36a', align: 'center' }).setOrigin(0.5).setDepth(depth);
     // The station stands up from its foot: drawn at its foot's depth, so an owl in front of it is drawn over it.

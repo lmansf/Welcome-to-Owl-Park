@@ -31,6 +31,8 @@ import {
 } from '@owl-park/shared';
 import type { RoomConnection } from '../net/transport';
 import { createPartyScreen, type PartyScreen } from '../ui/partyScreen';
+import { standIn } from './standIn';
+import { workBoxesShown } from './workBoxes';
 
 export interface PartyLayerOpts {
   scene: Phaser.Scene;
@@ -101,6 +103,12 @@ export class PartyLayer {
   /** The Old Stump and its seats as size boxes on the plaza's floor. */
   private drawStump(): void {
     const s = this.o.scene;
+    // For every visitor but a painter or a keeper (workBoxes.ts), the park's own stump in the box's
+    // place, its foot where the box's was; the seats are where owls sit on it, and draw nothing.
+    if (!workBoxesShown()) {
+      standIn(s, 'decor-stump-table', { x: STUMP_AT.x, y: STUMP_AT.y + STUMP_SIZE.h / 2 }, STUMP_SIZE.w, STUMP_AT.y + STUMP_SIZE.h / 2, this.boxes);
+      return;
+    }
     const box = (x: number, y: number, w: number, h: number, name: string) => {
       const g = s.add.graphics();
       g.fillStyle(0xffd36a, 0.1).fillRect(x - w / 2, y - h, w, h);
