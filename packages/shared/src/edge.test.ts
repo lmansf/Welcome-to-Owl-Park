@@ -118,6 +118,9 @@ describe('parseClientFrame', () => {
   it('accepts well-formed frames and rounds coordinates', () => {
     expect(parseClientFrame(JSON.stringify({ t: 'hello', v: V, look, spawn: 'from-grove', pos: { x: 10.4, y: 20.6 } }))).toEqual({ t: 'hello', v: V, look, spawn: 'from-grove', pos: { x: 10, y: 21 } });
     expect(parseClientFrame(JSON.stringify({ t: 'move', to: { x: 1, y: 2 }, seq: 3 }))).toEqual({ t: 'move', to: { x: 1, y: 2 }, seq: 3 });
+    // Asked for as a glide lane's carry (OP-287): the word is kept, and a move without it has no such key.
+    expect(parseClientFrame(JSON.stringify({ t: 'move', to: { x: 1.4, y: 2 }, seq: 3, lane: true }))).toEqual({ t: 'move', to: { x: 1, y: 2 }, seq: 3, lane: true });
+    expect(parseClientFrame(JSON.stringify({ t: 'move', to: { x: 1, y: 2 }, seq: 3 }))).not.toHaveProperty('lane');
     expect(parseClientFrame(JSON.stringify({ t: 'look', look, extra: 1 }))).toEqual({ t: 'look', look });
     expect(parseClientFrame(JSON.stringify({ t: 'bye' }))).toEqual({ t: 'bye' });
     // Come by travel from the map (OP-130).
@@ -197,6 +200,8 @@ describe('parseClientFrame', () => {
     expect(parseClientFrame(JSON.stringify({ t: 'move', to: { x: 5, y: 2 }, seq: 1.5 }))).toBeNull();
     expect(parseClientFrame(JSON.stringify({ t: 'move', to: { x: Infinity, y: 2 }, seq: 1 }))).toBeNull();
     expect(parseClientFrame(JSON.stringify({ t: 'move', to: { x: 6401, y: 2 }, seq: 1 }))).toBeNull(); // past the biggest room
+    // A lane's carry is said with `true` and nothing else (OP-287).
+    for (const lane of [false, 1, 'yes', null]) expect(parseClientFrame(JSON.stringify({ t: 'move', to: { x: 5, y: 2 }, seq: 1, lane })), String(lane)).toBeNull();
     expect(parseClientFrame(JSON.stringify({ t: 'say', text: 'hi' }))).toBeNull();
     expect(parseClientFrame('x'.repeat(2000))).toBeNull();
   });
