@@ -407,11 +407,8 @@ section 10.
 - **The shard timings**: `apps/park/e2e/shard.mjs` shares the suite out by measured seconds per test
   on a CI runner, longest first onto the shard that would finish soonest with it; a test with no
   measured time counts as the median. The suite runs on twenty shards, one test at a time on each
-  (`PW_WORKERS: 1`, set in `ci.yml`; two or three at once starved the game of CPU on the runners' four
-  cores and failed tests across the suite), about 13 minutes of tests a shard. `PW_WORKERS` and
-  `node e2e/shard.mjs plan <shards> <workers> <dir>` still take more workers for a bigger runner; the
-  room server project then stays one at a time (`workers: 1` on the `edge` project, listed first). The
-  build job makes the plan once (`node e2e/shard.mjs plan 20 1 shard-plan`, the `shard-plan` artifact) so every
+  (two or three at once starved the game of CPU on the runners' four cores and failed tests across the
+  suite), about 13 minutes of tests a shard. The build job makes the plan once (`node e2e/shard.mjs plan 20 1 shard-plan`, the `shard-plan` artifact) so every
   shard works from the same table. The table is the newest one main has kept in the Actions cache
   (`e2e-durations-v1-*`: each passing run on main averages its times in and saves it), and
   `apps/park/e2e/durations.json` when there is none. Refresh the committed copy now and then from the

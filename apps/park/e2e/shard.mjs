@@ -7,10 +7,12 @@
  * shards. A test with no measured time counts as the median. The shard's tests print in the suite's
  * own order, in the form `playwright test --test-list` reads.
  *
- * A shard runs its tests on several workers at once (playwright.config.ts, PW_WORKERS in CI), but the
- * room server project's tests one at a time, since they share the shard's one room server (the gate,
- * the day's scores). So a shard takes about the longer of its room server tests end to end and all its
- * tests spread over the workers, and that is what the sharing evens out.
+ * CI runs one test at a time on each shard (two or three at once on a four-core runner starved the game
+ * of CPU and failed tests across the suite), so CI plans with one worker. The workers argument is for a
+ * bigger runner: it assumes the room server project's tests still run one at a time, since they share
+ * the shard's one room server (the gate, the day's scores), which would need `workers: 1` on the `edge`
+ * project in playwright.config.ts. A shard then takes about the longer of its room server tests end to
+ * end and all its tests spread over the workers, and that is what the sharing evens out.
  *
  *   node e2e/shard.mjs <shard> <of> [workers]        this shard's test list, on stdout
  *   node e2e/shard.mjs plan <of> <workers> <dir>     every shard's list, as <dir>/shard-<n>.txt (CI's
@@ -51,7 +53,7 @@ function listed() {
   return out.split('\n').filter((l) => /^\s+\[\w+\] › /.test(l)).map((l) => l.trim());
 }
 
-/** Projects whose tests run one at a time on a shard (`workers: 1` in playwright.config.ts). */
+/** Projects whose tests would run one at a time on a shard with more than one worker (above). */
 const ONE_AT_A_TIME = new Set(['[edge]']);
 
 /**

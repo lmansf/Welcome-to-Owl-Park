@@ -149,10 +149,9 @@ jobs:
           restore-keys: e2e-durations-v1-
       - name: Share the browser suite out across the shards (e2e/shard.mjs)
         working-directory: apps/park
-        run: node e2e/shard.mjs plan 20 "$PW_WORKERS" shard-plan
+        run: node e2e/shard.mjs plan 20 1 shard-plan
         env:
           CI: 'true'
-          PW_WORKERS: 1
       - uses: actions/upload-artifact@v4
         with:
           name: shard-plan
@@ -335,8 +334,6 @@ jobs:
         env:
           CI: 'true'
           PW_BLOB: 'true'
-          # One test at a time: two or three at once on the runner's four cores failed tests across the suite.
-          PW_WORKERS: 1
           # Each shard's report needs its own name: the report job downloads them all into one folder.
           PLAYWRIGHT_BLOB_OUTPUT_NAME: report-${{ matrix.shard }}.zip
       - name: Upload this shard's report
