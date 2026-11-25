@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { E2E_ADMIN_KEY, openPark } from './helpers';
+import { E2E_ADMIN_KEY, FEEDBACK_OFF_AT, feedbackOffered, openPark } from './helpers';
 
 /**
  * Feedback first in Settings (OP-167): wherever Settings open (the Menu's Settings tab in each realm,
@@ -43,6 +43,8 @@ async function openHomeSettings(page: Page, transport: 'local' | 'edge'): Promis
 }
 
 test.describe('Send feedback is the first row of Settings (OP-167)', () => {
+  test.skip(!feedbackOffered(), 'Send feedback goes at the full opening (OP-449), as the tests below hold');
+
   test("in the park's Menu, in each realm: first, and it opens the Feedback form with its way back to Settings", async ({ page }) => {
     test.skip(isEdge(), 'the room server suite sends from the home screen below');
     test.slow(); // three realms, the Menu opened in each
@@ -111,7 +113,7 @@ test.describe('Send feedback is the first row of Settings (OP-167)', () => {
  * everywhere opens the same Feedback form, clear of the movement controls, and over a covering
  * screen (the owl builder here, the arcade and the climb alike) leaves that screen as it was.
  */
-const FULL_OPENING_MS = Date.parse('2026-12-01T00:00:00-05:00');
+const FULL_OPENING_MS = FEEDBACK_OFF_AT;
 
 /** The bug covers none of what `selectors` find on screen. */
 async function expectClear(bug: Locator, selectors: string[]): Promise<void> {
@@ -246,5 +248,69 @@ test.describe('Thanks for feedback, through the room server (OP-272)', () => {
     await expect(page.locator('[data-feedback-card]')).toBeHidden();
     await page.locator('[data-feedback-bug]').click();
     await expect(page.getByRole('dialog', { name: 'Feedback' }).getByText('Your first note wins a grey mouse.')).toBeVisible();
+  });
+});
+
+/**
+ * Feedback goes at the full opening (OP-449): from midnight in New York on December 1 the bug, the
+ * Menu's Send feedback by Close and Settings' Send feedback row are all gone, in the park and on the
+ * home screen, and a page left open across midnight loses them within a minute. Until then the bug
+ * gives way to the Menu while it is open, so it never sits over the Menu's sheet. The page's clock is
+ * set, so these hold on any date; the feedback route and the notes kept are untouched.
+ */
+test.describe('Feedback goes at the full opening (OP-449)', () => {
+  const AFTER = FEEDBACK_OFF_AT + 30_000;
+  const BEFORE = FEEDBACK_OFF_AT - 30_000;
+
+  test('after midnight on December 1: no bug, no Send feedback in the Menu or in Settings', async ({ page }) => {
+    test.skip(isEdge(), 'the same in every suite');
+    await page.clock.install({ time: AFTER });
+    await openPark(page);
+    await expect(page.locator('[data-feedback-bug]')).toBeHidden();
+    const menu = await openMenuSettings(page);
+    await expect(menu.locator('[data-menu-feedback]')).toHaveCount(0);
+    const panel = menu.locator('[data-panel="settings"]');
+    await expect(panel.locator('[data-setting="calm"]')).toBeVisible();
+    await expect(panel.locator('[data-feedback-row]')).toHaveCount(0);
+    await expect(panel.locator('[data-screen="feedback"]')).toHaveCount(0);
+    await menu.getByRole('button', { name: 'Close the menu' }).click();
+    await expect(menu).toBeHidden();
+    // The home screen's Settings too.
+    const settings = await openHomeSettings(page, 'local');
+    await expect(page.locator('[data-feedback-bug]')).toBeHidden();
+    await expect(settings.locator('[data-feedback-row]')).toHaveCount(0);
+    await expect(settings.locator('[data-screen="feedback"]')).toHaveCount(0);
+  });
+
+  test('before it, the bug gives way to the open Menu; across midnight, the bug and the Menu’s Send feedback go', async ({ page, isMobile }) => {
+    test.skip(isEdge(), 'the same in every suite');
+    await page.clock.install({ time: BEFORE });
+    await openPark(page);
+    const bug = page.locator('[data-feedback-bug]');
+    // A phone's park view keeps the bug off screen already (OP-242); a desktop's shows it.
+    if (isMobile) await expect(bug).toBeHidden();
+    else await expect(bug).toBeVisible();
+    // Narrow, the Menu is a sheet across the screen: the bug is never over it.
+    if (!isMobile) await page.setViewportSize({ width: 500, height: 800 });
+    await page.locator('[data-menu-btn]').click();
+    const menu = page.getByRole('dialog', { name: 'Menu' });
+    await expect(menu).toBeVisible();
+    await expect(menu.locator('[data-menu-feedback]')).toBeVisible();
+    await expect(bug).toBeHidden();
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-feedback-menu-narrow.png` });
+    await menu.getByRole('button', { name: 'Close the menu' }).click();
+    await expect(menu).toBeHidden();
+    if (!isMobile) {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await expect(bug).toBeVisible();
+    }
+    // Midnight passes with the page open.
+    await page.clock.fastForward(90_000);
+    await expect(bug).toBeHidden();
+    await page.locator('[data-menu-btn]').click();
+    await expect(menu).toBeVisible();
+    await expect(menu.locator('[data-menu-feedback]')).toHaveCount(0);
+    await menu.locator('[data-tab="settings"]').click();
+    await expect(menu.locator('[data-panel="settings"] [data-feedback-row]')).toHaveCount(0);
   });
 });

@@ -87,9 +87,10 @@ function buttonRow(title: string, note: string, label: string, onClick: () => vo
  * (OP-108): first Send feedback, which opens the Feedback form (OP-167), then the thumbstick (touch
  * screens), the bubbles of what owls say, the park's sounds, calm motion, full screen where the
  * browser allows it, and which keys and touches do what. `redraw` draws them again (full screen
- * changed). Every place Settings open draws these rows, so each has Send feedback first.
+ * changed). Every place Settings open draws these rows, so each has Send feedback first, until the
+ * full opening takes Feedback away (OP-449): `feedback` null draws no Send feedback row.
  */
-export function settingsRows(store: SettingsStore, redraw: () => void, feedback: () => void): HTMLElement[] {
+export function settingsRows(store: SettingsStore, redraw: () => void, feedback: (() => void) | null): HTMLElement[] {
   if (!styled) {
     const style = document.createElement('style');
     style.textContent = CSS;
@@ -150,12 +151,14 @@ export function settingsRows(store: SettingsStore, redraw: () => void, feedback:
       e.textContent = t;
       return e;
     };
-    const fb = buttonRow(FEEDBACK_ROW_WORDS.title, FEEDBACK_ROW_WORDS.note, FEEDBACK_ROW_WORDS.button, feedback);
-    fb.row.dataset['feedbackRow'] = '';
-    fb.button.dataset['screen'] = 'feedback';
-    fb.button.dataset['key'] = 'feedback';
+    if (feedback) {
+      const fb = buttonRow(FEEDBACK_ROW_WORDS.title, FEEDBACK_ROW_WORDS.note, FEEDBACK_ROW_WORDS.button, feedback);
+      fb.row.dataset['feedbackRow'] = '';
+      fb.button.dataset['screen'] = 'feedback';
+      fb.button.dataset['key'] = 'feedback';
+      rows.push(fb.row);
+    }
     rows.push(
-      fb.row,
       h('On screen'),
       textSize(),
       toggle('thumbstick', 'Thumbstick', 'Walk with the stick in the corner. Off: tap the floor to walk.', 'touch-only'),
@@ -201,9 +204,10 @@ export function settingsRows(store: SettingsStore, redraw: () => void, feedback:
 /**
  * Settings from the home screen, before the park (in the park they are the Menu's Settings tab).
  * `feedback` opens the Feedback form; it is given the button that opened Settings, which takes the
- * focus back when the form closes.
+ * focus back when the form closes. `offered` says, each time they are drawn, whether Feedback is
+ * still offered (OP-449: not from the full opening on).
  */
-export function createSettingsScreen(root: HTMLElement, store: SettingsStore, feedback: (opener: HTMLElement | null) => void): SettingsScreen {
+export function createSettingsScreen(root: HTMLElement, store: SettingsStore, feedback: (opener: HTMLElement | null) => void, offered: () => boolean = () => true): SettingsScreen {
   const modal = createModal(root, { name: 'settings', label: 'Settings', layout: 'card' });
   const box = modal.box;
   let openedBy: HTMLElement | null = null;
@@ -211,7 +215,7 @@ export function createSettingsScreen(root: HTMLElement, store: SettingsStore, fe
   const render = () => {
     box.innerHTML = '';
     box.appendChild(modalHeader('Settings', { onClose: () => modal.close(), closeLabel: 'Close settings' }));
-    box.append(...settingsRows(store, render, () => feedback(openedBy)));
+    box.append(...settingsRows(store, render, offered() ? () => feedback(openedBy) : null));
     syncSettings(box, store.get());
   };
   store.onChange((s) => syncSettings(box, s));

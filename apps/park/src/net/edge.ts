@@ -1204,6 +1204,8 @@ export class EdgeTransport implements ParkTransport {
       // Feather tag (OP-403): the room answers and pushes with `tag` frames, heard by the handlers.
       tag: {
         send: (op, at) => sendFrame(op === 'pass' && at ? { t: 'tag', op, at } : { t: 'tag', op }),
+        // A Start pressed while the socket is down would go nowhere: the layer says so instead (OP-434).
+        online: () => !down,
         self: () => selfId,
       },
       send(msg: ParkMessage) {

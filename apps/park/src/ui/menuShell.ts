@@ -111,12 +111,10 @@ const CSS = `
 #hud .menu-shell .mcard h3{margin:0;font-size:var(--m-body);font-weight:800}
 #hud .menu-shell .mnote{margin:0;color:var(--m-muted)}
 #hud .menu-shell .mrow{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+#hud .menu-shell .mrow[hidden]{display:none}
 #hud .menu-shell .mbtn{min-height:var(--m-target);padding:10px 18px;border-radius:999px;background:var(--m-accent);color:var(--m-on-accent);border:0;font-weight:800}
 #hud .menu-shell .mbtn.ghost{background:transparent;color:var(--m-text);border:2px solid var(--m-frame)}
 #hud .menu-shell .mbtn[disabled]{opacity:.55}
-#hud .menu-shell .mbtn.hold{position:relative;overflow:hidden;isolation:isolate;touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
-#hud .menu-shell .mbtn.hold::before{content:'';position:absolute;inset:0;z-index:-1;background:rgba(12,30,54,.3);transform:scaleX(0);transform-origin:left;transition:transform .12s ease-out}
-#hud .menu-shell .mbtn.hold.holding::before{transform:scaleX(1);transition:transform .35s linear}
 #hud .menu-shell .mmeter{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:baseline}
 #hud .menu-shell .mmeter .bar{grid-column:1 / -1;display:block;height:12px;border-radius:6px;background:color-mix(in srgb,var(--m-frame) 22%,transparent);overflow:hidden}
 #hud .menu-shell .mmeter .bar i{display:block;height:100%;background:var(--m-accent);border-radius:6px}
@@ -362,6 +360,7 @@ export function createMenuShell(root: HTMLElement, tabs: readonly MenuTab[], opt
     closeTimer = null;
     if (!isOpen()) return;
     layer.classList.remove('open', 'closing');
+    root.classList.remove('menu-open');
     for (const cb of closers) cb();
     if (back?.isConnected) back.focus({ preventScroll: true });
     back = null;
@@ -414,6 +413,7 @@ export function createMenuShell(root: HTMLElement, tabs: readonly MenuTab[], opt
       if (closeTimer) clearTimeout(closeTimer);
       closeTimer = null;
       layer.classList.remove('open', 'closing');
+      root.classList.remove('menu-open');
       for (const cb of closers) cb();
       if (back?.isConnected) back.focus({ preventScroll: true });
       back = null;
@@ -443,6 +443,9 @@ export function createMenuShell(root: HTMLElement, tabs: readonly MenuTab[], opt
       back = opener ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
       const already = isOpen();
       layer.classList.add('open');
+      // A mark on the HUD's root while the Menu is open, for what gives way to it (the feedback button, OP-449):
+      // a class, not a :has() rule, whose checks would run on every change anywhere in the HUD.
+      root.classList.add('menu-open');
       show(tab && byId.has(tab) ? tab : current);
       if (already) return;
       if (!pushed) {

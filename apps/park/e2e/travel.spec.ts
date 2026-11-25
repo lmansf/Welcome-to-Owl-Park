@@ -1,11 +1,11 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { frames, mapCard, openPark, state, travelTo, walkToDoor } from './helpers';
+import { confirmTravel, frames, mapCard, openPark, state, travelTo, walkToDoor } from './helpers';
 
 /**
  * Travel from the Menu's map (OP-130). Every place is lit from the start (the owner's "whole map
  * unlocked", Nov 8), one walked into sparkles the first time the map shows it, and a card's button,
- * held, travels there; the owl's own nest is always there. Into the park only through
+ * tapped and confirmed with Go (OP-385), travels there; the owl's own nest is always there. Into the park only through
  * the front gate: a place inside the park offers the gate instead until the owl has walked through
  * the turnstiles, and going home puts it outside again. On this device (the local mode), and through
  * the room server, which keeps the map with the owl and turns a travel in away without the gate.
@@ -17,8 +17,14 @@ async function inRoom(page: Page, room: string | RegExp): Promise<void> {
   await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toMatch(room);
 }
 
-/** A finger held on a travel button until it is full (350 ms), pressed in the page so a busy runner's round trips cannot cut it short. */
-const hold = (button: Locator) => button.evaluate((el) => void el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })));
+/** A travel button tapped (or clicked), then Go on the question it asks (OP-385: a tap and a confirm, no hold). */
+async function tapAndGo(button: Locator): Promise<void> {
+  const to = await button.getAttribute('data-travel');
+  await button.click();
+  const go = button.page().locator(`[data-travel-go="${to}"]`);
+  await expect(go).toBeVisible();
+  await go.click();
+}
 
 /** The page's map, as if this browser had walked these places before (the local mode keeps it per collector). */
 async function walkedBefore(page: Page, collector: string, places: string[]): Promise<void> {
@@ -38,7 +44,7 @@ async function walkedBefore(page: Page, collector: string, places: string[]): Pr
 test.describe.configure({ timeout: 120_000 });
 
 test.describe('travel from the map (OP-130)', () => {
-  test('every place is lit from the start, one walked into sparkles once; its card, held, travels there; the nest is always there', async ({ page }) => {
+  test('every place is lit from the start, one walked into sparkles once; its card, tapped and confirmed, travels there; the nest is always there', async ({ page }) => {
     test.skip(isEdge(), 'on this device; through the room server below');
     await openPark(page, { room: 'homes', collector: `e2e-travel-lit-${test.info().project.name}` });
     const menu = page.getByRole('dialog', { name: 'Menu' });
@@ -62,16 +68,16 @@ test.describe('travel from the map (OP-130)', () => {
     await expect(menu.locator('button.pin[data-place="lobby"] .spark')).toHaveCount(1);
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-travel-map.png` });
 
-    // Held, the street's card travels there: the Menu closes and the owl lands where walking in would.
+    // Tapped and confirmed, the street's card travels there: the Menu closes and the owl lands where walking in would.
     const button = card.locator('[data-travel="homes"]');
     await expect(button).toHaveText('Travel here');
-    await hold(button);
+    await tapAndGo(button);
     await expect(menu).toBeHidden();
     await inRoom(page, 'homes');
     // And home from there, before its mirror; the gate sparkles no more.
     card = await mapCard(page, 'nest');
     await expect(menu.locator('.spark')).toHaveCount(0);
-    await hold(card.locator('[data-travel="nest"]'));
+    await tapAndGo(card.locator('[data-travel="nest"]'));
     await inRoom(page, /^nest-/);
     const at = await state(page);
     expect(at.nest?.mine).toBe(true);
@@ -87,7 +93,7 @@ test.describe('travel from the map (OP-130)', () => {
     let card = await mapCard(page, 'grove');
     await expect(card).toContainText('Enter the park through the gate first.');
     await expect(card.locator('[data-travel]')).toHaveText('Travel to the gate');
-    await card.locator('[data-travel]').press('Enter');
+    await confirmTravel(card);
     await inRoom(page, 'lobby');
     // At the gate, the great tree's card says the turnstiles are the way.
     card = await mapCard(page, 'hub');
@@ -155,9 +161,88 @@ test.describe('travel from the map (OP-130)', () => {
     await expect(nest).toHaveAttribute('aria-pressed', 'true');
     const go = menu.locator('[data-travel-card="nest"] [data-travel]');
     await go.focus();
+    // Enter asks once (OP-385): the button's words as the question, Go holding the focus; Not now puts it back.
+    await page.keyboard.press('Enter');
+    const ask = menu.locator('[data-travel-card="nest"] [data-travel-ask="nest"]');
+    await expect(ask).toBeVisible();
+    await expect(ask).toContainText('Travel home?');
+    await expect(ask.locator('[data-travel-go="nest"]')).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(ask.locator('[data-travel-stay]')).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(ask).toBeHidden();
+    await expect(go).toBeFocused();
+    await expect(menu).toBeVisible();
+    expect((await state(page)).room).toBe('homes');
+    // Enter, and Enter on Go: the owl goes.
+    await page.keyboard.press('Enter');
+    await expect(ask.locator('[data-travel-go="nest"]')).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(menu).toBeHidden();
     await inRoom(page, /^nest-/);
+  });
+
+  test('the new map has all three courses by name; a tap and Go, or Enter and Enter, travels to each, and inside one You are here names it (OP-385)', async ({ page, isMobile }) => {
+    test.skip(isEdge(), 'on this device');
+    test.slow(); // four rooms drawn with software WebGL on CI runners
+    // A phone on its side, as a course plays: held upright, a course shows only the turn-your-phone card
+    // (OP-155), which lies over the Menu button.
+    if (isMobile) await page.setViewportSize({ width: 915, height: 412 });
+    await page.addInitScript(() => {
+      try {
+        sessionStorage.setItem('owl-park-map', '3');
+      } catch {
+        // A browser that keeps nothing walks today's park.
+      }
+    });
+    // In the Great Hollow, just through the Treetop Commons' turnstiles.
+    await openPark(page, { room: 'm3-hall', spawn: 'from-lobby', collector: `e2e-travel-courses-${test.info().project.name}` });
+    await expect.poll(async () => (await state(page)).travel.gate).toBe(true);
+    const menu = page.getByRole('dialog', { name: 'Menu' });
+    let card = await mapCard(page, 'brush-1');
+    // Every course by its own name, and the places by the names the rooms' signs use.
+    const names: Array<[string, string]> = [
+      ['brush-1', 'Brushstroke Bridges'],
+      ['canopy-1', 'Updraft Canopy'],
+      ['circuit-1', 'Blackout Circuit'],
+      ['lobby', 'The Treetop Commons'],
+      ['m3-hall', 'The Great Hollow'],
+      ['ink', 'The ink garden'],
+    ];
+    for (const [place, name] of names) await expect(menu.locator(`button.pin[data-place="${place}"] .name`), place).toHaveText(name);
+    // The line under the map says what a tap does: no hold.
+    await expect(menu.getByText('Tap a place, then its travel button, then Go.', { exact: false })).toBeVisible();
+    await expect(menu.getByText(/\bhold\b/i)).toHaveCount(0);
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-travel-courses-map.png` });
+
+    // A tap on Travel here asks once; a tap on Go travels, with no hold.
+    const button = card.locator('[data-travel="brush-1"]');
+    await expect(button).toHaveText('Travel here');
+    if (isMobile) await button.tap();
+    else await button.click();
+    await expect(card.locator('[data-travel-ask="brush-1"]')).toContainText('Travel here?');
+    expect((await state(page)).room).toBe('m3-hall');
+    const go = card.locator('[data-travel-go="brush-1"]');
+    if (isMobile) await go.tap();
+    else await go.click();
+    await expect(menu).toBeHidden();
+    await inRoom(page, 'brush-1');
+
+    // Inside Brushstroke Bridges the map says so, not the ink garden.
+    card = await mapCard(page, 'brush-1');
+    const here = menu.locator('button.pin.here');
+    await expect(here).toHaveCount(1);
+    await expect(here).toHaveAttribute('data-place', 'brush-1');
+    await expect(here).toContainText('Brushstroke Bridges');
+    await expect(here).toContainText('You are here');
+    await expect(card).toContainText('You are here.');
+    await expect(card.locator('[data-travel]')).toHaveCount(0);
+
+    // By keys: Enter on Travel here, Enter on Go, to the other two courses in turn.
+    await travelTo(page, 'canopy-1');
+    await inRoom(page, 'canopy-1');
+    await travelTo(page, 'circuit-1');
+    await inRoom(page, 'circuit-1');
   });
 
   test('through the room server: the map stays with the owl, realm to realm, and a travel into the park without the gate is turned away', async ({ page }) => {
@@ -191,7 +276,7 @@ test.describe('travel from the map (OP-130)', () => {
     });
     const card = await mapCard(page, 'grove');
     await expect(card.locator('[data-travel]')).toHaveText('Travel here');
-    await card.locator('[data-travel]').press('Enter');
+    await confirmTravel(card);
     await expect(page.getByText('Enter the park through the gate first.')).toBeVisible({ timeout: 20_000 });
     await inRoom(page, home);
     await expect.poll(async () => (await state(page)).travel.gate).toBe(false);

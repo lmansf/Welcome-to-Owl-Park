@@ -36,8 +36,9 @@ describe('the new map’s flow: hub and spokes from the Treetop Commons (OP-305)
     for (const room of AREAS) expect(doorwaysFrom(room).get(LOBBY_ROOM), room).toBeLessThanOrEqual(2);
   });
 
-  it('puts every area but the courses on the map, a tap away', () => {
-    for (const room of AREAS.filter((r) => !/-1$/.test(r))) expect(NEW_MAP_LANDINGS[room], room).toBeDefined();
+  it('puts every area on the map, a tap away, the courses at their gates too (OP-385)', () => {
+    for (const room of AREAS) expect(NEW_MAP_LANDINGS[room], room).toBeDefined();
+    for (const room of AREAS.filter((r) => /-1$/.test(r))) expect(NEW_MAP_LANDINGS[room], room).toEqual({ room, spawn: 'from-gate' });
   });
 
   it('leaves the Party Grove off the new map since it folded into the hall (Nov 21): no way in, no place to travel to', () => {

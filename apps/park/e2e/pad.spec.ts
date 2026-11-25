@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import type { LockView } from '../../../packages/shared/src/puzzles';
 import { expect, test } from './fixtures';
-import { mapCard, openPark, state } from './helpers';
+import { feedbackOffered, mapCard, openPark, state } from './helpers';
 
 type Box = { x: number; y: number; width: number; height: number };
 const overlaps = (a: Box, b: Box) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
@@ -90,24 +90,29 @@ test.describe('the pad (OP-082, OP-114)', () => {
     await page.locator('[data-menu-btn]').tap();
     const menu = page.getByRole('dialog', { name: 'Menu' });
     await expect(menu.locator('[data-menu-sub]')).toHaveText(/owls? here/);
+    // Until the full opening, which takes Send feedback away with the bug (OP-449: feedback.spec.ts).
     const send = menu.locator('[data-menu-feedback]');
-    await expect(send).toBeVisible();
-    await expect(send).toHaveText('Send feedback');
-    const head = (await menu.locator('.mhead').boundingBox())!;
-    const sendBox = (await send.boundingBox())!;
-    expect(sendBox.y).toBeGreaterThanOrEqual(head.y - 1);
-    expect(sendBox.y + sendBox.height).toBeLessThanOrEqual(head.y + head.height + 1);
-    expect(sendBox.x + sendBox.width).toBeLessThanOrEqual(page.viewportSize()!.width);
-    for (const tab of ['collection', 'map', 'settings'] as const) {
-      await menu.locator(`[data-tab="${tab}"]`).tap();
+    if (feedbackOffered()) {
       await expect(send).toBeVisible();
-    }
+      await expect(send).toHaveText('Send feedback');
+      const head = (await menu.locator('.mhead').boundingBox())!;
+      const sendBox = (await send.boundingBox())!;
+      expect(sendBox.y).toBeGreaterThanOrEqual(head.y - 1);
+      expect(sendBox.y + sendBox.height).toBeLessThanOrEqual(head.y + head.height + 1);
+      expect(sendBox.x + sendBox.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+      for (const tab of ['collection', 'map', 'settings'] as const) {
+        await menu.locator(`[data-tab="${tab}"]`).tap();
+        await expect(send).toBeVisible();
+      }
+    } else await expect(send).toHaveCount(0);
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-declutter-menu.png` });
-    await send.tap();
-    const feedback = page.getByRole('dialog', { name: 'Feedback' });
-    await expect(feedback).toBeVisible();
-    await feedback.getByRole('button', { name: 'Back to the menu' }).tap();
-    await expect(menu).toBeVisible();
+    if (feedbackOffered()) {
+      await send.tap();
+      const feedback = page.getByRole('dialog', { name: 'Feedback' });
+      await expect(feedback).toBeVisible();
+      await feedback.getByRole('button', { name: 'Back to the menu' }).tap();
+      await expect(menu).toBeVisible();
+    }
     await menu.getByRole('button', { name: 'Close the menu' }).tap();
     await expect(menu).toBeHidden();
 
@@ -192,29 +197,29 @@ test.describe('the pad (OP-082, OP-114)', () => {
     await expect(page.getByText('The gift shop opens soon.')).toBeVisible();
   });
 
-  test('travel home, on the Menu’s map, held, takes the owl home before its mirror; let go sooner it does nothing', async ({ page }) => {
+  test('travel home, on the Menu’s map, tapped, asks once: Not now does nothing, Go takes the owl home before its mirror (OP-385)', async ({ page }) => {
     test.slow(); // two rooms drawn with software WebGL on CI runners
     await openPark(page, { collector: `e2e-go-home-${test.info().project.name}` });
     const menu = page.getByRole('dialog', { name: 'Menu' });
-    const home = (await mapCard(page, 'nest')).locator('[data-travel="nest"]');
+    const card = await mapCard(page, 'nest');
+    const home = card.locator('[data-travel="nest"]');
     await expect(home).toHaveText('Travel home');
-    // Pressed and let go in one go in the page (a busy runner's round trips would otherwise stretch a
-    // quick tap past the hold): filling while pressed, empty once let go.
-    const tap = () =>
-      home.evaluate((el) => {
-        el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-        const filling = el.classList.contains('holding');
-        el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
-        return [filling, el.classList.contains('holding')];
-      });
-    // Let go before it is full: the owl stays where it is, and the Menu says to hold it.
-    expect(await tap()).toEqual([true, false]);
-    await expect(menu.getByText('Hold to travel.')).toBeVisible();
+    // A tap (a click on a computer) asks, in the button's own words, with Go and Not now; nothing has to be held.
+    await home.click();
+    const ask = card.locator('[data-travel-ask="nest"]');
+    await expect(ask).toBeVisible();
+    await expect(ask).toContainText('Travel home?');
+    await expect(home).toBeHidden();
+    // Not now: the owl stays where it is, and the button is back.
+    await ask.locator('[data-travel-stay]').click();
+    await expect(ask).toBeHidden();
+    await expect(home).toBeVisible();
     await page.waitForTimeout(900);
     expect((await state(page)).room).toBe('hub');
     await expect(menu).toBeVisible();
-    // Held until it is full: the Menu closes and the owl goes home, landing before its mirror.
-    expect(await home.evaluate((el) => (el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })), el.classList.contains('holding')))).toBe(true);
+    // Tapped again and Go: the Menu closes and the owl goes home, landing before its mirror.
+    await home.click();
+    await ask.locator('[data-travel-go="nest"]').click();
     await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toMatch(/^nest-/);
     await expect(menu).toBeHidden();
     const at = await state(page);

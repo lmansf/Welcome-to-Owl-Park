@@ -47,7 +47,8 @@ export const HOME_WORDS = {
   /** A ticket link whose ticket is already running on another owl (OP-174). */
   inUse: 'Ticket already in use',
   held: 'waiting on a quick check from the store',
-  none: 'No ticket yet: you can get one at the turnstiles',
+  /** No ticket while the gate takes tickets (OP-460): an invitation in, with where to get one, not a notice. */
+  none: 'No ticket yet? Come on in and get one at the turnstiles.',
   /** The Menu's way back here from inside the park. */
   menu: 'Home screen',
 } as const;

@@ -33,6 +33,18 @@ export function wheelEmotes(state: CollectionState): ItemDef[] {
 }
 
 /**
+ * The line under the wheel: how many emotes the owl has, of how many there are, and where more come
+ * from. The look around is one of them, on the wheel and in both counts (OP-470: a wheel showing three
+ * said "2 of 24"). Empty once it has every one; a wait while the collection has not come yet.
+ */
+export function emoteCountLine(state: CollectionState): string {
+  if (!state.inv) return 'Loading your emotes…';
+  const have = wheelEmotes(state).length;
+  const of = EMOTE_IDS.length + 1;
+  return have < of ? `${have} of ${of} emotes. Earn more on quests, or find them in the feather shop.` : '';
+}
+
+/**
  * The other wheel, one tap away (OP-242): a phone has one button for Say and the emotes, so each
  * wheel offers the other beside Close. The wheel closes and `go` opens the other.
  */
@@ -123,7 +135,6 @@ export function createEmoteWheel(root: HTMLElement, state: CollectionState, play
     for (const s of slots) s.remove();
     slots = [];
     const all = wheelEmotes(state);
-    const owned = all.filter((i) => i !== LOOK_ITEM).length;
     const view = wheelPage(all, page);
     page = view.page;
     const r = parseFloat(getComputedStyle(ring).getPropertyValue('--r')) || 132;
@@ -165,11 +176,7 @@ export function createEmoteWheel(root: HTMLElement, state: CollectionState, play
     nameEl.textContent = '';
     pager.style.visibility = view.pages > 1 ? 'visible' : 'hidden';
     pageLabel.textContent = `${view.page + 1} / ${view.pages}`;
-    note.textContent = !state.inv
-      ? 'Loading your emotes…'
-      : owned < EMOTE_IDS.length
-        ? `${owned} of ${EMOTE_IDS.length} emotes. Earn more on quests, or find them in the feather shop.`
-        : '';
+    note.textContent = emoteCountLine(state);
   };
 
   for (const b of box.querySelectorAll<HTMLButtonElement>('[data-page]')) {
