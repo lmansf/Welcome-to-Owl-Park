@@ -119,3 +119,30 @@ describe('Settings put Send feedback first (OP-167)', () => {
     expect(panel.querySelectorAll('[data-screen="leave"]')).toHaveLength(1);
   });
 });
+
+describe('Settings with Feedback switched off at the full opening (OP-449)', () => {
+  beforeEach(() => {
+    vi.stubGlobal('document', fakeDocument());
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('draws no Send feedback row, on the home screen or in the Menu, and the settings start at once', async () => {
+    const rows = settingsRows(store(), () => undefined, null) as unknown as FakeEl[];
+    expect(rows.filter((r) => 'feedbackRow' in r.dataset)).toHaveLength(0);
+    expect(rows.flatMap((r) => [r, ...r.all()]).filter((e) => e.dataset['screen'] === 'feedback')).toHaveLength(0);
+    expect(rows[0]!.tagName).toBe('h3');
+    const panel = new FakeEl('div');
+    renderSettings(
+      panel as unknown as HTMLElement,
+      { settings: store(), tickets: () => Promise.resolve(null), canLeave: true, feedback: null, title: () => undefined, leave: () => undefined, account: null },
+      () => undefined,
+    );
+    await Promise.resolve();
+    expect(panel.querySelectorAll('[data-feedback-row]')).toHaveLength(0);
+    expect(panel.querySelectorAll('[data-screen="feedback"]')).toHaveLength(0);
+    // The ways out stay.
+    expect(panel.querySelectorAll('[data-screen="title"]')).toHaveLength(1);
+  });
+});

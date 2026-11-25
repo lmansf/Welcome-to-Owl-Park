@@ -181,6 +181,31 @@ test.describe('feather tag across the Great Hollow (OP-434)', () => {
   });
 });
 
+/** The one line the park says when it cannot reach the room server (src/game/roomDown.ts), as Play and Talk say it (OP-407). */
+const ROOM_DOWN = 'That needs the park, and it could not connect just now. Try again in a moment.';
+
+test.describe('feather tag when the park cannot connect (OP-434, OP-407)', () => {
+  test('Start says the park could not connect, every time it is pressed, never nothing', async ({ page }) => {
+    // The room server's socket closes as it opens, as offline.spec.ts has it.
+    await page.routeWebSocket(/\/ws\//, (ws) => ws.close());
+    const q = new URLSearchParams({ transport: 'edge', room: TAG_ROOM, spawn: 'default', kit: '0', art: 'old' });
+    await page.goto(`/?${q.toString()}`);
+    await page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
+    await expect(page.locator('[data-dot][data-status]')).toHaveAttribute('data-status', 'offline', { timeout: 20_000 });
+    const start = tagButton(page);
+    await expect(start).toHaveText(TAG_WORDS.start);
+    const said = page.getByText(ROOM_DOWN);
+    await start.click();
+    await expect(said).toBeVisible({ timeout: 3_000 });
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-tag-offline.png` });
+    // Gone, and pressed again: said again.
+    await expect(said).toBeHidden();
+    await start.click();
+    await expect(said).toBeVisible({ timeout: 3_000 });
+    expect((await tagOf(page))?.players ?? []).toEqual([]);
+  });
+});
+
 test.describe('never a one-owl game: Pip stands in (OP-426, OP-434)', () => {
   test('a lone owl starts a game, Pip joins when the call closes, a ten year old’s owl catches Pip, and the round pays', async ({ browser }) => {
     test.slow(); // a call, a chase round the station and a 30 second round played out

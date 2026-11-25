@@ -226,10 +226,31 @@ export async function mapCard(page: Page, place: string): Promise<Locator> {
   return card;
 }
 
-/** Travel from the map (OP-130): the place's card, its travel button pressed with a key (a key acts at once; a pointer holds it, travel.spec.ts). */
+/**
+ * Travel from the map (OP-130): the place's card, its travel button pressed with a key, and Go on the
+ * question it asks (OP-385: a press and a confirm, by key or tap alike, in place of the hold).
+ */
 export async function travelTo(page: Page, place: string): Promise<void> {
-  await (await mapCard(page, place)).locator('[data-travel]').press('Enter');
+  await confirmTravel(await mapCard(page, place));
 }
+
+/** A card's travel button pressed with Enter, then Go, which takes the focus, pressed with Enter too (OP-385). */
+export async function confirmTravel(card: Locator): Promise<void> {
+  const button = card.locator('[data-travel]');
+  const to = await button.getAttribute('data-travel');
+  await button.press('Enter');
+  const go = card.locator(`[data-travel-go="${to}"]`);
+  await expect(go).toBeFocused();
+  await go.press('Enter');
+}
+
+/**
+ * Feedback is offered until the full opening, midnight in New York at the start of December 1 (OP-449,
+ * the owner's "Feedback button off Dec 1"): the tests of the Feedback form run until then, and
+ * feedback.spec.ts holds the clock either side of it to check it goes.
+ */
+export const FEEDBACK_OFF_AT = Date.parse('2026-12-01T00:00:00-05:00');
+export const feedbackOffered = (): boolean => Date.now() < FEEDBACK_OFF_AT;
 
 /** Walk the local owl into the middle of a doorway by id (from the live room definition). */
 /** The admin key the local room server runs with in these tests (playwright.config.ts): a test value, not a secret. */

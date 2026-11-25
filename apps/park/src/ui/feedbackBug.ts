@@ -18,10 +18,18 @@ export const FEEDBACK_BUG_WORDS = {
   label: 'Send feedback: found a bug or have an idea?',
 } as const;
 
-/** Whether the bug shows: switched on, and the full opening has not come. */
-export function feedbackBugShown(now: number = Date.now(), on: boolean = FEEDBACK_BUG_ON): boolean {
+/**
+ * Whether Feedback is offered at all (OP-449, the owner's "Feedback button off Dec 1"): the bug, the Menu's
+ * Send feedback by Close and Settings' Send feedback row all go together at the full opening, midnight
+ * at the start of December 1 in the park's time zone (2026-12-01T05:00Z), with no deploy. The keepers'
+ * feedback page and the notes already sent stay; only the ways to send a new one go.
+ */
+export function feedbackOffered(now: number = Date.now(), on: boolean = FEEDBACK_BUG_ON): boolean {
   return on && now < FULL_OPENING_MS;
 }
+
+/** Whether the bug shows: Feedback is offered (the same switch and date). */
+export const feedbackBugShown = feedbackOffered;
 
 /** How often a page left open checks the date, so the bug goes at the opening without a reload. */
 const CHECK_EVERY_MS = 60_000;
@@ -50,12 +58,16 @@ const CSS = `
 /* The home screen's buttons fill its left side, so there the bug keeps to the right edge (under a covering screen, the left again). */
 #hud.at-home:not(.covered) .fb-bug{left:auto;right:max(6px,env(safe-area-inset-right))}
 #hud .fb-bug[hidden]{display:none}
+/* The Menu has its own Send feedback by Close (OP-242): while it is open the bug and its card never float over its sheet (OP-449). */
+#hud:has(.menu-layer.open) .fb-bug,#hud:has(.menu-layer.open) .fb-card{display:none}
 /* A phone's park view keeps it in the Menu, by Close (OP-242); on the home screen and over a covering screen it stays. */
 @media (pointer:coarse){#hud:not(.at-home):not(.covered) .fb-bug{display:none}}
 `;
 
 export interface FeedbackBug {
   readonly button: HTMLButtonElement;
+  /** Whether Feedback is offered now (feedbackOffered), as the last look at the date said. */
+  offered(): boolean;
   /** Show or hide it now, by the date. */
   refresh(): void;
 }
@@ -63,9 +75,10 @@ export interface FeedbackBug {
 /**
  * The bug button, in the HUD's root (outside the parts that hide under a covering screen). It sits
  * over every screen but under the Feedback form itself. `open` is given the button, which takes the
- * focus back when the form closes.
+ * focus back when the form closes. `gone` is told once, when the full opening takes Feedback away
+ * (at once if it already has), so the Menu's own Send feedback goes with the bug.
  */
-export function createFeedbackBug(root: HTMLElement, open: (button: HTMLElement) => void, now: () => number = Date.now): FeedbackBug {
+export function createFeedbackBug(root: HTMLElement, open: (button: HTMLElement) => void, now: () => number = Date.now, gone?: () => void): FeedbackBug {
   const style = document.createElement('style');
   style.textContent = CSS;
   document.head.appendChild(style);
@@ -84,15 +97,18 @@ export function createFeedbackBug(root: HTMLElement, open: (button: HTMLElement)
   root.appendChild(button);
 
   let timer: ReturnType<typeof setInterval> | null = null;
+  let shown = true;
   const refresh = () => {
-    const shown = feedbackBugShown(now());
+    const was = shown;
+    shown = feedbackOffered(now());
     button.hidden = !shown;
     if (!shown && timer !== null) {
       clearInterval(timer);
       timer = null;
     }
+    if (was && !shown) gone?.();
   };
   refresh();
-  if (feedbackBugShown(now())) timer = setInterval(refresh, CHECK_EVERY_MS);
-  return { button, refresh };
+  if (shown) timer = setInterval(refresh, CHECK_EVERY_MS);
+  return { button, offered: () => shown, refresh };
 }

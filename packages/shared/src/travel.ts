@@ -57,7 +57,7 @@ export const TRAVEL_LANDINGS: Readonly<Record<string, Landing>> = {
 
 /**
  * Where travel lands an owl walking the new map (OP-305): every place on its map, each where walking in
- * by its main way arrives. The Great Hollow is a place of its own (the root stair folded into the arcade,
+ * by its main way arrives, the three courses at their gates (OP-385). The Great Hollow is a place of its own (the root stair folded into the arcade,
  * OP-306). The Party Grove, the room `hub` here, is no place on it since Nov 21: folded into the hollow
  * (the owner's Nov 19 "Fold into the hub"), its door grown over.
  */
@@ -70,6 +70,10 @@ export const NEW_MAP_LANDINGS: Readonly<Record<string, Landing>> = {
   grove: { room: 'grove', spawn: 'default' },
   market: { room: 'market', spawn: 'default' },
   arcade: { room: 'arcade', spawn: 'from-cavern' },
+  // The three parkour courses (OP-385), each at its first room's gate, where its Commons' doorway in the hollow lands an owl.
+  'brush-1': { room: 'brush-1', spawn: 'from-gate' },
+  'canopy-1': { room: 'canopy-1', spawn: 'from-gate' },
+  'circuit-1': { room: 'circuit-1', spawn: 'from-gate' },
 };
 
 /** The landings for the park an owl walks: the new map's (3), or today's park's and the tree's. */
@@ -138,16 +142,18 @@ export const TRAVEL_WORDS = {
   here: 'Travel here',
   home: 'Travel home',
   gate: 'Travel to the gate',
-  hold: 'Hold to travel.',
+  /** The confirm step after a travel button (OP-385, in place of the hold): the button's words asked, then Go or Not now. */
+  go: 'Go',
+  stay: 'Not now',
   youAreHere: 'You are here.',
   atGate: 'You are at the gate: walk through the turnstiles to go in.',
   throughGate: 'Into the park is always through the front gate.',
   gateFirst: 'Enter the park through the gate first.',
   notYet: 'Travel does not go there yet.',
   busy: 'Finish what you are doing, then travel.',
-  map: 'Tap a place to travel there. Into the park is always through the front gate.',
+  map: 'Tap a place, then its travel button, then Go. Into the park is always through the front gate.',
   /** The same on the new map, whose way in is the Treetop Commons and whose every place travels (OP-305). */
-  newMap: 'Tap a place to travel there. Into the park is always through the Treetop Commons.',
+  newMap: 'Tap a place, then its travel button, then Go. Into the park is always through the Treetop Commons.',
   /** On the new map, the Treetop Commons' card while the owl has not walked through its turnstiles. */
   newGateFirst: 'Walk through the turnstiles in the Treetop Commons first.',
   /** The new map's way to its gate: the Treetop Commons. */

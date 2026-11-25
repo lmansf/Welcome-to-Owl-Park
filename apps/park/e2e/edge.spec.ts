@@ -1,7 +1,7 @@
 import { devices, type Browser, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { flyThrough, playAt, run, untilOver } from './arcadePlay';
-import { dist, doAction, E2E_ADMIN_KEY, jumpFlapGlide, openPark, settleCamera, state, steppedFlight, steppedPeerFlight, tapRoomPoint, travelTo, waitForArrival, walkAndStop, walkToDoor, walkToJetty, actionButton } from './helpers';
+import { dist, doAction, E2E_ADMIN_KEY, feedbackOffered, jumpFlapGlide, openPark, settleCamera, state, steppedFlight, steppedPeerFlight, tapRoomPoint, travelTo, waitForArrival, walkAndStop, walkToDoor, walkToJetty, actionButton } from './helpers';
 
 /**
  * These tests run against the room server (wrangler dev on :8787). Each visitor gets its own
@@ -1000,6 +1000,7 @@ test.describe('room server', () => {
   });
 
   test("feedback from the Menu reaches the keepers' page, which needs the admin key and marks notes done", async ({ browser, request }) => {
+    test.skip(!feedbackOffered(), 'the Menu has no Feedback from the full opening (OP-449)');
     const a = await visitor(browser);
     // A marker in letters as well as digits: the Worker takes ten digits or more out of a note as a phone number (OP-236).
     const words = `More lanterns by the pond, please (${Date.now().toString(36)})`;
@@ -1049,6 +1050,7 @@ test.describe('room server', () => {
   });
 
   test("a hostile note reaches the keepers' page as plain words: no markup, no script (OP-143)", async ({ browser }) => {
+    test.skip(!feedbackOffered(), 'the Menu has no Feedback from the full opening (OP-449)');
     const a = await visitor(browser);
     const words = `<img src=x onerror=alert(1)> ' OR '1'='1 ../../../etc/passwd %00 (${Date.now().toString(36)})`;
     await a.locator('[data-menu-btn]').click();
