@@ -172,9 +172,10 @@ or by the first run's quiz and builder.
 **Travel from the map** (OP-130, `packages/shared/src/travel.ts`): every place on the Menu's map is
 lit from the start (the owner's "whole map unlocked all the time", 2026-11-08), and one walked into
 sparkles the first time the map shows it. On the new map the Great Hollow, the root stair and the
-Party Grove travel too. A tap opens the place's card;
-its button is held to travel (`HOLD_MS`, 350 ms, a fill running across it), and a quicker tap says
-"Hold to travel." A key's press on the button travels at once. Travel lands the owl where walking
+Party Grove travel too, and so do the three courses, each by its in-game name under its realm,
+landing at its gate (OP-385). A tap opens the place's card; a tap or Enter on its travel button asks
+once, "Go" or "Not now" (Go has the focus, so Enter and Enter travels), and Go travels (OP-385 took
+the place of the hold, OP-130). Travel lands the owl where walking
 in would have. Into the park is only through the front gate (on the new map the turnstiles down
 the knothole into the Great Hollow count the same): today's great tree's card travels to the gate,
 outside the turnstiles, and a place inside the park offers **Travel to the gate** until the
