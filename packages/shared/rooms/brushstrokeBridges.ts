@@ -30,8 +30,10 @@ export const BRUSH_GROUND = 770;
 const G = BRUSH_GROUND;
 /** How deep under the walking line the water over a flooded stretch of the walk is drawn (room px). */
 const WATER_DEEP = 62;
-/** The water's colour: a wash of ink-blue. */
+/** The water's colour: a wash of ink-blue, drawn until its painted water (OP-485) loads. */
 const WATER = 0x6f93ad;
+/** The painted water (OP-485): grey-blue ink-wash river, repeated along each flooded walk. */
+const WATER_ART = 'kit-tex-ink-river';
 
 /** A walk along the ground line. */
 function floor(x0: number, x1: number) {
@@ -158,7 +160,7 @@ const bank = (id: string, x0: number, x1: number, row = 'kit-cut-ink-bank') => (
  * paints the water; the realm kit's hazard slot has no art for the ink realm yet, and its strip takes
  * over when it does. Its ends are plain lengths of the walk, not caps: the banks either side end in theirs.
  */
-const river = (id: string, x0: number, x1: number): KitRun => ({ id, x0, x1, top: 0, row: 'kit-cut-ink-bank', left: 'kit-cut-ink-bank-mid-320', right: 'kit-cut-ink-bank-mid-320', mid: 'kit-tex-ink-ink-stone', flood: { depth: WATER_DEEP, color: WATER } });
+const river = (id: string, x0: number, x1: number): KitRun => ({ id, x0, x1, top: 0, row: 'kit-cut-ink-bank', left: 'kit-cut-ink-bank-mid-320', right: 'kit-cut-ink-bank-mid-320', mid: 'kit-tex-ink-ink-stone', flood: { depth: WATER_DEEP, color: WATER, art: WATER_ART } });
 /**
  * Inside the cave behind the falls the floor and the shelves are fitted stone, as they were: the room
  * is one screen of wall, and the ink rock there takes the walkway's contrast over what the style

@@ -338,6 +338,15 @@ describe("a course's pit, drawn as a drop or a flooded walk (OP-343)", () => {
     expect(KIT_FLOOD_OVER).toBeGreaterThan(0);
   });
 
+  it("loads a flooded walk's painted water with the room (OP-485), and every course's water is painted from a kit texture", () => {
+    const painted = room({ paths: [walk('west', 100, 600), { ...walk('pond', 600, 1000), flood: { ...flood, art: 'kit-tex-ink-river' } }, walk('east', 1000, 1500)] }, { course });
+    expect(kitArtKeys(painted)).toContain('kit-tex-ink-river');
+    expect(kitArtKeys(room({ paths: [walk('west', 100, 600), { ...walk('pond', 600, 1000), flood }, walk('east', 1000, 1500)] }, { course }))).not.toContain('kit-tex-ink-river');
+    const floods = KIT_ROOMS.flatMap((k) => (k.kit!.paths ?? []).flatMap((p) => (p.flood ? [p.flood] : [])));
+    expect(floods.length).toBeGreaterThan(0);
+    for (const f of floods) expect(KIT_ART[f.art ?? ''], 'a kit key').toBeDefined();
+  });
+
   it('refuses a pit drawn as a walk, a drop or a flooded walk where an owl may stand, a drop with a top piece, and a pit drawn both ways', () => {
     expect(kitProblems(room({}, { course }))).toEqual(['the pit at x 608 is drawn as a walk: the path over it should be a drop or a flooded walk']);
     const wide = room({ paths: [walk('west', 100, 500), drop('dip', 500, 1000), walk('east', 1000, 1500)] }, { course });

@@ -978,10 +978,12 @@ test.describe('Swap pet (OP-263)', () => {
     }
     expect(seen).toContain('painted-egg~0');
     await expect.poll(() => wornPet(page)).toBe('painted-egg~0');
-    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-pet-swap.png` });
-    // Swapped to the bunny, the page is opened again: the bunny is still on.
+    // Swapped to the bunny, the page is opened again: the bunny is still on. The press comes straight after
+    // the last one, inside Swap pet's six seconds; the picture waits until after it, since a screenshot on a
+    // busy phone runner can outlast the offer and leave the button off.
     await swap.first().click();
     await expect.poll(() => wornPet(page)).toBe('rainbow-bunny~0');
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-pet-swap.png` });
     await open();
     await expect.poll(() => wornPet(page)).toBe('rainbow-bunny~0');
     // Swap pet goes away by itself after a few seconds.

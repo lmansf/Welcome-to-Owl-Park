@@ -170,14 +170,19 @@ test.describe('the movers, behind their flag (OP-287)', () => {
     await openPark(page, { room: 'arcade', spawn: 'from-dive', ...MOVERS });
     await page.keyboard.down('Space');
     await expect.poll(async () => (await state(page)).movers?.pace ?? 0, { timeout: 15_000, intervals: [50] }).toBe(LANE_PACE);
-    await expect.poll(async () => (await state(page)).pos.x, { timeout: 20_000, intervals: [50] }).toBeGreaterThan(1500);
+    // Both turns come mid-lane, seconds short of the end the owl is heading for: at that end the lane sets the
+    // owl down and takes it up no more on this flight. x 1200 was under two seconds from the west end at the
+    // lane's pace, and on a slow desktop runner the poll and the key presses before the next push took longer.
+    await expect.poll(async () => (await state(page)).pos.x, { timeout: 20_000, intervals: [50] }).toBeGreaterThan(2800);
     // Back along the lane: the same ride, turned for the other end in one walk more, still at the lane's pace.
     await page.keyboard.down('ArrowLeft');
     await expect.poll(async () => (await state(page)).movers?.laneTo ?? null, { timeout: 5_000, intervals: [50] }).toEqual(LANE.a);
     // Held on, the way the lane now goes: no walk more.
-    await expect.poll(async () => (await state(page)).pos.x, { timeout: 10_000, intervals: [50] }).toBeLessThan(1200);
+    await expect.poll(async () => (await state(page)).pos.x, { timeout: 10_000, intervals: [50] }).toBeLessThan(2400);
     expect((await state(page)).movers).toMatchObject({ laneRides: 1, carries: 2, pace: LANE_PACE, laneTo: LANE.a });
     await page.keyboard.up('ArrowLeft');
+    // Still carried for the west end, short of it, as the next push comes.
+    expect((await state(page)).movers?.laneTo ?? null, 'the ride still under way when ArrowRight is pressed').toEqual(LANE.a);
     // And round again.
     await page.keyboard.down('ArrowRight');
     await expect.poll(async () => (await state(page)).movers?.laneTo ?? null, { timeout: 5_000, intervals: [50] }).toEqual(LANE.b);
