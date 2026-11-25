@@ -58,9 +58,9 @@ function inOrder(seen: string[], all: string[]): boolean {
   return true;
 }
 
-test.describe('the look around (OP-289, behind ?look=1)', () => {
+test.describe('the look around (OP-289, every owl has it)', () => {
   test('is first on the emote wheel, a phone’s through Say, and turns the head round while the body stays still', async ({ page, isMobile }) => {
-    await openPark(page, { collector: 'e2e-look', tz: 'UTC', look: '1' });
+    await openPark(page, { collector: 'e2e-look', tz: 'UTC' });
     const wheel = page.getByRole('dialog', { name: 'Emotes' });
     // A phone has one button for Say and the emotes (OP-242).
     if (isMobile) {
@@ -82,11 +82,5 @@ test.describe('the look around (OP-289, behind ?look=1)', () => {
     expect(frames[frames.length - 1], log).toBe('front');
     expect(inOrder(frames, LOOK_ROUND), log).toBe(true);
     expect(bodyStill).toBe(true);
-  });
-
-  test('plays nothing on a page without the flag', async ({ page }) => {
-    await openPark(page, { collector: 'e2e-look-off', tz: 'UTC' });
-    expect(await page.evaluate(() => window.owlPark.emote('look'))).toBe(false);
-    expect((await page.evaluate(() => window.owlPark.state()))?.head.frame).toBe('front');
   });
 });

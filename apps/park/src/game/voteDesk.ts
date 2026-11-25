@@ -1,5 +1,5 @@
 /**
- * The vote desk in the Great Hollow (OP-288; behind `?desk=1`, flags.ts): a small board on the hall's
+ * The vote desk in the Great Hollow (OP-288, on for every visitor): a small board on the hall's
  * floor that shows how this month's Realm Vote stands, each realm's share in whole percents. It never
  * shows a count (the owner's call: percentages only), and it moves the moment any owl votes, because
  * the room server tells every owl in the hall the new shares (a `shares` frame).

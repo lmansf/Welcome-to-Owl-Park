@@ -532,7 +532,7 @@ export class RoomScene extends Phaser.Scene {
   private seeThrough: SeeThrough | null = null;
   /** The guardian alive at the heart of the Great Hollow (OP-359): only there, for every visitor since Nov 20 (it was behind `?guardian=1`). */
   private guardian: GuardianView | null = null;
-  /** The vote desk in the Great Hollow (OP-288): only there, and only behind `?desk=1` (flags.ts). */
+  /** The vote desk in the Great Hollow (OP-288): only there, for every visitor. */
   private desk: VoteDeskView | null = null;
   /**
    * The camera near the guardian (guardian.ts, presence): how much it is the guardian's now (0 to 1, eased),
@@ -588,8 +588,7 @@ export class RoomScene extends Phaser.Scene {
   private bubbles: SpeechBubbles | null = null;
   /** What tapping a painted egg last said here (OP-261). */
   private eggSaid: string | null = null;
-  /** Swap pet (OP-263): whether it is on, and until when it is offered after a tap on the own pet. */
-  private readonly petSwapOn = flagOn('petswap');
+  /** Swap pet (OP-263, on for every visitor): until when it is offered after a tap on the own pet. */
   private swapUntil = 0;
   /** The feather trail toward a doorway not tried yet (OP-307), and whether Settings has it on; none in a course. */
   private trail: FeatherTrail | null = null;
@@ -1227,8 +1226,8 @@ export class RoomScene extends Phaser.Scene {
       this.guardian = new GuardianView(this, { light: room.bowl?.light, calm: () => this.calm(), onHoot: () => this.sfx.play('guardianHoot') });
       (this.pieces.standing ??= []).push(this.guardian.image);
     }
-    // The vote desk in the Great Hollow (OP-288, behind ?desk=1): this month's Realm Vote in percents, moving as owls vote.
-    if (room.id === VOTE_DESK_ROOM && flagOn('desk') && !this.sideView()) {
+    // The vote desk in the Great Hollow (OP-288, on for every visitor): this month's Realm Vote in percents, moving as owls vote.
+    if (room.id === VOTE_DESK_ROOM && !this.sideView()) {
       const desk = new VoteDeskView(this);
       this.desk = desk;
       void this.transport.voteShares?.().then((r) => {
@@ -1971,11 +1970,11 @@ export class RoomScene extends Phaser.Scene {
   }
 
   /**
-   * A tap on the own owl's pet (OP-263, `?petswap=1`): with two pets or more, Swap pet joins the owl's
+   * A tap on the own owl's pet (OP-263): with two pets or more, Swap pet joins the owl's
    * actions for a few seconds (an egg still says when it hatches). False when it is not that, so the tap goes on.
    */
   private offerPetSwap(p: Vec2): boolean {
-    if (!this.petSwapOn || !this.me.petAt(p) || !canSwapPet(this.myPets())) return false;
+    if (!this.me.petAt(p) || !canSwapPet(this.myPets())) return false;
     this.swapUntil = Date.now() + PET_SWAP_MS;
     this.tapEgg(p);
     return true;
@@ -2847,7 +2846,7 @@ export class RoomScene extends Phaser.Scene {
     seeThrough: string[];
     /** The guardian at the heart of the Great Hollow (OP-359), where it is: null in any other room. */
     guardian: GuardianState | null;
-    /** The vote desk in the Great Hollow (OP-288): where it stands and what it says; null on any address without `?desk=1`. */
+    /** The vote desk in the Great Hollow (OP-288): where it stands and what it says; null in any other room. */
     desk: DeskState | null;
     /** The feather trail (OP-307): the feathers out now (room px) and the doorways that glint; null in a course. */
     trail: { feathers: Vec2[]; glints: string[]; on: boolean } | null;
@@ -3644,10 +3643,10 @@ export class RoomScene extends Phaser.Scene {
 
   /**
    * Play an owned emote here and for everyone in the room (it counts for quests that ask for it). The
-   * look around (OP-289) every owl has, behind ?look=1: it counts for no quest.
+   * look around (OP-289) every owl has: it counts for no quest.
    */
   emote(e: string): boolean {
-    const look = e === LOOK_EMOTE && flagOn('look');
+    const look = e === LOOK_EMOTE;
     if (!this.built || (!look && (!EMOTE_IDS.includes(e) || !this.collection.owns(e)))) return false;
     this.me.playEmote(e);
     this.guardianCalled(this.playerId, e);

@@ -1,5 +1,5 @@
 /**
- * Swapping the worn pet in one tap (OP-263, D7, behind `?petswap=1`): a tap on the owl's own pet, for an
+ * Swapping the worn pet in one tap (OP-263, D7): a tap on the owl's own pet, for an
  * owl that holds two pets or more, offers Swap pet beside the owl's other actions for a few seconds; each
  * press puts on the next pet it owns, in catalogue order, then no pet, then the first again. The choice is
  * an ordinary wardrobe change (the room checks it as any look), so it lasts a reload. An owl with one pet

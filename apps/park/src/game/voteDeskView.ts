@@ -1,5 +1,5 @@
 /**
- * The vote desk as it is drawn (OP-288; behind `?desk=1`): a wooden board on two legs on the Great
+ * The vote desk as it is drawn (OP-288): a wooden board on two legs on the Great
  * Hollow's floor, its rows of realm names with a bar and a percent each, or a line saying nobody has
  * voted yet this month. It stands among the owls with its foot as its depth, like any piece on the floor.
  * Its rules (where it stands, what it says) are voteDesk.ts's.

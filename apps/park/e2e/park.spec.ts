@@ -916,7 +916,7 @@ test.describe('the painted egg (OP-261)', () => {
   });
 });
 
-test.describe('Swap pet (OP-263, behind ?petswap=1)', () => {
+test.describe('Swap pet (OP-263)', () => {
   /** A collection holding these pets, as if a code and the hatch had given them, kept the way the local mode keeps one. */
   async function withPets(page: Page, cid: string, pets: string[]): Promise<void> {
     await page.addInitScript(
@@ -942,7 +942,7 @@ test.describe('Swap pet (OP-263, behind ?petswap=1)', () => {
     test.slow(); // two page loads and a tap on the pet for each of four swaps: 43 s on a desktop runner, over 45 s on a busy phone one
     const cid = 'e2e-pet-swap';
     await withPets(page, cid, ['painted-egg~0', 'rainbow-bunny~0']);
-    const open = () => openPark(page, { collector: cid, tz: 'UTC', room: 'hub', petswap: '1' });
+    const open = () => openPark(page, { collector: cid, tz: 'UTC', room: 'hub' });
     await open();
     await expect.poll(() => page.evaluate(() => window.owlPark.equip('painted-egg~0'))).toBe(true);
     await expect.poll(async () => (await state(page)).pet).not.toBeNull();
@@ -990,7 +990,7 @@ test.describe('Swap pet (OP-263, behind ?petswap=1)', () => {
     const cid = 'e2e-pet-swap-one';
     // Nothing but what every owl is given: the starter pieces and the Halloween Bat, its one pet.
     await withPets(page, cid, []);
-    await openPark(page, { collector: cid, tz: 'UTC', room: 'hub', petswap: '1' });
+    await openPark(page, { collector: cid, tz: 'UTC', room: 'hub' });
     await expect.poll(() => page.evaluate(() => (window.owlPark.collection()?.owned ?? []).includes('bat~0'))).toBe(true);
     await expect.poll(() => page.evaluate(() => window.owlPark.equip('bat~0'))).toBe(true);
     await expect.poll(async () => (await state(page)).pet).not.toBeNull();
