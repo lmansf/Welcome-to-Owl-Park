@@ -120,7 +120,13 @@ function inkAir(screens: number, start = 0): KitBackdrop[] {
  */
 const INK_FAR = ['kit-ink-far-a', 'kit-ink-far-b'] as const;
 
-const COURSE_ROOM = { map: 2 as const, owlScale: 1.25, mood: 'dusk' as const };
+/**
+ * The owl as big as in today's park (OP-477), not the tree's quarter bigger: next to the course's
+ * small stones, reeds and pine boughs the tree's size looked far too large (the Nov 25 walk). Only how
+ * the owl is drawn changes; every jump, flap and ledge is the same.
+ */
+export const BRUSH_OWL_SCALE = 1;
+const COURSE_ROOM = { map: 2 as const, owlScale: BRUSH_OWL_SCALE, mood: 'dusk' as const };
 
 function brushRoom(
   id: string,
