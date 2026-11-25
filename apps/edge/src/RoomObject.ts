@@ -26,9 +26,16 @@ import {
   DEFAULT_LOOK,
   HEARTBEAT_FRAME,
   KIND_RULES,
+  LANTERN_BEAMS,
   LANTERN_ROOM,
   QUIZ_FEATHERS,
+  TAG_ROOM,
+  tagTier,
+  type TagRoundResult,
   QUIZ_ROOM,
+  QUIZ_STAGES,
+  lanternBeam,
+  quizStage,
   NPC_EMOTE_RADIUS,
   NPC_TALK_RADIUS,
   REALMS_DEFAULTS,
@@ -43,7 +50,6 @@ import {
   distance,
   filterOwnedWear,
   getInteractable,
-  getNpc,
   getQuest,
   hashForLog,
   isDeviceId,
@@ -56,6 +62,7 @@ import {
   leafRespawnMs,
   nestIdOf,
   nestLook,
+  npcIn,
   npcsIn,
   parseClientFrame,
   pointInRect,
@@ -116,6 +123,8 @@ import {
   type PlayEvent,
   type PlayResult,
   type QuestBoard,
+  guestBoard,
+  guestQuest,
   type QuestUpdate,
   type RealmsSettings,
   type RunResult,
@@ -184,7 +193,7 @@ export interface Attachment {
   keeper?: true;
   /** Its upgrade came to a host on this machine: only then may a missing signing key fall back to the development key (OP-209). */
   local?: true;
-  /** At the Old Stump in the Party Grove (OP-314): the seat its owl sits in, or null while it only watches the seats. */
+  /** At the Old Stump in the Great Hollow (OP-314): the seat its owl sits in, or null while it only watches the seats. */
   stump?: StumpMark;
 }
 
@@ -195,6 +204,12 @@ export interface Attachment {
  */
 export function spectatorSocket(roomId: string, kind: string | null): boolean {
   return insidePark(roomId) && kind !== 'visitor';
+}
+
+/** Whether a free guest may send this quest frame (OP-428): the board, a talk, a use, or taking, handing in or dropping one of a guest's quests. */
+export function guestFrame(frame: { t: string; quest?: unknown }): boolean {
+  if (frame.t === 'quests' || frame.t === 'talk' || frame.t === 'use') return true;
+  return (frame.t === 'accept' || frame.t === 'handin' || frame.t === 'abandon') && guestQuest(frame.quest);
 }
 
 /** What an owl's play earned (OP-191): a ticket holder's pay, or a spectator's nothing, with its balance and `practice`. */
@@ -267,9 +282,19 @@ const OWNED_REFRESH_MS = 2_000;
 const OWNED_CACHE_MAX = 1_000;
 /** Storage key for used-up shared objects (leaf piles): room id -> object id -> when it is back. */
 const OBJECTS_KEY = 'objects';
-/** Storage keys for the hub's lantern beam and the last stage quiz round settled. */
+/**
+ * Storage keys for a room's lanterns and the last stage quiz round it settled: the plaza's keep their
+ * first names, and every other room (the Great Hollow) has its own, as one object may serve several rooms.
+ */
 const LANTERNS_KEY = 'lanterns';
 const QUIZ_KEY = 'quiz';
+/** Storage key for feather tag in the Great Hollow and its last round paid (OP-434), so a wake from hibernation carries the game on. */
+const TAG_KEY = 'tag';
+const lanternsKey = (room: string): string => (room === LANTERN_ROOM ? LANTERNS_KEY : `${LANTERNS_KEY}:${room}`);
+const quizKey = (room: string): string => (room === QUIZ_ROOM ? QUIZ_KEY : `${QUIZ_KEY}:${room}`);
+/** The rooms with lanterns, and with a stage quiz. */
+const LANTERN_ROOMS = Object.keys(LANTERN_BEAMS);
+const QUIZ_ROOMS = Object.keys(QUIZ_STAGES);
 /** Storage key for the sealed hollows' runs (OP-310), so a group's run outlasts the object's sleep (not the night's restart). */
 const ESCAPES_KEY = 'escapes';
 /** How close to the sealed hollow's doorway an owl asks for its groups (room px from the doorway's middle). */
@@ -487,10 +512,17 @@ export class RoomObject extends DurableObject<Env> {
       const saved = await ctx.storage.get<Record<string, Record<string, number>>>(OBJECTS_KEY);
       for (const [id, until] of Object.entries(saved ?? {})) if (Object.hasOwn(ROOMS, id)) this.room(id).restoreObjects(until);
       // A lantern beam still burning, and the last quiz round paid, so a round is never paid twice.
-      const lanterns = await ctx.storage.get<LanternState>(LANTERNS_KEY);
-      if (lanterns && Object.hasOwn(ROOMS, LANTERN_ROOM)) this.activities(LANTERN_ROOM).restoreLanterns(lanterns);
-      const settled = await ctx.storage.get<number>(QUIZ_KEY);
-      if (typeof settled === 'number' && Object.hasOwn(ROOMS, QUIZ_ROOM)) this.activities(QUIZ_ROOM).quizSettled = settled;
+      for (const id of LANTERN_ROOMS) {
+        const lanterns = await ctx.storage.get<LanternState>(lanternsKey(id));
+        if (lanterns && Object.hasOwn(ROOMS, id)) this.activities(id).restoreLanterns(lanterns);
+      }
+      for (const id of QUIZ_ROOMS) {
+        const settled = await ctx.storage.get<number>(quizKey(id));
+        if (typeof settled === 'number' && Object.hasOwn(ROOMS, id)) this.activities(id).quizSettled = settled;
+      }
+      // Feather tag as it stood, and its last round paid, so a game outlasts the object's sleep and no round is paid twice (OP-434).
+      const tag = await ctx.storage.get<unknown>(TAG_KEY);
+      if (tag) this.room(TAG_ROOM).restoreTag(tag);
       // The realms switch as last heard, so a wake from hibernation does not close an open realm.
       const realms = await ctx.storage.get<unknown>(REALMS_KEY);
       if (realms) this.realms = cleanRealms(realms);
@@ -533,6 +565,9 @@ export class RoomObject extends DurableObject<Env> {
         counts: () => this.counts(),
         log: this.log,
         rejected: (owl, why) => this.positionRejected(id, owl, why),
+        // A round of feather tag over (OP-434): its owls are paid, after the frame or wake that settled it.
+        tagRound: (result) => void this.payTag(id, result),
+        tagSaved: (kept) => void this.ctx.storage.put(TAG_KEY, kept),
       });
       this.rooms.set(id, r);
       const kept = this.leftBehind.get(id);
@@ -601,7 +636,7 @@ export class RoomObject extends DurableObject<Env> {
 
   /**
    * A spectator asked for something locked to ticket holders (OP-191): a quest, an NPC owl, a quest
-   * item, today's tasks (leaf piles, stalls and the moonbeam are open to it, OP-243). Told once per
+   * item, today's tasks (leaf piles, stalls and the floor's things are open to it, OP-243). Told once per
    * socket, with the first frame refused.
    *
    * TODO-DOCS (OP-191): docs/LOGGING.md: spectator_refused (room.play, info): frame (the first refused
@@ -1133,9 +1168,10 @@ export class RoomObject extends DurableObject<Env> {
         room.snowball(att.id, frame.at);
         return;
       case 'tag':
-        // Feather tag (OP-403): only the Party Grove plays it (Room.tag), whatever the page's flag says.
+        // Feather tag (OP-403): only the Great Hollow plays it (Room.tag), whatever the page's flag says.
         if (!room.admit(att.id) || room.sessionOf(att.id) !== att.sid) return;
-        room.tag(att.id, frame);
+        // A round starting or a call going out is a round to wake for and pay (OP-434).
+        if (room.tag(att.id, frame)) void this.scheduleAlarm();
         return;
       case 'say':
         // Every phrase is everyone's: no collection is needed to say one.
@@ -1178,7 +1214,7 @@ export class RoomObject extends DurableObject<Env> {
 
   // ---------- the party game (OP-314): partyHost.ts keeps the stump's seats and the games ----------
 
-  /** Into a party game's room: only an owl its game invited, while the game goes on; turned back to the Party Grove otherwise. */
+  /** Into a party game's room: only an owl its game invited, while the game goes on; turned back to the Great Hollow otherwise. */
   private async joinParty(ws: WebSocket, att: Attachment, hello: ClientHello): Promise<void> {
     if (!this.party.admits(att)) {
       this.logOf(att).info('room.join', 'room_join_refused', 'An owl was turned away from a party game it was not invited into, or one that is over.', { reason: 'party' });
@@ -1336,14 +1372,14 @@ export class RoomObject extends DurableObject<Env> {
     this.accountLook(att, look);
     this.checkDevice(ws, att);
     if (recheck) void this.recheckLook(att, hello.look);
-    // The lantern beam as it burns now; and the hub wakes when its next quiz question closes.
-    if (att.room === LANTERN_ROOM) this.send(ws, this.activities(att.room).lanternFrame());
-    if (att.room === QUIZ_ROOM) await this.scheduleAlarm();
+    // The room's lanterns as they burn now; and a quiz room wakes when its next question closes.
+    if (lanternBeam(att.room)) this.send(ws, this.activities(att.room).lanternFrame());
+    if (quizStage(att.room)) await this.scheduleAlarm();
     // The arcade's score wall as it stands, with this owl's own bests.
     if (isArcadeRoom(att.room)) this.serial(att, () => this.sendWall(ws, att));
     // Into a sealed hollow's group, and everyone inside sees who is waiting (OP-310).
     if (isEscapeRoom(att.room)) this.escapeArrived(att);
-    // Arriving in a room counts for quests that ask to visit it (none asks for a nest; nor for a spectator's arrival, OP-191).
+    // Arriving in a room counts for quests that ask to visit it (none asks for a nest); a spectator's, for a guest's quests only (OP-191, OP-428).
     if (!isNestRoom(att.room)) this.serial(att, () => this.pushEvent(ws, att, { kind: 'visit', room: att.room }));
     return true;
   }
@@ -1549,16 +1585,20 @@ export class RoomObject extends DurableObject<Env> {
     });
   }
 
-  private sendBoard(ws: WebSocket, board: QuestBoard, updates: QuestUpdate[], extra: { r?: number; ok?: boolean; reason?: string } = {}): void {
-    this.send(ws, { t: 'quests', ...extra, board, updates });
+  /** The quest board to a page: a free guest's shows only the quests a guest may do (OP-428). */
+  private sendBoard(ws: WebSocket, att: Attachment, board: QuestBoard, updates: QuestUpdate[], extra: { r?: number; ok?: boolean; reason?: string } = {}): void {
+    this.send(ws, { t: 'quests', ...extra, board: att.spec ? guestBoard(board) : board, updates });
   }
 
-  /** Count an event toward the visitor's quests and push the board when something moved. A spectator's count for nothing (OP-191). */
+  /**
+   * Count an event toward the visitor's quests and push the board when something moved. A spectator's
+   * count for nothing (OP-191) but the quests a free guest may do (OP-428, guestQuests.ts).
+   */
   private async pushEvent(ws: WebSocket, att: Attachment, ev: Parameters<Collections['questEvent']>[1]): Promise<void> {
-    if (!att.cid || att.spec) return;
+    if (!att.cid) return;
     try {
-      const res = await this.collections().questEvent(att.cid, ev, att.room);
-      if (res.updates.length && res.board) this.sendBoard(ws, res.board, res.updates);
+      const res = await this.collections().questEvent(att.cid, ev, att.room, att.spec === true);
+      if (res.updates.length && res.board) this.sendBoard(ws, att, res.board, res.updates);
     } catch (e) {
       // Quests are best effort for pushes: the next request returns the true board.
       this.logOf(att).warn('room.play', 'write_failed', 'A quest event was not counted: the collections object did not answer.', { kind: ev.kind, error: e });
@@ -1571,8 +1611,10 @@ export class RoomObject extends DurableObject<Env> {
     if (!att.cid) return refuse('unknown');
     if (room.sessionOf(att.id) !== att.sid) return;
     // The quests, the NPC owls and the quest items are ticket holders' (OP-191). A free guest may still
-    // flop into a leaf pile, browse a stall and bask in the moonbeam, for nothing (OP-243).
-    if (att.spec && frame.t !== 'use') {
+    // flop into a leaf pile, browse a stall and use the floor's things, for nothing (OP-243), and do
+    // Bramble's welcome (OP-428): read its board, talk to the NPC owls, and take, hand in or drop a
+    // guest's quest. Every other quest, the quest items and the puzzles stay ticket holders'.
+    if (att.spec && !guestFrame(frame)) {
       this.spectatorRefused(att, frame.t);
       return refuse('spectator');
     }
@@ -1581,31 +1623,32 @@ export class RoomObject extends DurableObject<Env> {
     try {
       switch (frame.t) {
         case 'quests':
-          return this.sendBoard(ws, await stub.board(cid), [], { r });
+          return this.sendBoard(ws, att, await stub.board(cid), [], { r });
         case 'talk': {
-          const npc = getNpc(frame.npc);
-          if (!npc || npc.room !== att.room) return refuse('unknown');
+          // Where the owl stands in this room: Bramble and Pip stand in the Great Hollow on the new map (NEW_MAP_HOMES).
+          const npc = npcIn(frame.npc, att.room);
+          if (!npc) return refuse('unknown');
           if (!room.near(att.id, npc.pos, NPC_TALK_RADIUS)) return refuse('far');
-          const res = await stub.questEvent(cid, { kind: 'talk', npc: npc.id }, att.room);
-          return this.sendBoard(ws, res.board ?? (await stub.board(cid)), res.updates, { r });
+          const res = await stub.questEvent(cid, { kind: 'talk', npc: npc.id }, att.room, att.spec === true);
+          return this.sendBoard(ws, att, res.board ?? (await stub.board(cid)), res.updates, { r });
         }
         case 'accept':
         case 'handin': {
           const q = getQuest(frame.quest);
-          const giver = q ? getNpc(q.giver) : undefined;
-          if (!q || !giver || giver.room !== att.room) return refuse('unknown');
+          const giver = q ? npcIn(q.giver, att.room) : undefined;
+          if (!q || !giver) return refuse('unknown');
           if (!room.near(att.id, giver.pos, NPC_TALK_RADIUS)) return refuse('far');
           if (frame.t === 'accept') {
             const res = await stub.accept(cid, q.id, att.room);
-            return this.sendBoard(ws, res.board, [], { r, ok: res.ok, ...(res.ok ? {} : { reason: res.reason }) });
+            return this.sendBoard(ws, att, res.board, [], { r, ok: res.ok, ...(res.ok ? {} : { reason: res.reason }) });
           }
-          const res = await stub.handIn(cid, q.id, giver.id, visitOf(att));
+          const res = await stub.handIn(cid, q.id, giver.id, visitOf(att), att.spec === true);
           if (res.ok && res.award && !res.award.dup) this.owned.get(cid)?.set.add(res.award.variant);
           return this.send(ws, { t: 'handin', r, ...res });
         }
         case 'abandon': {
           const res = await stub.abandon(cid, frame.quest);
-          return this.sendBoard(ws, res.board, [], { r, ok: res.ok });
+          return this.sendBoard(ws, att, res.board, [], { r, ok: res.ok });
         }
         case 'use': {
           const it = getInteractable(frame.target);
@@ -1613,7 +1656,11 @@ export class RoomObject extends DurableObject<Env> {
           const rules = KIND_RULES[it.kind];
           if (!room.reaches(att.id, it.pos, rules.reach, it)) return refuse('far');
           if (!room.takeUse(att.id)) return refuse('busy');
-          if (att.spec) return this.practiceUse(ws, room, att, it.id, rules.shared, r);
+          if (att.spec) {
+            // A guest's use earns nothing, and moves only the guest's own quests (a flop for Bramble's welcome, OP-428).
+            if (this.practiceUse(ws, room, att, it.id, rules.shared, r)) await this.pushEvent(ws, att, { kind: 'interact', what: it.kind, id: it.id, room: att.room });
+            return;
+          }
           const ev = { kind: 'interact' as const, what: it.kind, id: it.id, room: att.room };
           // Leaf piles and stalls count toward today's tasks too.
           const task = it.kind === 'leaf-pile' ? 'flop' : it.kind === 'stall' ? 'browse' : null;
@@ -1622,11 +1669,11 @@ export class RoomObject extends DurableObject<Env> {
             this.saveObjects();
             const res = await stub.flop(cid, ev, att.room);
             this.send(ws, { t: 'useResult', r, ok: true, feathers: res.feathers, total: res.total, updates: res.updates });
-            if (res.board) this.sendBoard(ws, res.board, res.updates);
+            if (res.board) this.sendBoard(ws, att, res.board, res.updates);
           } else {
             const res = await stub.questEvent(cid, ev, att.room);
             this.send(ws, { t: 'useResult', r, ok: true, feathers: 0, total: res.board?.feathers ?? -1, updates: res.updates });
-            if (res.board) this.sendBoard(ws, res.board, res.updates);
+            if (res.board) this.sendBoard(ws, att, res.board, res.updates);
           }
           if (task) this.pushTasks(ws, await stub.play(cid, 0, { kind: task }));
           return;
@@ -1635,8 +1682,8 @@ export class RoomObject extends DurableObject<Env> {
           const pos = room.positionOf(att.id);
           if (!pos) return refuse('unknown');
           const res = await stub.gather(cid, frame.quest, frame.n, att.room, pos, room.groundOf(att.id));
-          if (res.ok) return this.sendBoard(ws, res.board, res.updates, { r, ok: true });
-          return this.sendBoard(ws, await stub.board(cid), [], { r, ok: false, reason: res.reason });
+          if (res.ok) return this.sendBoard(ws, att, res.board, res.updates, { r, ok: true });
+          return this.sendBoard(ws, att, await stub.board(cid), [], { r, ok: false, reason: res.reason });
         }
         case 'puzzle':
           return await this.puzzle(ws, att, room, frame);
@@ -1893,12 +1940,15 @@ export class RoomObject extends DurableObject<Env> {
 
   /**
    * A free guest's use of an interactable (OP-243): a leaf pile poofs for everyone as anyone's flop does,
-   * a stall or the moonbeam answers as for anyone; but it turns up no feathers, moves no quest and counts
+   * a stall or a floor thing answers as for anyone; but it turns up no feathers, moves no quest but a guest's own (OP-428) and counts
    * for no task, and the collections object is told only for the play log (OP-304). `practice` tells the page so.
    */
-  private practiceUse(ws: WebSocket, room: Room, att: Attachment, id: string, shared: boolean, r: number): void {
+  private practiceUse(ws: WebSocket, room: Room, att: Attachment, id: string, shared: boolean, r: number): boolean {
     if (shared) {
-      if (!room.useObject(att.id, id, Date.now() + leafRespawnMs(Math.random))) return this.send(ws, { t: 'useResult', r, ok: false, reason: 'gone', feathers: 0, total: -1, updates: [] });
+      if (!room.useObject(att.id, id, Date.now() + leafRespawnMs(Math.random))) {
+        this.send(ws, { t: 'useResult', r, ok: false, reason: 'gone', feathers: 0, total: -1, updates: [] });
+        return false;
+      }
       this.saveObjects();
     }
     // The play log (OP-304) counts a guest's use too, so the owner sees what free owls play with: never waited on.
@@ -1912,6 +1962,7 @@ export class RoomObject extends DurableObject<Env> {
       );
     }
     this.send(ws, { t: 'useResult', r, ok: true, feathers: 0, total: -1, updates: [], practice: true });
+    return true;
   }
 
   // ---------- activities: lanterns, fishing, the copy game, the stage quiz ----------
@@ -1961,7 +2012,7 @@ export class RoomObject extends DurableObject<Env> {
           if (!res.ok) return no(res.reason);
           this.send(ws, { t: 'act', r, a, ok: true, id: res.id });
           room.broadcast(acts.lanternFrame({ id: res.id, by: att.id }));
-          this.saveLanterns(acts);
+          this.saveLanterns(att.room, acts);
           // A spectator's light counts toward the beam, and for no task (OP-191).
           if (!practice) this.pushTasks(ws, await this.earnFor(att, 0, { kind: 'light' }));
           if (res.full) await this.payBeam(res.full);
@@ -2105,15 +2156,47 @@ export class RoomObject extends DurableObject<Env> {
     }
   }
 
-  /** A stage quiz question that just closed: the answer for everyone in the hub, and pay for the owls in its zone (a spectator's, nothing: OP-191). */
+  /**
+   * A round of feather tag over (OP-434, tagPrize.ts): every owl still in it earns the round's tier from
+   * the collections object, a free guest its items only. A round with no pass earns nothing and is told
+   * nowhere: the page shows its own result from the game.
+   */
+  private async payTag(roomId: string, result: TagRoundResult): Promise<void> {
+    const tier = tagTier(result.score);
+    if (!tier) return;
+    for (const id of result.players) {
+      const ws = this.socketOf(id);
+      const att = ws?.deserializeAttachment() as Attachment | null | undefined;
+      if (!ws || !att?.cid || att.room !== roomId) continue;
+      try {
+        const paid = await this.collections().tagPrize(att.cid, tier, !!att.spec);
+        this.send(ws, { t: 'tagPrize', round: result.round, score: result.score, tier, prize: paid.prize, total: paid.total, ...(paid.capped ? { capped: true as const } : {}) });
+      } catch (e) {
+        // The game is over either way; pay is best effort.
+        this.logOf(att).error('room.play', 'write_failed', 'An owl in a finished game of feather tag was not paid: the collections object did not answer.', { tier, error: e });
+      }
+    }
+  }
+
+  /** Settle a round of feather tag whose time ran out while no frame came (OP-434). */
+  private settleTag(): void {
+    this.rooms.get(TAG_ROOM)?.settleTag(Date.now());
+  }
+
+  /** A stage quiz question that just closed, in each quiz room with owls in it. */
   private async settleQuiz(): Promise<void> {
-    const hub = this.rooms.get(QUIZ_ROOM);
+    for (const id of QUIZ_ROOMS) await this.settleQuizIn(id);
+  }
+
+  /** The answer for everyone in the room, and pay for the owls in its zone (a spectator's, nothing: OP-191). */
+  private async settleQuizIn(roomId: string): Promise<void> {
+    const hub = this.rooms.get(roomId);
     if (!hub?.count) return;
-    const acts = this.activities(QUIZ_ROOM);
+    const acts = this.activities(roomId);
     const due = acts.quizDue();
     if (!due) return;
     const { right, winners } = acts.settleQuiz(due);
-    await this.ctx.storage.put(QUIZ_KEY, due.n);
+    await this.ctx.storage.put(quizKey(roomId), due.n);
     hub.broadcast({ t: 'quiz', n: due.n, right, winners });
     for (const id of winners) {
       const ws = this.socketOf(id);
@@ -2129,15 +2212,18 @@ export class RoomObject extends DurableObject<Env> {
     }
   }
 
-  private saveLanterns(acts: Activities): void {
-    this.ctx.waitUntil(this.ctx.storage.put(LANTERNS_KEY, acts.lanternState()));
+  private saveLanterns(room: string, acts: Activities): void {
+    this.ctx.waitUntil(this.ctx.storage.put(lanternsKey(room), acts.lanternState()));
   }
 
   /** When the object should wake next: the housekeeping minute, or sooner when a hub quiz question closes. */
   private nextWake(now: number): number {
     let next = now + ALARM_EVERY_MS;
     if (this.closingAt !== null) next = Math.min(next, this.closingAt);
-    if (this.rooms.get(QUIZ_ROOM)?.count) next = Math.min(next, this.activities(QUIZ_ROOM).nextQuizClose());
+    for (const id of QUIZ_ROOMS) if (this.rooms.get(id)?.count) next = Math.min(next, this.activities(id).nextQuizClose());
+    // A round of feather tag running out (OP-434): wake to pay it even if no frame comes.
+    const tagDue = this.rooms.get(TAG_ROOM)?.tagDue() ?? 0;
+    if (tagDue > 0) next = Math.min(next, Math.max(now, tagDue));
     const party = this.party.due(now);
     if (party !== null) next = Math.min(next, Math.max(now, party));
     return next;
@@ -2324,6 +2410,8 @@ export class RoomObject extends DurableObject<Env> {
       }
       // A connection lost (not a goodbye, not sent away): one back soon has reconnected.
       room?.leave(att.id, att.sid, !att.kicked && (why.reason === 'dropped' || why.reason === 'timeout'));
+      // An owl whose line dropped mid feather tag is out once its grace runs out (OP-434): wake for that.
+      if (att.room === TAG_ROOM) void this.scheduleAlarm();
       if (owns) {
         this.keepLeavers(att.room);
         this.party.left(att, room, Date.now());
@@ -2361,6 +2449,7 @@ export class RoomObject extends DurableObject<Env> {
   override async alarm(): Promise<void> {
     await this.closeForRestart(Date.now());
     await this.settleQuiz();
+    this.settleTag();
     // The party games move on (OP-314); a wake for a game's step alone, between the minutes, does no more.
     this.party.tick(Date.now());
     if (this.party.due(Date.now()) !== null && Date.now() < this.housekeptAt + ALARM_EVERY_MS) {

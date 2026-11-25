@@ -267,7 +267,7 @@ test.describe('the movers, behind their flag (OP-287)', () => {
     test.slow(); // a rise of three seconds, a glide of five and two rooms, on a runner a third as fast
     await openPark(page, { room: 'm3-hall', ...MOVERS });
     const hall = await state(page);
-    const heart = hall.objects.find((o) => o.id === 'm3-hall-moonbeam-heart')!;
+    const heart = hall.thermals.find((t) => t.id === 'heart')!;
     const down = hall.doors.find((d) => d.id === 'down')!;
     await page.evaluate(({ x, y }) => window.owlPark.walkTo(x, y), { x: heart.x, y: heart.y });
     await expect.poll(async () => { const s = await state(page); return !s.walking && dist(s.pos, heart) < 30; }, { timeout: 30_000 }).toBe(true);

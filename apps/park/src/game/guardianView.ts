@@ -1,5 +1,5 @@
 /**
- * The guardian as it is drawn (OP-359; behind `?guardian=1`): its mind is guardian.ts, its parts are
+ * The guardian as it is drawn (OP-359): its mind is guardian.ts, its parts are
  * painted (OP-397: a head, a body, two wings and its bough, laid out by idolParts.ts), and here they
  * become one picture in the room.
  *
@@ -20,9 +20,9 @@ import type { Vec2 } from '@owl-park/shared';
 import { HALL_ROOM } from '@owl-park/shared/rooms';
 import { FOOT_SHADOW_DEPTH, footShadow } from './bowlView';
 import { onCanvas } from './canvasTint';
-import { GUARDIAN_ART, GUARDIAN_AT, GUARDIAN_SCALE, GuardianMind, guardianBoxes, inRoom, type Call, type GuardianFrame, type HeadPose, type Lids, type OwlSeen } from './guardian';
+import { GUARDIAN_ART, GUARDIAN_AT, GUARDIAN_SCALE, GuardianMind, composeDue, guardianBoxes, inRoom, type Call, type GuardianFrame, type HeadPose, type Lids, type OwlSeen } from './guardian';
 import { carved, lidded, type Pixels } from './guardianArt';
-import { IDOL_PARTS, PARTS, WING_OPEN_MAX, partKey, reach, wingOpen, type IdolPart } from './idolParts';
+import { IDOL_PARTS, PARTS, WING_OPEN_MAX, partKey, reach, tuckedPose, wingOpen, type IdolPart } from './idolParts';
 import { symbolTexture } from './symbols';
 
 /** The guardian's parts as painted, and where each lies in its frame. */
@@ -144,8 +144,12 @@ export class GuardianView {
   private readonly mind: GuardianMind;
   /** The picture its parts are put together into each frame; none where its parts could not be made, and the whole painting stands in. */
   private readonly whole: Phaser.Textures.DynamicTexture | null;
-  /** Texture pixels to a frame pixel in that picture: 2 where the @2x parts loaded. */
-  private readonly res: number;
+  /**
+   * Texture pixels to a frame pixel in that picture: one. The room draws the guardian at about one screen
+   * pixel to a frame pixel, a phone's or a laptop's (townView.ts), so a picture at the @2x parts' own size
+   * was four times the pixels to clear and fill each time it was put together, for nothing seen.
+   */
+  private readonly res = 1;
   private readonly glow: Phaser.GameObjects.Image;
   private readonly shadow: Phaser.GameObjects.Graphics;
   private readonly motes: Phaser.GameObjects.Particles.ParticleEmitter;
@@ -155,6 +159,8 @@ export class GuardianView {
   private now: GuardianFrame | null = null;
   /** What was last put together, so a frame that changes nothing draws nothing. */
   private drawn = '';
+  /** When it was last put together, and with which lids (COMPOSE, guardian.ts). */
+  private composed: { at: number; lids: Lids } | null = null;
   /** A hoot's swell of the chest and of the glow, 0 to 1, eased out by a tween. */
   private hootSwell = 0;
 
@@ -166,7 +172,6 @@ export class GuardianView {
     const heart = HALL_ROOM.thermals?.[0] ?? null;
     this.mind = new GuardianMind({ face: inRoom(A.face, this.at, this.scale), heart, seed: opts.seed ?? Math.floor(Math.random() * 0x7fffffff) + 1 });
     const parts = ensureGuardianParts(scene);
-    this.res = parts ? resOf(scene, 'head') : 1;
     this.whole = parts ? wholeTexture(scene, this.res) : null;
     const depth = this.at.y;
     const chest = inRoom(A.chest, this.at, this.scale);
@@ -245,8 +250,21 @@ export class GuardianView {
     // The motes thicken and quicken with its beat.
     this.motes.emitting = !calm && !f.dozing;
     this.motes.frequency = 260 - 190 * f.beat;
-    if (this.whole) this.compose(this.whole, f);
+    // Put together only as often as it shows (COMPOSE), and not while it is off the screen: a frame
+    // there, its picture is put together as soon as it comes back into view.
+    if (this.whole && composeDue(this.composed, now, f.lids) && this.onScreen()) {
+      this.composed = { at: now, lids: f.lids };
+      this.compose(this.whole, f);
+    }
     else this.image.setDisplaySize(GUARDIAN_ART.w * this.scale * (1 - 0.004 * f.breath), GUARDIAN_ART.h * this.scale * (1 + SWELL.breath * f.breath));
+  }
+
+  /** Whether any of it is in the camera's view. */
+  private onScreen(): boolean {
+    const view = this.scene.cameras.main.worldView;
+    // Before the camera has drawn once its view is empty: count it as seen.
+    if (view.width === 0 || view.height === 0) return true;
+    return Phaser.Geom.Rectangle.Overlaps(view, this.image.getBounds());
   }
 
   /** The parts put together into the one picture, as this frame holds them. */
@@ -278,10 +296,13 @@ export class GuardianView {
     whole.beginDraw();
     stamp('base', partKey('guardian', 'base'), P.parts.base.pivot);
     stamp('body', partKey('guardian', 'body'), body.pivot, { scaleX: wide, scaleY: tall });
+    // Each wing and the head tucked into the body (GUARDIAN_TUCK), so the guardian reads as one owl.
     // Phaser turns clockwise: the left wing's tip swings out to the left, the right wing's to the right.
-    stamp('wing-left', partKey('guardian', 'wing-left'), swell(P.parts['wing-left'].pivot), { rotation: open });
-    stamp('wing-right', partKey('guardian', 'wing-right'), swell(P.parts['wing-right'].pivot), { rotation: -open });
-    const neck = swell(P.parts.head.pivot);
+    for (const side of ['wing-left', 'wing-right'] as const) {
+      const w = tuckedPose(side, swell(P.parts[side].pivot), open);
+      stamp(side, partKey('guardian', side), w.at, { rotation: w.rotation });
+    }
+    const neck = tuckedPose('head', swell(P.parts.head.pivot), open).at;
     stamp('head', headKey(f.lids), { x: neck.x + f.head.dx, y: neck.y + f.head.dy }, { rotation: f.head.roll });
     whole.endDraw();
   }

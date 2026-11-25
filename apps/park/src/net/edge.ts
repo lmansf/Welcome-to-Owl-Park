@@ -3,6 +3,8 @@ import {
   EDGE_PROTOCOL_VERSION,
   HEARTBEAT_FRAME,
   isTagState,
+  isTagPrize,
+  TAG_TIERS,
   HEARTBEAT_INTERVAL_MS,
   STUMP_ROOM,
   VOTABLE_REALMS,
@@ -143,7 +145,7 @@ export class EdgeTransport implements ParkTransport {
   private opening = false;
   /** The latest entry (OP-075): every room's welcome renews it, and the line gives one to an owl it calls. */
   private entryToken: string | null = readEntry();
-  /** Which copy of the Party Grove this owl was last in (OP-314): a party game's room is in that copy's room server. */
+  /** Which copy of the Great Hollow, where the Old Stump stands, this owl was last in (OP-314): a party game's room is in that copy's room server. */
   private stumpCopy = 1;
 
   /** This screen's owl is on another screen now (OP-139): no pass, no socket, until it is brought back. */
@@ -808,6 +810,10 @@ export class EdgeTransport implements ParkTransport {
         case 'tag':
           // Feather tag (OP-403): its times stay on the room's clock; the page reads them with serverNow.
           if (isTagState(f.tag)) handlers.onTag?.(f);
+          break;
+        case 'tagPrize':
+          // What a finished game of feather tag earned this owl (OP-434).
+          if (isTagPrize(f.prize) && (TAG_TIERS as readonly string[]).includes(f.tier)) handlers.onTagPrize?.(f);
           break;
         case 'restart':
           if (typeof f.words === 'string' && f.words) handlers.onRestartNotice?.(f.words);

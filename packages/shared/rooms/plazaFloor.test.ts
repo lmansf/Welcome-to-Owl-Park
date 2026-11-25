@@ -105,8 +105,7 @@ describe("things to do out on the plazas' floors (Nov 8: stuff around the room, 
     const room = getRoom(id)!;
     const mine = new Set(FLOOR_INTERACTABLES.map((i) => i.id));
     const things = [
-      // A moonbeam is a ring of light: a scene at its rim hides none of it.
-      ...interactablesIn(id).filter((i) => !mine.has(i.id) && i.kind !== 'moonbeam').map((i) => ({ id: i.id, ...i.pos })),
+      ...interactablesIn(id).filter((i) => !mine.has(i.id)).map((i) => ({ id: i.id, ...i.pos })),
       ...Object.entries(room.spawns).map(([name, p]) => ({ id: name, ...p })),
       ...room.doors.map((d) => ({ id: d.id, x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2 })),
       ...npcsIn(id).map((n) => ({ id: n.id, ...n.pos })),
@@ -226,6 +225,20 @@ describe("one story per room, not the same props in every one (OP-416, the owner
       expect(stickers, id).not.toContain('bird-bath');
       if (id === 'grove') expect(stickers, id).not.toContain('mushroom');
     }
+  });
+
+  it('takes a tap on the entrance fountain anywhere on it as painted, from the owl on its top to its steps (OP-436)', () => {
+    const f = PAINTED_THINGS.find((t) => t.id === 'lobby-fountain')!;
+    const tap = f.tap!;
+    const inTap = (p: { x: number; y: number }) => p.x >= tap.x && p.x <= tap.x + tap.w && p.y >= tap.y && p.y <= tap.y + tap.h;
+    // Measured on lobby-west.webp: the owl on top, the upper bowl, the basin's rim and the foot of the steps.
+    for (const p of [{ x: 662, y: 530 }, { x: 665, y: 635 }, { x: 520, y: 690 }, { x: 815, y: 715 }]) expect(inTap(p), `${p.x},${p.y}`).toBe(true);
+    // Its painted body is off the floor an owl walks (the walk goes round its front), and where it stands to splash is on it.
+    const lobby = getRoom('lobby')!;
+    expect(lobby.walkable.some((poly) => pointInPolygon({ x: 665, y: 635 }, poly))).toBe(false);
+    expect(lobby.walkable.some((poly) => pointInPolygon(f.pos, poly))).toBe(true);
+    // The splash reaches from the foot of its steps.
+    expect(f.pos.y - (tap.y + tap.h)).toBeLessThan(KIND_RULES[f.kind].reach);
   });
 
   it('leaves the end of the jetty to fishing: nothing else to use is in reach there, so Interact or E reels in on a bite', () => {

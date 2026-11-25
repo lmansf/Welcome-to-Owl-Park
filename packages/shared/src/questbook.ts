@@ -12,17 +12,19 @@ import { variantsByRarity } from './collectibles';
 import { distance } from './geometry';
 import { PICKUP_RADIUS } from './collectibles';
 import { INTERACTABLES, type QuestItemSpot } from './interactables';
-import { NPCS } from './npcs';
+import { npcsIn } from './npcs';
 import { sameLevel, type Raised } from './perches';
 import { nextParkDayAt, nextParkMonthAt, nextParkWeekAt, parkDay, parkMonth, parkWeek, rotationRandom } from './parktime';
 import type { Vec2 } from './protocol';
 import { DAILY_POOL, MONTHLY_POOL, MONTHLY_PUZZLE_POOL, QUESTS, WEEKLY_POOL, WEEKLY_PUZZLE_POOL, getQuest } from './questCatalog';
+import { guestQuest } from './guestQuests';
 import {
   ACTIVE_SLOTS,
   DAILY_OFFER_DIFFICULTIES,
   WEEKLY_OFFER_DIFFICULTIES,
   goalCount,
   goalMatches,
+  GOAL_ROOM_TOO,
   goalText,
   pickRewardVariant,
   rewardOdds,
@@ -187,18 +189,28 @@ export class QuestBook {
     };
   }
 
-  /** Spots for a quest's items: away from NPCs and interactables, a stable choice per collector and period. */
+  /**
+   * Spots for a quest's items: away from NPCs and interactables, a stable choice per collector and period.
+   * A step's items lie in its room and, as many again, in the room that counts as it (GOAL_ROOM_TOO): the
+   * moonstones of the great tree's quests lie in the plaza on today's park and in the Great Hollow on the
+   * new map, where the Party Grove that was the room `hub` there was folded in (Nov 19) and its door grew
+   * over (Nov 21). Gathered in either, they count the same (inGoalRoom); the room server knows no map.
+   */
   private placeItems(cid: string, q: QuestDef, period: string): QuestItemSpot[] {
     const out: QuestItemSpot[] = [];
     let n = 0;
     q.steps.forEach((s, step) => {
       const g = s.goal;
       if (g.kind !== 'gather') return;
-      const blockers = [...NPCS.filter((x) => x.room === g.room).map((x) => x.pos), ...INTERACTABLES.filter((x) => x.room === g.room).map((x) => x.pos)];
-      const free = (this.spots[g.room] ?? []).filter((p) => blockers.every((b) => distance(p, b) >= ITEM_CLEARANCE));
-      const pickFrom = free.length >= g.count ? free : [...(this.spots[g.room] ?? [])];
-      const chosen = shuffled(pickFrom, rotationRandom(`owl-park-items|${cid}|${q.id}|${period}|${step}`)).slice(0, g.count);
-      for (const p of chosen) out.push({ n: n++, step, room: g.room, x: p.x, y: p.y, ...(p.top ? { top: p.top } : {}), kind: g.item, taken: false });
+      const twin = Object.hasOwn(GOAL_ROOM_TOO, g.room) ? GOAL_ROOM_TOO[g.room] : undefined;
+      for (const room of twin ? [g.room, twin] : [g.room]) {
+        const blockers = [...npcsIn(room).map((x) => x.pos), ...INTERACTABLES.filter((x) => x.room === room).map((x) => x.pos)];
+        const free = (this.spots[room] ?? []).filter((p) => blockers.every((b) => distance(p, b) >= ITEM_CLEARANCE));
+        const pickFrom = free.length >= g.count ? free : [...(this.spots[room] ?? [])];
+        const seed = room === g.room ? `owl-park-items|${cid}|${q.id}|${period}|${step}` : `owl-park-items|${cid}|${q.id}|${period}|${step}|${room}`;
+        const chosen = shuffled(pickFrom, rotationRandom(seed)).slice(0, g.count);
+        for (const p of chosen) out.push({ n: n++, step, room, x: p.x, y: p.y, ...(p.top ? { top: p.top } : {}), kind: g.item, taken: false });
+      }
     });
     return out;
   }
@@ -265,10 +277,12 @@ export class QuestBook {
    * Something happened that quests may count: a talk, a visit, a use, an emote. Only the
    * current step of each active quest can move. `here` is the room the visitor stands in.
    */
-  event(cid: string, ev: QuestEvent, now: number, here?: string): QuestUpdate[] {
+  /** Count an event toward the collector's active quests; `guest` (OP-428): toward a free guest's quests only. */
+  event(cid: string, ev: QuestEvent, now: number, here?: string, guest = false): QuestUpdate[] {
     const updates: QuestUpdate[] = [];
     for (const row of this.rows(cid, now)) {
       if (row.doneAt !== null) continue;
+      if (guest && !guestQuest(row.quest)) continue;
       const q = getQuest(row.quest)!;
       if (row.step >= q.steps.length) continue;
       const goal = q.steps[row.step]!.goal;
@@ -300,14 +314,26 @@ export class QuestBook {
     return { ok: true, updates: [update], board: this.board(cid, now) };
   }
 
-  /** Hand a finished quest back to its giver: feathers, plus a collectible (or its duplicate feathers). */
-  handIn(cid: string, questId: unknown, npc: string, now: number, rnd: () => number): HandInResult {
+  /**
+   * Hand a finished quest back to its giver: feathers, plus a collectible (or its duplicate feathers).
+   * `guest` (OP-428): a free guest's hand-in of one of its quests pays the collectible only, with no
+   * feathers, and one it already owns pays nothing more.
+   */
+  handIn(cid: string, questId: unknown, npc: string, now: number, rnd: () => number, guest = false): HandInResult {
     const q = getQuest(questId);
-    if (!q) return { ok: false, reason: 'unknown', board: this.board(cid, now) };
+    if (!q || (guest && !guestQuest(q.id))) return { ok: false, reason: 'unknown', board: this.board(cid, now) };
     const row = this.rows(cid, now).find((r) => r.quest === q.id && r.doneAt === null);
     if (!row) return { ok: false, reason: 'not-active', board: this.board(cid, now) };
     if (q.giver !== npc) return { ok: false, reason: 'wrong-npc', board: this.board(cid, now) };
     if (row.step < q.steps.length) return { ok: false, reason: 'not-ready', board: this.board(cid, now) };
+    if (guest) {
+      const crown = typeof q.reward.item === 'string' && q.reward.item !== 'pick' ? q.reward.item : null;
+      const given = crown ? this.book.grant(cid, crown, 'quest', now) : null;
+      const award: Award | null = given?.ok ? { variant: given.variant, dup: !given.added, feathers: 0 } : null;
+      row.doneAt = now;
+      this.store.putQuest(row);
+      return { ok: true, quest: q.id, title: q.title, thanks: q.thanks, feathers: 0, total: this.book.feathers(cid, now), award, board: this.board(cid, now) };
+    }
     let award: Award | null = null;
     const item = q.reward.item === 'pick' ? pickRewardVariant(rewardOdds(q), variantsByRarity(), new Set(this.store.owned(cid)), rnd) : q.reward.item;
     if (item) award = this.book.award(cid, item, 'quest', now);

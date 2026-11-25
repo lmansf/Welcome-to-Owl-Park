@@ -36,6 +36,8 @@ export const SPECTATOR_WORDS = {
   again: 'Play again',
   /** The quests, the NPC owls, the stores: shown above the card before the store. */
   locked: 'Quests and the shops are for ticket holders.',
+  /** The Quests tab and an NPC owl with nothing for a guest (OP-428): the one quest a guest may do, and that the rest are ticket holders'. */
+  guestQuests: 'Guests can do Elder Bramble’s welcome quest. The other quests and the shops are for ticket holders.',
   /** A guest's first flop into a leaf pile on this page (OP-243): said once, with no card. */
   leaves: 'With a Day Ticket, leaf piles can turn up feathers.',
   /** At a realm's idol (the Realm Vote). */
@@ -48,6 +50,10 @@ export const SPECTATOR_WORDS = {
   keep: 'A Day Ticket lets you keep what you win.',
   /** The end of a game that would have earned nothing anyway. */
   noFeathers: 'With a Day Ticket, games earn feathers.',
+  /** Through the turnstiles the first time for an owl that came in by Play free now (OP-421): it chose free already, so no question and no ticket here. */
+  freeIn: 'Welcome in! Follow the feathers to the next place to fly.',
+  /** That owl's first glide off the Great Hollow's roots, a moment after the room says so (OP-421): the Day Ticket's first word to it. */
+  freeLater: 'Want to keep what you win? A Day Ticket does that, from the button up top.',
 } as const;
 
 const feathersOf = (n: number) => `${n} feather${n === 1 ? '' : 's'}`;
@@ -91,6 +97,21 @@ export function turnstileWay(scan: ScanReply, entry: Entry): TurnstileWay {
   return refusal.buy ? { go: 'spectate', line: SPECTATOR_WORDS.turnstile, sale: true } : { go: 'spectate', line: refusal.line, sale: false };
 }
 
+/** The game registry's mark for an owl that came in by Play free now and has not been through the turnstiles yet (OP-421). */
+export const CAME_FREE = 'cameFree';
+/** The registry's mark for that owl once through: the Day Ticket's first word waits for its first glide (OP-421). */
+export const TICKET_AFTER_GLIDE = 'ticketAfterGlide';
+
+/**
+ * Whether the turnstiles ask their question (OP-198, gatePrompt.ts) of this owl (OP-421). An owl that
+ * came in by the home screen's Play free now chose free already: on its first time through, the
+ * turnstiles let it on in as a guest with no question and no Day Ticket line, and the ticket's first
+ * word to it waits for its first glide. Every other owl without a ticket is asked as before.
+ */
+export function asksAtGate(way: TurnstileWay, cameFree: boolean): boolean {
+  return way.go === 'spectate' && way.sale && !cameFree;
+}
+
 /**
  * A free guest's gentle word that tickets turn up rewards (OP-243): said the first time only, for the
  * whole page, never as the card before the store. `say()` answers the line once, then null.
@@ -128,12 +149,24 @@ export function createOfferPacer(now: () => number = Date.now): OfferPacer {
 }
 
 /** What the HUD's badge shows: nothing for a visitor; for a spectator its words and the Get a Day Ticket button. */
+/** The registry key for a guest's welcome still to say (OP-291): set at the turnstiles, said once the badge shows. */
+export const GUEST_IN = 'guestInPending';
+
+/**
+ * The guest's welcome (OP-291, QA sweep D18): it points to the "Just looking" badge's button up top, so it
+ * is said once the room server has made the owl a spectator and the badge shows, not at the turnstiles
+ * where no such button is drawn yet. Null while there is nothing to say.
+ */
+export function guestWelcome(pending: boolean, spectator: boolean): string | null {
+  return pending && spectator ? SPECTATOR_WORDS.guestIn : null;
+}
+
 export function badgeView(spectator: boolean): { shown: boolean; label: string; button: string } {
   return { shown: spectator, label: SPECTATOR_WORDS.badge, button: SPECTATOR_WORDS.get };
 }
 
 const CSS = `
-#hud .spectator{position:relative;z-index:9;margin-top:8px;width:max-content;max-width:calc(100vw - 24px);display:none;align-items:center;gap:8px;padding:4px 4px 4px 12px;border-radius:999px;
+#hud .spectator{position:relative;z-index:9;margin-top:8px;width:max-content;max-width:calc(calc(100vw/var(--vz,1)) - 24px);display:none;align-items:center;gap:8px;padding:4px 4px 4px 12px;border-radius:999px;
   background:rgba(12,30,54,.86);border:1px dashed rgba(255,211,106,.7);color:#FFD36A;font-size:13px;font-weight:700;pointer-events:auto;box-shadow:0 4px 14px rgba(0,0,0,.4)}
 #hud .spectator.show{display:flex}
 #hud .spectator button{min-height:36px;padding:6px 12px;font-size:13px}

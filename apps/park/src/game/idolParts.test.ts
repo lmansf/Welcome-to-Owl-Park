@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { ART } from './art';
-import { IDOL_PARTS, PARTS, WING_OPEN, WING_OPEN_MAX, openedPoint, partKey, partKeys, reach, wingOpen, type IdolKey } from './idolParts';
+import { GUARDIAN_TUCK, IDOL_PARTS, PARTS, WING_OPEN, WING_OPEN_MAX, openedPoint, partKey, partKeys, reach, tuckedPose, wingOpen, type IdolKey } from './idolParts';
 
 // The drawing code is not run here.
 vi.mock('phaser', () => ({ default: {} }));
@@ -85,5 +85,63 @@ describe('the idols painted in parts (OP-397)', () => {
     const rest = reach(G, 0);
     expect(rest.x0).toBeGreaterThanOrEqual(0);
     expect(rest.x1).toBeLessThanOrEqual(G.w);
+  });
+
+  // Logan, Nov 20, on his phone: "The guardian is cool, but looks really unnatural with the head and wings so
+  // disconnected. They should probably overlap the body model a little bit".
+  describe('the guardian put together as one owl, its head and wings tucked into its body', () => {
+    const G = IDOL_PARTS.guardian.parts;
+    /** Measured from the paintings (frame px): the body's left edge and the left wing's inner edge, row by row from the shoulder to the bough. */
+    const SIDE: ReadonlyArray<{ y: number; body: number; wing: number }> = [
+      { y: 350, body: 241, wing: 227 },
+      { y: 410, body: 218, wing: 268 },
+      { y: 470, body: 209, wing: 272 },
+      { y: 530, body: 211, wing: 263 },
+      { y: 590, body: 226, wing: 243 },
+      { y: 620, body: 238, wing: 233 },
+      { y: 650, body: 259, wing: 221 },
+    ];
+    /** Measured from the paintings: by column across the neck, the head's lowest feathers and the top of the body under them. */
+    const NECK: ReadonlyArray<{ x: number; head: number; body: number }> = [
+      { x: 265, head: 282, body: 291 },
+      { x: 340, head: 308, body: 311 },
+      { x: 355, head: 312, body: 314 },
+      { x: 460, head: 288, body: 298 },
+    ];
+    /** Where a point of the left wing goes, tucked in and opened by `open`. */
+    const leftWing = (p: { x: number; y: number }, open: number) => {
+      const q = G['wing-left'];
+      const pose = tuckedPose('wing-left', q.pivot, open);
+      const turned = openedPoint(q, 'wing-left', p, pose.rotation);
+      return { x: turned.x + pose.at.x - q.pivot.x, y: turned.y + pose.at.y - q.pivot.y };
+    };
+
+    it('laid out as measured, it had the gaps he saw: under the chin and between each wing and the body', () => {
+      expect(NECK.some((c) => c.head < c.body)).toBe(true);
+      expect(SIDE.some((r) => r.wing < r.body)).toBe(true);
+    });
+
+    it('lays each wing over the body’s side from shoulder to bough, at rest and with a full breath', () => {
+      // At rest each wing lies well over the body; on the in-breath the low tip lifts but still touches it.
+      for (const [open, over] of [[0, 8], [WING_OPEN.breath, 0]] as const)
+        for (const r of SIDE) expect(leftWing({ x: r.wing, y: r.y }, open).x, `row ${r.y}, open ${open}`).toBeGreaterThan(r.body + over);
+    });
+
+    it('sits the head into the body’s ruff, with no seam under the chin', () => {
+      for (const c of NECK) expect(c.head + GUARDIAN_TUCK.head, `column ${c.x}`).toBeGreaterThan(c.body + 4);
+      expect(tuckedPose('head', G.head.pivot, 0)).toEqual({ at: { x: G.head.pivot.x, y: G.head.pivot.y + GUARDIAN_TUCK.head }, rotation: 0 });
+    });
+
+    it('tucks both wings alike, mirrored, and still opens them outward with a hoot', () => {
+      const l = tuckedPose('wing-left', G['wing-left'].pivot, 0);
+      const r = tuckedPose('wing-right', G['wing-right'].pivot, 0);
+      expect(l.at.x - G['wing-left'].pivot.x).toBe(-(r.at.x - G['wing-right'].pivot.x));
+      expect(l.rotation).toBe(-r.rotation);
+      // At rest a wing's tip is turned in toward the body (Phaser turns clockwise: the left wing anticlockwise is in).
+      expect(l.rotation).toBeLessThan(0);
+      expect(tuckedPose('wing-left', G['wing-left'].pivot, WING_OPEN.hoot).rotation).toBeGreaterThan(0);
+      // Its body and bough stay where they are.
+      for (const part of ['body', 'base'] as const) expect(tuckedPose(part, G[part].pivot, 0.2)).toEqual({ at: G[part].pivot, rotation: 0 });
+    });
   });
 });

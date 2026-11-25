@@ -2351,6 +2351,54 @@
             "desc": "a flat shelf of woven roots to stand on, cut straight at both ends"
           }
         ]
+      },
+      "signs-hazards": {
+        "w": 240,
+        "h": 240,
+        "pieces": [
+          {
+            "name": "sign-hanging",
+            "w": 240,
+            "h": 200,
+            "desc": "a blank sign hanging by two chains or ropes from a bracket, of mossy weathered wood bound with rope, with ferns and small mushrooms at its foot, no letters, standing on its bottom edge"
+          },
+          {
+            "name": "sign-arrow",
+            "w": 240,
+            "h": 200,
+            "desc": "a blank arrow sign pointing right on a short post, of mossy weathered wood bound with rope, with ferns and small mushrooms at its foot, no letters, standing on its bottom edge"
+          },
+          {
+            "name": "signpost",
+            "w": 160,
+            "h": 300,
+            "desc": "a tall signpost with one blank board near its top, of mossy weathered wood bound with rope, with ferns and small mushrooms at its foot, no letters, standing on its bottom edge"
+          },
+          {
+            "name": "sign-board",
+            "w": 160,
+            "h": 240,
+            "desc": "a blank board on a stake pushed into the ground, of mossy weathered wood bound with rope, with ferns and small mushrooms at its foot, no letters, standing on its bottom edge"
+          },
+          {
+            "name": "hazard-thorns",
+            "w": 320,
+            "h": 120,
+            "desc": "a low tangle of berry-red thorny brambles lying flat, a hazard an owl must not touch, its ends fading so copies sit side by side"
+          },
+          {
+            "name": "hazard-moth",
+            "w": 120,
+            "h": 100,
+            "desc": "a dusky violet moth in flight seen from the side, a hazard that patrols"
+          },
+          {
+            "name": "hazard-lantern",
+            "w": 120,
+            "h": 200,
+            "desc": "a spiky glowing ember burr hanging from a twisted vine, a hazard that swings"
+          }
+        ]
       }
     },
     "neon": {
@@ -2437,6 +2485,54 @@
             "desc": "a short dark iron stair rising to the right onto a higher roof, cut straight at both ends"
           }
         ]
+      },
+      "signs-hazards": {
+        "w": 240,
+        "h": 240,
+        "pieces": [
+          {
+            "name": "sign-hanging",
+            "w": 240,
+            "h": 200,
+            "desc": "a blank sign hanging by two chains or ropes from a bracket, of dark riveted iron with a glowing cyan to pink neon edge, no letters, standing on its bottom edge"
+          },
+          {
+            "name": "sign-arrow",
+            "w": 240,
+            "h": 200,
+            "desc": "a blank arrow sign pointing right on a short post, of dark riveted iron with a glowing cyan to pink neon edge, no letters, standing on its bottom edge"
+          },
+          {
+            "name": "signpost",
+            "w": 160,
+            "h": 300,
+            "desc": "a tall signpost with one blank board near its top, of dark riveted iron with a glowing cyan to pink neon edge, no letters, standing on its bottom edge"
+          },
+          {
+            "name": "sign-board",
+            "w": 160,
+            "h": 240,
+            "desc": "a blank board on a stake pushed into the ground, of dark riveted iron with a glowing cyan to pink neon edge, no letters, standing on its bottom edge"
+          },
+          {
+            "name": "hazard-thorns",
+            "w": 320,
+            "h": 120,
+            "desc": "a sparking hot pink neon tube with barbed wire curling over it, a hazard an owl must not touch, its ends fading so copies sit side by side"
+          },
+          {
+            "name": "hazard-moth",
+            "w": 120,
+            "h": 100,
+            "desc": "a glowing magenta neon moth in flight seen from the side, a hazard that patrols"
+          },
+          {
+            "name": "hazard-lantern",
+            "w": 120,
+            "h": 200,
+            "desc": "a cage of sparking neon tubes hanging from a cable, spiked, a hazard that swings"
+          }
+        ]
       }
     },
     "glass": {
@@ -2521,6 +2617,54 @@
             "w": 120,
             "h": 400,
             "desc": "a slim vertical strand of pale stone with glass lanterns hung down it, cut straight at both ends so it repeats upward"
+          }
+        ]
+      },
+      "signs-hazards": {
+        "w": 240,
+        "h": 240,
+        "pieces": [
+          {
+            "name": "sign-hanging",
+            "w": 240,
+            "h": 200,
+            "desc": "a blank sign hanging by two chains or ropes from a bracket, of pale carved stone set with stained glass in gold and deep blue, with a little ivy, no letters, standing on its bottom edge"
+          },
+          {
+            "name": "sign-arrow",
+            "w": 240,
+            "h": 200,
+            "desc": "a blank arrow sign pointing right on a short post, of pale carved stone set with stained glass in gold and deep blue, with a little ivy, no letters, standing on its bottom edge"
+          },
+          {
+            "name": "signpost",
+            "w": 160,
+            "h": 300,
+            "desc": "a tall signpost with one blank board near its top, of pale carved stone set with stained glass in gold and deep blue, with a little ivy, no letters, standing on its bottom edge"
+          },
+          {
+            "name": "sign-board",
+            "w": 160,
+            "h": 240,
+            "desc": "a blank board on a stake pushed into the ground, of pale carved stone set with stained glass in gold and deep blue, with a little ivy, no letters, standing on its bottom edge"
+          },
+          {
+            "name": "hazard-thorns",
+            "w": 320,
+            "h": 120,
+            "desc": "a low bed of jagged ruby glass shards, a hazard an owl must not touch, its ends fading so copies sit side by side"
+          },
+          {
+            "name": "hazard-moth",
+            "w": 120,
+            "h": 100,
+            "desc": "a violet stained-glass moth in flight seen from the side, a hazard that patrols"
+          },
+          {
+            "name": "hazard-lantern",
+            "w": 120,
+            "h": 200,
+            "desc": "a cracked molten glass lantern on a chain, spiked and glowing hot orange, a hazard that swings"
           }
         ]
       }

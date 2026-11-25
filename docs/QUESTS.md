@@ -1,7 +1,7 @@
 # Quests, NPC owls, leaf piles and the feather shop
 
 - Status: BUILT; the founder perk PLANNED (OP-049)
-- Verified against: branch claude/op-202-docs off main 01e9722 (2026-11-02); the numbers are Claude Code's as written
+- Verified against: main ad68b81 (2026-11-17); the quest counts were taken from the code (`QUESTS` and its pools), OP-427
 - Code: packages/shared/src/quests.ts, questCatalog.ts, questbook.ts, npcs.ts, interactables.ts, shop.ts, species.ts; apps/edge/src/Collections.ts; apps/park/src/ui/quests.ts
 - Tickets: OP-013, OP-014, OP-015, OP-016, OP-018, OP-019, OP-083, OP-108
 - Related: docs/COLLECTIBLES.md, docs/ACTIVITIES.md; the Quest Log sheet in the Drive
@@ -82,11 +82,15 @@ is the step after the last.
 
 - **Type**: talk, visit, interact, emote, gather, or mixed. **Difficulty**: easy, medium, hard.
   **Length** by steps: 1 short, 2 or 3 medium, 4 to 6 long. **Cadence**: story (once), daily, weekly or monthly (OP-254).
-- **Catalogue**: 114 quests. Six hand-written story quests (the welcome quest first; the others
-  unlock after it). Eight templates expanded in bulk over the givers and the three difficulties:
-  leaves, errand, tour, show, gather, browse, bask and grand. The first seven, at every difficulty,
-  form the daily pool (96); the grand quests (medium and hard, four to six steps) the weekly pool
-  (12). Ids are stable: `<template>-<giver>-<difficulty>`, for example `leaves-hazel-medium`.
+- **Catalogue**: 131 quests (`QUESTS`). Fifteen hand-written story quests (`STORY_QUESTS`): the
+  welcome quest first, six that unlock after it (five from the town residents, one more from Pip),
+  and eight more from the quest owls around the map, the courses and the arcade that need nothing
+  first. Nine templates expanded in bulk over the givers and the difficulties: leaves, errand, tour,
+  show, gather, browse, bask, grand and odyssey. The first seven, at every difficulty, form the daily
+  pool (96, `DAILY_POOL`); the grand quests (medium and hard, four to six steps) the weekly pool (12,
+  `WEEKLY_POOL`); the odysseys the monthly pool (6, `MONTHLY_POOL`). Two puzzle quests (`PUZZLE_QUESTS`):
+  one weekly, one monthly. Ids are stable: `<template>-<giver>-<difficulty>`, for example
+  `leaves-hazel-medium`.
 - **Offers**: each park day one easy, one medium and one hard daily quest (different givers and
   templates); each week one medium and one hard weekly quest (different givers). The same for
   every visitor, chosen by a seeded shuffle of the day or week; plus one weekly puzzle quest, and each

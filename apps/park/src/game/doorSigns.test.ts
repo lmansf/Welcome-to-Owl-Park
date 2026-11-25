@@ -12,9 +12,10 @@ describe('door signs', () => {
     expect(signDepth(ROOMS['m3-ground']!)).toBe(SIGN_DEPTH);
   });
 
-  it('sign the Great Hollow’s open ways, the Party Grove’s among them', () => {
+  it('sign the Great Hollow’s open ways', () => {
     const ids = signedDoors(ROOMS['m3-hall']!).map((d) => d.id);
-    expect(ids).toContain('to-party');
+    // The trunk's door to the Party Grove grew over on Nov 21 (D5), its sign with it.
+    expect(ids).not.toContain('to-party');
     expect(ids).toContain('up');
     expect(ids).toContain('down');
     // The ink-wash realm's way opened on its room, the ink garden (OP-402), and has its sign.

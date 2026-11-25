@@ -588,7 +588,7 @@ test.describe('room server', () => {
     await a.goto('/?transport=edge');
     await a.locator('[data-home-btn="guest"]').click({ timeout: 20_000 });
     await expect.poll(async () => (await state(a)).room, { timeout: 25_000 }).toBe('lobby');
-    const beam = (await state(a)).objects.find((o) => o.id === 'lobby-moonbeam')!;
+    const beam = (await state(a)).thermals.find((t) => t.id === 'commons')!;
     expect(dist((await state(a)).pos, beam)).toBeLessThan(450);
     await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(1);
     // Into the light and up: the other owl sees it carried far over a jump's reach, so the room server took it lifted.
@@ -825,7 +825,7 @@ test.describe('room server', () => {
     for (const page of [a, b, c]) await page.context().close();
   });
 
-  test('a leaf pile up on the lantern beam is flopped into from the beam through the room server, and stays gone for a newcomer (OP-084)', async ({ browser }) => {
+  test('the Party Grove’s leaf pile past the root bench’s east end is out of reach from the bench and flopped into from the floor through the room server, and stays gone for a newcomer (OP-084, OP-414)', async ({ browser }) => {
     test.slow(); // a live park drawn with software WebGL on CI runners, and the walk across the hub
     const a = await visitor(browser);
     await walkAndStop(a, 900, 760);
@@ -835,11 +835,12 @@ test.describe('room server', () => {
     await a.waitForTimeout(320);
     await a.keyboard.up('Space');
     await expect.poll(async () => { const s = await state(a); return [s.air.s, s.air.z]; }, { timeout: 5_000, intervals: [50] }).toEqual([0, 80]);
-    // On the bench below it, the pile is not on offer; a jump and the flap put the owl up on the beam by it.
+    // On the bench, the pile is not on offer: it lies on the floor past the bench's end.
     expect((await state(a)).actions).not.toContain('use:hub-leaves-beam');
-    await jumpFlapGlide(a, 250);
-    await expect.poll(async () => { const s = await state(a); return [s.air.s, s.air.z]; }, { timeout: 5_000, intervals: [50] }).toEqual([0, 264]);
-    // The room server checks the owl stands up there, and takes the flop.
+    // Off the front of the seat and back to the pile on the floor: the room server checks the owl stands there, and takes the flop.
+    await a.evaluate(() => window.owlPark.walkTo(900, 800));
+    await expect.poll(async () => { const s = await state(a); return [s.air.s, s.air.z, s.walking]; }, { timeout: 10_000, intervals: [50] }).toEqual([0, 0, false]);
+    await walkAndStop(a, 1440, 770);
     await doAction(a, 'use:hub-leaves-beam');
     await expect.poll(async () => (await state(a)).objects.find((o) => o.id === 'hub-leaves-beam')?.here, { timeout: 15_000 }).toBe(false);
     const b = await visitor(browser);
@@ -1146,4 +1147,37 @@ test.describe('room server', () => {
     await expect.poll(async () => (await state(b)).peers.length, { timeout: 15_000 }).toBe(0);
     await b.context().close();
   });
+});
+
+test('a shared quiz result opens as that owl’s own page, and any other owl goes to the front page (OP-392)', async ({ request }) => {
+  const res = await request.get('/owl/gentle', { maxRedirects: 0 });
+  expect(res.status()).toBe(200);
+  expect(res.headers()['content-type']).toContain('text/html');
+  const html = await res.text();
+  expect(html).toContain('data-owl="gentle"');
+  expect(html).toContain('og-image.jpg');
+  expect(html).not.toMatch(/<script/i);
+  const other = await request.get('/owl/dragon', { maxRedirects: 0 });
+  expect(other.status()).toBe(302);
+  expect(other.headers()['location']).toBe('/');
+});
+
+test('a shared activity opens as that place’s own page, its Play button the park’s front door, and any other goes to the front page (OP-392)', async ({ request, page }) => {
+  const res = await request.get('/play/arcade', { maxRedirects: 0 });
+  expect(res.status()).toBe(200);
+  expect(res.headers()['content-type']).toContain('text/html');
+  const html = await res.text();
+  expect(html).toContain('data-activity="arcade"');
+  expect(html).toContain('og-image.jpg');
+  expect(html).toContain('<a class="play" href="/?go=arcade">');
+  expect(html).not.toMatch(/<script/i);
+  const other = await request.get('/play/dragon', { maxRedirects: 0 });
+  expect(other.status()).toBe(302);
+  expect(other.headers()['location']).toBe('/');
+  // Its button opens the park at its front door: the home screen, not a room past the turnstiles.
+  await page.goto('/play/arcade?golink=1');
+  await page.locator('a.play').click();
+  await expect(page).toHaveURL(/\/\?go=arcade&golink=1$/);
+  await page.waitForFunction(() => window.owlPark?.home?.().shown === true, null, { timeout: 20_000 });
+  await expect(page.getByText('Your link goes to the arcade, past the turnstiles.')).toBeVisible();
 });

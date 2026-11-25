@@ -138,9 +138,11 @@ test.describe('the Great Hollow’s camera rests the same however the owl came b
   /**
    * A spot on the hall's floor between its root runs: far enough from the back wall and the front rim
    * that neither holds the camera there, on a computer or on a phone held upright (whose view is nearly
-   * 2,000 px of the room tall), so a view with a lead and one without are far apart on any screen.
+   * 2,000 px of the room tall), so a view with a lead and one without are far apart on any screen. And west
+   * of the guardian at the heart, past the floor round it where the camera is the guardian's (guardian.ts,
+   * presence), so the camera here is the owl's own.
    */
-  const SPOT = { x: 2720, y: 1300 };
+  const SPOT = { x: 1400, y: 1300 };
 
   /** How far down its view the owl stands, in the room's own px. */
   const downView = (at: { pos: { y: number }; view: { viewY: number } }) => at.pos.y - at.view.viewY;
@@ -177,7 +179,7 @@ test.describe('the Great Hollow’s camera rests the same however the owl came b
     await holdTheClock(page);
     await openHeld(page, { room: 'm3-hall', newmap: '1' });
     const before = await heldStandingAt(page, SPOT);
-    const beam = (await stateNow(page)).objects.find((o) => o.id === 'm3-hall-moonbeam-heart')!;
+    const beam = (await stateNow(page)).thermals.find((t) => t.id === 'heart')!;
     const atHeart = await heldStandingAt(page, { x: beam.x, y: beam.y });
 
     // Jump held in the rising air and let go on the way up: the camera draws back, and the owl comes down where it rose.

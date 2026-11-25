@@ -10,7 +10,7 @@ import { cameraView, openPark, settleCamera, state } from './helpers';
 /** Walks the owl to the heart's moonbeam, where the thermal rises, and says where that is and how wide the room. */
 async function toTheHeart(page: Page): Promise<{ heart: { x: number; y: number }; hallW: number }> {
   const s = await state(page);
-  const beam = s.objects.find((o) => o.id === 'm3-hall-moonbeam-heart');
+  const beam = s.thermals.find((t) => t.id === 'heart');
   // The knothole up stands at the middle of the back wall: the room is twice as wide as it is across.
   const up = s.doors.find((d) => d.id === 'up');
   if (!beam || !up) throw new Error('not in the Great Hollow');

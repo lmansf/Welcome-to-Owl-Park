@@ -32,8 +32,8 @@ export const SOURCES: readonly Source[] = ['found', 'crafted', 'granted', 'bough
  * capped), today's gift, progress on each of the day's three tasks, whether their bonus is paid,
  * the sealed hollow's escape pay (escape.ts, OP-310), and the party games that paid feathers today (OP-314).
  */
-export type EarnSource = 'leaves' | 'gift' | 'play' | 'task-0' | 'task-1' | 'task-2' | 'tasks-bonus' | 'escape' | 'party-games';
-export const EARN_SOURCES: readonly EarnSource[] = ['leaves', 'gift', 'play', 'task-0', 'task-1', 'task-2', 'tasks-bonus', 'escape', 'party-games'];
+export type EarnSource = 'leaves' | 'gift' | 'play' | 'task-0' | 'task-1' | 'task-2' | 'tasks-bonus' | 'escape' | 'party-games' | 'tag-prize';
+export const EARN_SOURCES: readonly EarnSource[] = ['leaves', 'gift', 'play', 'task-0', 'task-1', 'task-2', 'tasks-bonus', 'escape', 'party-games', 'tag-prize'];
 const TASK_SOURCES = ['task-0', 'task-1', 'task-2'] as const;
 
 export interface CollectorRow {
@@ -185,6 +185,18 @@ export class CollectionBook {
   /** Feathers from an activity (lanterns, the quiz, fishing, the copy game), under their shared daily cap. */
   earnPlay(cid: string, n: number, now: number): { added: number; feathers: number } {
     return this.earnCapped(cid, 'play', n, PLAY_FEATHERS_PER_DAY, now);
+  }
+
+  /**
+   * One of `cap` a park day from `source` (a feather tag prize, OP-434): taken and true while some are
+   * left today, false once they are all taken.
+   */
+  takeDaily(cid: string, source: EarnSource, cap: number, now: number): boolean {
+    const day = parkDay(now);
+    this.ensure(cid, undefined, now);
+    if (this.store.earned(cid, day, source) >= cap) return false;
+    this.store.addEarned(cid, day, source, 1);
+    return true;
   }
 
   /**

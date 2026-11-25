@@ -51,7 +51,7 @@ async function play(page: Page): Promise<void> {
 async function besideTheMoonbeam(page: Page): Promise<{ x: number; y: number }> {
   await expect.poll(async () => (await state(page)).room, { timeout: 20_000 }).toBe('lobby');
   const s = await state(page);
-  const beam = s.objects.find((o) => o.id === 'lobby-moonbeam');
+  const beam = s.thermals.find((t) => t.id === 'commons');
   if (!beam) throw new Error('no moonbeam in the Treetop Commons');
   const far = dist(s.pos, beam);
   expect(far).toBeGreaterThan(160);

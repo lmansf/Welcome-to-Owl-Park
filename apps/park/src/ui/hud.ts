@@ -1,4 +1,4 @@
-import { getPhrase, NEST_WORDS, type ArcadeGame, type ClimbInput, type EquipSlot, type FeedbackDraft, type FeedbackRewardView, type LockView, type NestSpotId, type NpcDef, type OwlAccount, type OwlLook, type TravelRefusal, type TravelState, type Vec2, type Wear } from '@owl-park/shared';
+import { getPhrase, NEST_WORDS, type ArcadeGame, type ClimbInput, type EggRedeemReply, type EquipSlot, type FeedbackDraft, type FeedbackRewardView, type LockView, type NestSpotId, type NpcDef, type OwlAccount, type OwlLook, type TravelRefusal, type TravelState, type Vec2, type Wear } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { TaskState } from '../collect/tasks';
 import type { CollectionState } from '../collect/state';
@@ -7,6 +7,7 @@ import type { FeedbackSent } from '../net/feedback';
 import type { WalletEntry } from '../net/transport';
 import type { SettingsStore } from '../settings';
 import { createInfoScreens, type InfoKind } from './about';
+import { eggCodeCard } from './eggCode';
 import { accountCard, createAccountScreens, type AccountScreenDeps, type AccountScreens } from './account';
 import { createActivityCards, type CopyView, type QuizView } from './activities';
 import { createArcadeScreen, type ArcadeHandlers, type ArcadeResultView, type ArcadeView } from './arcadeScreen';
@@ -39,7 +40,7 @@ import { createGatePrompt, type GateAsk } from './gatePrompt';
 import { SPECTATOR_WORDS, createSpectatorBadge } from './spectator';
 import { watchTopStack } from './topStack';
 import { createTurnPhone } from './turnPhone';
-import { toastLift } from './toastLift';
+import { owlBox, toastLift, type Box } from './toastLift';
 
 /** The highest the tips go, lifted clear of the chips (OP-415): under the bar along the top. */
 const TOASTS_TOP = 64;
@@ -108,6 +109,8 @@ export interface Hud {
   attachAccount(link: AccountLink, deps: Pick<AccountScreenDeps, 'restart' | 'startOver'>): AccountScreens;
   /** Bring a friend (OP-056): its card in the Menu's Nest tab, shown with the park's REFERRALS on, or as a preview when `preview` (?friends=1). */
   attachReferrals(link: ReferralLink, preview: boolean): void;
+  /** The Redeem a code card in the Menu's Settings tab (OP-260), behind ?eggcode=1. */
+  attachRedeem(redeem: (code: string) => Promise<EggRedeemReply>): void;
   /** The Menu's ways out: what "Leave the park" and travel from the map do. */
   attachWayOut(actions: WayOutActions): void;
   /** The tickets on this device, for the Menu's Settings tab (null: the page has no park server keeping them). */
@@ -262,11 +265,14 @@ export interface Hud {
   closePanels(): void;
   /** The off-screen hint chips; an empty list clears them. */
   setHints(hints: HudHint[]): void;
+  /** Where the activity cards (the stage quiz's question, the robot owl's tune) stand on the screen, or null while none shows: the hint chips keep off them (OP-435). */
+  cardsBox(): { left: number; top: number; right: number; bottom: number } | null;
   /**
-   * Where the visitor's own owl's feet are on the screen (CSS px), or null for nowhere (OP-349): the
-   * thumbstick goes quiet while the owl is under it (joystick.ts, underStick).
+   * Where the visitor's own owl's feet (and the top of its head) are on the screen (CSS px), or null for
+   * nowhere (OP-349): the thumbstick goes quiet while the owl is under it (joystick.ts, underStick), and
+   * the tips at the bottom go up above it rather than over it (OP-291, toastLift.ts).
    */
-  setOwlAt(feet: { x: number; y: number } | null): void;
+  setOwlAt(feet: { x: number; y: number; top?: number } | null): void;
   /**
    * The room is fading out, or the next is not in yet (OP-346): what the HUD shows of the room itself
    * (a course's strip, the actions where the owl stands) fades with it. The Menu and the counters stay.
@@ -343,7 +349,7 @@ const CSS = `
 #hud.just-in .fb-bug,#hud.just-in .fb-card{pointer-events:none}
 #hud.at-home .bar,#hud.at-home .welcome,#hud.at-home .welcome.show,#hud.at-home .nest-welcome.show,#hud.at-home .bottom,#hud.at-home .hints,#hud.at-home .cards,#hud.at-home .notices{display:none}
 @media (pointer:coarse){#hud.no-stick .bottom .actions{bottom:0}}
-#hud .toasts{position:absolute;z-index:10;left:50%;transform:translate(-50%,calc(-1 * var(--toasts-lift,0px)));bottom:calc(max(12px,env(safe-area-inset-bottom)) + 64px);display:flex;flex-direction:column;gap:6px;align-items:center;width:min(92vw,520px)}
+#hud .toasts{position:absolute;z-index:10;left:50%;transform:translate(-50%,calc(-1 * var(--toasts-lift,0px)));bottom:calc(max(12px,env(safe-area-inset-bottom)) + 64px);display:flex;flex-direction:column;gap:6px;align-items:center;width:min(calc(92vw/var(--vz,1)),520px)}
 #hud .toast{background:rgba(246,241,227,.95);color:#0C1E36;border-radius:12px;padding:10px 14px;font-size:14px;font-weight:600;text-align:center;box-shadow:0 4px 16px rgba(0,0,0,.4);animation:hud-in .25s ease-out}
 @keyframes hud-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 #hud .actions button{animation:hud-in .25s ease-out}
@@ -419,7 +425,7 @@ const CSS = `
 #hud .hint.say i{border-left-width:18px;border-top-width:7px;border-bottom-width:7px}
 #hud .hint.say span{color:#F6F1E3;font-size:14px;font-weight:700;white-space:nowrap}
 /* The nest's welcome (OP-105) looks as the lobby's card does (.welcome, ui/quests.ts), and closes at a tap. */
-#hud .nest-welcome{display:none;position:relative;margin-top:8px;width:min(330px,calc(100vw - 24px));min-height:0;padding:7px 32px 7px 11px;text-align:left;color:#F6F1E3;
+#hud .nest-welcome{display:none;position:relative;margin-top:8px;width:min(330px,calc(calc(100vw/var(--vz,1)) - 24px));min-height:0;padding:7px 32px 7px 11px;text-align:left;color:#F6F1E3;
   background:rgba(12,30,54,.72);border:1px solid rgba(246,241,227,.18);border-radius:12px;font-size:13px;font-weight:400;line-height:1.3;box-shadow:none;backdrop-filter:blur(6px)}
 #hud .nest-welcome.show{display:block}
 #hud .nest-welcome b{display:block;font-size:12px;color:#FFD36A;letter-spacing:.02em}
@@ -445,7 +451,7 @@ const CSS = `
   #hud .emote-btn{display:none}
   #hud .pad-btn.interact.idle{opacity:0;pointer-events:none}
   #hud .pad-btn.interact .lbl{display:none}
-  #hud .pad-btn.interact.labelled{width:max-content;min-width:56px;max-width:min(240px,calc(100vw - 232px));padding:0 14px 0 12px;gap:4px;justify-content:flex-start;border-radius:28px;background:rgba(12,30,54,.78)}
+  #hud .pad-btn.interact.labelled{width:max-content;min-width:56px;max-width:min(240px,calc(calc(100vw/var(--vz,1)) - 232px));padding:0 14px 0 12px;gap:4px;justify-content:flex-start;border-radius:28px;background:rgba(12,30,54,.78)}
   #hud .pad-btn.interact.labelled svg{flex:none}
   #hud .pad-btn.interact.labelled .lbl{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;font-size:13px;font-weight:700;line-height:1.15;text-align:left;color:#F6F1E3}
   /* The first action is Interact's own, so its button in the row would say it twice. */
@@ -541,6 +547,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   const actionsEl = $<HTMLElement>('[data-actions]');
   const hintsEl = $<HTMLElement>('[data-hints]');
   const hintEls = new Map<string, HTMLButtonElement>();
+  /** Where the visitor's own owl stands on the screen, for the tips to stay clear of (OP-291). */
+  let owlAt: Box | null = null;
   let hintCb: ((id: string) => void) | null = null;
   const nestWelcome = $<HTMLButtonElement>('[data-nest-welcome]');
   nestWelcome.querySelector('b')!.textContent = NEST_WORDS.welcome;
@@ -575,6 +583,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   let account: OwlAccount | null = null;
   let builder: OwlBuilder | null = null;
   let collectionActions: CollectionActions | null = null;
+  /** The Redeem a code card (OP-260), made once so its last line outlasts a redraw: null while the flag is off. */
+  let redeem: HTMLElement | null = null;
   let wayOut: WayOutActions | null = null;
   let waysOut = { leave: false, home: false };
   /** Travel from the map (OP-130): what the room scene last said, the place whose card is open, and when places lit up. */
@@ -695,7 +705,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
             questDot.hidden = true;
           }
           if (!questUi) return void panel.append(Object.assign(document.createElement('p'), { className: 'mnote', textContent: 'Your quests show here once you are in the park.' }));
-          // A spectator's quests and today's tasks are locked (OP-191): the Day Ticket instead.
+          // A spectator's quests and today's tasks are locked (OP-191), but for the one a guest may do (OP-428):
+          // which that is, the Day Ticket for the rest, and the journal with the guest's quest under them.
           if (spectator) {
             const get = Object.assign(document.createElement('button'), { type: 'button', textContent: SPECTATOR_WORDS.get });
             get.dataset['spectatorGet'] = 'quests';
@@ -703,7 +714,9 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
               closeScreens();
               getTicket?.(SPECTATOR_WORDS.locked);
             });
-            return void panel.append(Object.assign(document.createElement('p'), { className: 'mnote', textContent: `${SPECTATOR_WORDS.locked} ${GATE_WORDS.buy}` }), get);
+            const journal = document.createElement('div');
+            panel.append(Object.assign(document.createElement('p'), { className: 'mnote', textContent: `${SPECTATOR_WORDS.guestQuests} ${GATE_WORDS.buy}` }), get, journal);
+            return void questUi.mountJournal(journal, () => menu.isOpen() && menu.tab() === 'quests');
           }
           questUi.mountJournal(panel, () => menu.isOpen() && menu.tab() === 'quests');
         },
@@ -727,7 +740,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
         render: (panel) =>
           renderSettings(
             panel,
-            { settings, tickets: ticketsNow, canLeave: waysOut.leave, feedback: () => openScreen('feedback', true), title: () => openScreen('title'), leave: () => openScreen('leave'), account: accountCards(), retake: collectionActions ? () => retakeQuiz() : null },
+            { settings, tickets: ticketsNow, canLeave: waysOut.leave, feedback: () => openScreen('feedback', true), title: () => openScreen('title'), leave: () => openScreen('leave'), account: accountCards(), retake: collectionActions ? () => retakeQuiz() : null, redeem },
             () => menu.refresh(),
           ),
       },
@@ -806,7 +819,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       invite: async (code) => {
         const answer = await r.link.invite(code);
         if (answer.ok) {
-          referral = { ...r, state: answer.state, said: REFERRAL_WORDS.welcome };
+          // Over what the card already knew, so a word the answer leaves out (whether free tickets are open) stays (OP-420).
+          referral = { ...r, state: { ...r.state, ...answer.state }, said: REFERRAL_WORDS.welcome };
           menu.refresh();
         }
         return answer;
@@ -995,7 +1009,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     const lift = parseFloat(toasts.style.getPropertyValue('--toasts-lift')) || 0;
     const r = toasts.getBoundingClientRect();
     const column = { left: r.left, right: r.right, top: r.top + lift, bottom: r.bottom + lift };
-    const chips = [...hintEls.values()].map((el) => el.getBoundingClientRect());
+    const chips: Box[] = [...hintEls.values()].map((el) => el.getBoundingClientRect());
+    if (owlAt) chips.push(owlAt);
     const next = toasts.childElementCount ? toastLift(column, chips, TOASTS_TOP) : 0;
     if (Math.abs(next - lift) >= 0.5) toasts.style.setProperty('--toasts-lift', `${next.toFixed(1)}px`);
   };
@@ -1174,6 +1189,10 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
         menu.refresh();
       });
     },
+    attachRedeem(fn) {
+      redeem = eggCodeCard(fn);
+      if (menu.isOpen() && menu.tab() === 'settings') menu.refresh();
+    },
     attachWayOut(actions) {
       wayOut = actions;
     },
@@ -1265,6 +1284,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       spectator = on;
       loadRewards?.();
       badge.set(on);
+      questUi?.setGuest(on);
       if (on) shop?.close();
       menu.refresh();
     },
@@ -1387,6 +1407,9 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       document.documentElement.classList.toggle('room-dark', on);
     },
     setOwlAt(feet) {
+      const was = owlAt;
+      owlAt = feet && feet.top !== undefined ? owlBox({ x: feet.x, y: feet.y, top: feet.top }, { w: window.innerWidth, h: window.innerHeight }) : null;
+      if (toasts.childElementCount && (was?.left !== owlAt?.left || was?.top !== owlAt?.top)) liftToasts();
       const el = root.querySelector<HTMLElement>('.stick');
       if (!el) return;
       const box = el.getBoundingClientRect();
@@ -1453,6 +1476,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     onLookChange(cb) {
       lookCb = cb;
     },
+    cardsBox: () => cards.box(),
     setQuiz: (v) => cards.setQuiz(v),
     setCopy: (v) => cards.setCopy(v),
     onCopy: (cb) => cards.onCopy(cb),

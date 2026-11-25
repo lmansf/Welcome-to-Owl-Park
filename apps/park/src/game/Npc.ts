@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { FIT, SPRITES, speciesOf, type NpcDef } from '@owl-park/shared';
+import { FIT, SPRITES, speciesOf, type NpcDef, type Vec2 } from '@owl-park/shared';
 import type { NpcMark } from '../collect/quests';
 import { SPECIES_LAYERS } from './art';
 import type { NpcFit } from './fitOverlay';
@@ -61,6 +61,8 @@ export class NpcOwl {
   private lift = 0;
   private shown: NpcMark = null;
   private nextIdleAt: number;
+  /** Out of its spot, standing in for a missing player in a game (OP-426): its name, marks and talk wait at home. */
+  private away = false;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -117,12 +119,48 @@ export class NpcOwl {
   }
 
   /** Whether its '!' says the visitor can talk to it now. */
+  /** Whether it is out of its spot standing in for a missing player (OP-426). */
+  get standingIn(): boolean {
+    return this.away;
+  }
+
+  /**
+   * Out of its spot to stand in for a missing player (OP-426, feather tag): drawn at `pos` in the game,
+   * facing the way it goes, with its name, marks and '!' put away and no talking to it; back home with
+   * them all once `pos` is null.
+   */
+  standIn(pos: Vec2 | null): void {
+    if (pos) {
+      if (!this.away) {
+        this.away = true;
+        this.setApproach(false, true);
+        this.approach.setVisible(false);
+        for (const o of [this.label, this.mark, this.markGlow]) o.setVisible(false);
+        this.owl.disableInteractive();
+      }
+      const dx = pos.x - this.owl.pos.x;
+      if (Math.abs(dx) > 0.5) this.owl.face(dx > 0 ? 1 : -1);
+      this.owl.place(pos);
+      return;
+    }
+    if (!this.away) return;
+    this.away = false;
+    this.owl.place(this.def.pos);
+    this.owl.face(this.def.facing);
+    this.label.setVisible(true);
+    this.owl.setInteractive();
+    const mark = this.shown;
+    this.shown = null;
+    this.setMark(mark);
+  }
+
   get approaching(): boolean {
     return this.near;
   }
 
   /** The visitor is (or is no longer) close enough to talk to this owl, the nearest such: its '!' shows or fades. */
-  setApproach(on: boolean, calm: boolean): void {
+  setApproach(on0: boolean, calm: boolean): void {
+    const on = on0 && !this.away;
     this.calm = calm;
     if (on === this.near) return;
     this.near = on;
@@ -147,6 +185,7 @@ export class NpcOwl {
   setMark(mark: NpcMark): void {
     if (mark === this.shown) return;
     this.shown = mark;
+    if (this.away) return;
     this.mark.setVisible(mark !== null);
     this.markGlow.setVisible(mark !== null);
     if (!mark) return;
@@ -157,6 +196,7 @@ export class NpcOwl {
 
   /** Look at a visitor standing close, or back the usual way when there is none. */
   lookAt(x: number | null): void {
+    if (this.away) return;
     this.owl.face(x === null || Math.abs(x - this.def.pos.x) < 8 ? this.def.facing : x > this.def.pos.x ? 1 : -1);
   }
 

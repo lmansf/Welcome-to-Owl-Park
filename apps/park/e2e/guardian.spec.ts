@@ -3,26 +3,24 @@ import { expect, test } from './fixtures';
 import { HELD_FRAME_MS, heldPass as pass, heldUntil as until, holdTheClock, openHeld, openPark, state, stateNow as now } from './helpers';
 
 /**
- * The guardian alive at the heart of the Great Hollow (OP-359), which is behind `?guardian=1`
- * (src/flags.ts): a plain address has none of it, and with the flag the great horned owl sits at the
- * heart of the hall, asleep until an owl comes in, then awake to it. It opens its eyes, hoots once to
+ * The guardian alive at the heart of the Great Hollow (OP-359), on for every visitor since Nov 20 (it
+ * was behind `?guardian=1`): the great horned owl sits at the heart of the hall, asleep until an owl comes in, then awake to it. It opens its eyes, hoots once to
  * an owl that came in by the knothole, answers a hoot with its own, goes see-through while the
  * visitor's own owl is behind it, and beats while that owl rides the rising air at the heart. Its
  * rules, to the millisecond, are in src/game/guardian.test.ts; here it is in the room, on a held
  * clock (helpers.ts), so a slow machine sees what a quick one sees.
  */
 
-/** The Great Hollow opened on the held clock with the guardian's flag, the owl in by the knothole: back as soon as the room is built. */
-const openHallWithGuardian = (page: Page) => openHeld(page, { room: 'm3-hall', newmap: '1', spawn: 'from-lobby', guardian: '1' });
+/** The Great Hollow opened on the held clock, the owl in by the knothole: back as soon as the room is built. */
+const openHallWithGuardian = (page: Page) => openHeld(page, { room: 'm3-hall', newmap: '1', spawn: 'from-lobby' });
 
 const inside = (p: { x: number; y: number }, b: { x: number; y: number; w: number; h: number }) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
 
-test.describe('the guardian at the heart of the Great Hollow (OP-359, behind ?guardian=1)', () => {
-  test('a plain address has no guardian: the hall is as it was', async ({ page }) => {
+test.describe('the guardian at the heart of the Great Hollow (OP-359)', () => {
+  test('a plain address has the guardian in the Great Hollow, and no other room has one', async ({ page }) => {
     await openPark(page, { room: 'm3-hall', newmap: '1' });
-    expect((await state(page)).guardian).toBeNull();
-    // Nor does any value but 1.
-    await openPark(page, { room: 'm3-hall', newmap: '1', guardian: 'yes' });
+    await expect.poll(async () => (await state(page)).guardian, { timeout: 10_000 }).not.toBeNull();
+    await openPark(page, { room: 'lobby', newmap: '1' });
     expect((await state(page)).guardian).toBeNull();
   });
 
@@ -78,7 +76,7 @@ test.describe('the guardian at the heart of the Great Hollow (OP-359, behind ?gu
     await openHallWithGuardian(page);
     await until(page, 'its eyes opening', async () => (await now(page)).guardian!.lids === 'open');
     let s = await now(page);
-    const beam = s.objects.find((o) => o.id === 'm3-hall-moonbeam-heart')!;
+    const beam = s.thermals.find((t) => t.id === 'heart')!;
     const g = s.guardian!;
     // The heart's light and rising air are at its chest: behind it, by where its foot stands.
     expect(beam.y).toBeLessThan(g.at.y);

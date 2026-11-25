@@ -29,7 +29,6 @@ import {
   type ServerEscape,
   type Vec2,
 } from '@owl-park/shared';
-import { flagOn } from '../flags';
 import type { EscapeLink } from '../net/transport';
 import type { Hud } from '../ui/hud';
 import { createCodePad, type CodePad } from '../ui/puzzle';
@@ -110,7 +109,7 @@ export interface EscapeHost {
 }
 
 const CSS = `
-#hud .escape{position:fixed;top:calc(max(10px,env(safe-area-inset-top)) + 56px);left:50%;transform:translateX(-50%);width:min(440px,calc(100vw - 20px));display:flex;flex-direction:column;gap:6px;pointer-events:auto;background:rgba(12,30,54,.92);border:1px solid rgba(246,241,227,.18);border-radius:14px;padding:10px 12px;color:#F6F1E3;font-size:13px;box-shadow:0 6px 24px rgba(0,0,0,.45)}
+#hud .escape{position:fixed;top:calc(max(10px,env(safe-area-inset-top)) + 56px);left:50%;transform:translateX(-50%);width:min(440px,calc(calc(100vw/var(--vz,1)) - 20px));display:flex;flex-direction:column;gap:6px;pointer-events:auto;background:rgba(12,30,54,.92);border:1px solid rgba(246,241,227,.18);border-radius:14px;padding:10px 12px;color:#F6F1E3;font-size:13px;box-shadow:0 6px 24px rgba(0,0,0,.45)}
 #hud .escape h2{margin:0;font-size:15px}
 #hud .escape p{margin:0;line-height:1.35}
 #hud .escape .note{opacity:.85;font-style:italic}
@@ -122,7 +121,7 @@ const CSS = `
 #hud .escape .pips{display:flex;gap:4px}
 #hud .escape .pips i{width:10px;height:10px;border-radius:50%;background:rgba(246,241,227,.2)}
 #hud .escape .pips i.on{background:#8FE3A8}
-@media (max-height:520px){#hud .escape{top:8px;width:min(380px,calc(100vw - 20px));font-size:12px}}
+@media (max-height:520px){#hud .escape{top:8px;width:min(380px,calc(calc(100vw/var(--vz,1)) - 20px));font-size:12px}}
 `;
 let styled = false;
 
@@ -162,7 +161,7 @@ function padLock(l: EscapeLockView): LockView {
 
 // ---------- the doorway in the plaza ----------
 
-/** The doorway on the clearing's front edge, drawn and offered only with `?friends=1`. */
+/** The doorway on the clearing's front edge. */
 export class EscapeDoorway {
   private readonly box: Phaser.GameObjects.Container;
   private sheet: HTMLElement | null = null;
@@ -486,9 +485,8 @@ export class EscapeHollow {
   }
 }
 
-/** The hollow's controller in an escape room, the doorway's in its plaza: only with `?friends=1`. */
+/** The hollow's controller in an escape room, the doorway's in its plaza: on for every visitor since Nov 20. */
 export function escapeFor(room: RoomDef, host: EscapeHost): { hollow: EscapeHollow | null; doorway: EscapeDoorway | null } {
-  if (!flagOn('friends')) return { hollow: null, doorway: null };
   if (isEscapeRoom(room.id)) return { hollow: new EscapeHollow(host), doorway: null };
   if (room.id === ESCAPE_DOOR.room) return { hollow: null, doorway: new EscapeDoorway(host) };
   return { hollow: null, doorway: null };

@@ -764,9 +764,9 @@ describe('perches (OP-084)', () => {
         expect(groundAt(room.perches, p, top), `${room.id} ${name}`).toBe(top);
       }
     }
-    // The hub's first: two quest spots on the bench, a leaf pile on the beam.
+    // The hub's first: two quest spots on the bench. Its leaf pile is on the floor now (OP-414); the stairs' piles are up on perches.
     expect(ROOMS['hub']!.spots?.filter((s) => s.top === 80)).toHaveLength(2);
-    expect(INTERACTABLES.find((t) => t.id === 'hub-leaves-beam')?.top).toBe(264);
+    expect(INTERACTABLES.find((t) => t.id === 'm3-stair-2-leaves-lookout')?.top).toBe(431);
   });
 
   it("the hub's bench is a jump up from the floor, and the lantern beam a jump and the second flap up from the bench", () => {
@@ -1255,8 +1255,9 @@ describe('the new map (map 3): the park as one tree', () => {
     // The old stairs are left over since the hall was switched on: they still lead out, and nothing leads back in (the next test).
     // So is the cavern's side-view arcade since its door leads to the top-down arcade (OP-283), and the root
     // stair since the hall's hatch leads straight into the arcade (OP-306; links to it land in the arcade).
-    const leftOver = new Set(['m3-stair-1', 'm3-stair-2', 'm3-stair-3', 'm3-ground', 'm3-cave', 'm3-under']);
-    const inMap = new Set([...Object.keys(NEW_MAP).filter((id) => !leftOver.has(id)), ...NEW_MAP_HALL, 'lobby', 'glass', 'grove', 'market', 'hub', 'arcade']);
+    // And the Party Grove since the trunk's door to it grew over (Nov 21, D5): its way into the trunk still leads an owl in it out.
+    const leftOver = new Set(['m3-stair-1', 'm3-stair-2', 'm3-stair-3', 'm3-ground', 'm3-cave', 'm3-under', 'hub']);
+    const inMap = new Set([...Object.keys(NEW_MAP).filter((id) => !leftOver.has(id)), ...NEW_MAP_HALL, 'lobby', 'glass', 'grove', 'market', 'arcade']);
     for (const id of inMap) {
       for (const { door, to } of ways(ROOMS[id]!)) {
         if (!inMap.has(to.room)) continue;
@@ -1266,7 +1267,7 @@ describe('the new map (map 3): the park as one tree', () => {
     }
   });
 
-  it('runs from the turnstiles down the hollow hall past every open realm\'s Commons to the Party Grove and the arcade, all of it reachable', () => {
+  it('runs from the turnstiles down the hollow hall past every open realm\'s Commons to the arcade, all of it reachable', () => {
     const reach = (from: string) => {
       const seen = new Set<string>([from]);
       const next = [from];
@@ -1280,7 +1281,9 @@ describe('the new map (map 3): the park as one tree', () => {
       return seen;
     };
     const seen = reach('lobby');
-    for (const id of [...NEW_MAP_HALL, 'glass', 'grove', 'market', 'hub', 'homes', 'arcade']) expect(seen.has(id), id).toBe(true);
+    for (const id of [...NEW_MAP_HALL, 'glass', 'grove', 'market', 'homes', 'arcade']) expect(seen.has(id), id).toBe(true);
+    // The Party Grove folded into the hall on Nov 21 (D5): the trunk's door to it grew over.
+    expect(seen.has('hub')).toBe(false);
     // The cavern's arcade is the top-down one (OP-283), and its street door leads back the way the owl came:
     // up the hatch into the hall for an owl that came down it (OP-306), back to the market for one from there.
     expect(ways(ROOMS['m3-under']!).find((w) => w.door.id === 'to-arcade')?.to).toEqual({ room: 'arcade', spawn: 'from-cavern' });
@@ -1289,7 +1292,7 @@ describe('the new map (map 3): the park as one tree', () => {
     expect(doorTarget(street, 3, 'market')).toEqual({ room: 'market', spawn: 'from-arcade' });
     expect(doorTarget(street, 1, 'market')).toEqual({ room: 'market', spawn: 'from-arcade' });
     expect(ROOMS['m3-under']!.spawns['from-arcade']).toBeDefined();
-    // Through the turnstiles down the knothole; up the root stair into the hall's floor; the Party Grove's way into the trunk.
+    // Through the turnstiles down the knothole; up the root stair into the hall's floor; the Party Grove's way into the trunk, for an owl still in it.
     expect(doorTarget(ROOMS['lobby']!.doors.find((d) => d.id === 'gate')!, 3)).toEqual({ room: 'm3-hall', spawn: 'from-lobby' });
     expect(ways(ROOMS['m3-under']!).find((w) => w.door.way === 'up')?.to).toEqual({ room: 'm3-hall', spawn: 'from-under' });
     expect(ways(ROOMS['hub']!).find((w) => w.door.id === 'to-lobby')?.to).toEqual({ room: 'm3-hall', spawn: 'from-party' });

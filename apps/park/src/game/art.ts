@@ -12,7 +12,6 @@ import { EDGE_ART, FURNITURE, KIT_ART, edgePlaceholder, kitDrawPlan, kitFrames, 
 import { HALL_ROOM } from '@owl-park/shared/rooms';
 import { GAME_ART } from '../arcade/paint';
 import type { ParkConfig } from '../config';
-import { flagOn } from '../flags';
 import { COURSES, ROOMS, TREE_GROUND, roomFor } from '../rooms';
 import { DENSE_SCALE, FLIGHT_LAYERS, OWL_LAYERS, SPECIES_FLIGHT_LAYERS, SPECIES_LAYERS, isFlightLayer, isSpeciesLayer, rasterCandidates, rasterNames, roomScaleCap } from './artFiles';
 import { ART_BYTES, PUBLISHED_ART, versioned } from './publishedArt';
@@ -678,6 +677,27 @@ export const ART: Record<string, ArtSpec> = {
   'kit-landmark-hall-root-market-log': { w: 400, h: 120, kind: 'piece' },
   'kit-landmark-hall-root-market-knot': { w: 200, h: 200, kind: 'piece' },
   'kit-landmark-hall-root-market-stump': { w: 320, h: 400, kind: 'piece' },
+  'kit-glass-sign-hanging': { w: 240, h: 200, kind: 'piece' },
+  'kit-glass-sign-arrow': { w: 240, h: 200, kind: 'piece' },
+  'kit-glass-signpost': { w: 160, h: 300, kind: 'piece' },
+  'kit-glass-sign-board': { w: 160, h: 240, kind: 'piece' },
+  'kit-glass-hazard-thorns': { w: 320, h: 120, kind: 'piece' },
+  'kit-glass-hazard-moth': { w: 120, h: 100, kind: 'piece' },
+  'kit-glass-hazard-lantern': { w: 120, h: 200, kind: 'piece' },
+  'kit-clearing-sign-hanging': { w: 240, h: 200, kind: 'piece' },
+  'kit-clearing-sign-arrow': { w: 240, h: 200, kind: 'piece' },
+  'kit-clearing-signpost': { w: 160, h: 300, kind: 'piece' },
+  'kit-clearing-sign-board': { w: 160, h: 240, kind: 'piece' },
+  'kit-clearing-hazard-thorns': { w: 320, h: 120, kind: 'piece' },
+  'kit-clearing-hazard-moth': { w: 120, h: 100, kind: 'piece' },
+  'kit-clearing-hazard-lantern': { w: 120, h: 200, kind: 'piece' },
+  'kit-neon-sign-hanging': { w: 240, h: 200, kind: 'piece' },
+  'kit-neon-sign-arrow': { w: 240, h: 200, kind: 'piece' },
+  'kit-neon-signpost': { w: 160, h: 300, kind: 'piece' },
+  'kit-neon-sign-board': { w: 160, h: 240, kind: 'piece' },
+  'kit-neon-hazard-thorns': { w: 320, h: 120, kind: 'piece' },
+  'kit-neon-hazard-moth': { w: 120, h: 100, kind: 'piece' },
+  'kit-neon-hazard-lantern': { w: 120, h: 200, kind: 'piece' },
   'kit-landmark-pane-cracked': { w: 240, h: 320, kind: 'piece' },
   'kit-landmark-lever-brass': { w: 120, h: 160, kind: 'piece' },
   'kit-landmark-switch-lift': { w: 120, h: 160, kind: 'piece' },
@@ -1050,8 +1070,8 @@ export function roomArtKeys(roomId: string, room: RoomDef | undefined = roomFor(
   // A realm's idol, in the realm or in its Commons (`votesFor`), or each of several (the Great Hollow's, RoomDef.idols).
   const realms = room ? idolRealms(room) : [roomId];
   if (realms.includes('grove')) keys.push('guardian');
-  // The guardian alive at the heart of the Great Hollow (OP-359, behind ?guardian=1) moves in its painted parts (OP-397).
-  if (roomId === HALL_ROOM.id && flagOn('guardian')) keys.push(...partKeys('guardian'));
+  // The guardian alive at the heart of the Great Hollow (OP-359) moves in its painted parts (OP-397).
+  if (roomId === HALL_ROOM.id) keys.push(...partKeys('guardian'));
   if (realms.includes('market')) keys.push('robot-owl');
   if (realms.includes('glass')) keys.push('kit-glass-idol-owl');
   // A realm start's set pieces (OP-276).

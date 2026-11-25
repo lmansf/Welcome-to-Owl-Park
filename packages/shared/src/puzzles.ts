@@ -22,8 +22,9 @@
  */
 import { distance } from './geometry';
 import { INTERACTABLES } from './interactables';
-import { NPCS, placeName } from './npcs';
+import { npcsIn, placeName } from './npcs';
 import { sameLevel, type Raised } from './perches';
+import { GOAL_ROOM_TOO } from './quests';
 import { rotationRandom } from './parktime';
 import type { Vec2 } from './protocol';
 
@@ -103,9 +104,25 @@ export function puzzleGoalText(id: string): string {
 /** Hiding spots by room (room data's `spots`). */
 export type PuzzleSpots = Readonly<Record<string, ReadonlyArray<Vec2 & Raised>>>;
 
-export interface PuzzlePiece extends Vec2 {
+/** A spot a piece lies at. */
+export interface PieceSpot extends Vec2 {
   room: string;
   top?: number;
+}
+
+export interface PuzzlePiece extends PieceSpot {
+  /**
+   * The same piece in the room that counts as its room (GOAL_ROOM_TOO): a piece in `hub` lies in the
+   * Great Hollow too, since the new map's `hub` (the Party Grove) was folded into the hollow and its
+   * door closed. Either spot works it, and the run shares one piece whichever an owl uses.
+   */
+  also?: PieceSpot;
+}
+
+/** Where `piece` lies in `room`, if it lies there: its own spot, or its twin's in the room that counts as it. */
+export function puzzlePieceIn(piece: PuzzlePiece, room: string): PieceSpot | undefined {
+  if (piece.room === room) return piece;
+  return piece.also && piece.also.room === room ? piece.also : undefined;
 }
 
 export interface LockLayout {
@@ -132,18 +149,30 @@ function shuffled<T>(list: readonly T[], rnd: () => number): T[] {
  */
 export function layoutRun(puzzle: PuzzleDef, seed: string, spots: PuzzleSpots): LockLayout[] {
   const rnd = rotationRandom(`owl-park-puzzle|${puzzle.id}|${seed}`);
-  const decks = new Map<string, Array<Vec2 & Raised>>();
+  // Twins come from their own stream and decks, so a run's own pieces and code stay as they were dealt.
+  const twinRnd = rotationRandom(`owl-park-puzzle|${puzzle.id}|${seed}|too`);
+  const dealer = (random: () => number) => {
+    const decks = new Map<string, Array<Vec2 & Raised>>();
+    return (room: string): PieceSpot => {
+      let deck = decks.get(room);
+      if (!deck || deck.length === 0) {
+        const blockers = [...npcsIn(room).map((x) => x.pos), ...INTERACTABLES.filter((x) => x.room === room).map((x) => x.pos)];
+        const all = spots[room] ?? [];
+        const free = all.filter((p) => blockers.every((b) => distance(p, b) >= PIECE_CLEARANCE));
+        deck = shuffled(free.length ? free : all, random);
+        decks.set(room, deck);
+      }
+      const p = deck.pop() ?? { x: 0, y: 0 };
+      return { room, x: p.x, y: p.y, ...(p.top ? { top: p.top } : {}) };
+    };
+  };
+  const own = dealer(rnd);
+  const twin = dealer(twinRnd);
   const deal = (room: string): PuzzlePiece => {
-    let deck = decks.get(room);
-    if (!deck || deck.length === 0) {
-      const blockers = [...NPCS.filter((x) => x.room === room).map((x) => x.pos), ...INTERACTABLES.filter((x) => x.room === room).map((x) => x.pos)];
-      const all = spots[room] ?? [];
-      const free = all.filter((p) => blockers.every((b) => distance(p, b) >= PIECE_CLEARANCE));
-      deck = shuffled(free.length ? free : all, rnd);
-      decks.set(room, deck);
-    }
-    const p = deck.pop() ?? { x: 0, y: 0 };
-    return { room, x: p.x, y: p.y, ...(p.top ? { top: p.top } : {}) };
+    const piece: PuzzlePiece = own(room);
+    const too = Object.hasOwn(GOAL_ROOM_TOO, room) ? GOAL_ROOM_TOO[room] : undefined;
+    if (too && spots[too]?.length) piece.also = twin(too);
+    return piece;
   };
   return puzzle.locks.map((l) => {
     const post = deal(l.room);
@@ -485,7 +514,8 @@ export class PuzzleBook {
   }
 
   private reach(piece: PuzzlePiece, room: string, pos: Vec2, ground: number): boolean {
-    return piece.room === room && distance(pos, piece) <= PUZZLE_REACH && sameLevel(ground, piece);
+    const at = puzzlePieceIn(piece, room);
+    return !!at && distance(pos, at) <= PUZZLE_REACH && sameLevel(ground, at);
   }
 
   /** Read clue `n` of a code lock, standing at `pos` in `room` over `ground`: its symbol shows for the whole run. */

@@ -1,8 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { ROOMS } from '../rooms';
 import { parseClientFrame, parseServerFrame } from './edge';
-import { SNOWBALL_EVERY_MS, snowTints, snowsIn } from './snow';
+import { SNOWBALL_EVERY_MS, SNOW_FROM, snowSeason, snowTints, snowsIn } from './snow';
 import { isParkMessage } from './validate';
+
+describe('when the first snow starts (Logan, Nov 24: "Snow on Dec 1")', () => {
+  it('starts for everyone at midnight Eastern on Dec 1, and not a minute before', () => {
+    expect(SNOW_FROM).toBe('2026-12-01');
+    // 23:59 Eastern on Nov 30 is 04:59 UTC on Dec 1.
+    expect(snowSeason(Date.UTC(2026, 11, 1, 4, 59))).toBe(false);
+    expect(snowSeason(Date.UTC(2026, 11, 1, 5, 0))).toBe(true);
+    expect(snowSeason(Date.UTC(2026, 10, 24, 18, 0))).toBe(false);
+    expect(snowSeason(Date.UTC(2026, 11, 25, 12, 0))).toBe(true);
+  });
+});
 
 describe('where the first snow falls (OP-074, D6)', () => {
   it('falls outdoors: the lobby, the hub at the tree’s foot, the realms and their courses', () => {

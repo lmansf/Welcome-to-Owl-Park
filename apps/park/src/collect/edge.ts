@@ -1,4 +1,4 @@
-import { isNestId, parseTravelState, type BuyResult, type FurnitureGiftResult, type GiftResult, type Inventory, type ShopView, type TravelState } from '@owl-park/shared';
+import { isNestId, parseTravelState, type BuyResult, type EggRedeemReply, type FurnitureGiftResult, type GiftResult, type Inventory, type ShopView, type TravelState } from '@owl-park/shared';
 import type { EdgeTransport } from '../net/edge';
 import type { RoomConnection } from '../net/transport';
 import type { ActivityLink, CollectionService, CourseLink, FurnitureGiftReply, NestLink, QuestLink } from './service';
@@ -33,6 +33,25 @@ export class EdgeCollections implements CollectionService {
 
   async claimGift(): Promise<GiftResult> {
     return this.json<GiftResult>('/api/shop/gift', { method: 'POST' });
+  }
+
+  /** The room server checks the code's signature and keeps the ledger of taken codes (OP-260). */
+  async redeemEgg(code: string): Promise<EggRedeemReply> {
+    let res: Response;
+    try {
+      res = await this.transport.api('/api/redeem', { method: 'POST', body: JSON.stringify({ code }) });
+    } catch {
+      return { ok: false, reason: 'offline' };
+    }
+    if (res.status === 429) return { ok: false, reason: 'full' };
+    if (res.status === 503) return { ok: false, reason: 'closed' };
+    if (!res.ok) return { ok: false, reason: 'offline' };
+    try {
+      const body = (await res.json()) as EggRedeemReply;
+      return body.ok || ['have', 'bad', 'full', 'closed'].includes(body.reason) ? body : { ok: false, reason: 'offline' };
+    } catch {
+      return { ok: false, reason: 'offline' };
+    }
   }
 
   questLink(_room: string, conn: RoomConnection | null): QuestLink | null {

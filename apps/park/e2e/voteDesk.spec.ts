@@ -3,7 +3,7 @@ import { expect, test } from './fixtures';
 import { E2E_ADMIN_KEY, openPark, state } from './helpers';
 
 /**
- * The vote desk in the Great Hollow (OP-288), behind `?desk=1` (src/flags.ts), on the room server:
+ * The vote desk in the Great Hollow (OP-288), on for every visitor, on the room server:
  * it shows each realm's share of this month's Realm Vote in whole percents (never a count), as the
  * park's own /api/vote/shares says, and it moves on every page in the hall, on a computer and on a
  * phone, a moment after any owl votes. Its rules (where it stands, its words) are in
@@ -17,7 +17,7 @@ const HALL = { transport: 'edge', room: 'm3-hall', newmap: '1', spawn: 'default'
 async function hallPage(browser: Browser, phone: boolean): Promise<Page> {
   const ctx = await browser.newContext(phone ? { ...devices['Pixel 7'] } : { viewport: { width: 1280, height: 800 } });
   const page = await ctx.newPage();
-  await openPark(page, { ...HALL, desk: '1' });
+  await openPark(page, HALL);
   return page;
 }
 
@@ -43,10 +43,10 @@ async function voteAsTicketHolder(request: APIRequestContext, realm: string): Pr
 
 const deskOf = async (page: Page) => (await state(page)).desk;
 
-test.describe('the vote desk in the Great Hollow (OP-288, behind ?desk=1)', () => {
-  test('a plain address has no desk', async ({ page }) => {
+test.describe('the vote desk in the Great Hollow (OP-288)', () => {
+  test('a plain address has the desk', async ({ page }) => {
     await openPark(page, HALL);
-    expect((await state(page)).desk).toBeNull();
+    await expect.poll(async () => (await state(page)).desk?.at ?? null).toEqual({ x: expect.any(Number), y: expect.any(Number) });
   });
 
   test('it shows the park’s shares in percents, and moves on a computer and a phone a moment after an owl votes', async ({

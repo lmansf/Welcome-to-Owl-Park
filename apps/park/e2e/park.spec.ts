@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { cameraView, dist, frames, openGround, openPark, settleCamera, state, tapRoomPoint, toScreen, waitForArrival, walkAndStop, walkToDoor } from './helpers';
+import { actionButton, cameraView, dist, frames, openGround, openPark, settleCamera, state, tapRoomPoint, toScreen, waitForArrival, walkAndStop, walkToDoor } from './helpers';
 
 /** A finger drawn down the screen from (x, y), `by` pixels, in a few steps, then lifted. */
 async function swipeDown(page: Page, x: number, y: number, by: number): Promise<void> {
@@ -348,7 +348,7 @@ test.describe('single visitor', () => {
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-settings.png` });
     await page.reload();
     await page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('owl-park:settings') ?? '{}'))).toEqual({ thumbstick: !isMobile, calm: true, bubbles: true, sound: true, trail: true });
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('owl-park:settings') ?? '{}'))).toEqual({ thumbstick: !isMobile, calm: true, bubbles: true, sound: true, trail: true, text: 100 });
   });
 
   test('Feedback from the Menu takes a note, and typing in it never walks the owl, plays an emote or opens a screen', async ({ page }) => {
@@ -489,8 +489,9 @@ test.describe('the prompt at the owl (OP-344)', () => {
   test('what an owl can do where it stands shows at its own feet, with the key on a computer, and goes when it talks or walks off', async ({ page }) => {
     await openPark(page);
     const touch = await page.evaluate(() => matchMedia('(pointer: coarse)').matches);
-    // At the way in the owl stands in the moonbeam: the prompt says what Interact does there.
-    await expect.poll(async () => (await state(page)).promptShown, { timeout: 10_000 }).toBe(touch ? 'Bask in the moonbeam' : 'E: Bask in the moonbeam');
+    // At the leaves just inside the tree: the prompt says what Interact does there.
+    await walkAndStop(page, 1930, 820);
+    await expect.poll(async () => (await state(page)).promptShown, { timeout: 10_000 }).toBe(touch ? 'Flop into the leaves' : 'E: Flop into the leaves');
     // Out on the open floor nothing is in reach: no prompt.
     await walkAndStop(page, 2600, 880);
     await expect.poll(async () => (await state(page)).promptShown, { timeout: 10_000 }).toBeNull();
@@ -615,7 +616,11 @@ test.describe('a first flight where owls arrive (OP-347)', () => {
       { x: 3140, y: 1238 },
     ];
     const near = roots.map((p) => Math.hypot(last.x - p.x, last.y - p.y));
-    expect(Math.min(...near), 'the trail ends by an inner run\'s first root').toBeLessThan(260);
+    // By the root, or as far toward it as a trail goes: at most ten feathers (featherTrail.ts, TRAIL), and
+    // the way round the guardian at the heart of the hall is longer than ten feathers reach.
+    const owlTo = Math.min(...roots.map((p) => Math.hypot(s0.pos.x - p.x, s0.pos.y - p.y)));
+    const reached = Math.min(...near) < 260 || (s0.trail!.feathers.length >= 10 && Math.min(...near) < owlTo / 2);
+    expect(reached, `the trail ends by an inner run's first root, or more than halfway there (${last.x},${last.y})`).toBe(true);
     expect(s0.trail!.glints).toContain('play-roots');
 
     // Walked down to the roots: how to get up them, in this device's words.
@@ -908,5 +913,115 @@ test.describe('the painted egg (OP-261)', () => {
     const after = await state(page);
     expect(after.walking).toBe(false);
     expect(dist(after.pos, before)).toBeLessThan(2);
+  });
+});
+
+test.describe('Swap pet (OP-263)', () => {
+  /** A collection holding these pets, as if a code and the hatch had given them, kept the way the local mode keeps one. */
+  async function withPets(page: Page, cid: string, pets: string[]): Promise<void> {
+    await page.addInitScript(
+      ({ id, pets }) => {
+        const key = `owl-park:collection:${id}`;
+        if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ collectors: [], owned: pets.map((p) => [id, p, 'granted', 0]) }));
+      },
+      { id: cid, pets },
+    );
+  }
+
+  async function tapPet(page: Page, isMobile: boolean): Promise<void> {
+    await settleCamera(page);
+    const at = (await state(page)).pet!;
+    const p = await toScreen(page, at.x, at.y);
+    if (isMobile) await page.touchscreen.tap(p.x, p.y);
+    else await page.mouse.click(p.x, p.y);
+  }
+
+  const wornPet = async (page: Page) => (await state(page)).look.wear?.pet ?? null;
+
+  test('an owl with the egg and the bunny taps its pet and swaps egg, bunny, no pet, egg, and the choice lasts a reload', async ({ page, isMobile }) => {
+    test.slow(); // two page loads and a tap on the pet for each of four swaps: 43 s on a desktop runner, over 45 s on a busy phone one
+    const cid = 'e2e-pet-swap';
+    await withPets(page, cid, ['painted-egg~0', 'rainbow-bunny~0']);
+    const open = () => openPark(page, { collector: cid, tz: 'UTC', room: 'hub' });
+    await open();
+    await expect.poll(() => page.evaluate(() => window.owlPark.equip('painted-egg~0'))).toBe(true);
+    await expect.poll(async () => (await state(page)).pet).not.toBeNull();
+    expect((await state(page)).actions).not.toContain('pet:swap');
+    await tapPet(page, isMobile);
+    // The egg still says when it hatches, and Swap pet is offered beside it.
+    await expect.poll(async () => (await state(page)).egg.said).toMatch(/^Hatches in \d+ days$/);
+    await expect.poll(async () => (await state(page)).actions).toContain('pet:swap');
+    expect((await state(page)).walking).toBe(false);
+    const swap = actionButton(page, 'pet:swap');
+    await swap.first().click();
+    await expect.poll(() => wornPet(page)).toBe('rainbow-bunny~0');
+    await expect(page.locator('[data-toasts]')).toContainText('Rainbow Bunny is walking with you now');
+    await swap.first().click();
+    await expect.poll(() => wornPet(page)).toBeNull();
+    // From no pet the presses go round every pet the owl holds (every owl also holds the park’s Halloween
+    // Bat), each once, and come back to the egg.
+    const held = await page.evaluate(() => (window.owlPark.collection()?.owned ?? []).filter((v) => /^(painted-egg|rainbow-bunny|bat)~/.test(v)));
+    expect(held).toEqual(expect.arrayContaining(['painted-egg~0', 'rainbow-bunny~0']));
+    const seen: string[] = [];
+    for (let i = 0; i < held.length && !seen.includes('painted-egg~0'); i++) {
+      const was = await wornPet(page);
+      await swap.first().click();
+      await expect.poll(() => wornPet(page)).not.toBe(was);
+      const now = (await wornPet(page))!;
+      expect(held).toContain(now);
+      expect(seen).not.toContain(now);
+      seen.push(now);
+    }
+    expect(seen).toContain('painted-egg~0');
+    await expect.poll(() => wornPet(page)).toBe('painted-egg~0');
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-pet-swap.png` });
+    // Swapped to the bunny, the page is opened again: the bunny is still on.
+    await swap.first().click();
+    await expect.poll(() => wornPet(page)).toBe('rainbow-bunny~0');
+    await open();
+    await expect.poll(() => wornPet(page)).toBe('rainbow-bunny~0');
+    // Swap pet goes away by itself after a few seconds.
+    await tapPet(page, isMobile);
+    await expect.poll(async () => (await state(page)).actions).toContain('pet:swap');
+    await expect.poll(async () => (await state(page)).actions, { timeout: 10_000 }).not.toContain('pet:swap');
+  });
+
+  test('a new owl, whose one pet is the park’s Bat, is offered no Swap pet when it taps it', async ({ page, isMobile }) => {
+    const cid = 'e2e-pet-swap-one';
+    // Nothing but what every owl is given: the starter pieces and the Halloween Bat, its one pet.
+    await withPets(page, cid, []);
+    await openPark(page, { collector: cid, tz: 'UTC', room: 'hub' });
+    await expect.poll(() => page.evaluate(() => (window.owlPark.collection()?.owned ?? []).includes('bat~0'))).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.owlPark.equip('bat~0'))).toBe(true);
+    await expect.poll(async () => (await state(page)).pet).not.toBeNull();
+    await tapPet(page, isMobile);
+    await page.waitForTimeout(500);
+    expect((await state(page)).actions).not.toContain('pet:swap');
+    expect(await wornPet(page)).toBe('bat~0');
+  });
+});
+
+test.describe('Pets stay smaller than their owls (OP-433)', () => {
+  test('a worn pet draws at the owls’ scale, under half its owl’s width, on putting it on and after a reload', async ({ page }) => {
+    const cid = 'e2e-pet-size';
+    // Nothing but what every owl is given: the park’s Halloween Bat is its one pet.
+    await page.addInitScript((id) => {
+      const key = `owl-park:collection:${id}`;
+      if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ collectors: [], owned: [] }));
+    }, cid);
+    const open = () => openPark(page, { collector: cid, tz: 'UTC', room: 'hub' });
+    // A pet's 90 x 90 canvas at the owls' scale against a great horned owl's 200-wide one: 0.45 of the owl's canvas.
+    const sized = async () => {
+      await expect.poll(async () => (await state(page)).petSize).not.toBeNull();
+      const s = (await state(page)).petSize!;
+      expect(s.w / s.owlW).toBeCloseTo(0.45, 2);
+      expect(s.h / s.owlW).toBeCloseTo(0.45, 2);
+    };
+    await open();
+    await expect.poll(() => page.evaluate(() => window.owlPark.equip('bat~0'))).toBe(true);
+    await sized();
+    await open();
+    await expect.poll(async () => (await state(page)).look.wear?.pet ?? null).toBe('bat~0');
+    await sized();
   });
 });

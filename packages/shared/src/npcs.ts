@@ -76,6 +76,15 @@ export const NEW_MAP_PLACE_NAMES: Readonly<Record<string, string>> = {
 };
 
 /**
+ * The names quest text gives places on the new map. They are the new map's own names but for `hub`:
+ * since the Party Grove was folded into the Great Hollow (Nov 19, "Fold into the hub"), the hub's
+ * quests, its owls and its things are met in the hollow (goalMatches, NEW_MAP_HOMES), so a step that
+ * says "the great tree" reads as the Great Hollow there, while the doorway still out to the old grove
+ * keeps its own name.
+ */
+const QUEST_PLACE_NAMES: Readonly<Record<string, string>> = { ...NEW_MAP_PLACE_NAMES, hub: 'the Great Hollow' };
+
+/**
  * A place's name as an owl walking `map` is shown it: the new map's own where it has one. A room of the
  * new map alone (its id says so, `m3-`) has that name whichever park the owl walks: a course's way out
  * leads into the Great Hollow on any of them.
@@ -93,7 +102,7 @@ const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 export function placeWords(text: string, map: number): string {
   if (map !== 3) return text;
   let out = text;
-  for (const [room, name] of Object.entries(NEW_MAP_PLACE_NAMES)) {
+  for (const [room, name] of Object.entries(QUEST_PLACE_NAMES)) {
     const old = PLACE_NAMES[room];
     if (!old || old === name) continue;
     out = out.split(old).join(name).split(capital(old)).join(capital(name));
@@ -110,7 +119,7 @@ export const NPCS: readonly NpcDef[] = [
     pos: { x: 2210, y: 700 },
     facing: 1,
     look: { body: '#5C4033', belly: '#E8D8B8', accent: '#C9A227', wear: { head: 'mortarboard~0', face: 'half-moon-specs~0', neck: 'moon-pendant~0' } },
-    greetings: ['Welcome in. The tree has room for everyone.', 'Every leaf in this hollow has a story. Some are even true.', 'Mind the moonbeam. It likes to be looked at.'],
+    greetings: ['Welcome in. The tree has room for everyone.', 'Every leaf in this hollow has a story. Some are even true.', 'Have you been to the telescope? The moon likes to be looked at.'],
     idle: ['nod', 'hoot'],
   },
   {
@@ -258,7 +267,7 @@ export const NPCS: readonly NpcDef[] = [
     pos: questOwlAt('glass'),
     facing: 1,
     look: { body: '#5B6E99', belly: '#E6ECF7', accent: '#9FD0FF', wear: { head: 'moon-circlet~0', neck: 'pearl-necklace~0', pet: 'dragonfly~0' } },
-    greetings: ['Through that door the light comes in every colour at once.', 'Prism keeps count of the panes out there. I keep count of the owls.', 'Stand in the moonbeam a moment. It is warm.'],
+    greetings: ['Through that door the light comes in every colour at once.', 'Prism keeps count of the panes out there. I keep count of the owls.', 'The warm air at the heart lifts you right up. Jump in it and hold on.'],
     idle: ['nod', 'tilt'],
   },
 ];
@@ -269,6 +278,45 @@ export function getNpc(id: string): NpcDef | undefined {
   return Object.hasOwn(BY_ID, id) ? BY_ID[id] : undefined;
 }
 
-export function npcsIn(room: string): NpcDef[] {
-  return NPCS.filter((n) => n.room === room);
+/**
+ * Where an owl lives on the new map (map 3) when that is not its own room: the Party Grove's residents
+ * moved into the Great Hollow when the Grove was folded into it (Nov 19, the owner's "The party grove
+ * doesn't make sense. We already have a central hub" and "Fold into the hub"). Today's park keeps them
+ * where they were, in its plaza (`hub`). Elder Bramble, keeper of the tree, welcomes owls just below
+ * where they come down into the hollow from the Treetop Commons; Pip, who steps into feather tag when
+ * an owl plays alone (party/tag.ts), waits by the tag ring's east end, where Pip's round starts.
+ */
+export const NEW_MAP_HOMES: Readonly<Record<string, { room: string; pos: Vec2; facing: 1 | -1 }>> = {
+  bramble: { room: 'm3-hall', pos: { x: 2640, y: 720 }, facing: 1 },
+  pip: { room: 'm3-hall', pos: { x: 3640, y: 1500 }, facing: -1 },
+};
+
+const newHome = (id: string) => (Object.hasOwn(NEW_MAP_HOMES, id) ? NEW_MAP_HOMES[id] : undefined);
+
+/**
+ * The park's owls standing in `room` on the park an owl walks (`map`): an owl that moved on the new map
+ * (NEW_MAP_HOMES) stands only in its new home there, and only in its own room on the others, but a room
+ * of the new map alone (`m3-`, as placeShown has it) shows its owls to an owl of any park, one that came
+ * out of a course into the Great Hollow too. With no map (the room server, which serves every park) an
+ * owl stands in both, so talking to it, handing a quest in or hooting for it works wherever a page shows it.
+ */
+export function npcsIn(room: string, map?: number): NpcDef[] {
+  const out: NpcDef[] = [];
+  for (const n of NPCS) {
+    const home = newHome(n.id);
+    if (n.room === room && (!home || map !== 3)) out.push(n);
+    if (home && home.room === room && (map === undefined || map === 3 || room.startsWith('m3-'))) out.push({ ...n, ...home });
+  }
+  return out;
+}
+
+/** An owl as it stands in `room` (its spot there), if it stands there on the park `map` (any park with none). */
+export function npcIn(id: string, room: string, map?: number): NpcDef | undefined {
+  return npcsIn(room, map).find((n) => n.id === id);
+}
+
+/** The room an owl stands in on the park `map`: its new home on the new map, else its own room. */
+export function npcRoomOn(id: string, map: number): string | undefined {
+  const home = newHome(id);
+  return map === 3 && home ? home.room : getNpc(id)?.room;
 }

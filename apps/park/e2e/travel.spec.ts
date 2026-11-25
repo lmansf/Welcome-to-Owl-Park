@@ -116,7 +116,7 @@ test.describe('travel from the map (OP-130)', () => {
     await expect(card).toContainText('Enter the park through the gate first.');
   });
 
-  test('on the new map the Party Grove is a place like any other: signed back into the Great Hollow, one sign at a time, and travel goes there', async ({ page }) => {
+  test('on the new map an owl still in the Party Grove is signed back into the Great Hollow, one sign at a time, and the map has no Party Grove since it folded in (Nov 21)', async ({ page }) => {
     test.skip(isEdge(), 'on this device');
     await page.addInitScript(() => {
       try {
@@ -131,11 +131,16 @@ test.describe('travel from the map (OP-130)', () => {
     // rest at the screen's edges, on a phone or a computer.
     await expect.poll(async () => (await state(page)).signShown, { timeout: 10_000 }).toBe('Back into the Great Hollow');
     expect(await page.locator('#hud .hint').count()).toBeLessThanOrEqual(1);
-    // Through the trunk's door into the Great Hollow, and travel back from the map, never walked to before.
+    // Through the trunk's door into the Great Hollow, where the door grew over behind it: its owls and games
+    // are in the hall now, so the map has no Party Grove to travel back to, and the hall no sign out to it.
     await walkToDoor(page, 'to-lobby');
     await inRoom(page, 'm3-hall');
-    await travelTo(page, 'hub');
-    await inRoom(page, 'hub');
+    expect((await state(page)).doors.some((d) => d.id === 'to-party')).toBe(false);
+    const menu = page.getByRole('dialog', { name: 'Menu' });
+    await page.locator('[data-menu-btn]').click();
+    await menu.locator('[data-tab="map"]').click();
+    await expect(menu.locator('button.pin[data-place="m3-hall"]')).toBeVisible();
+    await expect(menu.locator('button.pin[data-place="hub"]')).toHaveCount(0);
   });
 
   test('M opens the map; its places and the travel button answer keys', async ({ page, isMobile }) => {
@@ -194,6 +199,7 @@ test.describe('travel from the map (OP-130)', () => {
 
   test('with the room out of reach the map still travels, trip after trip, once the owl has walked through the turnstiles (OP-358)', async ({ page }) => {
     test.skip(!isEdge(), 'a page the Worker answers while no room lets its owl in');
+    test.slow(); // five rooms come into, each one's art drawn before the Worker is asked: 49 s on a quiet runner
     // A network that lets pages through and not sockets: every room's socket closes as it opens, while
     // the Worker goes on answering. It has seen this owl walk into no room, so its map says "not
     // through the gate"; the page, which walked the owl through, is the one that knows.
@@ -205,8 +211,17 @@ test.describe('travel from the map (OP-130)', () => {
         // A browser that keeps nothing walks today's park.
       }
     });
-    /** The Worker's answer about the map, asked as each room is come into: the test goes on only once the page has had it. */
-    const mapAnswered = () => page.waitForResponse((r) => r.url().includes('/api/travel'), { timeout: 30_000 });
+    /**
+     * The Worker's answer about the map, asked as each room is come into: the test goes on only once the page has had it.
+     * Asked only once the room's art is drawn, in software on a CI runner: a busy runner has taken over 30 s for the
+     * treehouse clearing, so the wait is 60 s, and one that runs out says where the page was.
+     */
+    const mapAnswered = () =>
+      page.waitForResponse((r) => r.url().includes('/api/travel'), { timeout: 60_000 }).catch(async (e: unknown) => {
+        const s = await page.evaluate(() => window.owlPark?.state() ?? null).catch(() => null);
+        const where = s ? { room: s.room, connected: s.connected, travel: s.travel } : 'no room scene';
+        throw new Error(`no answer from /api/travel within 60 s; the page: ${JSON.stringify(where)}`, { cause: e });
+      });
     let answered = mapAnswered();
     // At the front gate, outside the turnstiles, wandering alone.
     const q = new URLSearchParams({ transport: 'edge', room: 'lobby', kit: '0', art: 'old' });

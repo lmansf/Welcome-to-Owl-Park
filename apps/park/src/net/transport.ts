@@ -1,4 +1,4 @@
-import type { PartyKey, PartyOp, ServerParty, ServerStump, ServerTag, TagOp } from '@owl-park/shared';
+import type { PartyKey, PartyOp, ServerParty, ServerStump, ServerTag, ServerTagPrize, TagOp } from '@owl-park/shared';
 import type { Air, ClosedView, EscapeAct, FeedbackDraft, LineStatus, OwlAccount, OwlLook, OwlPicture, ParkMessage, PlayerState, PortraitLook, PuzzleSymbol, RealmsSettings, ReferralRefusal, ReferralView, ServerEscape, Vec2, Walk } from '@owl-park/shared';
 import type { ActivityLink, ActivityPushes, CourseLink, NestLink, NestPushes, QuestLink, QuestPushes } from '../collect/service';
 import type { TicketLink } from './ticketLinks';
@@ -69,10 +69,12 @@ export interface RoomHandlers extends QuestPushes, ActivityPushes, NestPushes {
   onStump?(frame: ServerStump): void;
   /** A party game as it stands, an owl's input in its minigame, or what it paid (OP-314). */
   onParty?(frame: ServerParty): void;
-  /** The party game's room turned this owl away, or its game is over (OP-314): back to the Party Grove. */
+  /** The party game's room turned this owl away, or its game is over (OP-314): back to the Old Stump in the Great Hollow. */
   onPartyClosed?(): void;
-  /** Feather tag in the Party Grove (OP-403): the game as it now stands, or why the room turned this owl's frame down. */
+  /** Feather tag in the Great Hollow (OP-403): the game as it now stands, or why the room turned this owl's frame down. */
   onTag?(frame: ServerTag): void;
+  /** What a finished game of feather tag earned this owl (OP-434). */
+  onTagPrize?(frame: ServerTagPrize): void;
 }
 
 /** Feather tag (OP-403) through the room server: step in, step out, pass the feather, or ask for the game. */
@@ -87,7 +89,7 @@ export interface TagLink {
 
 /** The party game (OP-314) through the room server: what a page asks at the stump and in a game. */
 export interface PartyLink {
-  send(op: PartyOp, more?: { bots?: boolean; k?: PartyKey; v?: number }): void;
+  send(op: PartyOp, more?: { bots?: boolean; standin?: boolean; k?: PartyKey; v?: number }): void;
 }
 
 /** The sealed hollow's steps (OP-310), checked by the room server; the answer's times on this page's clock. */

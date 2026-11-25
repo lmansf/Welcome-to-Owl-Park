@@ -157,14 +157,15 @@ describe('LocalCollections', () => {
     expect(total).toBe(LEAF_FEATHERS_PER_DAY);
   });
 
-  it('reaches the leaf pile up on the lantern beam only from the beam, and a pile on the floor only from the floor (OP-084)', async () => {
+  it('reaches a leaf pile up on a perch only from the perch, and a pile on the floor only from the floor (OP-084)', async () => {
     const { page, clock } = rig();
-    const ground = { top: 80 };
-    const beam = page.questLink('hub', null, {}, () => ({ x: 930, y: 696 }), () => ground.top);
-    // On the bench under it: out of reach. Up on the beam: a flop.
-    expect(await beam.use('hub-leaves-beam')).toMatchObject({ ok: false, reason: 'far' });
-    ground.top = 264;
-    expect((await beam.use('hub-leaves-beam')).ok).toBe(true);
+    const ground = { top: 0 };
+    const log = page.questLink('m3-stair-3', null, {}, () => ({ x: 125, y: 770 }), () => ground.top);
+    // On the floor under the diner's log end: out of reach. Up on the log: a flop.
+    expect(await log.use('m3-stair-3-leaves-log')).toMatchObject({ ok: false, reason: 'far' });
+    ground.top = 64;
+    expect((await log.use('m3-stair-3-leaves-log')).ok).toBe(true);
+    ground.top = 80;
     clock.now += USE_COOLDOWN_MS;
     const floor = page.questLink('hub', null, {}, () => ({ x: 1930, y: 820 }), () => ground.top);
     expect(await floor.use('hub-leaves-1')).toMatchObject({ ok: false, reason: 'far' });

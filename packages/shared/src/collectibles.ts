@@ -341,7 +341,7 @@ export const EMOTE_IDS: readonly string[] = CATALOGUE.filter((i) => i.kind === '
 
 /**
  * Emotes every owl plays without owning them: no catalogue item, nothing kept in a collection, no
- * quest counts them. `look` is the head-turn look around (OP-289), shown in the park behind ?look=1.
+ * quest counts them. `look` is the head-turn look around (OP-289), shown in the park for every owl.
  */
 export const FREE_EMOTES: readonly string[] = ['look'];
 

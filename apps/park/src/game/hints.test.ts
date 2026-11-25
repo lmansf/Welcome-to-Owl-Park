@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ROOMS, groundOf } from '@owl-park/shared/rooms';
-import { SIDE_HINT_OVER, SIGN_HOLD, SIGN_REACH, doorHintTarget, farSignX, nearTargets, nearestOffSides, placeHints, signFocus, signWaits, signX, touchBottom, type ScreenBox, type ViewRect, CHIP_WORDS, sideChipWords } from './hints';
+import { CHIP_GAP, chipBox, chipReach, type ScreenRect, SIDE_HINT_OVER, SIGN_HOLD, SIGN_REACH, doorHintTarget, farSignX, nearTargets, nearestOffSides, placeHints, signFocus, signWaits, signX, touchBottom, type ScreenBox, type ViewRect, CHIP_WORDS, sideChipWords } from './hints';
 
 // A 1000 x 600 screen showing room pixels 1000-2000 by 0-600 (one CSS pixel per room pixel).
 const view: ViewRect = { x: 1000, y: 0, w: 1000, h: 600 };
@@ -56,6 +56,54 @@ describe('placeHints', () => {
   });
 });
 
+describe('chips keep off the stage quiz (OP-435)', () => {
+  // A 1440 x 813 screen; the quiz card at the top right, as the HUD lays it on a computer (activities.ts: 380 wide, 62 down).
+  const wide: ScreenBox = { w: 1440, h: 813, top: 64, bottom: 84, side: 30 };
+  const seen: ViewRect = { x: 1000, y: 0, w: 1440, h: 813 };
+  const card: ScreenRect = { left: 1048, top: 62, right: 1428, bottom: 330 };
+  const meets = (a: ScreenRect, b: ScreenRect) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+
+  it('a doorway off to the right, level with answer B, no longer sits on the card (fails on main: it sat at y 200)', () => {
+    const t = { id: 'to-canopy', x: 4000, y: 200 };
+    const [was] = placeHints([t], seen, wide);
+    expect(meets(chipBox(was!, wide.w), card)).toBe(true); // the fault as filed
+    const [p] = placeHints([t], seen, wide, 52, [card]);
+    expect(p!.x).toBe(was!.x);
+    expect(meets(chipBox(p!, wide.w), card)).toBe(false);
+    expect(chipBox(p!, wide.w).top).toBeGreaterThanOrEqual(card.bottom + CHIP_GAP);
+    expect(p!.y).toBeLessThanOrEqual(wide.h - wide.bottom);
+  });
+
+  it('a chip on the bottom edge slides along it off the answer plates', () => {
+    const plates: ScreenRect[] = [
+      { left: 520, top: 700, right: 690, bottom: 780 },
+      { left: 700, top: 700, right: 870, bottom: 780 },
+      { left: 880, top: 700, right: 1050, bottom: 780 },
+    ];
+    const reach = chipReach('Down to Neon Roost, the arcade');
+    const [p] = placeHints([{ id: 'down', x: 1780, y: 2000, reach }], seen, wide, 52, plates);
+    expect(p!.y).toBe(wide.h - wide.bottom);
+    for (const r of plates) expect(meets(chipBox({ ...p!, reach }, wide.w), { left: r.left - CHIP_GAP, top: r.top - CHIP_GAP, right: r.right + CHIP_GAP, bottom: r.bottom + CHIP_GAP })).toBe(false);
+  });
+
+  it("on a phone, where the card runs the screen's width, a chip on the top edge goes below it", () => {
+    const phone: ScreenBox = { w: 390, h: 844, top: 64, bottom: 160, side: 30 };
+    const v: ViewRect = { x: 1000, y: 1000, w: 390, h: 844 };
+    const across: ScreenRect = { left: 12, top: 62, right: 378, bottom: 300 };
+    const [p] = placeHints([{ id: 'up', x: 1200, y: 100 }], v, phone, 52, [across]);
+    expect(meets(chipBox(p!, phone.w), across)).toBe(false);
+  });
+
+  it('with nothing to keep off, every chip is where it always was', () => {
+    const ts = [
+      { id: 'a', x: 4000, y: 200 },
+      { id: 'b', x: 200, y: 700 },
+      { id: 'c', x: 1500, y: 2000 },
+    ];
+    expect(placeHints(ts, seen, wide, 52, [])).toEqual(placeHints(ts, seen, wide));
+  });
+});
+
 describe('hints seen from the side (an Updraft Canopy room, as an owl stands by the hatch up)', () => {
   const ROOM = ROOMS['canopy-2a']!;
   const GROUND = groundOf(ROOM);
@@ -107,8 +155,8 @@ describe('hints seen from above (the Great Hollow, a huge oval of doorways)', ()
   });
 
   it('always keeps a doorway it is told to keep, however far', () => {
-    const near = nearestOffSides(doorways, phone, 2, new Set(['to-party']));
-    expect(near.map((t) => t.id)).toContain('to-party');
+    const near = nearestOffSides(doorways, phone, 2, new Set(['to-market']));
+    expect(near.map((t) => t.id)).toContain('to-market');
   });
 });
 
@@ -122,7 +170,7 @@ describe('one doorway sign at a time, seen from above (OP-309)', () => {
   });
 
   it('shows the doorway the owl stands by, and only that one', () => {
-    expect(signFocus(doorways, HALL.spawns['from-party']!, null)).toBe('to-party');
+    expect(signFocus(doorways, HALL.spawns['from-grove']!, null)).toBe('to-grove');
     expect(signFocus(doorways, HALL.spawns['from-lobby']!, null)).toBe('up');
     expect(signFocus(doorways, HALL.spawns['from-under']!, null)).toBe('down');
     expect(signFocus(doorways, { x: HALL.size.w / 2, y: HALL.spawns['from-lobby']!.y + SIGN_REACH + 500 }, null)).toBeNull();
@@ -130,9 +178,9 @@ describe('one doorway sign at a time, seen from above (OP-309)', () => {
 
   it('shows the doorway a tap walk is going to, however far, over the one the owl passes', () => {
     const market = doorways.find((d) => d.id === 'to-market')!;
-    expect(signFocus(doorways, HALL.spawns['from-party']!, { x: market.x - 60, y: market.y })).toBe('to-market');
+    expect(signFocus(doorways, HALL.spawns['from-grove']!, { x: market.x - 60, y: market.y })).toBe('to-market');
     // A walk to open floor names no doorway: the nearest by the owl shows.
-    expect(signFocus(doorways, HALL.spawns['from-party']!, { x: HALL.size.w / 2, y: HALL.size.h / 2 })).toBe('to-party');
+    expect(signFocus(doorways, HALL.spawns['from-grove']!, { x: HALL.size.w / 2, y: HALL.size.h / 2 })).toBe('to-grove');
   });
 
   it('keeps the sign showing between two near doorways until another is clearly nearer, so they never flicker', () => {
@@ -167,7 +215,7 @@ describe('the doorway an owl came in by keeps its sign back (OP-337)', () => {
 
   it('still shows it for a walk to that doorway, and shows any other doorway in reach as ever', () => {
     expect(signFocus(doorways, landing, { x: up.x, y: up.y + 40 }, null, 'up')).toBe('up');
-    expect(signFocus(doorways, HALL.spawns['from-party']!, null, null, 'up')).toBe('to-party');
+    expect(signFocus(doorways, HALL.spawns['from-grove']!, null, null, 'up')).toBe('to-grove');
   });
 
   it('waits until the owl has been out of the sign’s reach once, and not after', () => {

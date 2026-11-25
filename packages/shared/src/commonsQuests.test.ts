@@ -6,14 +6,15 @@
 import { describe, expect, it } from 'vitest';
 import { HALL_COMMONS, HALL_ID, HALL_ROOM, clearOfRoots, courseDoor, realmDoor } from '../rooms/hollowHall';
 import { distance, isWalkable } from './geometry';
-import { commonsS, HALL_LEAVES, HALL_MOONBEAMS, ringAt, voteAt, type HallLevel } from './hollowOval';
+import { commonsS, HALL_LEAVES, HALL_RINGS, ringAt, voteAt, type HallLevel } from './hollowOval';
 import { INTERACTABLES } from './interactables';
-import { NPCS, NPC_TALK_RADIUS, npcsIn, placeName, placeShown } from './npcs';
+import { NPCS, NPC_TALK_RADIUS, placeName, placeShown } from './npcs';
 import { DAILY_POOL, QUESTS, TOWN_NPCS, WEEKLY_POOL } from './questCatalog';
 import { stepTexts } from './quests';
 
 const LEVELS = HALL_COMMONS.map((c) => c.level);
-const hallOwls = npcsIn(HALL_ID);
+// The Commons' own quest owls (the Party Grove's Bramble and Pip, who moved in on Nov 19, are the hollow's too: hollowResidents.test.ts).
+const hallOwls = NPCS.filter((n) => n.room === HALL_ID);
 
 /** The Commons a point belongs to: the one whose middle, round the rim, is nearest it. */
 function commonsOf(p: { x: number; y: number }): HallLevel {
@@ -36,10 +37,10 @@ describe("the Great Hollow's quest owls (OP-281)", () => {
     }
   });
 
-  it('keep clear of the leaf piles, moonbeams, doorways, landings and vote stones, so no prompt sits on another', () => {
+  it('keep clear of the leaf piles, plaza rings, doorways, landings and vote stones, so no prompt sits on another', () => {
     const things = [
       ...HALL_LEAVES.map((l) => ['leaves ' + l.id, l.pos] as const),
-      ...HALL_MOONBEAMS.map((m) => ['moonbeam ' + m.id, m.pos] as const),
+      ...HALL_RINGS.map((m) => ['ring ' + m.id, m.pos] as const),
       ...HALL_ROOM.doors.flatMap((d) => [['door ' + d.id, { x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2 }] as const, ...(d.labelAt ? [['sign ' + d.id, d.labelAt] as const] : [])]),
       ...Object.entries(HALL_ROOM.spawns).map(([id, p]) => ['landing ' + id, p] as const),
       ...LEVELS.filter((l) => HALL_COMMONS.find((c) => c.level === l)!.votesFor).map((l) => ['vote stone ' + l, voteAt(l)] as const),

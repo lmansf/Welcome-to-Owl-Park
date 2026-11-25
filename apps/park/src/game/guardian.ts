@@ -1,5 +1,5 @@
 /**
- * The guardian alive at the heart of the Great Hollow (OP-359; behind `?guardian=1`, flags.ts).
+ * The guardian alive at the heart of the Great Hollow (OP-359; on for every visitor since Nov 20).
  *
  * The park's story makes its guardians colossal and living. Until this the great horned owl was an
  * idol about four owls tall on the hall's rim. Here it sits at the heart of the hall, about nine owls
@@ -64,6 +64,20 @@ export const GUARDIAN_AT: Vec2 = { x: HALL_MIDDLE, y: RUN_Y + 142 };
 export const GUARDIAN_SCALE = 1.06;
 /** The room it lives in. */
 export const GUARDIAN_ROOM = HALL_ROOM.id;
+
+/**
+ * How often its parts are put together into the one picture it is drawn as (guardianView.ts): at most
+ * every `ms`, but a blink or a waking (its lids) at once. Putting it together redraws a picture as big as
+ * the guardian with its wings open, and did so every frame: on a phone the way into the Great Hollow
+ * lagged (Logan, Nov 20). Its breath, its beat and its head move slowly enough that 30 a second shows
+ * no step.
+ */
+export const COMPOSE = { ms: 1000 / 30 } as const;
+
+/** Whether to put its parts together now: the first time, when its lids change, or once `COMPOSE.ms` has passed. */
+export function composeDue(last: { at: number; lids: Lids } | null, now: number, lids: Lids): boolean {
+  return last === null || last.lids !== lids || now - last.at >= COMPOSE.ms - 1;
+}
 
 /** A point of the painting, in the room. */
 export function inRoom(p: Vec2, at: Vec2 = GUARDIAN_AT, scale = GUARDIAN_SCALE): Vec2 {

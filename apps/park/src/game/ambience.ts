@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { KIT_ART, ROOM_W, WAY_OUT_DOOR, idolRealms, kitFilesOf, seenFromSide, snowTints, snowsIn, type RoomDef } from '@owl-park/shared';
+import { KIT_ART, ROOM_W, WAY_OUT_DOOR, idolRealms, kitFilesOf, seenFromSide, snowSeason, snowTints, snowsIn, type RoomDef } from '@owl-park/shared';
 import { flagOn } from '../flags';
 import { ANCHORS } from '../rooms';
 import { ART, blockadeKey } from './art';
@@ -192,9 +192,9 @@ export function addSetPieces(
     const sx = guardian.scaleX * k;
     const sy = guardian.scaleY * k;
     guardian.setScale(sx, sy);
-    // Where the guardian itself is alive at the heart of the room (OP-359, behind ?guardian=1), this one on
+    // Where the guardian itself is alive at the heart of the room (OP-359), this one on
     // the rim is its carving: one tone of wood, and still. The living owl is not in the room twice.
-    const carving = room.id === GUARDIAN_ROOM && flagOn('guardian') ? carvedTexture(scene) : null;
+    const carving = room.id === GUARDIAN_ROOM ? carvedTexture(scene) : null;
     if (!carving) scene.tweens.add({ targets: guardian, scaleY: sy * 1.015, scaleX: sx * 0.995, duration: 4200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     scene.tweens.add({ targets: glow, alpha: 0.48, scaleX: 5.4 * k, duration: 3600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     tappable(guardian, 'grove');
@@ -415,9 +415,10 @@ export function addAmbience(scene: Phaser.Scene, room: RoomDef): Ambience {
       .setDepth(h + 20);
     drifting.push(rain);
   }
-  // The first snow (OP-074, D6, behind ?snow=1): falling in every room open to the sky (snowsIn), and
-  // seen from above lying thin on the floor. Drawn in code: no painted snow until its spend is approved.
-  const snowing = flagOn('snow') && snowsIn(room);
+  // The first snow (OP-074, D6): falling in every room open to the sky (snowsIn), and seen from above
+  // lying thin on the floor. For everyone from Dec 1 (snowSeason), and before then on ?snow=1. Drawn in
+  // code: no painted snow until its spend is approved.
+  const snowing = (snowSeason(Date.now()) || flagOn('snow')) && snowsIn(room);
   if (snowing) {
     const snow = scene.add
       .particles(0, 0, 'fx-dot', {

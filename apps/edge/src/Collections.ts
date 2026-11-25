@@ -16,6 +16,7 @@
  */
 import { DurableObject } from 'cloudflare:workers';
 import {
+  redeemEgg,
   ArcadeBook,
   ClimbBook,
   CollectionBook,
@@ -54,6 +55,7 @@ import {
   type RunResult,
   type RunSettled,
   type BuyResult,
+  type EggRedeemResult,
   type FeedbackDraft,
   type FeedbackLadderState,
   type FurnitureGiftResult,
@@ -83,10 +85,14 @@ import {
   type TaskView,
   type Vec2,
   type Wear,
+  payTagPrize,
+  type TagPrizeResult,
+  type TagTier,
 } from '@owl-park/shared';
 import { AccountBook, type CarriedEmail, type GoogleFor, type GoogleLink, type LinkKind, type Protected, type Restored } from './accountBook';
 import { ReferralBook, type Credited, type InviteResult } from './referralBook';
 import { TravelBook } from './travelBook';
+import { EggCodeBook } from './eggCodeBook';
 import { CollectLog, cleanVisit, collectibleType, furnitureId, logConfig, logRoom, type CollectibleType, type PlayEventData, type PurchaseData, type Visit } from './collectLog';
 import { FeedbackBox, thankForNote, type FeedbackAdd, type FeedbackRow, type FeedbackStatus } from './feedbackBox';
 import { ParkStats, type Sighting, type StatsLook } from './parkStats';
@@ -145,6 +151,7 @@ export class Collections extends DurableObject<Env> {
   /** Bring a friend (OP-056): who brought whom, and the free Day Tickets waiting. */
   private readonly referrals: ReferralBook;
   private readonly travel: TravelBook;
+  private readonly eggCodes: EggCodeBook;
   private readonly log: CollectLog;
   private readonly stats: ParkStats;
   /** The visit the call in progress came in, as its caller said (`during`), for the log's rows. */
@@ -173,6 +180,7 @@ export class Collections extends DurableObject<Env> {
     this.accounts = new AccountBook(sql, randomBytes);
     this.referrals = new ReferralBook(sql, secureToken);
     this.travel = new TravelBook(sql);
+    this.eggCodes = new EggCodeBook(sql);
   }
 
   // ---------- the collection log (OP-107) ----------
@@ -326,6 +334,14 @@ export class Collections extends DurableObject<Env> {
     return this.during(visit, () => this.book.buy(cid, variant, Date.now()));
   }
 
+  /**
+   * An egg code (OP-260), already checked against the portfolio site's key by the Worker: its id taken
+   * once for the whole park and the painted egg given, here in one step so two owls can't both take it.
+   */
+  async redeemEgg(cid: string, id: string, visit?: Visit): Promise<EggRedeemResult> {
+    return this.during(visit, () => redeemEgg(this.book, this.eggCodes, cid, id, Date.now()));
+  }
+
   async claimGift(cid: string, visit?: Visit): Promise<GiftResult> {
     return this.during(visit, () => this.book.claimGift(cid, Date.now()));
   }
@@ -356,11 +372,12 @@ export class Collections extends DurableObject<Env> {
     return this.quests.abandon(cid, quest, Date.now());
   }
 
-  /** Count a talk, visit, use or emote toward the collector's quests. */
-  async questEvent(cid: string, ev: QuestEvent, here: string): Promise<EventResult> {
+  /** Count a talk, visit, use or emote toward the collector's quests; `guest` (OP-428): toward a free guest's own quests only. */
+  async questEvent(cid: string, ev: QuestEvent, here: string, guest = false): Promise<EventResult> {
     const now = Date.now();
-    if (ev.kind === 'interact') this.played({ event: 'interact', cid, room: here, thing: `${ev.what}:${ev.id}` });
-    const updates = this.quests.event(cid, ev, now, here);
+    // A free guest's use is in the play log already (practiceUsed): its event only moves its own quests (OP-428).
+    if (ev.kind === 'interact' && !guest) this.played({ event: 'interact', cid, room: here, thing: `${ev.what}:${ev.id}` });
+    const updates = this.quests.event(cid, ev, now, here, guest);
     return updates.length ? { updates, board: this.quests.board(cid, now) } : { updates };
   }
 
@@ -396,6 +413,11 @@ export class Collections extends DurableObject<Env> {
    */
   async partyGame(cid: string, place: number): Promise<{ added: number; total: number; games: number }> {
     return this.book.partyGame(cid, place, Date.now());
+  }
+
+  /** What a finished game of feather tag earns this owl (OP-434): its tier's prize; `guest`, a free guest's (items only). */
+  async tagPrize(cid: string, tier: TagTier, guest: boolean): Promise<TagPrizeResult> {
+    return payTagPrize(this.book, this.nests, cid, tier, guest, Date.now(), secureRandom);
   }
 
   /** The collector's feather balance, and nothing more: a spectator's practice answers carry it (OP-191). */
@@ -521,8 +543,9 @@ export class Collections extends DurableObject<Env> {
     return this.quests.gather(cid, quest, n, room, pos, Date.now(), ground);
   }
 
-  async handIn(cid: string, quest: string, npc: string, visit?: Visit): Promise<HandInResult> {
-    return this.during(visit, () => this.quests.handIn(cid, quest, npc, Date.now(), secureRandom));
+  /** Hand a quest in to its giver; `guest` (OP-428): a free guest's, which pays the collectible only. */
+  async handIn(cid: string, quest: string, npc: string, visit?: Visit, guest = false): Promise<HandInResult> {
+    return this.during(visit, () => this.quests.handIn(cid, quest, npc, Date.now(), secureRandom, guest));
   }
 
   // ---------- nests: none of these answers carries a collector id ----------

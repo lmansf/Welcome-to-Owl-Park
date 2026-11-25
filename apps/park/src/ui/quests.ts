@@ -1,8 +1,12 @@
-import { ACTIVE_SLOTS, MAX_ACTIVE_QUESTS, TASKS_BONUS, getQuest, questPuzzle, type LockView, type PuzzleSymbol, TASK_FEATHERS, getNpc, placeName, placeWords, variantName, type ActiveQuestView, type NpcDef, type QuestOfferView, type QuestReward } from '@owl-park/shared';
+import { ACTIVE_SLOTS, MAX_ACTIVE_QUESTS, TASKS_BONUS, getQuest, questPuzzle, type LockView, type PuzzleSymbol, TASK_FEATHERS, getNpc, npcIn, npcRoomOn, placeShown, placeWords, type ActiveQuestView, type NpcDef, type QuestOfferView } from '@owl-park/shared';
 import type { QuestState } from '../collect/quests';
 import type { TaskState } from '../collect/tasks';
 import { walkingMap } from '../game/walkingMap';
 import { PUZZLE_CSS, createCodePad, puzzleBox } from './puzzle';
+import { SPECTATOR_WORDS } from './spectator';
+import { rewardText } from './questReward';
+
+export { rewardText };
 
 export interface QuestActions {
   accept(quest: string): Promise<unknown>;
@@ -30,6 +34,8 @@ export interface QuestUi {
   mountJournal(host: HTMLElement, shown: () => boolean): void;
   /** Back to its first tab (Under way), for the J key and the Menu's Quests tab opened afresh. */
   resetJournal(): void;
+  /** The owl is a free guest (OP-428): an NPC owl with nothing for it says which quest a guest may do. */
+  setGuest(on: boolean): void;
   /** The room the owl is in: the lobby shows its welcome, and a finished quest can be collected where its giver stands. */
   setRoom(room: string): void;
   /** The code pad of a code lock the owl walked up to (OP-255). */
@@ -42,10 +48,10 @@ export interface QuestUi {
 }
 
 const CSS = `
-#hud .welcome{margin-top:8px;display:none;width:min(330px,calc(100vw - 24px));background:rgba(12,30,54,.72);border:1px solid rgba(246,241,227,.18);border-radius:12px;padding:7px 11px;font-size:13px;line-height:1.3;backdrop-filter:blur(6px)}
+#hud .welcome{margin-top:8px;display:none;width:min(330px,calc(calc(100vw/var(--vz,1)) - 24px));background:rgba(12,30,54,.72);border:1px solid rgba(246,241,227,.18);border-radius:12px;padding:7px 11px;font-size:13px;line-height:1.3;backdrop-filter:blur(6px)}
 #hud .welcome.show{display:block}
 #hud .welcome b{display:block;font-size:12px;color:#FFD36A;letter-spacing:.02em}
-#hud .sheet{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(max(12px,env(safe-area-inset-bottom)) + 62px);width:min(520px,calc(100vw - 20px));max-height:min(72vh,640px);display:none;flex-direction:column;gap:10px;pointer-events:auto;background:rgba(12,30,54,.95);border:1px solid rgba(246,241,227,.18);border-radius:18px;padding:14px;box-shadow:0 10px 40px rgba(0,0,0,.55);overflow:auto}
+#hud .sheet{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(max(12px,env(safe-area-inset-bottom)) + 62px);width:min(520px,calc(calc(100vw/var(--vz,1)) - 20px));max-height:min(calc(72vh/var(--vz,1)),640px);display:none;flex-direction:column;gap:10px;pointer-events:auto;background:rgba(12,30,54,.95);border:1px solid rgba(246,241,227,.18);border-radius:18px;padding:14px;box-shadow:0 10px 40px rgba(0,0,0,.55);overflow:auto}
 #hud .sheet.open{display:flex}
 #hud .sheet header{display:flex;align-items:center;gap:10px}
 #hud .sheet h2{margin:0;font-size:16px}
@@ -72,7 +78,7 @@ const CSS = `
 #hud .qcard .quote{font-style:italic;font-size:13px;opacity:.9}
 #hud .sheet .empty{font-size:13px;opacity:.8}
 #hud .sheet .who{font-size:13px;display:flex;flex-direction:column;gap:4px}
-#hud .layer .modal.quests{width:min(560px,calc(100vw - 24px))}
+#hud .layer .modal.quests{width:min(560px,calc(calc(100vw/var(--vz,1)) - 24px))}
 #hud .quests h3{margin:6px 0 0;font-size:12px;letter-spacing:.06em;text-transform:uppercase;opacity:.7}
 #hud .quests .empty{font-size:13.5px;opacity:.85;margin:0}
 #hud .quests .who{font-size:13.5px;display:flex;flex-direction:column;gap:6px}
@@ -103,13 +109,9 @@ export function timeLeft(at: number, now = Date.now()): string {
   return `${Math.round(ms / 86_400_000)} days`;
 }
 
-export function rewardText(r: QuestReward): string {
-  const item = r.item === 'pick' ? ' and a collectible' : r.item ? ` and ${variantName(r.item)}` : '';
-  return `${r.feathers} feathers${item}`;
-}
-
 const npcName = (id: string) => getNpc(id)?.name ?? 'a friend';
-const npcPlace = (id: string) => placeName(getNpc(id)?.room ?? '');
+/** Where a quest owl stands on the park this owl walks (Bramble and Pip in the Great Hollow on the new map). */
+const npcPlace = (id: string) => placeShown(npcRoomOn(id, walkingMap()) ?? '', walkingMap());
 
 /** A quest's progress in the quests screen: its steps done of all of them ("2/5"), or Done once it is ready to hand in. */
 export function progressText(q: Pick<ActiveQuestView, 'ready' | 'step' | 'steps'>): string {
@@ -186,6 +188,7 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
 
   let talking: NpcDef | null = null;
   let greeting = '';
+  let guest = false;
   let room = '';
   /** A request from a button is under way: buttons wait for it. */
   let pending = false;
@@ -235,7 +238,7 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
     if (inJournal && q.ready) {
       const row = el('div', 'collect');
       // The giver hands the reward over: from here when it stands in this room, otherwise it says where.
-      if (getNpc(q.giver)?.room === room) row.append(el('span', '', `Done! ${npcName(q.giver)} has your reward.`), button('Collect', '', () => void run(() => actions.collect(q.id)), pending));
+      if (npcIn(q.giver, room, walkingMap())) row.append(el('span', '', `Done! ${npcName(q.giver)} has your reward.`), button('Collect', '', () => void run(() => actions.collect(q.id)), pending));
       else row.append(el('span', '', `Done! Take it back to ${npcName(q.giver)} at ${npcPlace(q.giver)} to collect.`));
       card.appendChild(row);
     }
@@ -378,7 +381,8 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
       row.append(el('span', 'meta', 'A free gift every day, three new things every day and eight every week.'), button('Open the shop', '', () => actions.openShop()));
       dialogue.appendChild(row);
     } else if (!ready.length && !offers.length && !underway.length) {
-      dialogue.appendChild(el('p', 'empty', 'Nothing to ask of you right now. Come back tomorrow!'));
+      // A free guest's board holds only a guest's quests (OP-428): the rest are a ticket holder's, not tomorrow's.
+      dialogue.appendChild(el('p', 'empty', guest ? SPECTATOR_WORDS.guestQuests : 'Nothing to ask of you right now. Come back tomorrow!'));
     }
   };
 
@@ -424,6 +428,11 @@ export function createQuestUi(root: HTMLElement, bar: HTMLElement, state: QuestS
     },
     resetJournal() {
       tab = 'underway';
+    },
+    setGuest(on) {
+      if (on === guest) return;
+      guest = on;
+      renderDialogue();
     },
     openLock(quest, lock) {
       onOpen();

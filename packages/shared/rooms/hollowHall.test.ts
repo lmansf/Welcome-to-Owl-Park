@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { doorTarget } from '../src/doorways';
 import { pointInPolygon } from '../src/geometry';
-import { GROWN_BASE, GROWN_WAYS, HALL_SCALE, HALL_WAYS, RIM_LENGTH, WAY_STEP, rimAt } from '../src/hollowOval';
+import { GROWN_BASE, GROWN_WAYS, HALL_RINGS, HALL_SCALE, HALL_WAYS, RIM_LENGTH, WAY_STEP, rimAt } from '../src/hollowOval';
 import { INTERACTABLES } from '../src/interactables';
+import { npcsIn } from '../src/npcs';
 import { kitProblems } from '../src/kit';
 import { KIT_ART } from '../src/kitArt';
 import { GLIDE_SLOPE, MAX_AIR_Z } from '../src/flight';
@@ -17,6 +18,7 @@ import {
   HALL_CX,
   HALL_CY,
   HALL_GROWN,
+  HALL_ROOTED,
   HALL_ID,
   HALL_LIGHT,
   HEART_THERMAL,
@@ -83,7 +85,7 @@ describe('the Great Hollow (Nov 7; an oval, Nov 8)', () => {
     for (const p of hall.walkable[0]!) expect(ovalR(p), `${p.x},${p.y}`).toBeLessThanOrEqual(1.001);
     expect(hall.walkable[0]!.filter((p) => ovalR(p) > 0.995).length / hall.walkable[0]!.length).toBeGreaterThan(0.8);
     // Each way out at the front has its opening in the near wall's top.
-    for (const id of HALL_WAYS.filter((w) => atFront(w) && w !== 'down'))
+    for (const id of HALL_WAYS.filter((w) => atFront(w) && w !== 'down' && !HALL_GROWN.includes(w)))
       expect(
         HALL_BOWL.gaps!.some((g) => Math.hypot(g.x - middle(id).x, g.y - middle(id).y) < 5),
         id,
@@ -135,11 +137,28 @@ describe('the Great Hollow (Nov 7; an oval, Nov 8)', () => {
       }
     }
     expect(HALL_GROWN).toBe(GROWN_WAYS);
-    expect([...HALL_GROWN]).toEqual(['course-glass']);
+    // The trunk's door to the Party Grove grew over on Nov 21 (D5): the grove's owls and games are in the hall now.
+    expect([...HALL_GROWN]).toEqual(['course-glass', 'to-party']);
     // No blockade and no closed sign anywhere in the room (OP-286): every doorway leads somewhere, or is an idol's vote spot.
     expect(hall.doors.filter((d) => d.closedSign)).toEqual([]);
     for (const d of hall.doors) expect(d.to !== undefined || d.id.startsWith('idol-'), d.id).toBe(true);
-    for (const id of HALL_GROWN) {
+    // At the front (the trunk's door, Nov 21) the near wall's top runs on over a grown-over way: no opening
+    // in it, no roots standing up over the floor in front, and the floor running to the rim as along any wall.
+    expect([...HALL_ROOTED]).toEqual(['course-glass']);
+    for (const id of HALL_GROWN.filter((w) => atFront(w))) {
+      expect(
+        hall.pieces!.some((p) => p.id === `${id}-grown`),
+        id,
+      ).toBe(false);
+      expect(
+        HALL_BOWL.gaps!.some((g) => Math.hypot(g.x - rimAt(wayS(id)).x, g.y - rimAt(wayS(id)).y) < 300),
+        id,
+      ).toBe(false);
+      expect(onFloor(rimAt(wayS(id), 30)), id).toBe(true);
+      for (const p of hall.pieces!)
+        expect(Math.hypot(p.x - rimAt(wayS(id)).x, p.y - rimAt(wayS(id)).y), `${id}: ${p.id}`).toBeGreaterThan(200);
+    }
+    for (const id of HALL_ROOTED) {
       // Roots the kit already has stand over the knothole painted at the way...
       const roots = hall.pieces!.find((p) => p.id === `${id}-grown`)!;
       expect(roots.key).toBe(GROWN_ART);
@@ -213,11 +232,13 @@ describe('the Great Hollow (Nov 7; an oval, Nov 8)', () => {
     expect(roomOnMap(hall, 3)).toBe(hall);
   });
 
-  it('names every open way out on a sign in front of it, the Party Grove among them, clear of its doorway’s art', () => {
+  it('names every open way out on a sign in front of it, clear of its doorway’s art', () => {
     const named = hall.doors.filter((d) => d.label);
     for (const d of hall.doors) expect(!!d.label, d.id).toBe(!!d.to && !d.closedSign);
     expect(new Set(named.map((d) => d.label)).size).toBe(named.length);
-    expect(doorOf('to-party').label).toBe('Out to the Party Grove');
+    // The trunk's door grew over on Nov 21, its sign with it: nothing in the hall points out to the Party Grove.
+    expect(hall.doors.some((d) => d.id === 'to-party')).toBe(false);
+    for (const d of named) expect(d.label, d.id).not.toContain('Party Grove');
     expect(doorOf('up').label).toBe('Up to the Treetop Commons');
     expect(doorOf('down').label).toBe('Down to Neon Roost, the arcade');
     for (const d of named) {
@@ -251,13 +272,13 @@ describe('the Great Hollow (Nov 7; an oval, Nov 8)', () => {
     }
   });
 
-  it('puts the way up at the very back, and the ways out to the Party Grove and down to the arcade at the front', () => {
+  it('puts the way up at the very back, and the way down to the arcade and the grown-over trunk door at the front', () => {
     expect(doorOf('up').to).toEqual({ room: 'lobby', spawn: 'from-hub' });
-    expect(doorOf('to-party').to).toEqual({ room: 'hub', spawn: 'default' });
+    expect(HALL_GROWN).toContain('to-party');
     expect(doorOf('down').to).toEqual({ room: 'arcade', spawn: 'from-cavern' });
     expect(middle('up').x).toBe(HALL_MIDDLE);
     expect(Math.min(...hall.doors.map((d) => middle(d.id).y))).toBe(middle('up').y);
-    for (const id of ['to-party', 'down']) expect(middle(id).y, id).toBeGreaterThan(HALL_CY + 0.8 * HALL_RY);
+    for (const id of ['to-party', 'down'] as const) expect(spot(id).y, id).toBeGreaterThan(HALL_CY + 0.8 * HALL_RY);
     // The leaves lie where the wind leaves them (OP-417): by the knothole they blow in at, and by the hatch they fall through.
     const piles = INTERACTABLES.filter((t) => t.room === HALL_ID && t.kind === 'leaf-pile');
     expect(piles.filter((p) => Math.hypot(p.pos.x - middle('up').x, p.pos.y - middle('up').y) < 900).length).toBeGreaterThanOrEqual(2);
@@ -265,7 +286,7 @@ describe('the Great Hollow (Nov 7; an oval, Nov 8)', () => {
     for (const p of piles) expect(onFloor(p.pos), p.id).toBe(true);
   });
 
-  it('gives each Commons a plaza a crowd of 80 owls can gather in, with its moonbeam in the middle', () => {
+  it('gives each Commons a plaza a crowd of 80 owls can gather in, with its worn ring in the middle', () => {
     for (const c of HALL_COMMONS) {
       const at = plazaAt(c.level);
       let floor = 0;
@@ -273,13 +294,13 @@ describe('the Great Hollow (Nov 7; an oval, Nov 8)', () => {
         for (let y = at.y - 700; y <= at.y + 700; y += 20) if (Math.hypot(x - at.x, y - at.y) <= 700 && onFloor({ x, y })) floor += 400;
       expect(floor / OWL_ROOM_PX2, c.level).toBeGreaterThanOrEqual(80);
       expect(
-        INTERACTABLES.some((t) => t.room === HALL_ID && t.kind === 'moonbeam' && t.pos.x === at.x && t.pos.y === at.y),
+        HALL_RINGS.some((r) => r.pos.x === at.x && r.pos.y === at.y),
         c.level,
       ).toBe(true);
     }
   });
 
-  it('gives every stretch of the floor something close by to do: a doorway, an idol, a moonbeam, a leaf pile or a root to climb', () => {
+  it('gives every stretch of the floor something close by to do: a doorway, an idol, a leaf pile, a root to climb, an owl to talk to or the warm air at the heart', () => {
     const things = [
       ...INTERACTABLES.filter((t) => t.room === HALL_ID).map((t) => t.pos),
       ...(hall.perches ?? []).map((p) => ({
@@ -287,8 +308,10 @@ describe('the Great Hollow (Nov 7; an oval, Nov 8)', () => {
         y: p.area.reduce((a, q) => a + q.y, 0) / p.area.length,
       })),
       ...hall.doors.map((d) => d.marker ?? { x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2 }),
+      ...(hall.thermals ?? []).map((t) => t.pos),
+      // An owl to talk to counts, as it does in every room (fill.test.ts): each Commons' quest owl stands by its plaza.
+      ...npcsIn(HALL_ID).map((n) => n.pos),
     ];
-    expect(INTERACTABLES.filter((t) => t.room === HALL_ID && t.kind === 'moonbeam')).toHaveLength(HALL_COMMONS.length + 1);
     for (let x = 40; x < HALL_W; x += 40)
       for (let y = 40; y < hall.size.h; y += 40) {
         if (!onFloor({ x, y })) continue;
@@ -360,7 +383,7 @@ describe('the Great Hollow, sized for the park that is open (OP-339)', () => {
 });
 
 describe('the thermal at the Great Hollow’s heart (OP-340)', () => {
-  const heart = INTERACTABLES.find((t) => t.id === 'm3-hall-moonbeam-heart')!.pos;
+  const heart = HALL_RINGS.find((r) => r.id === 'heart')!.pos;
 
   it('rises where the heart’s moonbeam falls, a column an owl can stand in, on open floor', () => {
     expect(hall.thermals).toEqual([HEART_THERMAL]);
@@ -450,8 +473,7 @@ describe('the Great Hollow’s root runs (OP-308)', () => {
         return { id: q.id, x0: q.x - a.w / 2, x1: q.x + a.w / 2, y0: q.y - a.h, y1: q.y + RUN_HALF * 2 };
       });
     const things = [
-      // A moonbeam is a ring of light across its whole plaza: a root at its rim hides none of it.
-      ...INTERACTABLES.filter((i) => i.room === HALL_ID && i.kind !== 'moonbeam').map((i) => ({ id: i.id, ...i.pos })),
+      ...INTERACTABLES.filter((i) => i.room === HALL_ID).map((i) => ({ id: i.id, ...i.pos })),
       ...(hall.spots ?? []).map((s, i) => ({ id: `spot-${i}`, ...s })),
       // A spawn up on a root's own top (the stump the first flight's test glides from, OP-347) stands on the art, not behind it.
       ...Object.entries(hall.spawns)

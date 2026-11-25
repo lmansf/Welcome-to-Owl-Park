@@ -93,13 +93,14 @@ export const PLAZA_CLUSTERS: readonly FloorCluster[] = [
     ],
     perches: [{ kind: 'stump', x: 2400, y: 1070 }],
   },
-  // The arcade hall, under the roots: between its two rings and at its far end.
+  // The arcade hall, under the roots: between its two rings and at its far end. The vending machine stands
+  // toward the east ring since Nov 18, when the skylights' moonbeams went and that side of the floor was an empty walk.
   {
     id: 'arcade-token',
     room: 'arcade',
     story: 'A token rolled out from under the vending machine and lies glinting on the wet tiles.',
-    decor: [{ key: 'kit-neon-vending-machine', x: 2150, y: 1000 }],
-    things: [{ kind: 'shiny', x: 2060, y: 1060 }],
+    decor: [{ key: 'kit-neon-vending-machine', x: 3090, y: 1000 }],
+    things: [{ kind: 'shiny', x: 3000, y: 1060 }],
   },
   {
     id: 'arcade-crack',
@@ -199,6 +200,13 @@ export const PLAZA_CLUSTERS: readonly FloorCluster[] = [
       { kind: 'shiny', x: 4380, y: 1000 },
     ],
   },
+  // The Great Hollow (Dec 1 plan D5): the Party Grove's telescope came in with its lanterns and quiz.
+  {
+    id: 'hall-stars',
+    room: 'm3-hall',
+    story: 'The Party Grove’s telescope, set up beside the knothole at the back of the hollow and aimed up through it at the owl-shaped stars.',
+    things: [{ kind: 'telescope', x: 2440, y: 380 }],
+  },
 ];
 
 /** A thing's id: its cluster's, its kind and, past the first of its kind there, a number. */
@@ -219,7 +227,8 @@ const perchId = (c: FloorCluster, i: number) => (i === 0 ? `${c.id}-perch` : `${
  * each and the show when it is used; a sticker of the same thing beside its painted twin is gone.
  */
 export const PAINTED_THINGS: readonly InteractableDef[] = [
-  { id: 'lobby-fountain', kind: 'bird-bath', room: 'lobby', pos: { x: 665, y: 775 }, label: 'Splash in the fountain' },
+  // The fountain as painted (lobby-west): from the owl on its top to the foot of its steps (OP-436).
+  { id: 'lobby-fountain', kind: 'bird-bath', room: 'lobby', pos: { x: 665, y: 775 }, label: 'Splash in the fountain', tap: { x: 488, y: 505, w: 354, h: 232 } },
   // On the pond's near bank east of the jetty, out of reach from the jetty's end, so E there always reels in.
   { id: 'grove-pond-bank', kind: 'bird-bath', room: 'grove', pos: { x: 1250, y: 685 }, label: 'Splash in the pond' },
   { id: 'grove-glowcaps', kind: 'mushroom', room: 'grove', pos: { x: 3420, y: 850 }, label: 'Bounce on the glowing mushrooms' },

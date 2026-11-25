@@ -41,6 +41,8 @@ export class Pet {
   private respawn: PetRespawn = SETTLED;
   private art: string | undefined;
   private baseKey = '';
+  /** The texture last sized and placed: the image is made with its first one, so this starts empty to size it (OP-433). */
+  private shown = '';
   /** The painted egg: how it rocks just now, when that was read, how far it has rolled, and when it hatched here. */
   private wobble: EggWobble | null = null;
   private wobbleAt = Number.NEGATIVE_INFINITY;
@@ -71,6 +73,7 @@ export class Pet {
     this.wobbleAt = Number.NEGATIVE_INFINITY;
     this.hatchFrom = null;
     this.img.setRotation(0);
+    this.shown = '';
     const own = art === EGG_ART ? [...Object.values(EGG_CRACKS), ...EGG_HATCH] : art === BUNNY_ART ? [BUNNY_HOP] : [];
     for (const a of own) {
       if (this.frames.has(a)) continue;
@@ -95,8 +98,14 @@ export class Pet {
     return { x: b.centerX, y: b.centerY };
   }
 
+  /** How big the pet is drawn, in room pixels (OP-433). */
+  drawnSize(): { w: number; h: number } {
+    return { w: this.img.displayWidth, h: this.img.displayHeight };
+  }
+
   private show(key: string): void {
-    if (this.img.texture.key === key) return;
+    if (this.shown === key) return;
+    this.shown = key;
     const o = footOrigin(this.art);
     this.img.setTexture(key).setOrigin(o.x, o.y);
     this.setOwlSize(this.size);

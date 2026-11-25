@@ -4,7 +4,6 @@ import { tintedTexture } from './canvasTint';
 import { DEFAULT_ANCHORS, artFacing, type OwlAnchors } from '../collect/pixels';
 import { OWL_H, OWL_LAYERS, OWL_W, SPECIES_FLIGHT_LAYERS, SPECIES_LAYERS, WING_H, WING_W, ensurePlaceholder, loadArt, loadFlightArt, loadSpeciesArt } from './art';
 import { rasterNames } from './artNames';
-import { flagOn } from '../flags';
 import { HEAD_KEYS, LOOK_AROUND, LOOK_EMOTE, LOOK_MS, headBox, headFaceKey, headKey, headPose, type HeadFrame } from './headTurn';
 import { PUBLISHED_ART } from './publishedArt';
 import { playEmote, playFlop, type EmoteHost } from './emotes';
@@ -432,6 +431,21 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
     return !!this.pet?.isEgg && this.pet.contains(p);
   }
 
+  /** Whether a room point is on this owl's pet as drawn, whatever pet it is (OP-263, Swap pet). */
+  petAt(p: { x: number; y: number }): boolean {
+    return !!this.pet && this.pet.contains(p);
+  }
+
+  /** Where this owl's pet is drawn (the middle of it), or null without one. */
+  petPos(): { x: number; y: number } | null {
+    return this.pet ? this.pet.middle() : null;
+  }
+
+  /** How big this owl's pet is drawn and how wide its own canvas is in the room, or null without a pet (OP-433). */
+  petSize(): { w: number; h: number; owlW: number } | null {
+    return this.pet ? { ...this.pet.drawnSize(), owlW: OWL_W * this.scaleX } : null;
+  }
+
   /** Where this owl's painted egg is drawn (the middle of it), or null without one. */
   eggPos(): { x: number; y: number } | null {
     return this.pet?.isEgg ? this.pet.middle() : null;
@@ -439,8 +453,6 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
 
   /** Play an emote on this owl (everyone in the room plays it on their copy). */
   playEmote(emote: string): boolean {
-    // The look around is behind ?look=1 (OP-289): a page without it plays nothing for it.
-    if (emote === LOOK_EMOTE && !flagOn('look')) return false;
     if (emote !== LOOK_EMOTE) this.endLook();
     return playEmote(this, emote);
   }

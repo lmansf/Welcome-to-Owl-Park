@@ -20,13 +20,12 @@ export interface FlagSpec {
 // One entry per flag-hidden feature, added by the pull request that brings the feature:
 //   ropeSwings: { param: 'ropes', note: 'Rope swings between the canopy nests' },
 export const FLAGS = {
-  friends: { param: 'friends', note: 'Play with your friends preview: co-op escape room, party game, friend invites' },
-  guardian: { param: 'guardian', note: 'The guardian alive at the heart of the Great Hollow: it breathes, turns its head to an owl, and hoots back' },
+  friends: { param: 'friends', note: 'Bring a friend preview: the friend invite card in the Menu (the co-op escape room and the party game are on for everyone)' },
   movers: { param: 'movers', note: 'Owls move like owls: a dive down a knot hole in place of the Great Hollow’s hatch, a knot-hole tunnel up from the arcade, and a glide lane along its cabinets' },
-  desk: { param: 'desk', note: 'The vote desk in the Great Hollow: each realm’s share of this month’s Realm Vote, in percents, moving as owls vote' },
-  look: { param: 'look', note: 'Look around: an emote every owl has, its head turning on its own through front, three-quarter, side and back while the body stays still' },
-  snow: { param: 'snow', note: 'The first snow (OP-074): snow falling in every room open to the sky and lying thin on the floors seen from above, drawn in code' },
-  tag: { param: 'tag', note: 'Feather tag in the Party Grove (OP-403): its game spaces as size boxes, and tag for 2 to 8 owls in the ring, played on the room server' },
+  snow: { param: 'snow', note: 'The first snow (OP-074): snow falling in every room open to the sky and lying thin on the floors seen from above, drawn in code; on for everyone from Dec 1 (snowSeason), so the flag only shows it before then' },
+  share: { param: 'share', note: 'Share my owl (OP-392): a button on the Which owl are you result that shares a link to that owl’s own page' },
+  golink: { param: 'golink', note: 'Activity links (OP-392): /?go=<place> from a /play/<place> page flies the owl on to that place once it has walked through the turnstiles' },
+  eggcode: { param: 'eggcode', note: 'Egg codes (OP-260): the Redeem a code card in the Menu’s Settings tab, for a code from the portfolio site’s SQL console' },
 } as const satisfies Record<string, FlagSpec>;
 
 export type FlagName = keyof typeof FLAGS;

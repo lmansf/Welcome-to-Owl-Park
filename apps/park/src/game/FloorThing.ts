@@ -82,6 +82,9 @@ export class FloorThing {
   /** A tap at this point of the room is on the thing: on its art or close round its spot. */
   hit(p: Vec2): boolean {
     if (!this.here) return false;
+    // A thing the painting has: anywhere on it as painted (OP-436: a tap on the fountain itself did nothing).
+    const t = this.def.tap;
+    if (t && p.x >= t.x && p.x <= t.x + t.w && p.y >= t.y && p.y <= t.y + t.h) return true;
     if (this.art) {
       const b = this.art.getBounds();
       if (p.x >= b.left - TAP_PAD && p.x <= b.right + TAP_PAD && p.y >= b.top && p.y <= b.bottom + TAP_PAD) return true;
@@ -116,8 +119,11 @@ export class FloorThing {
     const { x, y } = this.foot;
     // A painted fountain or pond has no art of ours: the water is at the painting's foot.
     const h = this.art ? this.art.displayHeight : (KIT_ART[this.def.piece ?? '']?.h ?? 40);
+    // A painted fountain splashes up out of its painted basin.
+    const tap = this.def.tap;
+    const from = tap ? tap.y + tap.h * 0.55 : y - h * 0.9;
     const drops = this.scene.add
-      .particles(x, y - h * 0.9, symbolTexture(this.scene, 'bubble'), {
+      .particles(x, from, symbolTexture(this.scene, 'bubble'), {
         emitting: false,
         speed: { min: 120, max: 300 },
         angle: { min: 220, max: 320 },

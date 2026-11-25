@@ -22,7 +22,7 @@ import {
   NestBook,
   NPC_TALK_RADIUS,
   QUIZ_FEATHERS,
-  QUIZ_ROOM,
+  quizStage,
   QuestBook,
   REACH_SLACK,
   sameLevel,
@@ -31,7 +31,7 @@ import {
   USE_COOLDOWN_MS,
   distance,
   getInteractable,
-  getNpc,
+  npcIn,
   getQuest,
   isEmoteId,
   lanternFeathers,
@@ -64,7 +64,13 @@ import {
   PuzzleBook,
   acceptPuzzleAware,
   puzzleStep,
+  LOCAL_EGG_CODE_PUBLIC_KEY,
+  redeemEgg,
+  verifyEggCode,
+  type EggCodeLedger,
+  type EggRedeemReply,
 } from '@owl-park/shared';
+import { walkingMap } from '../game/walkingMap';
 import { LOCAL_COLLECTOR_KEY } from '../identity';
 import type { RoomConnection } from '../net/transport';
 import { COURSES, ROOMS } from '../rooms';
@@ -73,6 +79,8 @@ import type { ActivityLink, ActivityPushes, CollectionService, CourseLink, Cours
 const STORE_PREFIX = 'owl-park:collection:';
 /** Every nest in this browser, whichever collector's: the street shows the other ones that are open. */
 const NESTS_KEY = 'owl-park:nests';
+/** The egg codes this browser's park has taken (OP-260), so a code works once here too. */
+const EGG_CODES_KEY = 'owl-park:egg-codes';
 /** A nest's owner changed it: the other tabs of this browser that are inside it hear of it here. */
 const NESTS_CHANNEL = 'owl-park:nests';
 /** The arcade's scores of the day in this browser, every collector's: the wall shows them all. */
@@ -361,6 +369,37 @@ export class LocalCollections implements CollectionService {
     return this.use(({ book }) => book.claimGift(this.cid, this.now()));
   }
 
+  /**
+   * An egg code in the offline park (OP-260): checked against the offline test key, the one the browser
+   * tests sign with, never the live park's. The ledger of taken codes lives in this browser.
+   */
+  async redeemEgg(code: string): Promise<EggRedeemReply> {
+    const id = await verifyEggCode(code, LOCAL_EGG_CODE_PUBLIC_KEY);
+    let taken: Record<string, string> = {};
+    try {
+      const raw = this.storage?.getItem(EGG_CODES_KEY) ?? null;
+      const parsed: unknown = raw ? JSON.parse(raw) : {};
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) taken = parsed as Record<string, string>;
+    } catch {
+      /* unreadable: start a fresh ledger */
+    }
+    const ledger: EggCodeLedger = {
+      taken: (k) => Object.hasOwn(taken, k),
+      take: (k, cid) => {
+        taken[k] = cid;
+      },
+    };
+    const res = this.use(({ book }) => redeemEgg(book, ledger, this.cid, id, this.now()));
+    if (res.ok) {
+      try {
+        this.storage?.setItem(EGG_CODES_KEY, JSON.stringify(taken));
+      } catch {
+        /* storage full or unavailable: the ledger lives for this page only */
+      }
+    }
+    return res;
+  }
+
   async claimFurnitureGift(): Promise<FurnitureGiftReply> {
     return this.nests((nests) => nests.claimGift(this.cid, this.now()));
   }
@@ -463,16 +502,15 @@ export class LocalCollections implements CollectionService {
     const near = (p: Vec2, radius: number) => distance(where(), p) <= radius + REACH_SLACK;
     /** The giver of a quest, if it stands in this room. */
     const giverHere = (quest: string): NpcDef | undefined => {
-      const giver = getNpc(getQuest(quest)?.giver ?? '');
-      return giver && giver.room === room ? giver : undefined;
+      return npcIn(getQuest(quest)?.giver ?? '', room, walkingMap());
     };
     // The room server reports used-up objects right after its welcome; so does this.
     queueMicrotask(() => pushes.onObjects?.(this.liveObjects()));
     return {
       board: async () => this.use(({ quests }) => ({ ok: true, board: quests.board(cid, this.now()), updates: [] })),
       talk: async (npcId) => {
-        const npc = getNpc(npcId);
-        if (!npc || npc.room !== room) return refused('unknown');
+        const npc = npcIn(npcId, room, walkingMap());
+        if (!npc) return refused('unknown');
         if (!near(npc.pos, NPC_TALK_RADIUS)) return refused('far');
         return this.use(({ quests }) => {
           const now = this.now();
@@ -610,7 +648,7 @@ export class LocalCollections implements CollectionService {
       armQuiz();
     };
     const armQuiz = () => {
-      if (closed || room !== QUIZ_ROOM) return;
+      if (closed || !quizStage(room)) return;
       quizTimer = setTimeout(settleQuiz, Math.max(0, acts.nextQuizClose() - this.now()) + 50);
     };
     armQuiz();

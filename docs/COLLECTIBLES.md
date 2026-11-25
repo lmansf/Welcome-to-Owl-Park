@@ -1,7 +1,7 @@
 # Collectibles
 
 - Status: BUILT; Purchases is groundwork only, PLANNED (OP-049 for the founder perk)
-- Verified against: branch claude/op-202-docs off main 01e9722 (2026-11-02); the numbers are Claude Code's as written
+- Verified against: main ad68b81 (2026-11-17); the catalogue counts were taken from the code (`CATALOGUE`, `allVariants()`), OP-427
 - Code: packages/shared/src/collectibles.ts, book.ts, shop.ts, styles.ts, nestbook.ts; apps/edge/src/Collections.ts, sqlStore.ts, collectLog.ts; apps/park/src/collect, apps/park/src/game/itemArt.ts
 - Tickets: OP-013, OP-014, OP-015, OP-025, OP-029, OP-076, OP-084, OP-107, OP-110
 - Related: docs/QUESTS.md, docs/ARCHITECTURE.md section 8
@@ -26,17 +26,18 @@ shop replace them. The quests, NPC owls, leaf piles and the shop are in [QUESTS.
 
 | Kind | Items | Colourways | Variants |
 | --- | --- | --- | --- |
-| Wearables: head 35, face 11, neck 12 | 58 | 10 (hue rotations of the art) | 580 |
-| Pets | 24 | 8 (hue rotations) | 192 |
+| Wearables: head 36, face 11, neck 12 | 59 | 10 (hue rotations of the art) | 590 |
+| Pets: 24 in colourways, 4 in one | 28 | 8 (hue rotations), or 1 | 196 |
 | Effects | 24 | 16 (tint colours) | 384 |
 | Emotes | 24 | 1 | 24 |
-| **Total** | 130 | | **1,180** |
+| **Total** | 135 | | **1,194** |
 
 The launch set was 118 items (1,068 variants). Drop 1, for Owlloween and the first frost, adds
 eight wearables (Bat Headband, Candy Corn Cap, Earmuffs, Holly Crown, Mummy Wrap, Jack-o'-Lantern
 Shades, Candy Necklace, Vampire Collar) and four pets (Little Ghost, Pumpkin Sprite, Snow Bunny,
 Black Kitten). They can be earned all year, like everything else, and are the featured shelf in
-their season.
+their season. Since then the Glass Circlet (a wearable) and the four one-colourway pets below
+bring the catalogue to 135 items (1,194 variants).
 
 Four pets of their own come in one colourway and are never sold, given as the day's gift or drawn
 as a prize: the Golden Mouse and the Hollow Moth (rewards), and the Painted Egg and Rainbow Bunny

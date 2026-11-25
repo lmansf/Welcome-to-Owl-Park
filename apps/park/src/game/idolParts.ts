@@ -8,7 +8,7 @@
  * the point it moves about: the head turns about its neck, a wing opens about its shoulder, the body
  * swells from where it sits. Laid out at these places the parts stand as the idol at rest.
  *
- * Only the guardian moves in parts today (guardianView.ts, behind `?guardian=1`); the robot owl's and
+ * Only the guardian moves in parts today (guardianView.ts); the robot owl's and
  * the glass owl's are here for when they do.
  */
 import type { Vec2 } from '@owl-park/shared';
@@ -84,6 +84,26 @@ export function partKey(idol: IdolKey, part: IdolPart): string {
 /** An idol's part keys, back to front. */
 export function partKeys(idol: IdolKey): string[] {
   return PARTS.map((p) => partKey(idol, p));
+}
+
+/**
+ * How the guardian's parts sit into its body when put together (Logan, Nov 20: "looks really unnatural with
+ * the head and wings so disconnected. They should probably overlap the body model a little bit"). Laid out
+ * as measured, the head sat on the body's top edge with a seam at the neck, and each wing hung clear of the
+ * body, its tip swinging away from it as the body narrows to its feet. So the head sits lower, into the
+ * body's ruff (`head`, frame px down), and each wing sits in over the body's side (`wing`, frame px toward
+ * the middle), tipped in about its shoulder (`tilt`, radians) so it follows the body down to the bough.
+ * A breath, a beat and a hoot open the wings from there (wingOpen).
+ */
+export const GUARDIAN_TUCK = { head: 20, wing: 28, tilt: 0.06 } as const;
+
+/** Where a part of the guardian is stamped (its pivot) and how far a wing is turned, tucked in (GUARDIAN_TUCK), with the wings `open`. */
+export function tuckedPose(part: IdolPart, pivot: Vec2, open: number): { at: Vec2; rotation: number } {
+  const T = GUARDIAN_TUCK;
+  if (part === 'head') return { at: { x: pivot.x, y: pivot.y + T.head }, rotation: 0 };
+  if (part === 'wing-left') return { at: { x: pivot.x + T.wing, y: pivot.y }, rotation: open - T.tilt };
+  if (part === 'wing-right') return { at: { x: pivot.x - T.wing, y: pivot.y }, rotation: -(open - T.tilt) };
+  return { at: pivot, rotation: 0 };
 }
 
 /** How far the wings open (radians, each wing outward about its shoulder): a little with each breath and beat, wide with a hoot. */

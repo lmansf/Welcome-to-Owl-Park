@@ -90,7 +90,8 @@ describe('travel on the new map (OP-305)', () => {
 
   it('lands the owl at a spawn its room has, for every place on the new map', () => {
     for (const [place, to] of Object.entries(NEW_MAP_LANDINGS)) expect(ROOMS[to.room]?.spawns[to.spawn], place).toBeDefined();
-    expect(travelLanding('hub', 3)).toEqual({ room: 'hub', spawn: 'default' });
+    // The Party Grove folded into the Great Hollow on Nov 21 (D5): no place on the new map.
+    expect(travelLanding('hub', 3)).toBeUndefined();
     // Today's park keeps its own: the great tree lands at the gate, outside the turnstiles.
     expect(travelLanding('hub')).toEqual(TRAVEL_LANDINGS['hub']);
     expect(travelLanding('m3-hall')).toBeUndefined();
@@ -99,7 +100,8 @@ describe('travel on the new map (OP-305)', () => {
   it('travels to every place from the start, and into the park only once through the turnstiles', () => {
     for (const place of Object.keys(NEW_MAP_LANDINGS)) expect(canTravel(place, 3), place).toBe(true);
     expect(canTravel('no-such-place', 3)).toBe(false);
-    for (const place of ['m3-hall', 'glass', 'grove', 'market', 'hub', 'arcade']) expect(needsGate(place, 3), place).toBe(true);
+    for (const place of ['m3-hall', 'glass', 'grove', 'market', 'arcade']) expect(needsGate(place, 3), place).toBe(true);
+    expect(canTravel('hub', 3)).toBe(false);
     for (const place of ['lobby', 'homes', 'nest']) expect(needsGate(place, 3), place).toBe(false);
   });
 

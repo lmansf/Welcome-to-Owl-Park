@@ -45,7 +45,7 @@ export function feedbackReply(outcome: FeedbackOutcome): { text: string; done: b
 
 const CSS = `
 #hud .layer.feedback-layer{z-index:26}
-#hud .layer .modal.feedback{width:min(520px,calc(100vw - 24px))}
+#hud .layer .modal.feedback{width:min(520px,calc(calc(100vw/var(--vz,1)) - 24px))}
 @media (max-width:600px),(pointer:coarse){#hud .layer.feedback-layer{align-items:flex-start;padding-top:max(10px,env(safe-area-inset-top))}}
 #hud .feedback .kinds{display:flex;gap:6px;flex-wrap:wrap}
 #hud .feedback .kinds button{min-height:36px;padding:6px 14px;font-size:13px;background:rgba(246,241,227,.08);color:#F6F1E3;border:1px solid rgba(246,241,227,.18);box-shadow:none}

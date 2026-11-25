@@ -86,4 +86,10 @@ export interface Env extends Cloudflare.Env {
   GOOGLE_CLIENT_SECRET?: string;
   /** Browser tests only: a stand-in for Google's sign-in page and token endpoint on this machine. Never set in production. */
   GOOGLE_TEST_ORIGIN?: string;
+  /**
+   * Egg codes (OP-260): the portfolio site's public key (raw Ed25519, base64url, 43 characters) that every
+   * code is checked against. Not a secret: the private half stays with the portfolio site, so the park can
+   * check codes but never make one. Unset, or the offline park's test key: no code is taken.
+   */
+  EGG_CODE_KEY?: string;
 }

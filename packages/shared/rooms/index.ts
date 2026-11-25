@@ -1,7 +1,7 @@
 import type { Polygon } from '../src/geometry';
 import { isNestRoom } from '../src/homes';
 import { ESCAPE_BACK_SPAWN, ESCAPE_DOOR, ESCAPE_ROOM, isEscapeRoom } from '../src/escape';
-import { FROM_STUMP_AT, FROM_STUMP_SPAWN, isPartyRoom } from '../src/party/ids';
+import { isPartyRoom } from '../src/party/ids';
 import { PARTY_ROOM } from './party';
 import { doorTarget, type WalkMap } from '../src/doorways';
 import { isNewMapRoom } from '../src/newMap';
@@ -221,7 +221,7 @@ export const ROOMS: Record<string, RoomDef> = {
         top: 264,
       },
     ],
-    spawns: { 'default': { x: 2400, y: 730 }, 'from-grove': { x: 1800, y: 740 }, 'from-market': { x: 2990, y: 750 }, 'from-glass': { x: 2665, y: 740 }, [FROM_STUMP_SPAWN]: { ...FROM_STUMP_AT } },
+    spawns: { 'default': { x: 2400, y: 730 }, 'from-grove': { x: 1800, y: 740 }, 'from-market': { x: 2990, y: 750 }, 'from-glass': { x: 2665, y: 740 } },
     doors: [
       // On the new map this is the Party Grove (out of the Great Hollow's trunk door): its doorways carry signs there (labelNew).
       { id: 'to-grove', rect: { x: 1700, y: 610, w: 130, h: 90 }, to: { room: 'grove', spawn: 'default' }, marker: { x: 1765, y: 560 }, labelNew: 'To the treehouse clearing' },
@@ -356,8 +356,7 @@ export const ROOMS: Record<string, RoomDef> = {
     // The porch is also a jump and the second flap straight from the floor (tier 2). The left tree's
     // treehouse is across the gap from the loft, past the rope bridge, and only a glide gets there (tier
     // 3). The rope bridge stays painted, not a perch, so the treehouse stays the glide's.
-    // TODO-DOCS (OP-084): docs/ACTIVITIES.md: the grove's treetop walk (the ladder to the porch's leaf
-    // pile and the loft, and the glide to the far treehouse's), beside the hub's bench and beam.
+    // Its leaf piles lie on the floor at the trees' feet, not up here (OP-423, interactables.ts).
     perches: [
       {
         id: 'grove-log',
@@ -1577,7 +1576,7 @@ ROOMS['m3-cave'] = newMapLevel('m3-cave', 'l0-arcade', { 'to-l0': at('m3-under',
 // gather. Each painted common room runs on below its painting into a plaza: the Treetop Commons in
 // front of the turnstiles, and the arcade hall in front of its cabinets.
 
-/** Where the plazas' floors end, their gathering spots' middles (each a moonbeam in a worn ring). */
+/** Where the plazas' floors end, their gathering spots' middles (each a worn ring; the Treetop Commons' has the light its warm air rises in). */
 export const LOBBY_PLAZA = { front: 1335, rings: [{ x: 1600, y: 1110 }] } as const;
 export const ARCADE_PLAZA = { front: 1335, rings: [{ x: 1200, y: 1110 }, { x: 3600, y: 1110 }] } as const;
 export const HOMES_PLAZA = { front: 1335, rings: [{ x: 2300, y: 1110 }] } as const;

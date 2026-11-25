@@ -12,3 +12,4 @@ export * from './game';
 export * from './words';
 export * from './ids';
 export * from './tag';
+export * from './bowling';

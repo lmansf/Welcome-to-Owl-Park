@@ -10,7 +10,7 @@
  * the front, the ink-wash realm's course gate, and the glass realm's doorway. A way with nothing behind
  * it yet (the ink-wash realm's doorway, the glass realm's course gate) is no doorway at all: the tree has
  * grown over it (OP-337, HALL_GROWN). Each Commons' idol stands on its base between its two ways, over its Realm Vote spot,
- * and its plaza, where its moonbeam falls, lies out toward the middle. Every open way has a sign on the
+ * and its plaza, round its worn ring, lies out toward the middle. Every open way has a sign on the
  * floor in front of it naming where it leads, so a ten year old finds the Party Grove without a map.
  *
  * TODO-DOCS (OP-337): docs/MAP.md's notes on `m3-hall` gain its ways round the rim as they are now: nine
@@ -38,7 +38,7 @@ import {
   HALL_W,
   HALL_HEART,
   HALL_LEAVES,
-  HALL_MOONBEAMS,
+  HALL_RINGS,
   HALL_WAYS,
   RIM_LENGTH,
   RUN_Y,
@@ -53,6 +53,7 @@ import {
   type HallLevel,
   type HallWay,
 } from '../src/hollowOval';
+import { HALL_LANTERN_ART, HALL_LANTERN_POSTS } from '../src/hallLanterns';
 import type { EdgePlacement } from '../src/edges';
 import { GLIDE_SLOPE } from '../src/flight';
 import type { Polygon } from '../src/geometry';
@@ -62,6 +63,7 @@ import type { DoorDef, RoomBowl, RoomDef, RoomKit, RoomPiece } from '../src/room
 import type { Thermal } from '../src/thermal';
 import type { Downdraft } from '../src/movers';
 import { KIT_ART } from '../src/kitArt';
+import { FROM_STUMP_AT, FROM_STUMP_SPAWN } from '../src/party/ids';
 
 export {
   HALL_CX,
@@ -176,6 +178,13 @@ export function grownFoot(id: HallWay): Vec2 {
 
 /** Whether a way stands on the front half of the rim, where an owl sees the near wall's top and not its face. */
 export const atFront = (id: HallWay) => rimNormal(angleAt(wayS(id))).y > 0.7;
+/**
+ * The grown-over ways that roots stand over: at the back and the two ends, over the knothole painted there.
+ * At the front an owl sees the near wall's top, not its face, and a way there was only an opening in that top
+ * (bowl gaps): grown over, the wall's top simply runs on unbroken (the trunk's door, Nov 21), with no roots to
+ * stand up over the floor in front of it and no floor cut in round them.
+ */
+export const HALL_ROOTED: readonly HallWay[] = HALL_GROWN.filter((id) => !atFront(id));
 /** Whether a way stands at one of the oval's two ends, the rim running up and down beside it. */
 const atEnd = (id: HallWay) => {
   const n = rimNormal(angleAt(wayS(id)));
@@ -191,7 +200,7 @@ function hollowFloor(): Polygon {
   const n = Math.round(RIM_LENGTH / 40);
   for (let i = 0; i < n; i++) {
     const s = (i / n) * RIM_LENGTH;
-    out.push(rimAt(s, floorInset(s, IDOL_LEVELS, HALL_GROWN)));
+    out.push(rimAt(s, floorInset(s, IDOL_LEVELS, HALL_ROOTED)));
   }
   return out;
 }
@@ -204,6 +213,7 @@ const END_ART_OUT = -6;
 
 /** The art standing at each way: its realm's doorway, the knothole, the trunk's door, the hatch. */
 function wayArt(id: HallWay): string | null {
+  if (HALL_GROWN.includes(id)) return null;
   if (id === 'up') return 'kit-doorway-knothole';
   if (id === 'to-party') return 'kit-clearing-trunk-entrance';
   if (id === 'down') return 'kit-hatch-down';
@@ -298,8 +308,8 @@ const DOORS: DoorDef[] = [
       ? [{ id: voteDoor(c.level), rect: { x: voteAt(c.level).x - 110, y: voteAt(c.level).y - 35, w: 220, h: 70 }, marker: voteAt(c.level) }]
       : []),
   ]),
-  // Out through the trunk's door at the front: the Party Grove at the tree's foot.
-  rimDoor('to-party', { room: 'hub', spawn: 'default' }, 'Out to the Party Grove'),
+  // The trunk's door at the front, out to the Party Grove, grew over on Nov 21 (HALL_GROWN): its owls and games are in here now.
+  ...(HALL_GROWN.includes('to-party') ? [] : [rimDoor('to-party', { room: 'hub', spawn: 'default' }, 'Out to the Party Grove')]),
   // Down the hatch in the floor at the front: straight into the arcade (OP-306, the root stair folded into it).
   (() => {
     const at = wayAt('down', HATCH_IN);
@@ -321,8 +331,9 @@ const DOORS: DoorDef[] = [
  */
 const PIECES: RoomPiece[] = HALL_WAYS.flatMap((id): RoomPiece[] => {
   const key = wayArt(id);
-  // Grown over: the roots stand over the knothole painted there, their foot a little below its point on the rim.
-  if (!key) return HALL_GROWN.includes(id) ? [{ id: `${id}-grown`, key: GROWN_ART, ...grownFoot(id) }] : [];
+  // Grown over: the roots stand over the knothole painted there, their foot a little below its point on the rim
+  // (at the front the wall's top runs on over it instead, HALL_ROOTED).
+  if (!key) return HALL_ROOTED.includes(id) ? [{ id: `${id}-grown`, key: GROWN_ART, ...grownFoot(id) }] : [];
   if (id === 'down') {
     const at = wayAt('down', HATCH_IN);
     return [{ id: 'root-hatch', key, x: at.x, y: at.y + 50 }];
@@ -464,9 +475,11 @@ const ROOT_PIECES: RoomPiece[] = ROOT_RUNS.flatMap((run) =>
   ),
 );
 
-/** Each plaza's worn ring round its moonbeam, and the heart's (edges.ts: walked across, drawn on the floor). */
-export const HALL_EDGES: readonly EdgePlacement[] = HALL_MOONBEAMS.map((m) => ({
-  id: `ring-${m.id.replace('moonbeam-', '')}`,
+/** The Party Grove's lanterns, on posts out on the floor past the grove's roots (activities.ts, LANTERN_BEAMS). */
+const LANTERN_POSTS: RoomPiece[] = HALL_LANTERN_POSTS.map((p, i) => ({ id: `lantern-post-${i + 1}`, key: HALL_LANTERN_ART, x: p.x, y: p.y, tint: HALL_LIGHT.roots }));
+/** Each plaza's worn ring, and the heart's (edges.ts: walked across, drawn on the floor). */
+export const HALL_EDGES: readonly EdgePlacement[] = HALL_RINGS.map((m) => ({
+  id: `ring-${m.id}`,
   key: 'edge-hall-plaza-ring',
   x: m.pos.x - 380,
   y: m.pos.y - 190,
@@ -541,6 +554,8 @@ const SPAWNS: Record<string, Vec2> = {
   'from-lobby': wayAt('up', ARRIVE),
   'from-party': wayAt('to-party', arriveAt('to-party')),
   'from-under': wayAt('down', 330),
+  // Back from a party game (OP-314): in front of the Old Stump (src/party/ids.ts).
+  [FROM_STUMP_SPAWN]: { ...FROM_STUMP_AT },
   // An arrival spot in front of each way that leads somewhere (a grown-over way has none).
   ...Object.fromEntries(
     HALL_COMMONS.flatMap((c) => [
@@ -583,7 +598,7 @@ export const HALL_ROOM: RoomDef = {
   spawns: SPAWNS,
   spawnTops: { [STUMP_SPAWN]: WEST_STUMP.top },
   doors: DOORS,
-  pieces: [...PIECES, ...ROOT_PIECES],
+  pieces: [...PIECES, ...ROOT_PIECES, ...LANTERN_POSTS],
   perches: [...ROOT_PERCHES],
   thermals: [HEART_THERMAL],
   movers: { downdrafts: [HALL_KNOT_HOLE] },
@@ -595,8 +610,8 @@ export const HALL_ROOM: RoomDef = {
   kit: HALL_KIT,
 };
 
-/** The leaf piles and moonbeams (interactables.ts) are src/hollowOval.ts's: HALL_LEAVES, HALL_MOONBEAMS. */
-export { HALL_LEAVES, HALL_MOONBEAMS };
+/** The leaf piles (interactables.ts) and the plaza rings are src/hollowOval.ts's: HALL_LEAVES, HALL_RINGS. */
+export { HALL_LEAVES, HALL_RINGS };
 
 /** The idols' anchors (ANCHORS), under the names the scene draws each realm's idol at. */
 export const HALL_ANCHORS: Record<string, Vec2> = {

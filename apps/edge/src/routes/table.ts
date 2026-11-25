@@ -3,17 +3,19 @@
  * path up here (`router.ts`) after the front door and the rate limits; a path no route matches is a
  * static asset. Each handler answers its own methods, OPTIONS included.
  */
-import { RIBBON_WORDS } from '@owl-park/shared';
+import { ACTIVITY_SHARE_PREFIX, OWL_SHARE_PREFIX, RIBBON_WORDS } from '@owl-park/shared';
 import { capacityPage } from '../capacityPage';
 import { feedbackPage } from '../feedbackPage';
 import { gatePage } from '../gatePage';
 import { CSP_REPORT_PATH } from '../guard';
 import { openingPage } from '../openingPage';
+import { owlPage } from '../owlPage';
+import { activityPage } from '../activityPage';
 import { account } from './account';
 import { referral } from './referral';
 import { adminCapacity, adminClimb, adminCollectLog, adminGate, adminGrant, adminKeeper, adminOpening, adminPing, adminRestart, adminStore, adminTickets } from './admin';
 import { clientError } from './clientErrors';
-import { collection, nest, nestGift } from './collection';
+import { collection, nest, nestGift, redeem } from './collection';
 import { adminFeedback, feedback } from './feedback';
 import { closed, line, notice } from './line';
 import { adminMasks, masks } from './masks';
@@ -76,6 +78,8 @@ export const ROUTES: readonly Route[] = [
   // ---- The collection, the shop and the nests ----
   { path: '/api/collection', handle: collection },
   { path: '/api/shop', handle: collection },
+  // Egg codes (OP-260): the painted egg for a code from the portfolio site's SQL console.
+  { path: '/api/redeem', handle: redeem },
   { path: '/api/shop/buy', handle: collection },
   { path: '/api/shop/gift', handle: collection },
   { path: '/api/nest', handle: nest },
@@ -86,6 +90,10 @@ export const ROUTES: readonly Route[] = [
 
   // ---- Google Search Console's ownership check (OP-393) ----
   { path: GOOGLE_VERIFY_PATH, handle: googleVerification },
+  // A shareable quiz result (OP-392): one page for each kind of owl the quiz gives.
+  { prefix: OWL_SHARE_PREFIX, handle: ({ url }) => owlPage(url) },
+  // A shareable activity (OP-392): one page for each place to play, its Play button the park's front door.
+  { prefix: ACTIVITY_SHARE_PREFIX, handle: ({ url }) => activityPage(url) },
 
   // ---- The rooms ----
   { path: '/api/health', handle: healthRoute },

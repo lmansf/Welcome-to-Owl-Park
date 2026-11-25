@@ -181,7 +181,7 @@ export function linkToast(kind: TicketLink['kind'], tickets: WalletEntry[] | 'in
 
 const CSS = `
 #hud .ticket-card{position:absolute;z-index:11;left:50%;top:20%;transform:translateX(-50%) perspective(700px) rotateX(88deg);transform-origin:50% 100%;opacity:0;pointer-events:none;
-  background:linear-gradient(160deg,#F6F1E3,#EADFC3);color:#0C1E36;border-radius:14px;padding:14px 22px;width:min(320px,86vw);text-align:center;display:flex;flex-direction:column;gap:4px;
+  background:linear-gradient(160deg,#F6F1E3,#EADFC3);color:#0C1E36;border-radius:14px;padding:14px 22px;width:min(320px,calc(86vw/var(--vz,1)));text-align:center;display:flex;flex-direction:column;gap:4px;
   box-shadow:0 0 0 2px #C9A227,0 0 30px rgba(201,162,39,.8),0 10px 30px rgba(0,0,0,.45);transition:transform .5s cubic-bezier(.2,.9,.3,1.25),opacity .25s}
 #hud .ticket-card.up{transform:translateX(-50%) perspective(700px) rotateX(0);opacity:1}
 #hud .ticket-card .kind{font-size:12px;letter-spacing:.08em;text-transform:uppercase;opacity:.75}
@@ -231,7 +231,7 @@ export function createTicketCard(root: HTMLElement): TicketCard {
 }
 
 const PASS_CSS = `
-#hud .free-pass{position:absolute;z-index:11;left:50%;top:20%;transform:translateX(-50%);width:min(340px,90vw);display:none;flex-direction:column;align-items:center;gap:10px;padding:16px 18px;border-radius:16px;text-align:center;pointer-events:auto;
+#hud .free-pass{position:absolute;z-index:11;left:50%;top:20%;transform:translateX(-50%);width:min(340px,calc(90vw/var(--vz,1)));display:none;flex-direction:column;align-items:center;gap:10px;padding:16px 18px;border-radius:16px;text-align:center;pointer-events:auto;
   background:linear-gradient(160deg,#F6F1E3,#EADFC3);color:#0C1E36;box-shadow:0 0 0 2px #C9A227,0 0 30px rgba(201,162,39,.7),0 10px 30px rgba(0,0,0,.45)}
 #hud .free-pass.open{display:flex}
 #hud .free-pass p{margin:0;font-size:16px;font-weight:700}

@@ -1,6 +1,6 @@
 import { analytics } from '@heycatch/sdk';
 import Phaser from 'phaser';
-import { LEFT_PARK_SPAWN, LOBBY_ROOM, RESTART_HOME, SETUP_WORDS, TICKET_ENDED_HOME, TREE_STREET_ROOM, nestRoomId, parseVariant, putOn, type BuyResult, type ClosedView, type GiftResult, type Inventory, type LineStatus, type OwlLook, type PuzzleView, type QuestBoard, type ShopView, type TaskView } from '@owl-park/shared';
+import { LEFT_PARK_SPAWN, LOBBY_ROOM, RESTART_HOME, SETUP_WORDS, TICKET_ENDED_HOME, TREE_STREET_ROOM, nestRoomId, parseVariant, putOn, type BuyResult, type ClosedView, type GiftResult, type Inventory, type LineStatus, type OwlLook, type PuzzleView, type QuestBoard, type ShopView, type TaskView, type TravelState, ACTIVITY_SHARE_WORDS } from '@owl-park/shared';
 import { createCollections } from './collect';
 import { QuestState } from './collect/quests';
 import { CollectionState } from './collect/state';
@@ -34,7 +34,11 @@ import { linkToast } from './ui/tickets';
 import { createRibbon } from './ui/ribbon';
 import { createAway } from './ui/away';
 import { deviceSettings } from './settings';
+import { keepHudCalm } from './calmMotion';
+import { keepHudText } from './textSize';
 import { guardZoom } from './ui/noZoom';
+import { activityLink, linkedActivity } from './ui/activityLink';
+import { CAME_FREE } from './ui/spectator';
 
 // HeyCatch analytics (heycatch.ai/agents.md): once, at module scope, before anything else runs, so the
 // page's visits and clicks and the reserved short links (/a to /z, /0 to /9) are seen from the first
@@ -81,6 +85,10 @@ loadScreen.colour(look);
 // A pinch never leaves the page zoomed on a phone (noZoom.ts).
 guardZoom(document, window);
 const hud = createHud(document.body, look, settings);
+// Calm motion (OP-375): the HUD's screens move little or not at all while it is on (calmMotion.ts).
+keepHudCalm(document.getElementById('hud') as HTMLElement, () => settings.get().calm, (cb) => settings.onChange(cb));
+// Text size (OP-386): the HUD's screens drawn larger, from Settings, in place of pinch zoom (textSize.ts).
+keepHudText(document.getElementById('hud') as HTMLElement, () => settings.get().text, (cb) => settings.onChange(cb));
 // The busy ribbon (OP-075) across the top of the home screen and every room.
 const ribbon = createRibbon(document.getElementById('hud') as HTMLElement);
 // An owl asleep a long while (OP-126): "Still here?", and the way back once it has left.
@@ -657,6 +665,8 @@ const home = createHomeScreen(document.getElementById('hud') as HTMLElement, {
   lookAround: () => {
     if (!atHome || loggedIn) return;
     cameToLook = true;
+    // It chose free: the turnstiles let it on in as a guest the first time, with no question (OP-421).
+    game.registry.set(CAME_FREE, true);
     loggedIn = true;
     startCollection();
     void refreshWallet();
@@ -737,6 +747,29 @@ game.events.on(HOME_SHOWN, () => {
     hud.toast(setup, 8000);
   }
 });
+
+// ---- arriving by an activity link (OP-392, behind `golink`): in the usual way, then on to the place ----
+// The address names no room, so the home screen, the line, Play and the turnstiles all come first; the
+// owl is flown on only once the park's travel state has it through the turnstiles (ui/activityLink.ts).
+const goLink = (() => {
+  const activity = linkedActivity(globalThis.location?.search ?? '');
+  if (!activity) return null;
+  return activityLink(activity, {
+    walking: walkingMap,
+    travel: (place) => roomScene()?.travel(place) ?? 'busy',
+    toast: (message, ms) => hud.toast(message, ms),
+    later: (fn, ms) => void setTimeout(fn, ms),
+  });
+})();
+if (goLink) {
+  game.registry.events.on('setdata', (_parent: unknown, key: string, value: TravelState) => {
+    if (key === 'travel') goLink.onTravel(value);
+  });
+  game.registry.events.on('changedata-travel', (_parent: unknown, value: TravelState) => goLink.onTravel(value));
+  game.events.on(HOME_SHOWN, () => {
+    if (goLink.pending()) home.note(ACTIVITY_SHARE_WORDS.home(goLink.activity));
+  });
+}
 // The Say wheel says a phrase here and for everyone in the room.
 hud.onSay((n) => roomScene()?.say(n) ?? false);
 // Every Get a Day Ticket a spectator sees (OP-191): the turnstiles' sale, from the room the owl is in.
@@ -808,6 +841,8 @@ const takeAccountLink = () => {
 takeAccountLink();
 window.addEventListener('hashchange', takeAccountLink);
 // The Menu's Settings tab says which tickets this device holds (OP-108), where the park's server keeps them.
+// Egg codes from the portfolio site (OP-260): the Redeem a code card, behind ?eggcode=1 until the owner's yes.
+if (flagOn('eggcode')) hud.attachRedeem((code) => collection.redeemEgg(code));
 hud.attachTickets(() => (transport.tickets ? transport.tickets.wallet() : Promise.resolve(null)));
 // Back from checkout in this page (OP-190): the wallet is watched for the bought ticket. On the home
 // screen it is said, and Play lands the owl in front of the turnstiles and on through them with it;

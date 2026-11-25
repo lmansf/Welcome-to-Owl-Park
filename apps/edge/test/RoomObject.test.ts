@@ -13,6 +13,7 @@ import {
   ESCAPE_PLACES,
   GROUNDED,
   escapeLayout,
+  getInteractable,
   payEscape,
   CollectionBook,
   CourseBook,
@@ -23,11 +24,14 @@ import {
   MemoryClimbStore,
   MemoryCollectionStore,
   MemoryNestStore,
+  QuestBook,
   MemoryScoreStore,
   NEST_SPOTS,
   NIGHTS,
   PLAY_FEATHERS_PER_DAY,
   QUIZ_ZONES,
+  lanternBeam,
+  quizStage,
   RESTART_NOTICE,
   SETUP_WORDS,
   ROOM_W,
@@ -49,9 +53,11 @@ import {
   type OwlLook,
   type PlayEvent,
   type PortraitLook,
+  type QuestEvent,
   type RunResult,
   type ServerFrame,
   type Vec2,
+  TAG_ROOM,
 } from '@owl-park/shared';
 import type { Env } from '../src/env';
 import { captureLogs, loggerFor } from '../src/logs';
@@ -146,7 +152,10 @@ class FakeState {
 class FakeCollections {
   private made = 0;
   readonly store = new MemoryNestStore();
-  readonly book = new CollectionBook(new MemoryCollectionStore());
+  readonly collectionStore = new MemoryCollectionStore();
+  readonly book = new CollectionBook(this.collectionStore);
+  /** The real quest book: played for a free guest's quests (OP-428), the one place a spectator's quests reach. */
+  readonly quests = new QuestBook(this.collectionStore, this.book, Object.fromEntries(Object.values(PARK_ROOMS).map((r) => [r.id, r.spots ?? []])));
   readonly nests = new NestBook(this.store, this.book, { newId: () => `nest${String(++this.made).padStart(4, '0')}`, random: Math.random });
   readonly arcade = new ArcadeBook(new MemoryScoreStore(), this.book);
   readonly climbStore = new MemoryClimbStore();
@@ -213,7 +222,13 @@ class FakeCollections {
   }
   /** The quest events counted, as `kind:cid`. */
   readonly questCalls: string[] = [];
-  questEvent(cid?: string, ev?: { kind: string }) {
+  questEvent(cid?: string, ev?: QuestEvent, here?: string, guest?: boolean) {
+    // A spectator's events count for a guest's quests only (OP-428): asked with `guest`, they go to the real book.
+    if (cid && guest && ev) {
+      this.questCalls.push(`${ev.kind}:${cid}:guest`);
+      const updates = this.quests.event(cid, ev, Date.now(), here, true);
+      return this.answer(updates.length ? { updates, board: this.quests.board(cid, Date.now()) } : { updates });
+    }
     if (cid) this.noAward(cid, 'questEvent');
     if (cid && ev) this.questCalls.push(`${ev.kind}:${cid}`);
     return this.answer({ updates: [] });
@@ -257,20 +272,25 @@ class FakeCollections {
   puzzleRuns(cids: string[]) {
     return this.answer(Object.fromEntries(cids.filter((c) => this.inRuns.has(c)).map((c) => [c, { members: 1, opened: 2 }])));
   }
-  /** The quests' own calls: none is ever asked for a spectator; a ticket holder's are not played in this fake. */
+  /**
+   * The quests' own calls: a ticket holder's are not played in this fake. A spectator's board, accept and
+   * drop are the real book's (OP-428: the room object lets a guest take only a guest's quest), and its
+   * hand-in only with `guest`.
+   */
   board(cid: string) {
-    this.noAward(cid, 'board');
+    if (this.spectators.has(cid)) return this.answer(this.quests.board(cid, Date.now()));
     return Promise.reject(new Error('not in this fake'));
   }
-  accept(cid: string) {
-    this.noAward(cid, 'accept');
+  accept(cid: string, quest?: string, here?: string) {
+    if (this.spectators.has(cid)) return this.answer(this.quests.accept(cid, quest, Date.now(), here));
     return Promise.reject(new Error('not in this fake'));
   }
-  abandon(cid: string) {
-    this.noAward(cid, 'abandon');
+  abandon(cid: string, quest?: string) {
+    if (this.spectators.has(cid)) return this.answer(this.quests.abandon(cid, quest, Date.now()));
     return Promise.reject(new Error('not in this fake'));
   }
-  handIn(cid: string) {
+  handIn(cid: string, quest?: string, npc?: string, _visit?: unknown, guest?: boolean) {
+    if (guest) return this.answer(this.quests.handIn(cid, quest, npc ?? '', Date.now(), () => 0.5, true));
     this.noAward(cid, 'handIn');
     return Promise.reject(new Error('not in this fake'));
   }
@@ -1044,6 +1064,28 @@ describe('the realms switch (the stained-glass climb)', () => {
     expect(b.closed?.code).toBe(CLOSE.REALM_CLOSED);
     await tell(obj, 'nonsense');
     expect((await join(obj, 'l3', 'v_d')).closed?.code).toBe(CLOSE.REALM_CLOSED);
+  });
+});
+
+describe('feather tag through a wake from hibernation (OP-434)', () => {
+  it('keeps the game and its last round paid in storage, so a woken object carries the game on', async () => {
+    state = new KeepingState();
+    const obj = roomObject();
+    const a = await join(obj, TAG_ROOM, 'v_a');
+    await send(obj, a, { t: 'tag', op: 'join' });
+    expect(a.last('tag')?.tag.players).toEqual(['v_a']);
+    expect((state as KeepingState).kept.get('tag')).toMatchObject({ game: { players: ['v_a'] }, settled: 0 });
+    // The object sleeps through the call with the owl's socket open, and wakes on the same storage.
+    const woken = roomObject();
+    await settle(); // the constructor reads its storage
+    await send(woken, a, { t: 'tag', op: 'view' });
+    expect(a.last('tag')?.tag).toMatchObject({ players: ['v_a'], round: 0 });
+    // Nonsense in storage is dropped, never a reason to fail the wake.
+    (state as KeepingState).kept.set('tag', { game: { players: 'x' }, settled: -1 });
+    const again = roomObject();
+    await settle();
+    await send(again, a, { t: 'tag', op: 'view' });
+    expect(a.last('tag')?.tag.players).toEqual([]);
   });
 });
 
@@ -1992,7 +2034,7 @@ describe('spectators in the room object (OP-191)', () => {
     vi.stubGlobal('WebSocket', { READY_STATE_OPEN: 1 });
   });
 
-  it('welcomes a spectator as one, shows it to the others, and counts its arrival for no quest', async () => {
+  it('welcomes a spectator as one, shows it to the others, and counts its arrival for a guest’s quests only (OP-428)', async () => {
     const obj = roomObject();
     const holder = await join(obj, 'hub', 'v_holder', OWNER);
     expect(holder.last('welcome')).not.toHaveProperty('spectator');
@@ -2001,7 +2043,7 @@ describe('spectators in the room object (OP-191)', () => {
     expect(ws.last('welcome')).toMatchObject({ spectator: true });
     expect(holder.last('enter')).toMatchObject({ owl: { id: SPEC_ID } });
     logged(cap.lines, 'room_join_ok', { room: 'hub', spectator: true, owls: 2 });
-    expect(collections.questCalls).toEqual([`visit:${OWNER}`]);
+    expect(collections.questCalls).toEqual([`visit:${OWNER}`, `visit:${SPEC}:guest`]);
   });
 
   it('turns a spectator away at its share of the room, and still lets a ticket holder in', async () => {
@@ -2026,7 +2068,7 @@ describe('spectators in the room object (OP-191)', () => {
     expect(a.last('puzzle')).toEqual({ t: 'puzzle', r: 1, quest: 'puzzle-lockbox', ok: true, near: [] });
   });
 
-  it('refuses it the quests, the NPC owls, the quest items and today’s tasks, and tells it once', async () => {
+  it('refuses it every quest but a guest’s, the quest items and today’s tasks, and tells it once (OP-428: its board and a talk it may have)', async () => {
     const obj = roomObject();
     const ws = await spectator(obj, 'hub');
     await send(obj, ws, { t: 'quests', r: 1 });
@@ -2041,11 +2083,46 @@ describe('spectators in the room object (OP-191)', () => {
     await send(obj, ws, { t: 'puzzle', op: 'start', quest: 'puzzle-lockbox', r: 8 });
     await send(obj, ws, { t: 'puzzle', op: 'join', quest: 'puzzle-lockbox', with: 'v_a', r: 9 });
     await settle();
-    expect(ws.of('refused')).toEqual([...[1, 2, 3, 4, 5].map((r) => ({ t: 'refused', r, reason: 'spectator' })), { t: 'refused', r: 7, reason: 'unknown' }, ...[8, 9].map((r) => ({ t: 'refused', r, reason: 'spectator' }))]);
+    // Its board (a guest's: Bramble's welcome on offer, and no other quest) and a talk are a guest's too
+    // (OP-428): an NPC owl the room does not have is unknown, as anyone's.
+    const board = ws.of('quests').find((f) => f.r === 1)!.board;
+    expect(Object.values(board.offers).flat().map((o) => o.id)).toEqual(['story-welcome']);
+    expect(ws.of('refused')).toEqual([{ t: 'refused', r: 2, reason: 'unknown' }, ...[3, 4, 5].map((r) => ({ t: 'refused', r, reason: 'spectator' })), { t: 'refused', r: 7, reason: 'unknown' }, ...[8, 9].map((r) => ({ t: 'refused', r, reason: 'spectator' }))]);
     expect(act(ws, 6)).toEqual({ t: 'act', r: 6, a: 'tasks', ok: false, reason: 'spectator' });
-    logged(cap.lines, 'spectator_refused', { component: 'room.play', room: 'hub', frame: 'quests' });
+    logged(cap.lines, 'spectator_refused', { component: 'room.play', room: 'hub', frame: 'accept' });
     expect(eventsOf(cap.lines).filter((e) => e === 'spectator_refused')).toHaveLength(1);
-    expect(collections.questCalls).toEqual([]);
+    expect(collections.questCalls).toEqual([`visit:${SPEC}:guest`]);
+  });
+
+  it('lets it take Bramble’s welcome, and no other quest, and hand it in for the Leaf Crown and no feathers (OP-428)', async () => {
+    const obj = roomObject();
+    const ws = await spectator(obj, 'hub');
+    await settle();
+    // Beside Bramble, as anyone takes a quest from him.
+    await walk(obj, ws, floor(ws), { x: 2210, y: 760 });
+    await send(obj, ws, { t: 'accept', quest: 'story-welcome', r: 1 });
+    await settle();
+    expect(ws.of('quests').find((f) => f.r === 1)).toMatchObject({ ok: true });
+    expect(ws.of('quests').find((f) => f.r === 1)!.board.active.map((q) => q.id)).toEqual(['story-welcome']);
+    // Another of the park's story quests from Bramble's own hub: a ticket holder's.
+    await send(obj, ws, { t: 'accept', quest: 'story-hazel-acorns', r: 2 });
+    await send(obj, ws, { t: 'handin', quest: 'story-hazel-acorns', r: 3 });
+    await settle();
+    expect(ws.of('refused')).toEqual([2, 3].map((r) => ({ t: 'refused', r, reason: 'spectator' })));
+    // A hoot beside Bramble counts for his welcome's last step; its other steps are walked in their rooms.
+    for (const ev of [{ kind: 'talk', npc: 'pip' }, { kind: 'visit', room: 'grove' }, { kind: 'interact', what: 'leaf-pile', id: 'grove-leaves-2', room: 'grove' }, { kind: 'talk', npc: 'nova' }] as const) {
+      collections.quests.event(SPEC, ev, clock, undefined, true);
+    }
+    (collections as unknown as { owned: () => Promise<string[]> }).owned = async () => ['hoot'];
+    await send(obj, ws, { t: 'emote', e: 'hoot' });
+    await settle();
+    expect(collections.questCalls.at(-1)).toBe(`emote:${SPEC}:guest`);
+    expect(collections.quests.board(SPEC, clock).active.find((q) => q.id === 'story-welcome')?.ready).toBe(true);
+    await send(obj, ws, { t: 'handin', quest: 'story-welcome', r: 4 });
+    await settle();
+    expect(ws.of('handin').find((f) => f.r === 4)).toMatchObject({ ok: true, quest: 'story-welcome', feathers: 0, total: 0, award: { variant: 'leaf-crown~0', dup: false, feathers: 0 } });
+    expect(collections.book.owned(SPEC, undefined, clock)).toContain('leaf-crown~0');
+    expect(collections.book.feathers(SPEC, clock)).toBe(0);
   });
 
   it('lets it flop into a leaf pile for everyone to see, for no feathers, no quest and no task (OP-243)', async () => {
@@ -2066,21 +2143,26 @@ describe('spectators in the room object (OP-191)', () => {
     await settle();
     expect(ws.of('useResult').find((f) => f.r === 2)).toMatchObject({ ok: false, reason: 'gone', feathers: 0 });
     expect(collections.book.feathers(SPEC, clock)).toBe(0);
-    expect(collections.questCalls).toEqual([`visit:${OWNER}`]);
+    // Its flop counts for a guest's quests only (Bramble's welcome, OP-428).
+    expect(collections.questCalls).toEqual([`visit:${OWNER}`, `visit:${SPEC}:guest`, `interact:${SPEC}:guest`]);
     expect(ws.of('tasks')).toEqual([]);
     expect(eventsOf(cap.lines)).not.toContain('spectator_refused');
   });
 
-  it('lets it bask in the moonbeam as anyone does, counting for nothing (OP-243)', async () => {
+  // The Party Grove's telescope, out on its plaza's floor (plazaFloor.ts): a thing anyone may use that counts toward no feather.
+  const SCOPE = 'hub-stars-telescope';
+  const scopeAt = () => getInteractable(SCOPE)!.pos;
+
+  it('lets it look through the telescope as anyone does, counting for nothing (OP-243)', async () => {
     const obj = roomObject();
     const ws = await spectator(obj, 'hub');
     await settle();
-    await walk(obj, ws, floor(ws), { x: 2400, y: 800 });
-    await send(obj, ws, { t: 'use', target: 'hub-moonbeam', r: 1 });
+    await walk(obj, ws, floor(ws), scopeAt());
+    await send(obj, ws, { t: 'use', target: SCOPE, r: 1 });
     await settle();
     expect(ws.of('useResult')).toEqual([{ t: 'useResult', r: 1, ok: true, feathers: 0, total: -1, updates: [], practice: true }]);
     expect(ws.of('used')).toEqual([]);
-    expect(collections.questCalls).toEqual([]);
+    expect(collections.questCalls).toEqual([`visit:${SPEC}:guest`, `interact:${SPEC}:guest`]);
   });
 
   it('still keeps its uses to reach and the cooldown, as anyone’s (OP-243)', async () => {
@@ -2091,9 +2173,9 @@ describe('spectators in the room object (OP-191)', () => {
     await send(obj, ws, { t: 'use', target: 'hub-leaves-1', r: 1 });
     await settle();
     expect(ws.of('refused')).toEqual([{ t: 'refused', r: 1, reason: 'far' }]);
-    await walk(obj, ws, { x: 2400, y: 800 });
-    await send(obj, ws, { t: 'use', target: 'hub-moonbeam', r: 2 });
-    await send(obj, ws, { t: 'use', target: 'hub-moonbeam', r: 3 });
+    await walk(obj, ws, scopeAt());
+    await send(obj, ws, { t: 'use', target: SCOPE, r: 2 });
+    await send(obj, ws, { t: 'use', target: SCOPE, r: 3 });
     await settle();
     expect(ws.of('useResult').map((f) => f.r)).toEqual([2]);
     expect(ws.of('refused').find((f) => f.r === 3)).toEqual({ t: 'refused', r: 3, reason: 'busy' });
@@ -2103,12 +2185,12 @@ describe('spectators in the room object (OP-191)', () => {
     const obj = roomObject();
     const ws = await spectator(obj, 'hub');
     const woken = roomObject();
-    await send(woken, ws, { t: 'quests', r: 1 });
+    await send(woken, ws, { t: 'gather', quest: 'q1', n: 0, r: 1 });
     await settle();
     expect(ws.last('refused')).toEqual({ t: 'refused', r: 1, reason: 'spectator' });
   });
 
-  it('shows its emotes and counts them for no quest, and shows no Realm Vote pledge on it', async () => {
+  it('shows its emotes and counts them for a guest’s quests only, and shows no Realm Vote pledge on it', async () => {
     (collections as unknown as { owned: () => Promise<string[]> }).owned = async () => ['hoot', 'flap'];
     const obj = roomObject();
     const holder = connect('hub', 'v_holder', OWNER);
@@ -2121,7 +2203,7 @@ describe('spectators in the room object (OP-191)', () => {
     await send(obj, ws, { t: 'emote', e: 'hoot' });
     await settle();
     expect(holder.last('emote')).toEqual({ t: 'emote', id: SPEC_ID, e: 'hoot' });
-    expect(collections.questCalls).toEqual([`visit:${OWNER}`]);
+    expect(collections.questCalls).toEqual([`visit:${OWNER}`, `visit:${SPEC}:guest`, `emote:${SPEC}:guest`]);
   });
 
   it('plays the arcade’s games as practice runs: nothing kept on the wall, nothing paid', async () => {
@@ -2250,7 +2332,7 @@ describe('spectators in the room object (OP-191)', () => {
       expect(await answered(ws, i + 1)).toEqual({ t: 'admitted', r: i + 1, ok: false, reason: 'pass' });
       logged(cap.lines, 'spectator_refused', { component: 'room.play', frame: 'admit', reason });
     }
-    await send(obj, ws, { t: 'quests', r: 9 });
+    await send(obj, ws, { t: 'gather', quest: 'q1', n: 0, r: 9 });
     await settle();
     expect(ws.last('refused')).toMatchObject({ r: 9, reason: 'spectator' });
     // Its ticket went through: from here on it is a visitor, and its arrival counts.
@@ -2259,7 +2341,7 @@ describe('spectators in the room object (OP-191)', () => {
     expect(await answered(ws, 10)).toEqual({ t: 'admitted', r: 10, ok: true });
     expect(ws.deserializeAttachment()).not.toHaveProperty('spec');
     logged(cap.lines, 'spectator_admitted', { component: 'room.join', room: 'hub' });
-    expect(collections.questCalls).toEqual([`visit:${SPEC}`]);
+    expect(collections.questCalls).toEqual([`visit:${SPEC}:guest`, `visit:${SPEC}`]);
     await send(obj, ws, { t: 'act', a: 'tasks', r: 11 });
     await settle();
     expect(act(ws, 11)).toMatchObject({ ok: true });
@@ -2819,5 +2901,61 @@ describe('the Realm Vote’s shares in the Great Hollow (OP-288)', () => {
       expect((await shares(obj, bad)).status, JSON.stringify(bad)).toBe(400);
     }
     expect(inHall.of('shares')).toEqual([]);
+  });
+});
+
+describe('the Party Grove’s lanterns and quiz in the Great Hollow (Dec 1 plan D5)', () => {
+  const act = (ws: FakeSocket, r: number) => ws.of('act').find((f) => f.r === r);
+  let seqs = 0;
+  async function walk(obj: Obj, ws: FakeSocket, ...path: Vec2[]) {
+    for (const to of path) {
+      await send(obj, ws, { t: 'move', to, seq: ++seqs });
+      clock += 20_000;
+    }
+  }
+  /** Round the grove's roots, south of them, from wherever the owl came in. */
+  const round = (ws: FakeSocket): Vec2[] => [ws.last('welcome')!.you.pos, { x: 2720, y: 1480 }, { x: 3700, y: 1450 }];
+
+  it('keeps the hollow’s lanterns apart from the plaza’s, lit from the floor in front of the posts', async () => {
+    const beam = lanternBeam('m3-hall')!;
+    const lit: LanternState = { lit: Object.fromEntries(beam.lanterns.slice(1).map((l) => [l.id, clock + 600_000])), glowUntil: 0, helpers: {} };
+    const asked: string[] = [];
+    const puts: string[] = [];
+    state.storage.get = async (key: string) => {
+      asked.push(key);
+      return key === 'lanterns:m3-hall' ? structuredClone(lit) : undefined;
+    };
+    state.storage.put = async (key: string) => void puts.push(key);
+    const obj = roomObject();
+    const ws = await join(obj, 'm3-hall', 'v_hallowl01', OWNER);
+    expect(asked).toEqual(expect.arrayContaining(['lanterns', 'lanterns:m3-hall', 'quiz', 'quiz:m3-hall']));
+    // A newcomer is sent the row as it burns.
+    expect(ws.last('lanterns')).toMatchObject({ t: 'lanterns' });
+    await walk(obj, ws, ...round(ws), { x: beam.lanterns[0]!.pos.x, y: beam.floor.y + 50 });
+    await send(obj, ws, { t: 'act', a: 'light', r: 1 });
+    await settle();
+    expect(act(ws, 1)).toMatchObject({ ok: true, id: 'hall-lantern-1' });
+    // The other three were lit from the hollow's own storage: this one fills the row.
+    expect(ws.last('paid')).toMatchObject({ t: 'paid', what: 'beam' });
+    expect(ws.last('lanterns')!.glowUntil).toBeGreaterThan(clock);
+    expect(puts).toContain('lanterns:m3-hall');
+    expect(puts).not.toContain('lanterns');
+  });
+
+  it('asks the stage quiz in the hollow and pays the owls on the right plate', async () => {
+    const puts: string[] = [];
+    state.storage.put = async (key: string) => void puts.push(key);
+    const obj = roomObject();
+    const ws = await join(obj, 'm3-hall', 'v_hallowl01', OWNER);
+    const q = quizRound(quizRoundAt(clock).n + 2);
+    const zone = quizStage('m3-hall')!.zones[q.right];
+    await walk(obj, ws, ws.last('welcome')!.you.pos, { x: zone.x + zone.w / 2, y: zone.y + zone.h / 2 });
+    clock = q.revealAt + 1;
+    await obj.alarm();
+    await settle();
+    expect(ws.last('quiz')).toMatchObject({ n: q.n, right: q.right, winners: ['v_hallowl01'] });
+    expect(ws.last('paid')).toMatchObject({ what: 'quiz' });
+    expect(puts).toContain('quiz:m3-hall');
+    expect(puts).not.toContain('quiz');
   });
 });

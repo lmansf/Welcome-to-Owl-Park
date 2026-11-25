@@ -5,19 +5,39 @@ export interface ParkState {
   /** Whether the first snow falls in this room (OP-074, behind ?snow=1). */
   snow: boolean;
   snowballs: { thrown: number; landed: number; hits: string[] };
-  /** Feather tag in the Party Grove (OP-403, behind ?tag=1): the game as the page has it; null elsewhere or without the flag. */
+  /** Feather tag across the Great Hollow (OP-434): the game as the page has it; null elsewhere. */
   tag: {
-    inRing: boolean;
-    phase: 'waiting' | 'countdown' | 'live' | 'over';
+    atStation: boolean;
+    phase: 'waiting' | 'call' | 'countdown' | 'live' | 'over';
+    self: string;
+    heard: string[];
     players: string[];
     holder: string | null;
     round: number;
     left: string | null;
+    score: number;
     line: string;
+    button: string;
     passesAsked: number;
     refused: string[];
     server: boolean;
+    /** Where Pip stands while standing in for a missing player (OP-426). */
+    standIn: { x: number; y: number } | null;
+    /** What the last finished game earned this owl, as the room said. */
+    prize: { tier: 'low' | 'middle' | 'high'; score: number; total: number } | null;
   } | null;
+  /** Pinecone bowling in the Great Hollow (OP-403): this page's game; null elsewhere. */
+  bowl: {
+    phase: 'idle' | 'aiming' | 'rolling' | 'settling';
+    atSpot: boolean;
+    rolls: number[];
+    score: number;
+    standing: number[];
+    line: string;
+    games: number;
+  } | null;
+  /** Calm motion (OP-375): whether it is on, and how long this room faded in and (once left) out, in ms. */
+  motion: { calm: boolean; fadeInMs: number; fadeOutMs: number | null };
   /** The owl walks this room as a spectator, as its welcome said (OP-191). */
   spectator: boolean;
   /** The dash (OP-224): held in a parkour course only, spent until the owl lands, and the dashes made in this room. */
@@ -106,7 +126,7 @@ export interface ParkState {
   promptShown: string | null;
   /** The tall art gone see-through because the visitor's own owl is behind it (OP-346), by its art's key. */
   seeThrough: string[];
-  /** The guardian at the heart of the Great Hollow (OP-359): null on any address without `?guardian=1`. */
+  /** The guardian at the heart of the Great Hollow (OP-359): null in any other room. */
   guardian: {
     at: { x: number; y: number };
     scale: number;
@@ -120,13 +140,15 @@ export interface ParkState {
     alpha: number;
     boxes: Array<{ x: number; y: number; w: number; h: number }>;
   } | null;
-  /** The vote desk in the Great Hollow (OP-288): null on any address without `?desk=1`. */
+  /** The vote desk in the Great Hollow (OP-288): null in any other room. */
   desk: { at: { x: number; y: number }; month: string | null; shares: Record<string, number> | null; lines: string[] } | null;
   /** The sounds played for the visitor's own owl on this page, the newest last (OP-350). */
   sounds: string[];
   /** The side camera (OP-351): its lead (room px, to the right is positive), the height it holds and where it looks; null in a room seen from above. */
   sideCam: { lead: number; level: number; x: number; y: number } | null;
   egg: { at: { x: number; y: number } | null; said: string | null };
+  pet: { x: number; y: number } | null;
+  petSize: { w: number; h: number; owlW: number } | null;
   trail: { feathers: Array<{ x: number; y: number }>; glints: string[]; on: boolean } | null;
   floorShown: boolean;
   /** How many pieces shaping the room's edges seen from above were drawn (edges.ts). */
@@ -151,6 +173,8 @@ export interface ParkState {
   /** NPC owls, the quest marker each shows, and whether its '!' says the visitor can talk to it now (OP-114). */
   npcs: Array<{ id: string; x: number; y: number; mark: string | null; approach: boolean }>;
   objects: Array<{ id: string; kind: string; x: number; y: number; top: number; here: boolean }>;
+  /** The room's thermals (thermal.ts): where its warm air rises, in the light drawn there. */
+  thermals: Array<{ id: string; x: number; y: number; r: number; top: number }>;
   items: Array<{ quest: string; n: number; kind: string; x: number; y: number; top: number }>;
   actions: string[];
   /** Seen from the side (the tree, OP-212): the doorway the owl stands in that up would take it through, its up arrow shown. */
@@ -240,6 +264,8 @@ export const E2E_STORE = {
   token: 'e2e-only-store-token-not-a-secret',
   webhookKey: 'e2e-only-webhook-key-not-a-secret',
   passCode: 'E2E-OPENING-NIGHT',
+  /** The store code that takes the whole Day Ticket off for a friend (REFERRAL_CODE). */
+  referralCode: 'E2E-FRIEND-FREE',
   /** The store's ticket page the room server's client is built with (where checkout goes when the park cannot make an owl's cart link, OP-180). */
   ticketsUrl: 'https://owl-e2e.myshopify.com/collections/tickets',
   /** The store's page the gift shop's door opens, in the room server's client. */

@@ -18,9 +18,11 @@
  * TODO-DOCS (OP-365): docs/QUIZ-ART.md says the game draws the dashed box for every visitor; it
  * draws it with `?paint=1` or `?keeper=1` in the address, and word cards otherwise.
  */
-import { COLOUR_SETS, QUIZ_ART_SIZE, WHICH_OWL_WORDS as W, drawCards, getSpecies, natureDef, natureOf, quizLook, type ColourSetId, type Nature, type OwlLook, type QuizAnswer, type QuizCard } from '@owl-park/shared';
+import { COLOUR_SETS, OWL_SHARE_WORDS, QUIZ_ART_SIZE, WHICH_OWL_WORDS as W, drawCards, getSpecies, natureDef, natureOf, quizLook, type ColourSetId, type Nature, type OwlLook, type QuizAnswer, type QuizCard } from '@owl-park/shared';
 import { PUBLISHED_ART, versioned } from '../game/publishedArt';
+import { flagOn } from '../flags';
 import { createModal } from './modal';
+import { shareOwl, type ShareDevice } from './shareOwl';
 import type { PreviewFrame } from './owlBuilder';
 
 /**
@@ -74,7 +76,7 @@ export interface WhichOwlScreen {
 }
 
 const CSS = `
-#hud .layer.full .modal.which-owl{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;justify-content:safe center;gap:clamp(14px,3vh,26px);
+#hud .layer.full .modal.which-owl{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;justify-content:safe center;gap:clamp(14px,calc(3vh/var(--vz,1)),26px);
   padding:calc(max(10px,env(safe-area-inset-top)) + 56px) max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));
   background:radial-gradient(ellipse at 50% 18%,rgba(255,211,106,.3),rgba(255,211,106,0) 48%),linear-gradient(180deg,#24497A,#1B3A63 60%,#16304F);color:#F6F1E3;overflow:auto;transition:background-color .5s ease-out}
 /* The reveal is see-through (OP-325): the owl is drawn on the game canvas under the HUD, over the builder scene's own dusk backdrop. */
@@ -84,8 +86,8 @@ const CSS = `
 #hud .which-owl .wo-corner{position:absolute;z-index:2;top:max(10px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));display:flex;align-items:center;gap:10px}
 #hud .which-owl .wo-count{font-size:14px;opacity:.75}
 #hud .which-owl .wo-corner button{min-height:44px;padding:6px 16px;font-size:15px}
-#hud .which-owl .wo-say{max-width:34em;margin:0;text-align:center;font-size:clamp(19px,3.2vh,26px);line-height:1.35;text-shadow:0 2px 10px rgba(0,0,0,.6)}
-#hud .which-owl .wo-picks{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(8px,2vw,18px);width:min(640px,100%)}
+#hud .which-owl .wo-say{max-width:34em;margin:0;text-align:center;font-size:clamp(19px,calc(3.2vh/var(--vz,1)),26px);line-height:1.35;text-shadow:0 2px 10px rgba(0,0,0,.6)}
+#hud .which-owl .wo-picks{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(8px,calc(2vw/var(--vz,1)),18px);width:min(640px,100%)}
 #hud .which-owl .wo-picks.n2{grid-template-columns:repeat(2,minmax(0,1fr));width:min(440px,100%)}
 #hud .which-owl .wo-picks.n4{grid-template-columns:repeat(4,minmax(0,1fr));width:min(760px,100%)}
 #hud .which-owl .wo-picks.four{grid-template-columns:repeat(4,minmax(0,1fr));width:min(560px,100%)}
@@ -94,27 +96,27 @@ const CSS = `
   background:rgba(246,241,227,.08);border:2px solid rgba(246,241,227,.2);color:#F6F1E3;box-shadow:none;font-size:15px;font-weight:700;line-height:1.25;white-space:normal}
 #hud .which-owl .wo-pick:hover,#hud .which-owl .wo-pick:focus-visible{border-color:#FFD36A;background:rgba(255,211,106,.12)}
 /* Words alone (OP-365), as every visitor sees an answer until its picture is painted: a card tall enough to be an easy tap, its words in the middle. */
-#hud .which-owl .wo-picks.words .wo-pick{justify-content:center;min-height:clamp(76px,15vh,120px);padding:14px 12px;font-size:clamp(16px,2.6vh,20px)}
+#hud .which-owl .wo-picks.words .wo-pick{justify-content:center;min-height:clamp(76px,calc(15vh/var(--vz,1)),120px);padding:14px 12px;font-size:clamp(16px,calc(2.6vh/var(--vz,1)),20px)}
 /* Three answers across a phone held upright leave each a column a word wide: there they stack, one to a row. */
 @media (max-width:560px){#hud .which-owl .wo-picks.words.n3{grid-template-columns:minmax(0,1fr);width:min(360px,100%)}
   #hud .which-owl .wo-picks.words.n3 .wo-pick{min-height:64px}}
 /* The picture's place (OP-326), on a painter's or keeper's tab: a box with the size to paint it at, until the art comes. */
-#hud .which-owl .wo-pic{display:flex;align-items:center;justify-content:center;width:clamp(64px,12vh,${QUIZ_ART_SIZE}px);aspect-ratio:1;border:2px dashed rgba(246,241,227,.5);border-radius:12px;
+#hud .which-owl .wo-pic{display:flex;align-items:center;justify-content:center;width:clamp(64px,calc(12vh/var(--vz,1)),${QUIZ_ART_SIZE}px);aspect-ratio:1;border:2px dashed rgba(246,241,227,.5);border-radius:12px;
   font-size:12px;font-weight:600;letter-spacing:.02em;color:rgba(246,241,227,.75);background:rgba(246,241,227,.05)}
 /* A painted picture (OP-404) in the box's place: the same size, no dashes. */
 #hud .which-owl img.wo-pic.wo-painted{display:block;border:0;padding:0;background:none;object-fit:contain}
-#hud .which-owl .wo-feather{width:clamp(48px,10vh,76px);height:clamp(48px,10vh,76px)}
+#hud .which-owl .wo-feather{width:clamp(48px,calc(10vh/var(--vz,1)),76px);height:clamp(48px,calc(10vh/var(--vz,1)),76px)}
 /* The owl is the reveal's centrepiece: it never gives up its room when the words run past a phone's
    screen (a flex child shrinks by default, which left a thumb-sized owl), and on a phone the owl
    itself stands about a third of the screen wide. */
-#hud .which-owl .wo-stage{flex:0 0 auto;width:min(380px,88vw);height:min(400px,50vh,100vw)}
+#hud .which-owl .wo-stage{flex:0 0 auto;width:min(380px,calc(88vw/var(--vz,1)));height:min(400px,calc(50vh/var(--vz,1)),calc(100vw/var(--vz,1)))}
 #hud .which-owl .wo-you{margin:0;font-size:15px;opacity:.85;letter-spacing:.04em;text-transform:uppercase}
-#hud .which-owl .wo-name{margin:0;font-size:clamp(28px,5vh,40px);color:#FFD36A;text-shadow:0 2px 12px rgba(0,0,0,.55)}
+#hud .which-owl .wo-name{margin:0;font-size:clamp(28px,calc(5vh/var(--vz,1)),40px);color:#FFD36A;text-shadow:0 2px 12px rgba(0,0,0,.55)}
 #hud .which-owl .wo-fact{max-width:30em;margin:0;text-align:center;font-size:16px;line-height:1.4;opacity:.92}
 #hud .which-owl .wo-about{max-width:32em;margin:0;text-align:center;font-size:17px;line-height:1.45}
 #hud .which-owl .wo-enjoy{max-width:30em;margin:0;text-align:center;font-size:16px;line-height:1.4;color:#FFD36A}
 #hud .which-owl .wo-thinking{font-style:italic;opacity:.9}
-@media (max-height:720px) and (min-aspect-ratio:1/1){#hud .which-owl .wo-stage{height:min(260px,34vh)}}
+@media (max-height:720px) and (min-aspect-ratio:1/1){#hud .which-owl .wo-stage{height:min(260px,calc(34vh/var(--vz,1)))}}
 @media (max-height:720px){#hud .which-owl .wo-about,#hud .which-owl .wo-fact,#hud .which-owl .wo-enjoy{font-size:15px}}
 /* The reveal's words come in one by one, after the owl has landed (OP-330). */
 @media (prefers-reduced-motion:no-preference){#hud .which-owl .wo-later{animation:wo-fade .5s ease-out both}}
@@ -315,6 +317,21 @@ export function createWhichOwlScreen(root: HTMLElement): WhichOwlScreen {
     const again = button(W.again, 'ghost', { woAgain: '' });
     again.addEventListener('click', () => begin(false));
     actions.append(keep, makeBtn, again);
+    // Share my owl (OP-392), behind its flag: a link to this owl's own page, nothing personal with it.
+    if (flagOn('share')) {
+      const share = button(OWL_SHARE_WORDS.share, 'ghost', { woShare: '' });
+      share.addEventListener('click', () => {
+        const device = globalThis.navigator as unknown as ShareDevice;
+        void shareOwl(def, globalThis.location.origin, {
+          share: typeof device.share === 'function' ? device.share.bind(device) : undefined,
+          clipboard: device.clipboard,
+        }).then((how) => {
+          if (how === 'copied') share.textContent = OWL_SHARE_WORDS.copied;
+          share.dataset['woShared'] = how;
+        });
+      });
+      actions.append(share);
+    }
     // The owl glides in first (about a second); its name and the words follow, one after another.
     [line, you, name, about, fact, enjoy, actions].forEach((w, i) => {
       w.classList.add('wo-later');

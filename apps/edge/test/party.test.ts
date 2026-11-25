@@ -8,8 +8,10 @@ import {
   PARTY_FEATHERS,
   PARTY_LONGEST_MS,
   PARTY_PAID_GAMES,
+  PARTY_STANDIN_WAIT_MS,
   RESTART_HOUR_UTC,
   STUMP_ROOM,
+  getNpc,
   isPartyRoom,
   nextRestartAt,
   type ClientFrame,
@@ -131,7 +133,7 @@ function connect(room: string, id: string, cid?: string, spec = false): FakeSock
 const send = (obj: Obj, ws: FakeSocket, frame: ClientFrame | Record<string, unknown>) => obj.webSocketMessage(ws as unknown as WebSocket, JSON.stringify(frame));
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-/** An owl in the Party Grove, in front of the stump. */
+/** An owl in the Great Hollow, in front of the stump. */
 async function atStump(obj: Obj, id: string, opts: { cid?: string; spec?: boolean } = {}) {
   const ws = connect(STUMP_ROOM, id, opts.cid, opts.spec);
   await send(obj, ws, { t: 'hello', v: EDGE_PROTOCOL_VERSION, look: LOOK, spawn: FROM_STUMP_SPAWN });
@@ -277,9 +279,53 @@ describe('the Old Stump (OP-314)', () => {
     expect(gs.of('party').find((f) => f.paid)!.paid).toEqual({ feathers: 0, practice: true });
     logged(lines.lines, 'party_ended', { why: 'finished' });
     logged(lines.lines, 'party_paid', { games: 1 });
-    // Its room is let go: the owls still in it are sent back to the Party Grove.
+    // Its room is let go: the owls still in it are sent back to the Great Hollow.
     expect(ga.closed?.code).toBe(CLOSE.PARTY_CLOSED);
     expect(state.kept.get(`party:${go}`)).toBeUndefined();
+  });
+
+  it('lets an owl that sat alone a while play with Pip, a park owl, and pays only that owl (OP-426)', async () => {
+    const lines = captureLogs();
+    const obj = roomObject();
+    const a = await atStump(obj, 'a', { cid: 'c_aaaaAAAA' });
+    await party(obj, a, 'sit');
+    // Too soon: an owl just sat down may still be joined by a friend.
+    await party(obj, a, 'start', { standin: true });
+    expect(a.last('stump')).toMatchObject({ ok: false, reason: 'few' });
+    clock += PARTY_STANDIN_WAIT_MS;
+    // Asked plainly, one owl is still too few.
+    await party(obj, a, 'start');
+    expect(a.last('stump')).toMatchObject({ ok: false, reason: 'few' });
+    await party(obj, a, 'start', { standin: true });
+    const go = a.of('stump').find((f) => f.go)!.go!;
+    expect(isPartyRoom(go)).toBe(true);
+    logged(lines.lines, 'party_started', { owls: 1, bots: 1, standin: true });
+    const ga = await intoGame(obj, a, 'a', { cid: 'c_aaaaAAAA' });
+    const owls = ga.last('party')!.view!.owls;
+    expect(owls.map((o) => o.bot)).toEqual([false, true]);
+    expect(owls[1]!.look.body).toBe(getNpc('pip')!.look.body);
+    await playOut(obj, go, [ga]);
+    expect(collections.paid.map((p) => p.cid)).toEqual(['c_aaaaAAAA']);
+  });
+
+  it('never adds Pip when a second owl sat down, and Pip with the seats filled leaves four', async () => {
+    const lines = captureLogs();
+    const obj = roomObject();
+    const a = await atStump(obj, 'a');
+    const b = await atStump(obj, 'b');
+    await party(obj, a, 'sit');
+    await party(obj, b, 'sit');
+    clock += PARTY_STANDIN_WAIT_MS;
+    await party(obj, a, 'start', { standin: true });
+    logged(lines.lines, 'party_started', { owls: 2, bots: 0 });
+    const c = await atStump(obj, 'c');
+    await party(obj, c, 'sit');
+    clock += PARTY_STANDIN_WAIT_MS;
+    await party(obj, c, 'start', { standin: true, bots: true });
+    const go = c.of('stump').find((f) => f.go)!.go!;
+    const gc = await intoGame(obj, c, 'c');
+    expect(gc.last('party')!.view!.owls.map((o) => o.bot)).toEqual([false, true, true, true]);
+    expect(go).not.toBe(a.of('stump').find((f) => f.go)!.go);
   });
 
   it('ends a game everyone left, and pays nobody for it', async () => {
