@@ -956,7 +956,8 @@
       "textures": {
         "fern-floor": "a forest floor thick with low ferns, moss and a few fallen amber leaves, seen flat from above",
         "hollow-wood": "the inside wall of a hollow tree trunk: smooth worn wood with long curving grain and small knotholes, warm brown",
-        "leaf-canopy": "dense overlapping leaves in two greens with small gaps of amber light showing through, seen from below"
+        "leaf-canopy": "dense overlapping leaves in two greens with small gaps of amber light showing through, seen from below",
+        "meadow": "the clearing's short meadow grass at dusk seen from above, deep greens with paler tufts, a few bare earthy patches, small fallen amber leaves and pebbles, and a few tiny firefly glints, evenly spread"
       },
       "sheets": {
         "commons-a": {
@@ -2125,7 +2126,9 @@
       "textures": {
         "paper-grain": "warm cream handmade paper seen flat on, its fine fibres and faint grain evenly spread, the thinnest even grey ink wash over it, no marks, no strokes, no stains",
         "ink-stone": "fitted grey stone blocks shaded in grey ink wash, the joints a darker brushed line, smooth and even, the stone of a riverbank wall or a paper cliff",
-        "woven-reed": "a mat of woven reed strips seen flat on, pale straw over warm grey, the weave even and regular, each strip with a faint ink-wash edge"
+        "woven-reed": "a mat of woven reed strips seen flat on, pale straw over warm grey, the weave even and regular, each strip with a faint ink-wash edge",
+        "river": "still river water in soft grey-blue ink wash, a pale line of light along its surface, a few short dark brushed ripples and thin white glints lying level, darker towards its depth, no reflections of anything, no fish, no plants",
+        "flagstone": "pale grey flagstones of uneven shapes seen from above, fitted with narrow joints of soft green moss and small pebbles, shaded in light grey ink wash on warm paper, the floor of a garden courtyard, nothing standing on it"
       },
       "sheets": {
         "commons-a": {
