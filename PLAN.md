@@ -791,13 +791,71 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
     no flag sees a diver come in up in the air and land (`e2e/edge.spec.ts`).
   - Done when: with the flag, a course is climbed by tunnels and left by a dive on a computer
     and a phone; without it nothing has changed; the kid sim is green; the gate passes.
-- Milestone 3, the lane's pace: at a walk's pace the lane saves no time, only the walking. A
-  pace of its own needs a third walk pace on the wire and in the room server (a walk today is
-  260 px a second, or 900 for a course's dash), so that the room and every other page carry the
-  rider at the pace its own page does. Its own pull request.
+- Milestone 3, the lane's pace (its own pull request; built Nov 17).
+  - Should move: crossing the arcade by the lane takes half the time of walking it (7.7 s for
+    its 4,000 px, where a walk takes 15.4), so the lane is the way a player chooses, and a push
+    along it is never slower than letting it carry. With the flag on for everyone: the share of
+    arrivals in the Great Hollow that reach the arcade, and arcade visits that reach a second
+    cabinet. Until then: the QA walk, and the kid sim staying green.
+  - Why it beats what is there: at a walk's pace the lane saves the walking and not the time,
+    and a player who pushes along it gets nothing for having caught it.
+  - The pace: `LANE_SPEED`, twice a walk (520 px a second), in one place (`walk.ts`). A walk
+    says it is a lane's carry (`lane`), as a dash says `dash`, and `walkSpeed` gives its pace, so
+    the own owl, the room's copy and every other page's copy follow one rule.
+  - The wire: `lane` on the ordinary move, both ways. No new frame, and the protocol number
+    stays where it is: raising it reloads every open page, and neither side needs the other to
+    know. A room server that does not know the word walks the owl at a walk's pace and says so
+    in its echo, which puts the page right; a page that does not know it draws a rider at a
+    walk's pace until the rider's next walk. The change that switches the flag on should weigh
+    a raise then, so that no open page draws a rider slow.
+  - The room's rule (`Room.ts`, `onLane`): a walk is taken at the lane's pace only for an owl
+    the room itself holds up on that lane, from and to points within the lane's reach. Asked for
+    anywhere else it is an ordinary walk, echoed as one: no rejection, no strike. An owl that
+    leaves the lane's air with such a walk under way walks the rest at a walk's pace, for
+    everyone (`offLane`). And where the room reckons how far an owl that left may have got
+    before it came back, a room with a lane counts the lane's pace.
+  - The page (`rideLane`, `carry`): one walk of the lane's own, from the flight step's own place
+    and time, started once the room has been told the lane holds the owl. That is at the catch,
+    or up to a third of a second after it when the page's allowance of air tells was spent;
+    until then the owl hangs in the lane on the walk it came by. While the lane has the owl the
+    keys and a tap steer nothing: a push mostly along the lane picks the end it is carried to, a
+    push mostly across is the owl's own way out at a walk's pace, and Jump let go sets it down
+    where it is. The room's echo puts a pace right as well as an end (`net/edge.ts`). The
+    camera's follow is given the share of the way a frame that keeps the lane's pace in view
+    (`followEaseAt`).
+  - Fixed on the way, each found by reading the code or by a test, before a player met it:
+    - A lane end another owl stands on. The room ends the rider's walk beside that owl, and the
+      page asked again for the end itself at every step of the ride: in the two-owl test, eight
+      moves told where two do (a walk, then the ride), the page's allowance spent and its owl
+      lagging. The room's answer is now where the lane sets the owl down, and a ride is one move.
+    - The lane's catch against the arcade's floor. The floor's corner by the first cabinet
+      stands 72 px north of the lane's line and the catch reached 80, so an owl caught up there
+      was carried into the corner and set down at the cabinet. The catch is 70 px a side, and a
+      lane's reach has to be floor all over, measured against the floor's own edge and held for
+      every room (`laneClear`, `moverProblems`).
+    - Where the room starts a carry. The room's place for an owl runs a moment behind its
+      page's, so an owl caught on the rim of the reach could be outside it for the room, and its
+      carry began on a line across a cabinet's front. The room starts a carry from the nearest
+      spot inside the reach (`laneStart`).
+    - A tap on the floor during a ride began a walk that the lane took back at its next step,
+      two moves each time. A tap waits until Jump is let go.
+  - Tests: the shared pace, wire and reach (`walk.test.ts`, `edge.test.ts`, `movers.test.ts`);
+    the room (`Room.test.ts`: the pace given and refused, the start of a carry, an owl leaving
+    the lane's air); the page's transport (`net/edge.test.ts`) and small rules (`movers.test.ts`,
+    `hudInset.test.ts`, `posOverlay.test.ts`); and in the browser, a computer and a phone
+    (`e2e/movers.spec.ts`): the whole lane in one walk at twice a walk's pace, by the flight's
+    own record of it, and back; a push along and a push across; the tap; a catch on the very
+    rim. Through the room server (`e2e/edge.spec.ts`): another page with no flag sees the rider
+    go at the lane's pace, and the ride toward a taken end is counted in the moves it tells.
+    Each new rule taken out by hand fails a test: 43 in the room, 6 in the page and the shared
+    rules, 2 through the room server.
+  - Done when: with the flag, the ride takes about half the time of the walk on a computer and
+    a phone; another page with no flag sees the rider go at that pace through the room server;
+    without the flag nothing has changed; the kid sim is green; the gate passes.
 - Should move: with the flag on for everyone, the share of arrivals in the Great Hollow that
   reach the arcade, and arcade visits that reach a second cabinet. Until then, the QA walk.
-- For the owner: the lane's line of words; how each of the three pieces should look; whether
+- For the owner: the lane's line of words; how each of the three pieces should look, the lane's
+  catch among them (70 px a side now, where it was 80); whether
   the hall wants a lane of its own once the guardian is on; whether each course's way home
   should be a dive (it is, with the flag) or a tunnel like the rest; and the ticket's wider
   list (the hall's planks, the grove's ladder, nest doors), which is outside this build unless
@@ -1293,3 +1351,21 @@ Each leaves the game playable with the bots and the gate passing, and has its ow
   kid back down a storey for a jump. A course's dive is a tunnel that goes straight down, taken
   where the owl stands. And the courses needed no new art box: their doorways are the realm's
   knot-hole slot already.
+- 2026-11-17: the movers' third milestone built (OP-287). Kept for next time:
+  - Never judge a flight by the frames drawn of it. The headless browser here draws the Great
+    Hollow about seven times a second and a CI runner fewer, so a flight of half a second is
+    three frames. The flight itself is stepped 120 times a second inside each frame and keeps
+    its own record (`flown`, `movers.rode`); the tests read that.
+  - The camera's follow goes a share of the way each frame, not each second, so how far it
+    trails the owl depends on the frame rate. A test asserts the share it was given and never
+    the lag, and a tap after a ride waits for the camera to come to rest.
+  - A rule about a reach is exact or it is nothing. The lane's catch was checked against the
+    arcade by eye and passed; the floor's corner was 8 px inside it. The check now measures the
+    lane against the floor's own edge.
+  - The room's place for an owl can be a frame's travel behind its page's. A rule the room
+    applies to where an owl is needs that slack, or a start of its own as the lane's carry has.
+  - Another page sees an arrival's fall only when the room's welcome reaches the arriving page
+    before it lands, and a cabinet is a doorway that goes nowhere: it takes no owl.
+  - A correction: milestone 2's commit on `main` (ef94cee) repeats, from its second commit's
+    message, figures for the puzzle tests that overstate them. The right ones are in that pull
+    request's description (263) and on the board.

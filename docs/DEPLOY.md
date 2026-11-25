@@ -391,7 +391,7 @@ section 10.
 | Tier | When | What runs |
 | --- | --- | --- |
 | Quick | a push to a branch other than `main` | typecheck, unit tests and build as three jobs at once, then the browser smoke set: the tests tagged `@smoke`, on the `desktop` and `edge` projects; under five minutes |
-| Full | a pull request, a push to `main`, the nightly run (07:00 UTC) and a run by hand | the same three jobs, then the whole browser suite split across twelve runners by the tests' measured times, their reports merged into one; and mutation testing (OP-131, `docs/TESTING.md`) |
+| Full | a pull request, a push to `main`, the nightly run (07:00 UTC) and a run by hand | the same three jobs, then the whole browser suite split across twenty runners, one test at a time on each, by the tests' measured times, their reports merged into one; and mutation testing (OP-131, `docs/TESTING.md`) |
 
 - A push that changes only `docs/` or Markdown files runs nothing (`paths-ignore`). A pull request
   always runs.
@@ -404,12 +404,16 @@ section 10.
   `pnpm e2e --grep @smoke --project=desktop --project=edge`, so a smoke test must sit in a spec file
   one of those two projects matches (`apps/park/playwright.config.ts`). Keep the set small: the quick
   tier is meant to finish in under five minutes.
-- **The shard timings**: `apps/park/e2e/shard.mjs` shares the suite out by
-  `apps/park/e2e/durations.json` (seconds per test on a CI runner), longest first onto the shard with
-  the least so far; a test with no measured time counts as the median. A full run that passes uploads
-  a refreshed copy as the `durations` artifact (one run's times averaged with the table's). When tests
-  are added, take that artifact from a passing full run and commit it as `apps/park/e2e/durations.json`
-  (or run `node e2e/shard.mjs durations <report.json>` in `apps/park` on a merged JSON report).
+- **The shard timings**: `apps/park/e2e/shard.mjs` shares the suite out by measured seconds per test
+  on a CI runner, longest first onto the shard that would finish soonest with it; a test with no
+  measured time counts as the median. The suite runs on twenty shards, one test at a time on each
+  (two or three at once starved the game of CPU on the runners' four cores and failed tests across the
+  suite), about 13 minutes of tests a shard. The build job makes the plan once (`node e2e/shard.mjs plan 20 1 shard-plan`, the `shard-plan` artifact) so every
+  shard works from the same table. The table is the newest one main has kept in the Actions cache
+  (`e2e-durations-v1-*`: each passing run on main averages its times in and saves it), and
+  `apps/park/e2e/durations.json` when there is none. Refresh the committed copy now and then from the
+  `durations` artifact of a passing run on main, or with `node e2e/shard.mjs durations <report.json>`
+  in `apps/park` on a merged JSON report.
 - **Waiting in browser tests**: a test waits on the park's own state (`window.owlPark.state()`,
   through `state` in `apps/park/e2e/helpers.ts`, `expect.poll` or `page.waitForFunction`) or on the
   game's frames (`frames` in `helpers.ts`, counted in the game's updates, so a slow runner gets as many

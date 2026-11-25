@@ -15,8 +15,11 @@ import {
   hiddenPieces,
   inDowndraft,
   laneAt,
+  laneCarrying,
+  laneClear,
   laneEnd,
   laneHolds,
+  laneInto,
   laneOff,
   laneTop,
   moverProblems,
@@ -34,6 +37,9 @@ import { GLIDE_SLOPE } from './flight';
 import { findSpawn } from './room';
 import { INTERACTABLES } from './interactables';
 import { WALK_SPEED } from './walk';
+
+/** Whether a walk is some lane's carry, as the room server asks it (laneCarrying). */
+const laneCarries = (...asked: Parameters<typeof laneCarrying>): boolean => laneCarrying(...asked) !== undefined;
 
 const hole: Downdraft = { id: 'hole', door: 'down', pos: { x: 500, y: 500 }, r: 120, top: 600 };
 const lane: GlideLane = { id: 'row', a: { x: 100, y: 300 }, b: { x: 1100, y: 300 }, z: 150, r: 80 };
@@ -115,6 +121,52 @@ describe('a glide lane (OP-287)', () => {
     expect(laneTop({ movers: { lanes: [lane, { ...lane, id: 'high', z: 180 }] } })).toBe(180);
     expect(laneTop({})).toBe(0);
   });
+
+  it('a walk is a lane’s carry for the room server only between two points within one lane’s reach, for an owl held at that lane’s height', () => {
+    const from = { x: 400, y: 340 };
+    const to = { x: 1100, y: 300 };
+    expect(laneCarries([lane], from, to, 150)).toBe(true);
+    // Not the lane's height: a wind's, a thermal's or a column's.
+    expect(laneCarries([lane], from, to, 151)).toBe(false);
+    // Either end out of the lane's reach, and the slack the room gives for latency.
+    expect(laneCarries([lane], { x: 400, y: 381 }, to, 150)).toBe(false);
+    expect(laneCarries([lane], from, { x: 1100, y: 381 }, 150)).toBe(false);
+    expect(laneCarries([lane], { x: 400, y: 400 }, { x: 1100, y: 420 }, 150, 40)).toBe(true);
+    expect(laneCarries([lane], { x: 400, y: 400 }, { x: 1100, y: 421 }, 150, 40)).toBe(false);
+    // Past an end it is the end's own round reach, as for the catch.
+    expect(laneCarries([lane], from, { x: 1180, y: 300 }, 150)).toBe(true);
+    expect(laneCarries([lane], from, { x: 1181, y: 300 }, 150)).toBe(false);
+    // Each end in a different lane is no one lane's carry.
+    const other: GlideLane = { id: 'far', a: { x: 100, y: 900 }, b: { x: 1100, y: 900 }, z: 150, r: 80 };
+    expect(laneCarries([lane, other], from, { x: 400, y: 900 }, 150)).toBe(false);
+    expect(laneCarries([lane, other], { x: 300, y: 900 }, { x: 400, y: 900 }, 150)).toBe(true);
+    expect(laneCarries(undefined, from, to, 150)).toBe(false);
+    expect(laneCarries([], from, to, 150)).toBe(false);
+  });
+
+  it('names the lane that carries, and a carry from just outside its reach starts at the nearest spot inside it', () => {
+    const other: GlideLane = { id: 'far', a: { x: 100, y: 900 }, b: { x: 1100, y: 900 }, z: 150, r: 80 };
+    expect(laneCarrying([lane, other], { x: 300, y: 900 }, { x: 400, y: 900 }, 150)?.id).toBe('far');
+    expect(laneCarrying([lane, other], { x: 400, y: 340 }, { x: 1100, y: 300 }, 150)?.id).toBe('row');
+    expect(laneCarrying([lane, other], { x: 400, y: 340 }, { x: 400, y: 900 }, 150)).toBeUndefined();
+    expect(laneCarrying(undefined, { x: 400, y: 340 }, { x: 1100, y: 300 }, 150)).toBeUndefined();
+    // Inside the reach, and on its very edge: the point itself.
+    const inside = { x: 400, y: 340 };
+    expect(laneInto(lane, inside, 1)).toBe(inside);
+    const edge = { x: 400, y: 220 };
+    expect(laneInto(lane, edge, 1)).toBe(edge);
+    // Outside it, beside the line: straight toward the line, to the reach's edge, or `inset` px inside it.
+    expect(laneInto(lane, { x: 400, y: 200 })).toEqual({ x: 400, y: 220 });
+    expect(laneInto(lane, { x: 400, y: 200 }, 1)).toEqual({ x: 400, y: 221 });
+    expect(laneInto(lane, { x: 400, y: 420 }, 1)).toEqual({ x: 400, y: 379 });
+    // Past an end: toward that end, to its round reach (here 120 across and 90 down from it, 150 px off).
+    const round = laneInto(lane, { x: 1220, y: 390 }, 1);
+    expect(round.x).toBeCloseTo(1100 + 120 * (79 / 150), 9);
+    expect(round.y).toBeCloseTo(300 + 90 * (79 / 150), 9);
+    expect(laneOff(lane, round)).toBeCloseTo(79, 9);
+    // A lane narrower than the inset: its line, never the far side of it.
+    expect(laneInto({ ...lane, r: 0.5 }, { x: 400, y: 200 }, 1)).toEqual({ x: 400, y: 300 });
+  });
 });
 
 describe('a room’s movers in its data (OP-287)', () => {
@@ -148,6 +200,31 @@ describe('a room’s movers in its data (OP-287)', () => {
     expect(bad({ tunnels: [{ id: 'through', door: 'out', mouth: { x: 900, y: 800 } }] })).toContain('far from its doorway');
     expect(bad({ downdrafts: [hole], tunnels: [{ id: 'through', door: 'down', mouth: { x: 500, y: 500 } }] })).toContain('already has a mover');
     expect(bad({ downdrafts: [hole, hole] })).toContain('two movers called hole');
+  });
+
+  it('a lane’s reach is floor all over: no dent of the floor’s edge inside it, and no slit across its line', () => {
+    const problems = (walkable: MoverRoom['walkable'], l: GlideLane = lane) => moverProblems({ ...room, walkable, movers: { lanes: [l] } });
+    // The floor's edge dips toward the line: its lowest point is 64 px from it.
+    const dented = [[{ x: 0, y: 200 }, { x: 600, y: 200 }, { x: 640, y: 236 }, { x: 680, y: 200 }, { x: 1600, y: 200 }, { x: 1600, y: 900 }, { x: 0, y: 900 }]];
+    expect(laneClear(lane, dented)).toEqual({ gap: 64, at: { x: 640, y: 236 } });
+    expect(problems(dented)).toEqual(['r/row: its reach leaves the floor it starts on at 640,236']);
+    expect(problems(dented, { ...lane, r: 64 })).toEqual([]);
+    expect(problems(dented, { ...lane, r: 65 })).toEqual(['r/row: its reach leaves the floor it starts on at 640,236']);
+    // A slit across the line, too thin for the points checked along it: the floor's edge crosses the line there.
+    const slit = [[{ x: 0, y: 200 }, { x: 700, y: 200 }, { x: 701, y: 400 }, { x: 702, y: 200 }, { x: 1600, y: 200 }, { x: 1600, y: 900 }, { x: 0, y: 900 }]];
+    expect(laneClear(lane, slit).gap).toBe(0);
+    expect(problems(slit)).toEqual(['r/row: its reach leaves the floor it starts on at 701,300']);
+    // Round an end as beside the line: the room's own edge is 100 px west of the lane's west end, and 100 px over its line.
+    expect(laneClear(lane, room.walkable).gap).toBe(100);
+    expect(problems(room.walkable, { ...lane, r: 100 })).toEqual([]);
+    expect(problems(room.walkable, { ...lane, r: 101 })[0]).toContain('its reach leaves the floor');
+    // Two shapes of floor that overlap where the lane starts: the one that keeps farther from the line is the floor it is on.
+    const small = [{ x: 60, y: 260 }, { x: 140, y: 260 }, { x: 140, y: 340 }, { x: 60, y: 340 }];
+    expect(laneClear(lane, [small, ...room.walkable]).gap).toBe(100);
+    expect(laneClear(lane, [...room.walkable, small]).gap).toBe(100);
+    expect(laneClear(lane, [small]).gap).toBe(0);
+    // A lane that starts off the floor is on none of it.
+    expect(laneClear({ ...lane, a: { x: 100, y: 100 } }, room.walkable)).toEqual({ gap: 0, at: { x: 100, y: 100 } });
   });
 
   it('names the doorway each stands for, and the pieces they stand in place of', () => {
@@ -219,6 +296,12 @@ describe('the park’s movers (OP-287)', () => {
     for (const perch of arcade.perches ?? []) for (const corner of perch.area) expect(laneOff(ARCADE_LANE, corner), perch.id).toBeGreaterThan(ARCADE_LANE.r);
     // And what the room has to stand on is lower than the lane holds an owl, so a ride clears it wherever it is let go.
     expect(highestTop(arcade)).toBeLessThan(ARCADE_LANE.z);
+    // Its reach is floor all over, so a carry from anywhere in it goes straight to the lane's end. The floor's edge
+    // comes nearest the line at the first cabinet's front; a reach 80 px wide took that corner in, and a carry
+    // started north of it was stopped there, at the cabinet.
+    expect(laneClear(ARCADE_LANE, arcade.walkable)).toEqual({ gap: 72, at: { x: 612, y: 808 } });
+    expect(pointInRect({ x: 612, y: 808 }, arcade.doors.find((d) => d.id === 'cabinet-crossing')!.rect)).toBe(true);
+    expect(moverProblems({ ...arcade, movers: { lanes: [{ ...ARCADE_LANE, r: 80 }] } })).toEqual(['arcade/cabinet-row: its reach leaves the floor it starts on at 612,808']);
   });
 
   it('each path has something to do along it: a leaf pile by the knot hole and by the tunnel’s mouth, two along the lane (OP-417: three piles a room), and no point of the lane more than three seconds’ walk from one of the room’s things', () => {
