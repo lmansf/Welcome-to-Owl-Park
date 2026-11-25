@@ -125,9 +125,12 @@ import {
   downdraftAt,
   downdraftFor,
   inDowndraft,
+  LANE_SPEED,
+  WALK_SPEED,
   laneAt,
   laneEnd,
   laneOff,
+  walkSpeed,
   tunnelFor,
   type CameBy,
   type Downdraft,
@@ -224,7 +227,7 @@ import { VOTE_DESK_ROOM, type DeskState } from './voteDesk';
 import { VoteDeskView } from './voteDeskView';
 import { FIRST_FLIGHT_MARK, glidedOff, hallTipFor, hallTips } from './hallTips';
 import { FIRST_RISE_MARK, marksFirstRise, rodeUp } from './firstRise';
-import { INTO_HOLE_PX, INTO_MOUTH_MS, MOVER_FADE_IN_MS, MOVER_WORDS, headingOf, roomWithMovers } from './movers';
+import { INTO_HOLE_PX, INTO_MOUTH_MS, MOVER_FADE_IN_MS, MOVER_WORDS, headingOf, lanePush, roomWithMovers } from './movers';
 import { MoversView, type MoverPiece } from './moversView';
 import { COMMONS_WORDS, HALL_WORDS } from '../ui/hallWords';
 import { FeatherTrail } from './featherTrailView';
@@ -246,7 +249,7 @@ import { OWL_SCALE, OWL_W, Owl } from './Owl';
 import { QuestItemMarker, RisingLight, SpotGlow } from './QuestItem';
 import { PuzzleMarker, markKey, type PuzzleMarkKind, type PuzzleMarkLook } from './PuzzleMarker';
 import { StreetDoors, addNestsSign, addParkSign } from './street';
-import { cameraBounds, followLead, type CoveredEdges } from './hudInset';
+import { FOLLOW_EASE, cameraBounds, followEaseAt, followLead, type CoveredEdges } from './hudInset';
 import { RISE_HEAD, lookBetween, openingAt, restAt, riseBack, screenZoom, townZoom, wholeLook, wholeZoom, type Look } from './townView';
 import { SizeLabels } from './sizeLabels';
 import { CourseTipSigns } from './courseTipSigns';
@@ -666,12 +669,30 @@ export class RoomScene extends Phaser.Scene {
    * Kept from room to room, as `flown` is: a dive ends in the room below.
    */
   private dove: { id: string; z: number; ms: number } | null = null;
-  /** The end the lane the owl rides is carrying it to; and the lane that has set it down, until it lands or leaves it. */
+  /**
+   * The lane the owl rides (OP-287): the end the ride heads for, and where the lane is carrying it to (that
+   * end, or short of it where something on the floor or the room's own answer ends the carry); and the lane
+   * that has set it down, until it lands or leaves it.
+   */
+  private laneHead: Vec2 | null = null;
   private laneTo: Vec2 | null = null;
   private laneSetDown: string | null = null;
+  /** The lane's own walk has the owl this step, and no push is taking it out: the keys and a tap steer nothing (steer, setupInput). */
+  private laneCarry = false;
+  /** The walk the lane carries the owl by (carry, selfWalk): the room's answer is the lane's only while the owl is still on it. */
+  private laneWalk: Walk | null = null;
+  /** The room answered this ride's carry at a walk's pace: so the rest of it goes, and the lane's pace is not asked for again. */
+  private laneSlow = false;
   private laneTold = false;
-  /** Lanes caught on this page (for tests). */
+  /**
+   * For tests: the lanes ridden on this page and the walks the lanes have started; and the last ride as the
+   * flight stepped it: which lane, how far it took the owl from where it caught it and in how long (ms), and
+   * whether at the lane's pace.
+   */
   private laneRides = 0;
+  private laneCarries = 0;
+  private rode: { id: string; px: number; ms: number; fast: boolean } | null = null;
+  private rodeFrom: { pos: Vec2; at: number } | null = null;
   /** When the HUD was last told where the owl is on the screen (the thumbstick's quiet, OP-349). */
   private owlToldAt = 0;
   /** Where the room put the own owl when it last let it in (its welcome), until the room is caught up with the owl (OP-138). */
@@ -840,8 +861,13 @@ export class RoomScene extends Phaser.Scene {
     this.thermalTold = false;
     this.laneTold = false;
     this.diving = null;
+    this.laneHead = null;
     this.laneTo = null;
     this.laneSetDown = null;
+    this.laneCarry = false;
+    this.laneWalk = null;
+    this.laneSlow = false;
+    this.rodeFrom = null;
     this.cameBy = this.moversOn ? (data.came ?? null) : null;
     this.cameFrom = data.from;
     this.backWaiting = data.from !== undefined;
@@ -1141,15 +1167,28 @@ export class RoomScene extends Phaser.Scene {
     return this.camAt;
   }
 
-  /** How the engine's own follow eases: a share of the way each frame, or not at all in a room seen from the side, where the side camera eases by the clock itself. */
+  /**
+   * How the engine's own follow eases: a share of the way each frame (hudInset.ts; a larger one while a glide
+   * lane carries the owl at the lane's pace, OP-287, which keeps the owl where a walking owl is in the view),
+   * or not at all in a room seen from the side, where the side camera eases by the clock itself.
+   */
   private followEase(): number {
-    return seenFromSide(this.room) ? 1 : 0.12;
+    if (seenFromSide(this.room)) return 1;
+    return this.me.walk?.lane ? followEaseAt(LANE_SPEED) : FOLLOW_EASE;
   }
 
-  /** Where the camera looks this frame in a room seen from the side: what the side camera makes of where the owl is going (sideCamera.ts). */
+  /**
+   * Where the camera looks this frame. In a room seen from the side: what the side camera makes of where the
+   * owl is going (sideCamera.ts). Seen from above the engine's follow has the owl, by the share this frame's
+   * pace asks for (followEase).
+   */
   private aimCamera(now: number): void {
-    if (!seenFromSide(this.room)) return;
     const cam = this.cameras.main;
+    if (!seenFromSide(this.room)) {
+      const ease = this.followEase();
+      if (cam.lerp.x !== ease) cam.setLerp(ease, ease);
+      return;
+    }
     const viewW = cam.width / cam.zoom;
     const seen = this.sideCamSeen;
     const air = this.flier.air;
@@ -1495,7 +1534,11 @@ export class RoomScene extends Phaser.Scene {
     if (!this.built) return;
     const now = Date.now();
     this.standPerches(now);
+    // The pace the owl goes at this frame, for the keepers' overlay: the faster of its walk's before and after
+    // the flight's steps, which can start a lane's carry or end one (OP-287).
+    const paceWas = this.me.walk ? walkSpeed(this.me.walk) : WALK_SPEED;
     this.fly(now);
+    const pace = Math.max(paceWas, this.me.walk ? walkSpeed(this.me.walk) : WALK_SPEED);
     let finished = this.me.tick(now);
     this.tickTrail(now);
     this.aimCamera(now);
@@ -1510,7 +1553,7 @@ export class RoomScene extends Phaser.Scene {
       if (distance(this.edgeHint, this.me.pos) < 8) this.sayJumpHere();
       this.edgeHint = null;
     }
-    this.posOverlay?.frame(this.me.pos, now, this.room.id);
+    this.posOverlay?.frame(this.me.pos, now, this.room.id, pace);
     this.tag?.update(now);
     this.bowl?.update(now);
     this.seeThrough?.frame(this.me.pos, this.flier.air.z);
@@ -1624,7 +1667,7 @@ export class RoomScene extends Phaser.Scene {
         // Heard only once this page holds the connection (connect()), so the room is caught up at once.
         if (this.conn) this.catchUpRoom();
       },
-      onSelfWalk: (walk) => live() && this.me.startWalk({ ...walk, from: { ...this.me.pos } }),
+      onSelfWalk: (walk) => live() && this.selfWalk(walk),
       onSelfEcho: (from, to) => live() && this.posOverlay?.told('echo', to, from),
       onPeerLook: (id, look) => live() && this.peers.get(id)?.applyLook(look),
       onPeerRest: (id, asleep) => live() && this.peers.get(id)?.setAsleep(asleep, this.calm()),
@@ -1938,6 +1981,9 @@ export class RoomScene extends Phaser.Scene {
       // In feather tag a tap on the owl this one touches passes the feather to it (OP-403).
       const tagged = this.tag ? this.owlAt({ x: world.x, y: world.y }) : null;
       if (tagged && this.tag?.tap(tagged)) return;
+      // A glide lane has the owl (OP-287, rideLane): a walk asked for now the lane would take back at its next
+      // step, at the cost of two moves told to the room. Letting go of Jump sets the owl down to walk.
+      if (this.laneCarry) return;
       // A tap on a thing to use out on a plaza's floor walks the owl over and uses it (a bird bath, mushrooms, a telescope, a shiny thing).
       const thing = this.thingAt({ x: world.x, y: world.y });
       if (thing) {
@@ -2020,6 +2066,8 @@ export class RoomScene extends Phaser.Scene {
   private steer(): void {
     // In the turnstiles the owl goes on through where it stands, not sideways along them (OP-124).
     if (this.passingGate) return;
+    // A glide lane's own walk has the owl (OP-287, rideLane): the keys choose its end there, and steer nothing here.
+    if (this.laneCarry) return;
     // Decorating, the arrow keys step through the spots and the owl stays where it is. Seen from the
     // side (the tree), the keys walk along the floor only: up goes through doorways there (OP-212).
     const dir = this.decorating ? null : this.heldWay();
@@ -2064,15 +2112,36 @@ export class RoomScene extends Phaser.Scene {
     for (const to of roomsAhead(this.room, this.me.pos, this.me.walk?.to ?? null, this.keyWalk, (id) => this.realmClosed(id), this.walking(), side)) prefetchRoomArt(this, drawnRoom(to, this.cfg), this.cfg);
   }
 
-  /** Stand still where the owl is and tell the room. */
-  private stop(): void {
-    const here = { x: Math.round(this.me.pos.x), y: Math.round(this.me.pos.y) };
+  /** Stand still where the owl is (or at `at`, where a step of its flight has it) and tell the room. */
+  private stop(at: Vec2 = this.me.pos): void {
+    const here = { x: Math.round(at.x), y: Math.round(at.y) };
     this.wayTo = null;
     this.me.walk = null;
     this.me.pos = here;
     const walk: Walk = { from: here, to: here, startedAt: Date.now() };
     this.conn?.send({ t: 'move', id: this.playerId, walk });
     this.conn?.track(this.snapshot());
+  }
+
+  /**
+   * The room's own answer to the owl's newest walk, where it differs from what the page set off on (edge.ts):
+   * the owl goes on from where it is drawn to where the room has it going. For a glide lane's carry (OP-287,
+   * rideLane) the answer is the lane's: where the room ends it is where the lane sets the owl down (short of an
+   * owl standing at the lane's end, OP-248), and at the pace the room gave, so the lane does not ask again.
+   */
+  private selfWalk(walk: Walk): void {
+    const { lane, ...plain } = walk;
+    const mine = this.me.walk;
+    // The lane's only while the owl still rides, on the walk the lane started: a tap's walk the room puts right is not.
+    const carried = this.laneHead !== null && mine !== null && mine === this.laneWalk;
+    if (carried) {
+      this.laneTo = { x: walk.to.x, y: walk.to.y };
+      // Asked for at the lane's pace and answered at a walk's: so the rest of this ride goes.
+      if (mine.lane && !lane) this.laneSlow = true;
+    }
+    const next: Walk = { ...(carried ? walk : plain), from: { ...this.me.pos } };
+    if (carried) this.laneWalk = next;
+    this.me.startWalk(next);
   }
 
   /**
@@ -2768,7 +2837,7 @@ export class RoomScene extends Phaser.Scene {
      * The others, with how high each is drawn, whether on the ground (0), in the air (1) or gliding (2),
      * and its take-offs as this page carried them on from the states it was told (as `flown` is for the own owl).
      */
-    peers: Array<{ id: string; pos: Vec2; walking: boolean; look: OwlLook; emote: string | null; height: number; air: Air['s']; flown: { n: number; peak: number; glided: boolean; ms: number }; asleep: boolean; wings: boolean; owlWorn: string; head: string }>;
+    peers: Array<{ id: string; pos: Vec2; walking: boolean; look: OwlLook; emote: string | null; height: number; air: Air['s']; flown: { n: number; peak: number; glided: boolean; ms: number }; asleep: boolean; wings: boolean; owlWorn: string; head: string; pace: number }>;
     /** This visitor's owl's head frame as drawn (OP-289: 'front' at rest), and whether its body (the pose emotes move) is at rest. */
     head: { frame: string; bodyAtRest: boolean };
     /** Asleep, its visitor idle (OP-126). */
@@ -2832,10 +2901,24 @@ export class RoomScene extends Phaser.Scene {
     /**
      * The movers (OP-287): null on a page without the `movers` flag. Else the pieces drawn in this room, the
      * downdraft that has taken the owl down, the last dive one took it on as its flight stepped it (which
-     * downdraft, from how high, and how long the fall was, ms), the lanes it has caught on this page and the
-     * end it is being carried to, and how it came into the room.
+     * downdraft, from how high, and how long the fall was, ms), the lanes it has ridden on this page, the walks
+     * the lanes have started (one a ride, and one more each time a push turns it round or ends), where it is
+     * being carried to, the last ride as its flight stepped it (which lane, how far from where it caught the
+     * owl, in how long, ms, and whether at the lane's pace), the share the camera's follow eases by and the
+     * pace of the walk the owl is on (0 standing), and how it came into the room.
      */
-    movers: { pieces: MoverPiece[]; diving: string | null; dove: { id: string; z: number; ms: number } | null; laneRides: number; laneTo: Vec2 | null; cameBy: CameBy | null } | null;
+    movers: {
+      pieces: MoverPiece[];
+      diving: string | null;
+      dove: { id: string; z: number; ms: number } | null;
+      laneRides: number;
+      carries: number;
+      laneTo: Vec2 | null;
+      rode: { id: string; px: number; ms: number; fast: boolean } | null;
+      ease: number;
+      pace: number;
+      cameBy: CameBy | null;
+    } | null;
     /** Whether this device's owl has glided off one of the Great Hollow's roots (OP-347). */
     firstFlight: boolean;
     /** Whether this device's owl has ridden this room's rising air (OP-363, the Treetop Commons); null in a room that marks no such ride. */
@@ -2912,7 +2995,7 @@ export class RoomScene extends Phaser.Scene {
       height: this.me.flightHeight(),
       air: { ...this.flier.air },
       flown: { ...this.flown },
-      peers: [...this.peers.values()].map((o) => ({ id: o.id, pos: { ...o.pos }, walking: o.walking, look: o.look, emote: this.peerEmotes.get(o.id) ?? null, height: o.flightHeight(), air: o.airMode, flown: o.flown, asleep: o.asleep, wings: o.wingsOut, owlWorn: o.wornKey, head: o.headFrame })),
+      peers: [...this.peers.values()].map((o) => ({ id: o.id, pos: { ...o.pos }, walking: o.walking, look: o.look, emote: this.peerEmotes.get(o.id) ?? null, height: o.flightHeight(), air: o.airMode, flown: o.flown, asleep: o.asleep, wings: o.wingsOut, owlWorn: o.wornKey, head: o.headFrame, pace: o.walk ? walkSpeed(o.walk) : 0 })),
       head: { frame: this.me.headFrame, bodyAtRest: this.me.poseAtRest() },
       asleep: this.me.asleep,
       bubbles: this.bubbles?.showing() ?? [],
@@ -2952,7 +3035,20 @@ export class RoomScene extends Phaser.Scene {
       firstWays: [...this.firstNamed],
       signBox: this.doorSigns?.shownBox() ?? null,
       tipShown: this.tips?.shown() ?? null,
-      movers: this.moversOn ? { pieces: this.moversView?.pieces() ?? [], diving: this.diving?.id ?? null, dove: this.dove ? { ...this.dove } : null, laneRides: this.laneRides, laneTo: this.laneTo, cameBy: this.cameBy } : null,
+      movers: this.moversOn
+        ? {
+            pieces: this.moversView?.pieces() ?? [],
+            diving: this.diving?.id ?? null,
+            dove: this.dove ? { ...this.dove } : null,
+            laneRides: this.laneRides,
+            carries: this.laneCarries,
+            laneTo: this.laneTo,
+            rode: this.rode ? { ...this.rode } : null,
+            ease: this.cameras.main.lerp.x,
+            pace: this.me.walk ? walkSpeed(this.me.walk) : 0,
+            cameBy: this.cameBy,
+          }
+        : null,
       firstFlight: this.firstFlown,
       firstRise: marksFirstRise(this.room, this.rootTips) ? !this.riseWaits : null,
       promptShown: this.reach?.shown() ?? null,
@@ -3725,30 +3821,86 @@ export class RoomScene extends Phaser.Scene {
   }
 
   /**
-   * In a glide lane (OP-287, movers.ts): the lane holds the owl level and carries it to the end it is
-   * heading for, by the owl's own walk, as a wind current does (rideWind). An owl that pushes a way of its
-   * own is steered by that push, still held level, and the lane carries it on that way once the push ends.
+   * In a glide lane (OP-287, movers.ts), at a step of the owl's flight (`place`, `at`): the lane holds the owl
+   * level and carries it to the end it is heading for, by a walk of the lane's own at the lane's pace, twice a
+   * walk's, started once and then left alone. While the lane has the owl the keys steer nothing (steer): a
+   * push along the lane only chooses the end it is carried to, and one straight across is the owl's own way out
+   * of the lane, at a walk's pace, still held level until it is out of the lane's reach; where that push ends
+   * inside the reach the lane takes the owl on again.
+   *
+   * The pace is the room's to give (Room.ts, onLane), and it gives it only to an owl it holds up on the lane. So
+   * the carry waits until the room has been told the lane holds the owl: with the page's air allowance spent
+   * (takeAirToken) that is up to a third of a second after the catch, and until then the owl hangs in the lane
+   * on the walk it came by, the keys still steering it. A carry the room answers at a walk's pace (selfWalk)
+   * goes at a walk's pace for the rest of the ride and is not asked for again.
    */
-  private rideLane(lane: GlideLane, caught: boolean): void {
+  private rideLane(lane: GlideLane, place: Vec2, at: number): void {
     const pushed = this.heldWay();
-    if (caught) {
+    if (!this.laneHead) {
+      // A ride begins.
       this.laneRides += 1;
-      this.laneTo = laneEnd(lane, this.me.pos, headingOf(this.me.walk, pushed));
+      this.laneSlow = false;
+      this.laneHead = laneEnd(lane, place, headingOf(this.me.walk, pushed));
+      this.laneTo = this.laneHead;
     }
-    if (pushed) {
-      const along = pushed.x * (lane.b.x - lane.a.x) + pushed.y * (lane.b.y - lane.a.y);
-      if (along !== 0) this.laneTo = along > 0 ? lane.b : lane.a;
+    const push = pushed ? lanePush(lane, pushed) : null;
+    const told = this.roomTold.air.s === LIFTED && this.roomTold.air.h === lane.z;
+    if (push === 'out' || !told) {
+      // Its own way out (the keys have the owl), or the room not yet told the lane holds it.
+      this.laneCarry = false;
       return;
     }
-    const to = this.laneTo ?? laneEnd(lane, this.me.pos, null);
+    if (push) {
+      const head = push === 'b' ? lane.b : lane.a;
+      if (distance(head, this.laneHead) >= 1) {
+        this.laneHead = head;
+        this.laneTo = head;
+      }
+    }
+    const to = this.laneTo ?? this.laneHead;
     this.laneTo = to;
+    this.laneCarry = true;
+    const fast = !this.laneSlow;
     const walk = this.me.walk;
-    if (walk && distance(walk.to, to) < 3 && !walk.dash) return;
-    if (distance(this.me.pos, to) < 3) return;
-    this.walkTo({ x: to.x, y: to.y });
-    // Stopped short by something on the floor: where that walk ends is where the lane sets the owl down.
-    const got = this.me.walk?.to ?? this.me.pos;
-    if (distance(got, to) >= 3) this.laneTo = { x: got.x, y: got.y };
+    if (walk && !walk.dash && distance(walk.to, to) < 3 && (walk.lane === true) === fast) return;
+    if (distance(place, to) < 3) return;
+    this.carry(place, to, fast, at);
+  }
+
+  /**
+   * The lane's own walk (rideLane) from `from`, where the step of the owl's flight at `at` has it, straight to
+   * `to`: at the lane's pace when `fast`, and the room told. Stopped short by something on the floor, where it
+   * ends is where the lane sets the owl down.
+   */
+  private carry(from: Vec2, to: Vec2, fast: boolean, at: number): void {
+    this.cutOpening();
+    const f = this.footingNow();
+    const end = resolveTarget({ x: from.x, y: from.y }, to, f.walkable, f.shut);
+    if (distance(end, to) >= 3) this.laneTo = { x: end.x, y: end.y };
+    // Not a goal a jump or a landing takes up again (reaim), nor a leg of a way round a bend.
+    this.walkGoal = null;
+    this.wayTo = null;
+    if (distance(end, from) < 3) {
+      // Nowhere to go that way: the lane sets the owl down where it is, and no walk goes on under it.
+      if (this.me.walking) this.stop(from);
+      this.laneTo = { x: from.x, y: from.y };
+      return;
+    }
+    this.keyWalk = false;
+    // A key held when the carry ends steers afresh from there: left as it was, steer would take the lane's walk for its own and keep it going.
+    this.keyDir = null;
+    this.coasting = false;
+    // Carried off, a walk to the idol, an NPC or a leaf pile is over, as with any new way.
+    this.pendingVote = false;
+    this.errand = null;
+    // From the step's own place and time, not where the last frame drew the owl: a frame's walk back from there
+    // would start an owl caught at the edge of the lane's reach outside it, and the room gives no lane's pace there.
+    const walk: Walk = { from: { x: from.x, y: from.y }, to: end, startedAt: at, ...(fast ? { lane: true as const } : {}) };
+    this.laneWalk = walk;
+    this.laneCarries += 1;
+    this.me.startWalk(walk);
+    this.conn?.send({ t: 'move', id: this.playerId, walk });
+    this.conn?.track(this.snapshot());
   }
 
   /**
@@ -3898,6 +4050,7 @@ export class RoomScene extends Phaser.Scene {
       if (lane && this.laneTo && distance(place, this.laneTo) < LANE_END_PX) {
         this.laneSetDown = lane.id;
         this.laneTo = null;
+        this.laneHead = null;
       }
       if (!lane) this.laneSetDown = null;
       else if (lane.id === this.laneSetDown) lane = undefined;
@@ -3929,17 +4082,24 @@ export class RoomScene extends Phaser.Scene {
       // Taken up by a thermal: the camera draws back with the owl's height from here until it is down again (frameRise).
       if (warm !== null && air.s === LIFTED && !this.rise) this.rise = { from: air.z, top: warm, covered: this.hud.coveredEdges(), back: false };
       if (gust && air.s === LIFTED && air.h === gust.z) this.rideWind(gust, !wasLifted);
-      if (lane && air.s === LIFTED && air.h === lane.z) this.rideLane(lane, !wasLifted);
-      else if (wasLifted && air.s !== LIFTED && this.laneTo) {
-        // The ride ended in the air (Jump let go, or steered out of the lane's reach): its carry ends with it,
-        // so the owl comes down where it is and is not walked on to the lane's end.
-        const carry = this.me.walk;
-        if (carry && distance(carry.to, this.laneTo) < 3) {
-          this.stop();
-          // Nor is the lane's end a goal the walk takes up again as the owl lands (reaim).
-          this.walkGoal = null;
+      // The lane that holds the owl up at this step (its carry is the step's last act, below).
+      const riding = lane !== undefined && air.s === LIFTED && air.h === lane.z ? lane : undefined;
+      if (!riding) {
+        this.laneCarry = false;
+        this.rodeFrom = null;
+        if (this.laneTo) {
+          // The ride ended in the air (Jump let go, steered out of the lane's reach, or other rising air took the
+          // owl): its carry ends with it, so the owl comes down where it is and is not walked on to the lane's end,
+          // least of all at the lane's pace. The room hears of the stop before it hears the owl is falling.
+          const carry = this.me.walk;
+          if (carry && (carry.lane || distance(carry.to, this.laneTo) < 3)) {
+            this.stop(place);
+            // Nor is the lane's end a goal the walk takes up again as the owl lands (reaim).
+            this.walkGoal = null;
+          }
+          this.laneTo = null;
+          this.laneHead = null;
         }
-        this.laneTo = null;
       }
       const level = footingLevel(this.room, air.z);
       if (level !== this.footLevel) {
@@ -3958,6 +4118,7 @@ export class RoomScene extends Phaser.Scene {
       } else if (!grounded) {
         this.flown.ms = at - this.flownFrom;
         this.laneTo = null;
+        this.laneHead = null;
         this.laneSetDown = null;
         // Down inside the downdraft that took it: through the knot hole (OP-287). Else a flight as any other.
         const dived = this.diving;
@@ -3979,6 +4140,13 @@ export class RoomScene extends Phaser.Scene {
         this.conn?.send({ t: 'air', id: this.playerId, air: airOut(air), at });
         // A newcomer on the peer transports reads the snapshot: up on a perch, or just off one, it is told afresh (OP-084).
         if (wasPerched || (air.s === GROUNDED && air.z > 0)) this.conn?.track(this.snapshot());
+      }
+      // The lane's carry is the step's last act: the room has been told the lane holds the owl up (just above)
+      // before it is asked for the lane's pace.
+      if (riding) {
+        this.rideLane(riding, place, at);
+        if (!this.rodeFrom) this.rodeFrom = { pos: { x: place.x, y: place.y }, at };
+        this.rode = { id: riding.id, px: distance(this.rodeFrom.pos, place), ms: at - this.rodeFrom.at, fast: this.me.walk?.lane === true };
       }
     }
   }
