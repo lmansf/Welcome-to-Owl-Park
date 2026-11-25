@@ -28,7 +28,7 @@ const LOW = { risk: { recommendation: 'ACCEPT', assessments: [{ riskLevel: 'LOW'
 /** The Day Ticket in the stand-in store's catalogue. */
 const DAY_VARIANT = '41001';
 /** What the badge's Get a Day Ticket says above the card's line (OP-191). */
-const DAY_TICKET = 'A Day Ticket lets you keep what you win. You can get a Day Ticket right here.';
+const DAY_TICKET = 'A Day Ticket adds feathers, quests and the shops. You can get a Day Ticket right here.';
 /** Once the bought ticket has made the spectator a full visitor where it stands (OP-191). */
 const ADMITTED = 'Your Day Ticket is in. Have fun!';
 

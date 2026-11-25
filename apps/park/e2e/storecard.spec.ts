@@ -54,7 +54,7 @@ async function arrive(browser: Browser, device: BrowserContextOptions, blockPopu
 }
 
 /** What the badge's Get a Day Ticket says above the card's line (OP-191). */
-const KEEP = 'A Day Ticket lets you keep what you win.';
+const KEEP = 'A Day Ticket adds feathers, quests and the shops.';
 const DAY_TICKET = `${KEEP} You can get a Day Ticket right here.`;
 
 /** Through a turnstile with no ticket, on into the hub as a spectator (OP-191). */
