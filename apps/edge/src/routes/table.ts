@@ -13,7 +13,7 @@ import { owlPage } from '../owlPage';
 import { activityPage } from '../activityPage';
 import { account } from './account';
 import { referral } from './referral';
-import { adminCapacity, adminClimb, adminCollectLog, adminGate, adminGrant, adminKeeper, adminOpening, adminPing, adminRestart, adminStore, adminTickets } from './admin';
+import { adminCapacity, adminClimb, adminCollectLog, adminExport, adminGate, adminGrant, adminKeeper, adminOpening, adminPing, adminRestart, adminRestore, adminStore, adminTickets } from './admin';
 import { clientError } from './clientErrors';
 import { collection, nest, nestGift, redeem } from './collection';
 import { adminFeedback, feedback } from './feedback';
@@ -52,6 +52,8 @@ export const ROUTES: readonly Route[] = [
   { path: '/api/admin/gate', handle: adminGate },
   { path: '/admin/gate', handle: () => gatePage() },
   { path: '/api/admin/restart', handle: adminRestart },
+  { path: '/api/admin/export', handle: adminExport },
+  { path: '/api/admin/restore', handle: adminRestore },
   { path: '/api/admin/capacity', handle: adminCapacity },
   { path: '/admin/capacity', handle: () => capacityPage(RIBBON_WORDS) },
 

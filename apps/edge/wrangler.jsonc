@@ -48,8 +48,14 @@
   "dev": { "host": "localhost:8787" },
   // Month close for the Realm Vote: 05:05 UTC on the 1st (just after midnight in the park's time zone).
   // The nightly restart (OP-181): 09:00 UTC every day (4:00 AM Eastern in winter, 5:00 AM in summer).
+  // The weekly export (OP-185): 08:00 UTC every Sunday, an hour before that night's restart.
   // Each cron runs only its own job (src/crons.ts).
-  "triggers": { "crons": ["5 5 1 * *", "0 9 * * *"] },
+  "triggers": { "crons": ["5 5 1 * *", "0 9 * * *", "0 8 * * 0"] },
+  // The weekly export's copies (OP-185, src/parkExport.ts): a private bucket on the park's own account.
+  // A deploy needs R2 turned on for the account first: with it on, a deploy creates the bucket if it is
+  // missing (Wrangler's resource provisioning); with R2 off, the deploy fails (docs/DEPLOY.md). The Worker
+  // runs without the binding too: the export logs that it skipped.
+  "r2_buckets": [{ "binding": "PARK_EXPORTS", "bucket_name": "owl-park-exports" }],
   "vars": {
     // "single": the whole park lives in one Durable Object (cheapest on the free tier).
     // "room": one object per room (more fan-out capacity, more awake-time billed).
