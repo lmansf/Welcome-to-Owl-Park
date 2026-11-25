@@ -4265,6 +4265,13 @@
       "format": "webp",
       "with_2x": false
     },
+    "kit-tex-clearing-meadow": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
     "kit-clearing-idol-pedestal": {
       "w": 240,
       "h": 200,
@@ -6011,6 +6018,20 @@
       "with_2x": false
     },
     "kit-tex-ink-woven-reed": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-ink-river": {
+      "w": 512,
+      "h": 512,
+      "kind": "texture",
+      "format": "webp",
+      "with_2x": false
+    },
+    "kit-tex-ink-flagstone": {
       "w": 512,
       "h": 512,
       "kind": "texture",

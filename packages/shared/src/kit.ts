@@ -635,10 +635,12 @@ export function kitCells(d: KitDraw): KitCell[] {
   return cells;
 }
 
-/** Every art key a kit room draws: its pieces and its backdrops, once each. */
+/** Every art key a kit room draws: its pieces, its backdrops and its flooded walks' water, once each. */
 export function kitArtKeys(room: Pick<RoomDef, 'kit' | 'doors' | 'size'>): string[] {
   if (!room.kit) return [];
-  return [...new Set([...kitDrawPlan(room).map((d) => d.key), ...(room.kit.backdrops ?? []).map((b) => b.key)])];
+  // A flooded walk's painted water (OP-485) loads with the room too.
+  const water = (room.kit.paths ?? []).flatMap((p) => (p.flood?.art ? [p.flood.art] : []));
+  return [...new Set([...kitDrawPlan(room).map((d) => d.key), ...(room.kit.backdrops ?? []).map((b) => b.key), ...water])];
 }
 
 /** What drawing a kit room costs: its images (the draw's objects), its textures and their decoded bytes at `scale` texture px per room px. */

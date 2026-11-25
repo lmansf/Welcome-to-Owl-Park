@@ -15,6 +15,7 @@ import { BRUSH_COURSE, BRUSH_ROOMS } from './brushstrokeBridges';
 import { CIRCUIT_COURSE, CIRCUIT_ROOMS } from './neonCourse';
 import { HALL_ANCHORS, HALL_ID, HALL_ROOM, fromRealm } from './hollowHall';
 import { growToPlaza } from './plaza';
+export { PLAZA_SKIRT } from './plaza';
 import { GLIDE_SLOPE } from '../src/flight';
 import type { Thermal } from '../src/thermal';
 import type { GlideLane, KnotTunnel } from '../src/movers';
@@ -1582,6 +1583,8 @@ export const ARCADE_PLAZA = { front: 1335, rings: [{ x: 1200, y: 1110 }, { x: 36
 export const HOMES_PLAZA = { front: 1335, rings: [{ x: 2300, y: 1110 }] } as const;
 export const MARKET_PLAZA = { front: 1335, rings: [{ x: 900, y: 1110 }, { x: 2400, y: 1110 }] } as const;
 export const GROVE_PLAZA = { front: 1235, rings: [{ x: 900, y: 1060 }, { x: 2600, y: 1060 }, { x: 3900, y: 1060 }] } as const;
+/** How far the clearing's painted foot runs on over its plaza (OP-488): a short join, not a mirror of the doorway and mushrooms. */
+export const GROVE_SKIRT = 40;
 export const GLASS_PLAZA = { front: 1700, rings: [{ x: 800, y: 1260 }] } as const;
 export const INK_PLAZA = { front: 1335, rings: [{ x: 1600, y: 1110 }] } as const;
 export const HUB_PLAZA = { front: 1235, rings: [{ x: 1150, y: 1060 }, { x: 3650, y: 1060 }] } as const;
@@ -1769,8 +1772,9 @@ ROOMS['ink'] = growToPlaza(
     oldFront: 885,
     west: 150,
     east: 3170,
-    texture: 'kit-tex-ink-ink-stone',
-    tint: 0xd8d2c4,
+    // Garden flagstones seen from above (OP-487), not the riverbank wall's stone, which read as a wall.
+    texture: 'kit-tex-ink-flagstone',
+    tint: 0xd2cfcb,
     ring: 'edge-ink-ring',
     corner: 'edge-ink-corner-front',
     frontBumps: ['edge-ink-stones-a', 'edge-ink-stones-b', 'edge-ink-stones-a', 'edge-ink-stones-b'],
@@ -1788,8 +1792,11 @@ ROOMS['grove'] = growToPlaza(ROOMS['grove']!, {
   oldFront: 900,
   west: 0,
   east: 3 * ROOM_W,
-  texture: 'kit-tex-ground-forest-floor',
-  tint: 0x9b91bc,
+  // The clearing's own meadow at dusk (OP-488), and only a short run of the painting's foot over its
+  // top: a longer one mirrored the lit doorway and the mushrooms upside down into a dark pool.
+  texture: 'kit-tex-clearing-meadow',
+  tint: 0xbda6e3,
+  skirt: GROVE_SKIRT,
   ring: 'edge-clearing-ring',
   corner: 'edge-clearing-corner-front',
   frontBumps: ['edge-clearing-ferns-a', 'edge-clearing-ferns-b', 'edge-clearing-ferns-a', 'edge-clearing-ferns-b', 'edge-clearing-ferns-a', 'edge-clearing-ferns-b', 'edge-clearing-ferns-a'],
