@@ -4,9 +4,9 @@ name: CI
 # on a push to main, each night and by hand; a push to any other branch runs nothing here, since every
 # change reaches main through a pull request and its run is the one that counts (a branch push used to
 # run a second, quicker tier on the same commit, taking runners from the queue). A run is typecheck,
-# unit tests and build as three jobs at once, then the whole browser suite split across sixteen runners
-# by the tests' measured times (apps/park/e2e/shard.mjs), two tests at a time on each (the room
-# server's one at a time; three at a time timed out across the suite on the runners' four cores), with
+# unit tests and build as three jobs at once, then the whole browser suite split across twenty runners
+# by the tests' measured times (apps/park/e2e/shard.mjs), one test at a time on each (two or three at a
+# time on the runners' four cores starved the game of CPU and failed tests across the suite), with
 # their reports merged into one. The build job shares the tests out once, from the newest measured times
 # main has kept (the e2e-durations cache, else e2e/durations.json), so every shard runs from the same plan; each passing run on main keeps its times for the next. A push
 # to main that changes only docs or Markdown runs nothing. A failed typecheck or unit test run cancels
@@ -140,7 +140,7 @@ jobs:
       # The built page holds no database client or key (OP-150, tools/security/bundle-check.mjs).
       - run: pnpm security:bundle
       # The browser suite's plan: every shard's tests, shared out here once by the newest measured times
-      # main has kept (the report job saves them), so the sixteen shards agree on who runs what.
+      # main has kept (the report job saves them), so the twenty shards agree on who runs what.
       - name: The newest measured test times from main
         uses: actions/cache/restore@v4
         with:
@@ -149,10 +149,10 @@ jobs:
           restore-keys: e2e-durations-v1-
       - name: Share the browser suite out across the shards (e2e/shard.mjs)
         working-directory: apps/park
-        run: node e2e/shard.mjs plan 16 "$PW_WORKERS" shard-plan
+        run: node e2e/shard.mjs plan 20 "$PW_WORKERS" shard-plan
         env:
           CI: 'true'
-          PW_WORKERS: 2
+          PW_WORKERS: 1
       - uses: actions/upload-artifact@v4
         with:
           name: shard-plan
@@ -287,17 +287,16 @@ jobs:
           retention-days: ${{ github.event_name == 'schedule' && 90 || 14 }}
 
   e2e:
-    name: Browser suite ${{ matrix.shard }}/16
+    name: Browser suite ${{ matrix.shard }}/20
     needs: build
     runs-on: ubuntu-latest
-    # A shard runs a sixteenth of the suite, about 16 minutes of tests one at a time, on two workers:
-    # about 8 minutes (e2e/shard.mjs). Runners in late Nov 2026 took up to two and a half times their
+    # A shard runs a twentieth of the suite, about 13 minutes of tests one at a time (e2e/shard.mjs). Runners in late Nov 2026 took up to two and a half times their
     # measured time, so the limit leaves room for that.
     timeout-minutes: 30
     strategy:
       fail-fast: true
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -331,13 +330,13 @@ jobs:
         with:
           name: shard-plan
           path: apps/park/shard-plan
-      - name: End-to-end tests, shard ${{ matrix.shard }} of 16 (local transport on desktop and phone, and the room server)
+      - name: End-to-end tests, shard ${{ matrix.shard }} of 20 (local transport on desktop and phone, and the room server)
         run: pnpm e2e --test-list shard-plan/shard-${{ matrix.shard }}.txt
         env:
           CI: 'true'
           PW_BLOB: 'true'
-          # Two tests at once on the runner's four cores; the room server's one at a time (playwright.config.ts).
-          PW_WORKERS: 2
+          # One test at a time: two or three at once on the runner's four cores failed tests across the suite.
+          PW_WORKERS: 1
           # Each shard's report needs its own name: the report job downloads them all into one folder.
           PLAYWRIGHT_BLOB_OUTPUT_NAME: report-${{ matrix.shard }}.zip
       - name: Upload this shard's report

@@ -35,11 +35,11 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   // One test at a time on a machine. In CI the suite is split across runners one test at a time, not
   // a file at a time, so the slow files (the climb, the arcade, the room server) spread out (OP-123),
-  // and each runner runs PW_WORKERS tests at once (2 by default; 3 starved the game of CPU on a four-core
-  // runner), the room server project's one at a time (its `workers` below), so a pull request's browser
-  // suite takes minutes, not half an hour.
+  // and each runner runs PW_WORKERS tests at once (1 by default: 2 or 3 on a four-core runner starved the
+  // game of CPU and failed tests across the suite; a bigger runner could take more), the room server
+  // project's one at a time whatever the number (its `workers` below).
   fullyParallel: !!process.env['CI'],
-  workers: process.env['CI'] ? Number(process.env['PW_WORKERS'] || 2) : 1,
+  workers: process.env['CI'] ? Number(process.env['PW_WORKERS'] || 1) : 1,
   retries: process.env['CI'] ? 1 : 0,
   // A shard's report is a blob, merged with the others' into one HTML report by the CI's report job.
   reporter: process.env['CI'] ? [['list'], process.env['PW_BLOB'] ? ['blob'] : ['html', { open: 'never' }]] : 'list',
