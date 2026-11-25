@@ -66,3 +66,18 @@ export function headingOf(walk: { from: Vec2; to: Vec2 } | null, pushed: Vec2 | 
   if (walk && (walk.to.x !== walk.from.x || walk.to.y !== walk.from.y)) return { x: walk.to.x - walk.from.x, y: walk.to.y - walk.from.y };
   return pushed && (pushed.x !== 0 || pushed.y !== 0) ? pushed : null;
 }
+
+/**
+ * What a push does to an owl a lane holds: along the lane it chooses the end the lane carries the owl to
+ * ('a' or 'b'); straight across it is the owl's own way out of the lane ('out'). A push between the two
+ * (a diagonal on a lane that runs level) goes along.
+ */
+export function lanePush(lane: Pick<GlideLane, 'a' | 'b'>, pushed: Vec2): 'a' | 'b' | 'out' {
+  const dx = lane.b.x - lane.a.x;
+  const dy = lane.b.y - lane.a.y;
+  const along = pushed.x * dx + pushed.y * dy;
+  const across = pushed.x * dy - pushed.y * dx;
+  // The margin keeps a push at exactly forty-five degrees along, whatever the rounding of its two parts.
+  if (Math.abs(along) * (1 + 1e-9) < Math.abs(across)) return 'out';
+  return along > 0 ? 'b' : 'a';
+}

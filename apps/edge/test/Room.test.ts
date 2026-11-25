@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { AIRBORNE, DIVE_ARRIVAL, DIVE_SPEED, LIFTED, UPDRAFT_RISE, arrivalAir, dive, AIR_DASH_COOLDOWN_MS, AIR_DASH_DISTANCE, AIR_DASH_MS, AIR_DASH_SPEED, DASH_SLACK_PX, CLOSE, EDGE_PROTOCOL_VERSION, EMOTE_EVERY_MS, GROUNDED, ON_GROUND, STREET_DOORS, STREET_ROOM, WALK_SPEED, arrivalPoint, distance, isWalkable, nestDoorIndex, resolveTarget, type Air, type ClientHello, type RoomDef, type ServerFrame, type Vec2, segmentTouchesRect, walkCrossesExit } from '@owl-park/shared';
-import { FIRST_LOOK_SPAWN, ROOMS, roomFor } from '@owl-park/shared/rooms';
+import { AIRBORNE, DIVE_ARRIVAL, DIVE_SPEED, GLIDING, LANE_SPEED, LIFTED, UPDRAFT_RISE, arrivalAir, dive, AIR_DASH_COOLDOWN_MS, AIR_DASH_DISTANCE, AIR_DASH_MS, AIR_DASH_SPEED, DASH_SLACK_PX, CLOSE, EDGE_PROTOCOL_VERSION, EMOTE_EVERY_MS, GROUNDED, ON_GROUND, STREET_DOORS, STREET_ROOM, WALK_SPEED, arrivalPoint, distance, isWalkable, nestDoorIndex, resolveTarget, type Air, type ClientHello, type RoomDef, type ServerFrame, type Vec2, pointInRect, segmentTouchesRect, walkCrossesExit } from '@owl-park/shared';
+import { ARCADE_LANE, FIRST_LOOK_SPAWN, ROOMS, roomFor } from '@owl-park/shared/rooms';
 import { Room, LIMITS, type Peer, type PositionRejection, type VisitorState } from '../src/Room';
 
 const def: RoomDef = {
@@ -1255,6 +1255,328 @@ describe('Room: the movers of a room seen from above (OP-287)', () => {
     other.join(new FakePeer(), 'c', hello({ spawn: 'from-falls' }));
     expect(other.air('c', arrivalAir('tunnel', 0, ledge))).toBe(true);
     expect(rejected).toEqual([]);
+  });
+
+  describe('a glide lane’s carry: a walk at the lane’s pace', () => {
+    // A lane along the middle of the floor, through where an owl comes in, 150 up.
+    const lane = { id: 'row', a: { x: 200, y: 700 }, b: { x: 1400, y: 700 }, z: 150, r: 80 };
+    const laned: RoomDef = { ...def, movers: { lanes: [lane] } };
+    const held: Air = { z: 150, vz: UPDRAFT_RISE, s: LIFTED, f: 0, h: 150 };
+    const start = { x: 800, y: 700 };
+    const end = { x: 1400, y: 700 };
+    /** A room with a rider standing on the lane's line and a watcher out of the way, each on its own page. */
+    const ride = (d: RoomDef = laned) => {
+      const room = new Room(d, { now: () => now, random: () => 0.5, cap: 5, rejected: (_id, why) => rejected.push(why) });
+      const a = new FakePeer();
+      const b = new FakePeer();
+      room.join(a, 'a', hello({ pos: start }));
+      room.join(b, 'b', hello({ pos: { x: 640, y: 560 } }));
+      expect(room.positionOf('a')).toEqual(start);
+      expect(room.positionOf('b')).toEqual({ x: 640, y: 560 });
+      return { room, a, b };
+    };
+
+    it('is given to an owl the room holds up on that lane, told to the others and echoed as one, and kept for a newcomer', () => {
+      const { room, a, b } = ride();
+      expect(room.air('a', held)).toBe(true);
+      room.move('a', { t: 'move', to: end, seq: 1, lane: true });
+      const told = { t: 'move', id: 'a', from: start, to: end, at: now, lane: true };
+      expect(b.last('move')).toEqual(told);
+      expect(a.last('move')).toEqual({ ...told, seq: 1 });
+      expect(a.persisted.at(-1)!.walk).toEqual({ from: start, to: end, at: now, lane: true });
+      // Half a second on it is twice as far along as a walk would have it.
+      now += 500;
+      expect(room.positionOf('a')).toEqual({ x: 800 + LANE_SPEED / 2, y: 700 });
+      expect(LANE_SPEED / 2).toBe(WALK_SPEED);
+      const c = new FakePeer();
+      room.join(c, 'c', hello({ pos: { x: 700, y: 870 } }));
+      expect(c.last('welcome')!.owls.find((o) => o.id === 'a')!.walk).toEqual({ from: start, to: end, at: now - 500, lane: true });
+      // The 600 px are done in under 1.2 s, where a walk takes 2.3.
+      now += 700;
+      expect(room.positionOf('a')).toEqual(end);
+      expect(rejected).toEqual([]);
+    });
+
+    it('asked for anywhere else is a walk as any other, said in the echo, with nothing refused', () => {
+      const plain = { t: 'move', id: 'a', from: start, to: end };
+      const walked = (room: Room, a: FakePeer, b: FakePeer, seq = 1, lane = true) => {
+        room.move('a', { t: 'move', to: end, seq, ...(lane ? { lane: true as const } : {}) });
+        expect(b.last('move')).toEqual({ ...plain, at: now });
+        expect(a.last('move')).toEqual({ ...plain, at: now, seq });
+        expect(a.persisted.at(-1)!.walk).toEqual({ from: start, to: end, at: now });
+        now += 500;
+        expect(room.positionOf('a')).toEqual({ x: 800 + WALK_SPEED / 2, y: 700 });
+      };
+      // An owl on the floor: the room was told of no air at all.
+      {
+        const { room, a, b } = ride();
+        walked(room, a, b);
+      }
+      // Gliding at the lane's height: in the air, and not held.
+      {
+        const { room, a, b } = ride();
+        expect(room.air('a', { z: 150, vz: -80, s: GLIDING, f: 0 })).toBe(true);
+        walked(room, a, b);
+      }
+      // Held on the lane, by a page that asks for a walk and no carry.
+      {
+        const { room, a, b } = ride();
+        expect(room.air('a', held)).toBe(true);
+        walked(room, a, b, 1, false);
+      }
+      // Held up by a thermal that stands in the lane's reach, at the thermal's height: not the lane's hold.
+      {
+        const { room, a, b } = ride({ ...laned, thermals: [{ id: 'warm', pos: start, r: 160, top: 400 }] });
+        expect(room.air('a', { z: 200, vz: UPDRAFT_RISE, s: LIFTED, f: 0, h: 400 })).toBe(true);
+        walked(room, a, b);
+      }
+      // Held up in a room with no movers at all.
+      {
+        const { room, a, b } = ride({ ...def, thermals: [{ id: 'warm', pos: start, r: 160, top: 400 }] });
+        expect(room.air('a', { z: 200, vz: UPDRAFT_RISE, s: LIFTED, f: 0, h: 400 })).toBe(true);
+        walked(room, a, b);
+      }
+      expect(rejected).toEqual([]);
+    });
+
+    it('is a carry only between two points within the lane’s reach, with the room’s slack for latency', () => {
+      const { room, a } = ride();
+      expect(room.air('a', held)).toBe(true);
+      // Out to the side, as far off the lane's line as its reach and the slack: still its carry.
+      const side = { x: 800, y: 700 + lane.r + LIMITS.reachSlackPx };
+      room.move('a', { t: 'move', to: side, seq: 1, lane: true });
+      expect(a.last('move')).toEqual({ t: 'move', id: 'a', from: start, to: side, at: now, lane: true, seq: 1 });
+      now += 5_000;
+      // A step further off is out of it: a walk.
+      const out = { x: 800, y: side.y + 30 };
+      room.move('a', { t: 'move', to: out, seq: 2, lane: true });
+      expect(a.last('move')).toEqual({ t: 'move', id: 'a', from: side, to: out, at: now, seq: 2 });
+      now += 5_000;
+      // And from out there back to the line, the room having heard nothing of its air since: a walk.
+      room.move('a', { t: 'move', to: start, seq: 3, lane: true });
+      expect(a.last('move')).toEqual({ t: 'move', id: 'a', from: out, to: start, at: now, seq: 3 });
+    });
+
+    it('goes on at a walk’s pace once the owl leaves the lane’s air, as the others are told and its own page is not', () => {
+      const { room, a, b } = ride();
+      expect(room.air('a', held)).toBe(true);
+      room.move('a', { t: 'move', to: end, seq: 1, lane: true });
+      now += 500;
+      const moves = { a: a.count('move'), b: b.count('move') };
+      // Told again as held there: the carry goes on, and no one is told a walk.
+      expect(room.air('a', { ...held })).toBe(true);
+      expect(b.count('move')).toBe(moves.b);
+      now += 100;
+      const at = { x: 800 + (LANE_SPEED * 600) / 1000, y: 700 };
+      expect(room.positionOf('a')).toEqual(at);
+      // Jump let go: it glides down out of the lane.
+      expect(room.air('a', { z: 148, vz: -80, s: GLIDING, f: 0 })).toBe(true);
+      expect(b.last('move')).toEqual({ t: 'move', id: 'a', from: at, to: end, at: now });
+      expect(b.count('move')).toBe(moves.b + 1);
+      expect(a.count('move')).toBe(moves.a);
+      expect(a.persisted.at(-1)).toMatchObject({ pos: at, walk: { from: at, to: end, at: now } });
+      expect(a.persisted.at(-1)!.walk).not.toHaveProperty('lane');
+      now += 500;
+      expect(room.positionOf('a')).toEqual({ x: at.x + WALK_SPEED / 2, y: 700 });
+      // Down on the floor: the walk is a walk already, and is not told again.
+      expect(room.air('a', { z: 0, vz: 0, s: GROUNDED, f: 0 })).toBe(true);
+      expect(b.count('move')).toBe(moves.b + 1);
+    });
+
+    it('is slowed for an owl that some other air takes out of the lane’s hold', () => {
+      const warm = { id: 'warm', pos: { x: 1100, y: 700 }, r: 160, top: 400 };
+      const { room, a, b } = ride({ ...laned, thermals: [warm] });
+      expect(room.air('a', held)).toBe(true);
+      room.move('a', { t: 'move', to: end, seq: 1, lane: true });
+      now += 500;
+      const at = { x: 800 + LANE_SPEED / 2, y: 700 };
+      expect(distance(at, warm.pos)).toBeLessThan(warm.r);
+      expect(room.air('a', { z: 200, vz: UPDRAFT_RISE, s: LIFTED, f: 0, h: warm.top })).toBe(true);
+      expect(b.last('move')).toEqual({ t: 'move', id: 'a', from: at, to: end, at: now });
+      expect(a.count('move')).toBe(1);
+      expect(rejected).toEqual([]);
+    });
+
+    it('that has run its course when the owl comes down is not told again, and a walk under way is never re-timed by a jump', () => {
+      const { room, a, b } = ride();
+      expect(room.air('a', held)).toBe(true);
+      room.move('a', { t: 'move', to: end, seq: 1, lane: true });
+      now += 5_000;
+      const told = b.count('move');
+      expect(room.air('a', { z: 148, vz: -80, s: GLIDING, f: 0 })).toBe(true);
+      expect(b.count('move')).toBe(told);
+      expect(room.positionOf('a')).toEqual(end);
+      // An ordinary walk, and a jump on the way.
+      now += 5_000;
+      room.move('a', { t: 'move', to: start, seq: 2 });
+      now += 500;
+      expect(room.air('a', { z: 40, vz: 600, s: AIRBORNE, f: 0 })).toBe(true);
+      expect(b.count('move')).toBe(told + 1);
+      expect(a.count('move')).toBe(2);
+      now += 500;
+      expect(room.positionOf('a')).toEqual({ x: end.x - WALK_SPEED, y: 700 });
+    });
+
+    it('ends beside an owl that rests at the lane’s end, as any walk does, and says where', () => {
+      const { room, a, b } = ride();
+      room.move('b', { t: 'move', to: end, seq: 1 });
+      now += 10_000;
+      expect(room.positionOf('b')).toEqual(end);
+      expect(room.air('a', held)).toBe(true);
+      room.move('a', { t: 'move', to: end, seq: 1, lane: true });
+      const echo = a.last('move')!;
+      expect(echo).toMatchObject({ id: 'a', from: start, lane: true, seq: 1 });
+      expect(distance(echo.to, end)).toBeGreaterThanOrEqual(LIMITS.minSpacingPx);
+      expect(distance(echo.to, end)).toBeLessThanOrEqual(LIMITS.minSpacingPx + LIMITS.spacingSlackPx + 1);
+      expect(b.last('move')).toEqual({ t: 'move', id: 'a', from: start, to: echo.to, at: now, lane: true });
+      now += 5_000;
+      expect(room.positionOf('a')).toEqual(echo.to);
+    });
+
+    it('lets a page back from a dropped connection resume as far off as a lane could have carried its owl, in a room that has one', () => {
+      for (const [d, kept] of [[def, false], [laned, true]] as const) {
+        const room = new Room(d, { now: () => now, random: () => 0.5, cap: 5 });
+        room.join(new FakePeer(), 'a', hello());
+        room.move('a', { t: 'move', to: { x: 500, y: 850 }, seq: 1 });
+        now += 60_000;
+        room.leave('a');
+        now += 1_000;
+        // 600 px from where it left and away from the spawn: a second on a lane covers that, a second on foot does not.
+        const back = new FakePeer();
+        room.join(back, 'a', hello({ pos: { x: 1100, y: 850 } }));
+        const pos = back.last('welcome')!.you.pos;
+        if (kept) expect(pos).toEqual({ x: 1100, y: 850 });
+        else expect(Math.hypot(pos.x - 800, pos.y - 700)).toBeLessThanOrEqual(LIMITS.scatterDefault * 1.5);
+      }
+      expect(LIMITS.resumeRadius + WALK_SPEED).toBeLessThan(600);
+      expect(LIMITS.resumeRadius + LANE_SPEED).toBeGreaterThanOrEqual(600);
+    });
+
+    describe('where it starts', () => {
+      // 20 px north of the lane's reach, which runs 80 px to each side of its line.
+      const north = { x: 800, y: 600 };
+      /** A room with one rider standing at `pos` and a watcher out of the way. */
+      const rider = (pos: Vec2, d: RoomDef = laned, spawn?: string) => {
+        const room = new Room(d, { now: () => now, random: () => 0.5, cap: 5, rejected: (_id, why) => rejected.push(why) });
+        const a = new FakePeer();
+        const b = new FakePeer();
+        room.join(a, 'a', hello({ pos, ...(spawn ? { spawn } : {}) }));
+        room.join(b, 'b', hello({ pos: { x: 640, y: 560 } }));
+        expect(room.positionOf('a')).toEqual(pos);
+        return { room, a, b };
+      };
+      /** The walk the room answers a held rider at `pos` with, asked for the lane's end as the lane's carry. */
+      const carried = (pos: Vec2, spawn?: string) => {
+        const { room, a, b } = rider(pos, laned, spawn);
+        expect(room.air('a', held)).toBe(true);
+        room.move('a', { t: 'move', to: end, seq: 1, lane: true });
+        const echo = a.last('move')!;
+        expect(echo).toMatchObject({ id: 'a', to: end, at: now, lane: true, seq: 1 });
+        // The others are told the same start, and it is where the room has the owl from then on.
+        expect(b.last('move')).toEqual({ t: 'move', id: 'a', from: echo.from, to: end, at: now, lane: true });
+        expect(a.persisted.at(-1)).toMatchObject({ pos: echo.from, walk: { from: echo.from, to: end, at: now, lane: true } });
+        expect(room.positionOf('a')).toEqual(echo.from);
+        return echo.from;
+      };
+
+      it('is the nearest spot inside the lane’s reach, in whole pixels, for an owl the room holds up on it from just outside', () => {
+        // Beside the line: straight in, a pixel inside the reach's edge.
+        expect(carried(north)).toEqual({ x: 800, y: 621 });
+        // From as far out as the room's slack for latency reaches.
+        expect(carried({ x: 800, y: 700 - lane.r - LIMITS.reachSlackPx })).toEqual({ x: 800, y: 621 });
+        expect(carried({ x: 800, y: 700 + lane.r + LIMITS.reachSlackPx })).toEqual({ x: 800, y: 779 });
+        // Past the lane's west end: toward that end, into its round reach (70 across and 60 up from it, 92 px off).
+        const corner = carried({ x: 130, y: 640 }, 'from-left');
+        expect(corner).toEqual({ x: 140, y: 649 });
+        expect(distance(corner, lane.a)).toBeLessThanOrEqual(lane.r);
+        expect(rejected).toEqual([]);
+      });
+
+      it('is where the room has the owl, for one inside the lane’s reach', () => {
+        expect(carried({ x: 800, y: 640 })).toEqual({ x: 800, y: 640 });
+        // On the reach's very edge.
+        expect(carried({ x: 800, y: 620 })).toEqual({ x: 800, y: 620 });
+        expect(carried(start)).toEqual(start);
+        expect(rejected).toEqual([]);
+      });
+
+      it('is where the room has the owl for any walk that is not the lane’s carry', () => {
+        const plain = (room: Room, a: FakePeer, from: Vec2, to: Vec2, seq: number, lane: boolean) => {
+          room.move('a', { t: 'move', to, seq, ...(lane ? { lane: true as const } : {}) });
+          expect(a.last('move')).toEqual({ t: 'move', id: 'a', from, to, at: now, seq });
+          expect(a.persisted.at(-1)).toMatchObject({ pos: from, walk: { from, to, at: now } });
+        };
+        // Held on the lane, by a page that asks for a walk and no carry.
+        {
+          const { room, a } = rider(north);
+          expect(room.air('a', held)).toBe(true);
+          plain(room, a, north, end, 1, false);
+        }
+        // An owl on the floor: the room was told of no air at all.
+        {
+          const { room, a } = rider(north);
+          plain(room, a, north, end, 1, true);
+        }
+        // Gliding at the lane's height: in the air, and not held.
+        {
+          const { room, a } = rider(north);
+          expect(room.air('a', { z: 150, vz: -80, s: GLIDING, f: 0 })).toBe(true);
+          plain(room, a, north, end, 1, true);
+        }
+        // Held up by a thermal there, at the thermal's height: not the lane's hold.
+        {
+          const { room, a } = rider(north, { ...laned, thermals: [{ id: 'warm', pos: north, r: 160, top: 400 }] });
+          expect(room.air('a', { z: 200, vz: UPDRAFT_RISE, s: LIFTED, f: 0, h: 400 })).toBe(true);
+          plain(room, a, north, end, 1, true);
+        }
+        // Held on the lane and asking for a way out of it, further than the room's slack from its reach.
+        {
+          const { room, a } = rider(north);
+          expect(room.air('a', held)).toBe(true);
+          plain(room, a, north, { x: 1400, y: 700 - lane.r - LIMITS.reachSlackPx - 20 }, 1, true);
+        }
+        // Walked out of the lane's reach and its slack, the room having heard nothing of its air since.
+        {
+          const { room, a } = rider(north);
+          expect(room.air('a', held)).toBe(true);
+          const out = { x: 800, y: 700 - lane.r - LIMITS.reachSlackPx - 10 };
+          plain(room, a, north, out, 1, false);
+          now += 5_000;
+          plain(room, a, out, end, 2, true);
+        }
+        expect(rejected).toEqual([]);
+      });
+
+      it('keeps a ride in the arcade from ending at a cabinet’s front, where the room has the owl a moment behind its page', () => {
+        const arcade = ROOMS['arcade']!;
+        const came = { x: 400, y: 780 };
+        const far = ARCADE_LANE.b;
+        const glideIn = (lane: boolean) => {
+          const room = new Room(arcade, { now: () => now, random: () => 0.5, cap: 5, rejected: (_id, why) => rejected.push(why) });
+          const a = new FakePeer();
+          room.join(a, 'a', hello({ pos: came }));
+          expect(room.positionOf('a')).toEqual(came);
+          // Walking south into the lane with Jump held. Its page has it inside the lane's reach as the lane catches
+          // it; the room, which heard of that walk late and of the catch on time, still has it 10 px short.
+          room.move('a', { t: 'move', to: { x: 400, y: 900 }, seq: 1 });
+          now += 77;
+          expect(room.positionOf('a')).toEqual({ x: 400, y: 800 });
+          expect(ARCADE_LANE.a.y - 800).toBe(ARCADE_LANE.r + 10);
+          expect(room.air('a', { ...held, z: ARCADE_LANE.z, h: ARCADE_LANE.z })).toBe(true);
+          room.move('a', { t: 'move', to: far, seq: 2, ...(lane ? { lane: true as const } : {}) });
+          return a.last('move')!;
+        };
+        // The lane's carry starts inside the reach, which is floor all over: it goes the whole way, at the lane's pace.
+        expect(glideIn(true)).toEqual({ t: 'move', id: 'a', from: { x: 400, y: 811 }, to: far, at: now, lane: true, seq: 2 });
+        // A walk from where the room has the owl is stopped by the floor's edge, at the first cabinet's front.
+        const walked = glideIn(false);
+        expect(walked).toMatchObject({ id: 'a', from: { x: 400, y: 800 }, at: now, seq: 2 });
+        expect(walked).not.toHaveProperty('lane');
+        expect(walked.to.x).toBeLessThan(620);
+        expect(pointInRect(walked.to, arcade.doors.find((d) => d.id === 'cabinet-crossing')!.rect)).toBe(true);
+        expect(rejected).toEqual([]);
+      });
+    });
   });
 });
 

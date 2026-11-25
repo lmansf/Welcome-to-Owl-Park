@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WALK_SPEED } from '@owl-park/shared';
+import { AIR_DASH_SPEED, LANE_SPEED, WALK_SPEED } from '@owl-park/shared';
 import { JUMP_PX, WALK_FRAME_MS, jumpWatch } from './posOverlay';
 
 describe('the position overlay’s jump count (OP-138)', () => {
@@ -25,5 +25,25 @@ describe('the position overlay’s jump count (OP-138)', () => {
     const allowed = JUMP_PX + (WALK_SPEED * WALK_FRAME_MS) / 1000;
     expect(watch.see({ x: 165 + allowed + 1, y: 700 }, 'nest', 20_250)).toBe(true);
     expect(watch.count).toBe(1);
+  });
+
+  it('allows a faster owl its own pace: a glide lane’s carry and a dash are no jumps on a slow frame, and are at a walk’s pace (OP-287)', () => {
+    const lane = (LANE_SPEED * 250) / 1000;
+    const dash = (AIR_DASH_SPEED * 250) / 1000;
+    // A quarter-second frame of each is further than an owl's width beyond a walk's 65 px.
+    expect(lane).toBeGreaterThan(JUMP_PX + (WALK_SPEED * 250) / 1000);
+    const told = jumpWatch();
+    told.see({ x: 100, y: 700 }, 'arcade', 0);
+    expect(told.see({ x: 100 + lane, y: 700 }, 'arcade', 250, LANE_SPEED)).toBe(false);
+    expect(told.see({ x: 100 + lane + dash, y: 700 }, 'arcade', 500, AIR_DASH_SPEED)).toBe(false);
+    expect(told.count).toBe(0);
+    // Taken for a walk's, each of those frames is a jump: the pace is what tells them apart.
+    const untold = jumpWatch();
+    untold.see({ x: 100, y: 700 }, 'arcade', 0);
+    expect(untold.see({ x: 100 + lane, y: 700 }, 'arcade', 250)).toBe(true);
+    expect(untold.see({ x: 100 + lane + dash, y: 700 }, 'arcade', 500)).toBe(true);
+    expect(untold.count).toBe(2);
+    // And the pace allows no more than its own frame: a jump across the room at a lane's pace still counts.
+    expect(told.see({ x: 100 + lane + dash + JUMP_PX + lane + 1, y: 700 }, 'arcade', 750, LANE_SPEED)).toBe(true);
   });
 });

@@ -4,8 +4,11 @@ name: CI
 # on a push to main, each night and by hand; a push to any other branch runs nothing here, since every
 # change reaches main through a pull request and its run is the one that counts (a branch push used to
 # run a second, quicker tier on the same commit, taking runners from the queue). A run is typecheck,
-# unit tests and build as three jobs at once, then the whole browser suite split across twelve runners
-# by the tests' measured times (apps/park/e2e/shard.mjs), with their reports merged into one. A push
+# unit tests and build as three jobs at once, then the whole browser suite split across twenty runners
+# by the tests' measured times (apps/park/e2e/shard.mjs), one test at a time on each (two or three at a
+# time on the runners' four cores starved the game of CPU and failed tests across the suite), with
+# their reports merged into one. The build job shares the tests out once, from the newest measured times
+# main has kept (the e2e-durations cache, else e2e/durations.json), so every shard runs from the same plan; each passing run on main keeps its times for the next. A push
 # to main that changes only docs or Markdown runs nothing. A failed typecheck or unit test run cancels
 # the rest of the run.
 #
@@ -136,6 +139,24 @@ jobs:
       - run: pnpm build
       # The built page holds no database client or key (OP-150, tools/security/bundle-check.mjs).
       - run: pnpm security:bundle
+      # The browser suite's plan: every shard's tests, shared out here once by the newest measured times
+      # main has kept (the report job saves them), so the twenty shards agree on who runs what.
+      - name: The newest measured test times from main
+        uses: actions/cache/restore@v4
+        with:
+          path: apps/park/e2e/durations.json
+          key: e2e-durations-v1-none
+          restore-keys: e2e-durations-v1-
+      - name: Share the browser suite out across the shards (e2e/shard.mjs)
+        working-directory: apps/park
+        run: node e2e/shard.mjs plan 20 1 shard-plan
+        env:
+          CI: 'true'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shard-plan
+          path: apps/park/shard-plan
+          retention-days: 7
 
   # Which mutation shards this run needs: on a pull request, those whose code it touches; otherwise all.
   # Deciding it here, on one runner, keeps a pull request that touches none from starting eight.
@@ -265,17 +286,16 @@ jobs:
           retention-days: ${{ github.event_name == 'schedule' && 90 || 14 }}
 
   e2e:
-    name: Browser suite ${{ matrix.shard }}/12
+    name: Browser suite ${{ matrix.shard }}/20
     needs: build
     runs-on: ubuntu-latest
-    # A shard runs a twelfth of the suite, measured at about 13 minutes of tests (e2e/shard.mjs). Runners
-    # in late Nov 2026 took up to two and a half times that, and shards on main and on pull requests were
-    # cut off at the old 30 minute limit with their last tests unrun, so the limit is 45.
-    timeout-minutes: 45
+    # A shard runs a twentieth of the suite, about 13 minutes of tests one at a time (e2e/shard.mjs). Runners in late Nov 2026 took up to two and a half times their
+    # measured time, so the limit leaves room for that.
+    timeout-minutes: 30
     strategy:
       fail-fast: true
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -304,13 +324,13 @@ jobs:
         # updates, up to ten minutes on some runners. So the browser starts first, and only on a failure
         # are they installed.
         run: timeout 60 node -e "require('@playwright/test').chromium.launch().then((b) => b.close())" || pnpm exec playwright install-deps chromium
-      - name: This shard's tests, shared out by their measured times (e2e/shard.mjs)
-        working-directory: apps/park
-        run: node e2e/shard.mjs ${{ matrix.shard }} 12 > shard-tests.txt
-        env:
-          CI: 'true'
-      - name: End-to-end tests, shard ${{ matrix.shard }} of 12 (local transport on desktop and phone, and the room server)
-        run: pnpm e2e --test-list shard-tests.txt
+      - name: The suite's plan, from the build job (e2e/shard.mjs)
+        uses: actions/download-artifact@v4
+        with:
+          name: shard-plan
+          path: apps/park/shard-plan
+      - name: End-to-end tests, shard ${{ matrix.shard }} of 20 (local transport on desktop and phone, and the room server)
+        run: pnpm e2e --test-list shard-plan/shard-${{ matrix.shard }}.txt
         env:
           CI: 'true'
           PW_BLOB: 'true'
@@ -366,12 +386,26 @@ jobs:
           name: playwright-report
           path: apps/park/playwright-report
           retention-days: 7
-      - name: This run's measured times, to refresh e2e/durations.json now and then
+      - name: The newest measured test times from main, to average this run's with
+        if: needs.e2e.result == 'success'
+        uses: actions/cache/restore@v4
+        with:
+          path: apps/park/e2e/durations.json
+          key: e2e-durations-v1-none
+          restore-keys: e2e-durations-v1-
+      - name: This run's measured times, averaged into the table
         if: needs.e2e.result == 'success'
         working-directory: apps/park
         run: |
           pnpm exec playwright merge-reports --reporter json ./all-blob-reports > report.json
           node e2e/shard.mjs durations report.json
+      # Kept from main only (a pull request's cache is its own), for the next run's build job to share from.
+      - name: Keep the measured times for the next run
+        if: needs.e2e.result == 'success' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: apps/park/e2e/durations.json
+          key: e2e-durations-v1-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Upload the measured times
         if: needs.e2e.result == 'success'
         uses: actions/upload-artifact@v4
