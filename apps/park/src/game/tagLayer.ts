@@ -20,7 +20,7 @@
  * there while it plays, and goes home after.
  */
 import Phaser from 'phaser';
-import { standIn } from './standIn';
+import { laneArt, standIn } from './standIn';
 import { workBoxesShown } from './workBoxes';
 import {
   BOWLING_LANE,
@@ -183,18 +183,15 @@ export class TagLayer {
 
   /**
    * The feather station and the bowling lane. On a painter's or a keeper's tab, size boxes on the floor,
-   * each with its dimensions on it (workBoxes.ts); for every other visitor the park's own signboard,
-   * the game's name on it, at the station's foot, and the lane a soft worn strip with no outline or words.
+   * each with its dimensions on it (workBoxes.ts); for every other visitor the station's own art, the
+   * game's name over it, and the lane's (laneArt): a soft worn strip shows wherever the art has not loaded.
    */
   private drawSpaces(): void {
     const s = this.o.scene;
     if (!workBoxesShown()) {
       const st = TAG_STATION;
-      standIn(s, 'kit-clearing-sign-board', { x: st.x, y: st.y }, 140, st.y, this.drawn, { text: TAG_WORDS.ring, up: 130 });
-      const lane = s.add.graphics();
-      lane.fillStyle(0xffd36a, 0.07).fillRoundedRect(BOWLING_LANE.x, BOWLING_LANE.y, BOWLING_LANE.w, BOWLING_LANE.h, BOWLING_LANE.h / 2);
-      lane.setDepth(BOWLING_LANE.y);
-      this.drawn.push(lane);
+      standIn(s, 'tag-feather-station', { x: st.x, y: st.y + 7 }, 184, st.y, this.drawn, { text: TAG_WORDS.ring, up: 145 });
+      laneArt(s, this.drawn);
       return;
     }
     const label = (x: number, y: number, words: string, depth: number) =>
