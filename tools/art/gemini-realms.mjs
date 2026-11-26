@@ -28,6 +28,17 @@ export const HELPER_KEYS = G.HELPER_KEYS;
 export const NEGATIVE_PROMPT = null;
 export const REALMS = ['clearing', 'glass', 'neon', 'ink'];
 
+/**
+ * A realm's reference screen: the full copy in work/art/guides (gemini_pass_refs.py) when this machine has
+ * it, else the committed one in tools/art/refs (smaller and palette-reduced, so a fresh machine can still paint).
+ */
+export function realmRef(area) {
+  const guide = path.join(TOOLS, '..', '..', 'work', 'art', 'guides', `realm-ref-${area}.png`);
+  return fs.existsSync(guide)
+    ? { ref: `@guide:realm-ref-${area}`, role: "the realm's new reference screen", optional: false }
+    : { ref: `refs/realm-ref-${area}.png`, role: "the realm's new reference screen (committed copy)", optional: false };
+}
+
 /** Sentences with no negative in them, and none about the old references or the style blocks. */
 export function sceneSentences(prompt) {
   const body = prompt.split(/\b(?:STYLE|PALETTE|AVOID)\b\s*[:(]/)[0];
@@ -97,7 +108,7 @@ const LAYER_CANVAS = (job) => {
 function realmJob(base, { area, what }) {
   const roomLike = base.kind === 'room' || base.kind === 'wing' || (base.kind === 'anchor' && !base.key.startsWith('climb-'));
   const guide = { market: 'market', glass: 'glass', ink: 'ink' }[base.key];
-  const refs = [{ ref: `@guide:realm-ref-${area}`, role: "the realm's new reference screen (gemini_pass_refs.py)", optional: false }];
+  const refs = [realmRef(area)];
   if (guide) refs.push({ ref: `@guide:${guide}`, role: 'layout guide: the floor and doorways in greys', optional: true });
   const job = { ...base, kind: base.kind === 'wing' ? 'room' : base.kind, refs, variants: 2, batch: `realm-${area}` };
   if (job.kind === 'room' && job.size !== '3200x1800') job.size = '3200x1800';
@@ -137,7 +148,7 @@ export function singleJob(key) {
   const a = ASSETS[key];
   if (!d || !a) throw new Error(`gemini-realms: no sheet description for ${key}`);
   const W = a.w * 2; const H = a.h * 2;
-  const job = { key, kind: 'piece', realm: d.area, size: `${W}x${H}`, seed: 21000, variants: 2, key_colour: '#FF00FF', refs: [{ ref: `@guide:realm-ref-${d.area}`, role: "the realm's new reference screen", optional: false }], prompt: `single prop: ${key}`, batch: `single-${d.area}` };
+  const job = { key, kind: 'piece', realm: d.area, size: `${W}x${H}`, seed: 21000, variants: 2, key_colour: '#FF00FF', refs: [realmRef(d.area)], prompt: `single prop: ${key}`, batch: `single-${d.area}` };
   job.gemini_prompt = G.formula({
     context: 'A single prop for a 2D side-scrolling game.',
     lock: "Image 1 (reference image) is this realm's reference screen: paint the prop in its exact brush, palette, light and materials.",
