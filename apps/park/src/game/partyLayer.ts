@@ -103,10 +103,11 @@ export class PartyLayer {
   /** The Old Stump and its seats as size boxes on the plaza's floor. */
   private drawStump(): void {
     const s = this.o.scene;
-    // For every visitor but a painter or a keeper (workBoxes.ts), the park's own stump in the box's
-    // place, its foot where the box's was; the seats are where owls sit on it, and draw nothing.
+    // For every visitor but a painter or a keeper (workBoxes.ts), the Old Stump's art in the box's place,
+    // its foot where the box's was, and a log seat at each of its four seats.
     if (!workBoxesShown()) {
-      standIn(s, 'decor-stump-table', { x: STUMP_AT.x, y: STUMP_AT.y + STUMP_SIZE.h / 2 }, STUMP_SIZE.w, STUMP_AT.y + STUMP_SIZE.h / 2, this.boxes);
+      standIn(s, 'party-stump', { x: STUMP_AT.x, y: STUMP_AT.y + STUMP_SIZE.h / 2 }, STUMP_SIZE.w, STUMP_AT.y + STUMP_SIZE.h / 2, this.boxes);
+      for (const p of STUMP_SEATS) standIn(s, 'party-seat', { x: p.x, y: p.y + SEAT_SIZE.h / 2 }, SEAT_SIZE.w, p.y + SEAT_SIZE.h / 2 - 1, this.boxes);
       return;
     }
     const box = (x: number, y: number, w: number, h: number, name: string) => {

@@ -4,8 +4,10 @@
  * (escape.ts in the shared package): this page only draws it, says where the owl stands, and sends
  * the steps. Nothing here knows a code, the key's shelf or which roots carry the carvings.
  *
- * Its pieces are plain boxes with their sizes written on them until their art is made; the locks,
- * the carvings and the key reuse the puzzle quests' marks (PuzzleMarker, OP-256).
+ * Its pieces are painted (the `escape-*` art, November 2026) and its walls and floor are the park's own
+ * root and inner-wood textures (drawHollowRoom); a painter's or a keeper's tab (`?paint=1`, `?keeper=1`)
+ * still sees each piece as a plain box with its size written on it. The locks, the carvings and the key
+ * reuse the puzzle quests' marks (PuzzleMarker, OP-256).
  */
 import type Phaser from 'phaser';
 import {
@@ -33,6 +35,7 @@ import type { EscapeLink } from '../net/transport';
 import type { Hud } from '../ui/hud';
 import { createCodePad, type CodePad } from '../ui/puzzle';
 import { PuzzleMarker, markKey, type PuzzleMarkKind, type PuzzleMarkLook } from './PuzzleMarker';
+import { loadArtKey } from './art';
 import { standIn } from './standIn';
 import { workBoxesShown } from './workBoxes';
 
@@ -87,6 +90,49 @@ function sizeBox(scene: Phaser.Scene, foot: Vec2, box: { w: number; h: number; n
     .text(0, -box.h / 2, `${label}\n${box.w}×${box.h}`, { fontFamily: 'system-ui, sans-serif', fontSize: '13px', color: '#F6F1E3', align: 'center' })
     .setOrigin(0.5);
   return scene.add.container(foot.x, foot.y, [rect, text]).setDepth(foot.y - 2);
+}
+
+/** Each piece's art: a size box on a painter's or a keeper's tab, the painting for every other visitor. */
+const ART_OF = {
+  root: 'escape-root',
+  moon: 'escape-moon',
+  vine: 'escape-vine',
+  owl: 'escape-old-owl',
+  chest: 'escape-chest',
+  dial: 'escape-dial',
+  rootDoor: 'escape-root-door',
+  roundDoor: 'escape-round-door',
+} as const;
+
+/** A piece standing on `foot`: its art at its box's width, or on a work tab the box itself. */
+function piece(scene: Phaser.Scene, foot: Vec2, box: { w: number; h: number; name: string }, key: string, label = box.name): Phaser.GameObjects.Container {
+  return workBoxesShown() ? sizeBox(scene, foot, box, FILL.plain, label) : standIn(scene, key, foot, box.w, foot.y - 2, []);
+}
+
+/** The textures the hollow is drawn in: roots for its walls, the tree's inner wood for its floor (calm, so the pieces read on it). */
+export const HOLLOW_TEX = { wall: 'kit-tex-under-root-mat', floor: 'kit-tex-inner-wood' } as const;
+
+/**
+ * The hollow's walls and floor, over the plain shapes the room is drawn in (course.ts): the root
+ * texture over the whole room, dimmed so the floor reads first, and the packed earth cut to the floor's
+ * outline with a soft dark edge. A texture that does not load leaves the plain shapes showing.
+ */
+export function drawHollowRoom(scene: Phaser.Scene, room: RoomDef): void {
+  if (workBoxesShown()) return;
+  const { w, h } = room.size;
+  void Promise.all([loadArtKey(scene, HOLLOW_TEX.wall, 1), loadArtKey(scene, HOLLOW_TEX.floor, 1)]).then(([wall, floor]) => {
+    if (!scene.sys?.isActive()) return;
+    if (wall) scene.add.tileSprite(0, 0, w, h, HOLLOW_TEX.wall).setOrigin(0).setDepth(-0.99).setTint(0x7a7488);
+    if (!floor) return;
+    const outline = scene.make.graphics({}, false);
+    outline.fillStyle(0xffffff, 1);
+    for (const p of room.walkable) outline.fillPoints(p.map((v) => ({ x: v.x, y: v.y })), true);
+    scene.add.tileSprite(0, 0, w, h, HOLLOW_TEX.floor).setOrigin(0).setDepth(-0.98).setTint(0xb8a890).setMask(outline.createGeometryMask());
+    const edge = scene.add.graphics().setDepth(-0.97);
+    for (const p of room.walkable) edge.lineStyle(10, 0x1b1a30, 0.55).strokePoints(p.map((v) => ({ x: v.x, y: v.y })), true);
+  });
+  // The way back out, which the plain shapes drew under the walls: the park's open round door, lit from within.
+  for (const d of room.doors) standIn(scene, 'kit-clearing-hut-door-open', { x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h }, Math.max(d.rect.w, 110), -0.96, []);
 }
 
 /** A perch's middle. */
@@ -246,17 +292,28 @@ export class EscapeHollow {
   constructor(private readonly host: EscapeHost) {
     const { scene } = host;
     // The keeper's things, where the keeper left them: roots, the stump, the shelves, the vines, the carvings and the doors.
-    for (const r of ESCAPE_PLACES.roots) sizeBox(scene, r, BOX.root);
-    this.moonBox = sizeBox(scene, ESCAPE_PLACES.moon, BOX.moon);
-    for (const v of ESCAPE_PLACES.vines) sizeBox(scene, v, BOX.vine, FILL.plain, `${BOX.vine.name} (${v.id})`);
-    this.owlBox = sizeBox(scene, ESCAPE_PLACES.hintOwl, BOX.owl);
-    const label = (at: Vec2, text: string, top: number) =>
-      scene.add.text(at.x, at.y - top - 6, text, { fontFamily: 'system-ui, sans-serif', fontSize: '13px', color: '#F6F1E3', align: 'center' }).setOrigin(0.5, 1).setDepth(at.y + 1);
-    const stump = middle(ESCAPE_STUMP.area);
-    label(stump, `Old stump (perch)\n160×80`, ESCAPE_PERCH_TOP);
-    for (const s of ESCAPE_SHELVES) label(middle(s.area), `Keeper’s shelf (perch)\n140×60`, ESCAPE_PERCH_TOP);
-    const boxes = { chest: BOX.chest, dial: BOX.dial, roots: BOX.rootDoor, 'way-out': BOX.roundDoor } as const;
-    for (const l of ESCAPE_LOCKS) sizeBox(scene, { x: l.post.x, y: l.post.y - 30 }, boxes[l.id]);
+    for (const r of ESCAPE_PLACES.roots) piece(scene, r, BOX.root, ART_OF.root);
+    this.moonBox = piece(scene, ESCAPE_PLACES.moon, BOX.moon, ART_OF.moon);
+    for (const v of ESCAPE_PLACES.vines) piece(scene, v, BOX.vine, ART_OF.vine, `${BOX.vine.name} (${v.id})`);
+    this.owlBox = piece(scene, ESCAPE_PLACES.hintOwl, BOX.owl, ART_OF.owl);
+    const perches = [{ perch: ESCAPE_STUMP, key: 'escape-stump', name: 'Old stump' }, ...ESCAPE_SHELVES.map((perch) => ({ perch, key: 'escape-shelf', name: 'Keeper’s shelf' }))];
+    for (const { perch, key, name } of perches) {
+      const at = middle(perch.area);
+      const xs = perch.area.map((v) => v.x);
+      const ys = perch.area.map((v) => v.y);
+      const w = Math.max(...xs) - Math.min(...xs);
+      if (workBoxesShown()) {
+        scene.add
+          .text(at.x, at.y - ESCAPE_PERCH_TOP - 6, `${name} (perch)\n${w}×${Math.max(...ys) - Math.min(...ys)}`, { fontFamily: 'system-ui, sans-serif', fontSize: '13px', color: '#F6F1E3', align: 'center' })
+          .setOrigin(0.5, 1)
+          .setDepth(at.y + 1);
+      } else {
+        // Over the plain crate the room draws for the perch (course.ts), so the crate shows only if the art does not load.
+        standIn(scene, key, { x: at.x, y: Math.max(...ys) }, w, Math.max(...ys) + 0.2, []);
+      }
+    }
+    const lockArt = { chest: [BOX.chest, ART_OF.chest], dial: [BOX.dial, ART_OF.dial], roots: [BOX.rootDoor, ART_OF.rootDoor], 'way-out': [BOX.roundDoor, ART_OF.roundDoor] } as const;
+    for (const l of ESCAPE_LOCKS) piece(scene, { x: l.post.x, y: l.post.y - 30 }, lockArt[l.id][0], lockArt[l.id][1]);
     const root = host.hudRoot();
     this.sheet = root ? panel(root) : null;
     this.sheet?.setAttribute('data-escape', '');
@@ -424,7 +481,9 @@ export class EscapeHollow {
       else this.marks.set(key, new PuzzleMarker(this.host.scene, 'escape', w.lock, w.kind, w.n, w.at, w.top, w.look));
     }
     const lit = !!v?.lit;
-    (this.moonBox.list[0] as Phaser.GameObjects.Rectangle).setFillStyle(lit ? FILL.lit : FILL.plain, lit ? 0.75 : 0.55);
+    // Lit, the carving shows bright; in the dark it stays dim. A work tab shows its box's colour.
+    if (workBoxesShown()) (this.moonBox.list[0] as Phaser.GameObjects.Rectangle).setFillStyle(lit ? FILL.lit : FILL.plain, lit ? 0.75 : 0.55);
+    else this.moonBox.setAlpha(lit ? 1 : 0.55);
     if (this.padFor && v) {
       const l = v.locks.find((x) => x.id === this.padFor);
       this.pad?.update(l?.available ? padLock(l) : null);

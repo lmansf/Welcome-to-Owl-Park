@@ -36,3 +36,32 @@ export function standIn(
   });
   return box;
 }
+
+/**
+ * A piece the game moves, fades or turns (a bowling pin, the pinecone, the tag feather): a container
+ * holding the shape `drawShape` draws, swapped for `key`'s art at `w` × `h` (its middle at `origin`) once
+ * that loads. On a painter's or a keeper's tab, or with no art, the shape stays.
+ */
+export function artOrShape(
+  scene: Phaser.Scene,
+  key: string,
+  w: number,
+  h: number,
+  drawShape: (g: Phaser.GameObjects.Graphics) => void,
+  opts: { origin?: { x: number; y: number }; keepShape?: boolean } = {},
+): Phaser.GameObjects.Container {
+  const box = scene.add.container(0, 0);
+  const shape = scene.add.graphics();
+  drawShape(shape);
+  box.add(shape);
+  if (opts.keepShape) return box;
+  const cfg = scene.registry.get('config') as ParkConfig | undefined;
+  const scale = artScale('piece', cfg?.pixelRatio ?? 1, cfg?.artScaleMax ?? 1);
+  void loadArtKey(scene, key, scale).then((ok) => {
+    if (!ok || !box.scene) return;
+    const o = opts.origin ?? { x: 0.5, y: 0.5 };
+    box.add(scene.add.image(0, 0, key).setOrigin(o.x, o.y).setDisplaySize(w, h));
+    box.remove(shape, true);
+  });
+  return box;
+}

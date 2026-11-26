@@ -31,6 +31,7 @@ import {
   type BowlRoll,
   type Vec2,
 } from '@owl-park/shared';
+import { artOrShape, standIn } from './standIn';
 import { workBoxesShown } from './workBoxes';
 
 export interface BowlLayerOpts {
@@ -75,8 +76,8 @@ const DONE_SHOWN_MS = 5000;
 
 export class BowlLayer {
   private readonly drawn: Phaser.GameObjects.GameObject[] = [];
-  private readonly pins: Phaser.GameObjects.Graphics[] = [];
-  private readonly ball: Phaser.GameObjects.Graphics;
+  private readonly pins: Phaser.GameObjects.Container[] = [];
+  private readonly ball: Phaser.GameObjects.Container;
   private readonly arrow: Phaser.GameObjects.Graphics;
   private game: BowlGame = newBowl();
   private phase: BowlPhase = 'idle';
@@ -98,17 +99,22 @@ export class BowlLayer {
     spot.lineStyle(2, 0xffd36a, 0.9).strokeCircle(BOWL_SPOT.x, BOWL_SPOT.y, 26);
     spot.setDepth(BOWL_SPOT.y - 26);
     this.drawn.push(spot);
+    // The pins and the pinecone: their art (bowl-pin, bowl-pinecone) once it loads, the plain shapes until then
+    // and on a painter's or a keeper's tab.
+    const work = workBoxesShown();
     for (const p of BOWL_PINS) {
-      const g = s.add.graphics();
-      g.fillStyle(0xf6f1e3, 1).fillCircle(0, 0, BOWL_PIN_R);
-      g.lineStyle(2, 0xb07a1a, 1).strokeCircle(0, 0, BOWL_PIN_R);
-      g.fillStyle(0xc0392b, 1).fillRect(-BOWL_PIN_R, -2, BOWL_PIN_R * 2, 4);
+      const g = artOrShape(s, 'bowl-pin', BOWL_PIN_R * 2.6, BOWL_PIN_R * 2.6, (sh) => {
+        sh.fillStyle(0xf6f1e3, 1).fillCircle(0, 0, BOWL_PIN_R);
+        sh.lineStyle(2, 0xb07a1a, 1).strokeCircle(0, 0, BOWL_PIN_R);
+        sh.fillStyle(0xc0392b, 1).fillRect(-BOWL_PIN_R, -2, BOWL_PIN_R * 2, 4);
+      }, { keepShape: work });
       g.setPosition(p.x, p.y).setDepth(p.y);
       this.pins.push(g);
     }
-    this.ball = s.add.graphics();
-    this.ball.fillStyle(0x8a5a2b, 1).fillEllipse(0, 0, BOWL_BALL_R * 2.2, BOWL_BALL_R * 2);
-    this.ball.lineStyle(2, 0x4a2e12, 1).strokeEllipse(0, 0, BOWL_BALL_R * 2.2, BOWL_BALL_R * 2);
+    this.ball = artOrShape(s, 'bowl-pinecone', BOWL_BALL_R * 2.6, BOWL_BALL_R * 2.6, (sh) => {
+      sh.fillStyle(0x8a5a2b, 1).fillEllipse(0, 0, BOWL_BALL_R * 2.2, BOWL_BALL_R * 2);
+      sh.lineStyle(2, 0x4a2e12, 1).strokeEllipse(0, 0, BOWL_BALL_R * 2.2, BOWL_BALL_R * 2);
+    }, { keepShape: work });
     this.ball.setPosition(BOWL_START.x, BOWL_START.y).setDepth(BOWL_START.y).setVisible(false);
     this.arrow = s.add.graphics().setDepth(BOWLING_LANE.y + BOWLING_LANE.h).setVisible(false);
   }
@@ -116,12 +122,9 @@ export class BowlLayer {
   /** The lane as a size box with its dimensions on it, when feather tag is not drawing it. */
   private drawLane(): void {
     const s = this.o.scene;
-    // For every visitor but a painter or a keeper (workBoxes.ts), a soft worn strip, no outline or size.
+    // For every visitor but a painter or a keeper (workBoxes.ts), the lane's art, no outline or size.
     if (!workBoxesShown()) {
-      const worn = s.add.graphics();
-      worn.fillStyle(0xffd36a, 0.07).fillRoundedRect(BOWLING_LANE.x, BOWLING_LANE.y, BOWLING_LANE.w, BOWLING_LANE.h, BOWLING_LANE.h / 2);
-      worn.setDepth(BOWLING_LANE.y);
-      this.drawn.push(worn);
+      drawLaneArt(s, this.drawn);
       return;
     }
     const lane = s.add.graphics();
@@ -296,4 +299,13 @@ export class BowlLayer {
     this.line?.remove();
     this.line = null;
   }
+}
+
+/** The bowling lane's art (bowl-lane) over a soft worn strip that shows until it loads: shared with feather tag, which draws the lane when it is on. */
+export function drawLaneArt(s: Phaser.Scene, into: Phaser.GameObjects.GameObject[]): void {
+  const worn = s.add.graphics();
+  worn.fillStyle(0xffd36a, 0.07).fillRoundedRect(BOWLING_LANE.x, BOWLING_LANE.y, BOWLING_LANE.w, BOWLING_LANE.h, BOWLING_LANE.h / 2);
+  worn.setDepth(BOWLING_LANE.y);
+  into.push(worn);
+  standIn(s, 'bowl-lane', { x: BOWLING_LANE.x + BOWLING_LANE.w / 2, y: BOWLING_LANE.y + BOWLING_LANE.h }, BOWLING_LANE.w, BOWLING_LANE.y + 0.1, into);
 }

@@ -20,7 +20,8 @@
  * there while it plays, and goes home after.
  */
 import Phaser from 'phaser';
-import { standIn } from './standIn';
+import { drawLaneArt } from './bowlLayer';
+import { artOrShape, standIn } from './standIn';
 import { workBoxesShown } from './workBoxes';
 import {
   BOWLING_LANE,
@@ -143,7 +144,7 @@ export function prizeWords(f: ServerTagPrize): string {
 
 export class TagLayer {
   private readonly drawn: Phaser.GameObjects.GameObject[] = [];
-  private readonly feather: Phaser.GameObjects.Graphics;
+  private readonly feather: Phaser.GameObjects.Container;
   private conn: RoomConnection | null = null;
   private game: TagState = newTag();
   private heard: string[] = [];
@@ -167,8 +168,13 @@ export class TagLayer {
 
   constructor(private readonly o: TagLayerOpts) {
     this.drawSpaces();
-    this.feather = o.scene.add.graphics().setDepth(1_000_000).setVisible(false);
-    this.drawFeather();
+    // The feather over the holder's head: its art (tag-feather) once it loads, a plain drawn feather until then.
+    this.feather = artOrShape(o.scene, 'tag-feather', 52, 52, (g) => {
+      g.fillStyle(0xfff3c4, 1).fillEllipse(0, -34, 22, 52);
+      g.lineStyle(2, 0xb07a1a, 1).strokeEllipse(0, -34, 22, 52);
+      g.lineBetween(0, -64, 0, -2);
+    }, { origin: { x: 0.5, y: 1 }, keepShape: workBoxesShown() });
+    this.feather.setRotation(0.35).setDepth(1_000_000).setVisible(false);
   }
 
   /** The room's connection, once the scene holds it: the game is asked for. */
@@ -184,17 +190,14 @@ export class TagLayer {
   /**
    * The feather station and the bowling lane. On a painter's or a keeper's tab, size boxes on the floor,
    * each with its dimensions on it (workBoxes.ts); for every other visitor the park's own signboard,
-   * the game's name on it, at the station's foot, and the lane a soft worn strip with no outline or words.
+   * the game's name on it, at the station's foot, and the lane's art with no outline or words.
    */
   private drawSpaces(): void {
     const s = this.o.scene;
     if (!workBoxesShown()) {
       const st = TAG_STATION;
-      standIn(s, 'kit-clearing-sign-board', { x: st.x, y: st.y }, 140, st.y, this.drawn, { text: TAG_WORDS.ring, up: 130 });
-      const lane = s.add.graphics();
-      lane.fillStyle(0xffd36a, 0.07).fillRoundedRect(BOWLING_LANE.x, BOWLING_LANE.y, BOWLING_LANE.w, BOWLING_LANE.h, BOWLING_LANE.h / 2);
-      lane.setDepth(BOWLING_LANE.y);
-      this.drawn.push(lane);
+      standIn(s, 'tag-station', { x: st.x, y: st.y }, st.w, st.y, this.drawn, { text: TAG_WORDS.ring, up: st.h + 18 });
+      drawLaneArt(s, this.drawn);
       return;
     }
     const label = (x: number, y: number, words: string, depth: number) =>
@@ -215,15 +218,6 @@ export class TagLayer {
   }
 
   /** A feather drawn in code, as a size box would be: a quill and its vane, floating over the holder's head. */
-  private drawFeather(): void {
-    const g = this.feather;
-    g.clear();
-    g.fillStyle(0xfff3c4, 1).fillEllipse(0, -34, 22, 52);
-    g.lineStyle(2, 0xb07a1a, 1).strokeEllipse(0, -34, 22, 52);
-    g.lineBetween(0, -64, 0, -2);
-    g.setRotation(0.35);
-  }
-
   /** The room's word about the game: an answer or a push. */
   onTag(f: ServerTag): void {
     this.game = f.tag;

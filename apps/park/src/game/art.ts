@@ -261,6 +261,26 @@ export const ART: Record<string, ArtSpec> = {
   'decor-moss-rug': { w: 220, h: 100, kind: 'piece' },
   'decor-stump-table': { w: 160, h: 120, kind: 'piece' },
   'decor-feather-mobile': { w: 110, h: 160, kind: 'piece' },
+  // The minigames' own pieces (they were size boxes and shapes drawn in code): the sealed hollow's
+  // puzzle pieces, perches and doors (escapeRoom.ts), pinecone bowling's lane, pins and pinecone
+  // (bowlLayer.ts), feather tag's station and feather (tagLayer.ts), the Old Stump and its seats (partyLayer.ts).
+  'escape-root': { w: 90, h: 50, kind: 'piece' },
+  'escape-moon': { w: 180, h: 120, kind: 'piece' },
+  'escape-vine': { w: 40, h: 160, kind: 'piece' },
+  'escape-old-owl': { w: 70, h: 90, kind: 'piece' },
+  'escape-chest': { w: 100, h: 70, kind: 'piece' },
+  'escape-dial': { w: 90, h: 90, kind: 'piece' },
+  'escape-root-door': { w: 140, h: 100, kind: 'piece' },
+  'escape-round-door': { w: 120, h: 120, kind: 'piece' },
+  'escape-stump': { w: 160, h: 116, kind: 'piece' },
+  'escape-shelf': { w: 140, h: 96, kind: 'piece' },
+  'bowl-lane': { w: 800, h: 70, kind: 'piece' },
+  'bowl-pin': { w: 24, h: 24, kind: 'piece' },
+  'bowl-pinecone': { w: 24, h: 24, kind: 'piece' },
+  'tag-station': { w: 160, h: 110, kind: 'piece' },
+  'tag-feather': { w: 48, h: 48, kind: 'piece' },
+  'party-stump': { w: 300, h: 150, kind: 'piece' },
+  'party-seat': { w: 80, h: 40, kind: 'piece' },
   // Construction blockades in the hub's two closed arches, each carrying its doorway's phrase.
   'blockade-not-yet-fledged': { w: 300, h: 300, kind: 'piece' },
   'blockade-hatching-soon': { w: 300, h: 300, kind: 'piece' },

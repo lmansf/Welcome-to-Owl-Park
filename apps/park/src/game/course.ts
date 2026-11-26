@@ -89,7 +89,7 @@ const REFUSED_RETRY_MS = 4000;
 const C = { sky: 0x1b2640, floor: 0x3f5b46, edge: 0x6f8f6a, pit: 0x080b14, door: 0xc9a46a, bench: 0x8a5a33, bell: 0xffd36a, bellDone: 0x6d6a5e, feather: 0xf6f1e3, shrine: 0xb8d8ff, gate: 0xd9673e, opener: 0xffd36a, crate: 0x7a5534, crateTop: 0xa8794a, thorn: 0x5a3626, thornLight: 0x8a6442, thornTip: 0xf0e2b8, thornEdge: 0x1c100b, mist: 0xd9dde3, mistLight: 0xf3f4f6, falls: 0x9fb4c8, fallsLight: 0xe6eef5, wire: 0x1a1d2b, spark: 0x7ff6ff, sparkHot: 0xff5fd2, breaker: 0x3a3f55, breakerFace: 0xd9673e, breakerOn: 0x5ee08a };
 
 /** A room drawn in plain shapes (`drawn`, the test course): the sky, the floor, the pits and the doorways. */
-export function drawPlaceholderRoom(scene: Phaser.Scene, room: RoomDef): Phaser.GameObjects.Graphics {
+export function drawPlaceholderRoom(scene: Phaser.Scene, room: RoomDef, opts: { perches?: boolean } = {}): Phaser.GameObjects.Graphics {
   const g = scene.add.graphics().setDepth(-1);
   g.fillStyle(C.sky, 1).fillRect(0, 0, room.size.w, room.size.h);
   const poly = (p: Polygon, color: number, alpha = 1) => {
@@ -102,7 +102,8 @@ export function drawPlaceholderRoom(scene: Phaser.Scene, room: RoomDef): Phaser.
   for (const pit of room.course?.pits ?? []) poly(pit, C.pit);
   for (const d of room.doors) g.fillStyle(C.door, 0.55).fillRect(d.rect.x, d.rect.y, d.rect.w, d.rect.h);
   // A perch (a crate to jump up on): its face from the floor to its top, and its top, drawn by its place so owls pass in front and behind.
-  for (const perch of room.perches ?? []) {
+  // A room whose perches have their own art (the sealed hollow's stump and shelves) skips the crates.
+  for (const perch of opts.perches === false ? [] : (room.perches ?? [])) {
     const xs = perch.area.map((v) => v.x);
     const ys = perch.area.map((v) => v.y);
     const x0 = Math.min(...xs);

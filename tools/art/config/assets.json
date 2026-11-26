@@ -8098,6 +8098,142 @@
       "key_colour": "#FF00FF",
       "format": "webp",
       "with_2x": true
+    },
+    "escape-root": {
+      "w": 90,
+      "h": 50,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "escape-moon": {
+      "w": 180,
+      "h": 120,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "escape-vine": {
+      "w": 40,
+      "h": 160,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "escape-old-owl": {
+      "w": 70,
+      "h": 90,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "escape-chest": {
+      "w": 100,
+      "h": 70,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "escape-dial": {
+      "w": 90,
+      "h": 90,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "escape-root-door": {
+      "w": 140,
+      "h": 100,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "escape-round-door": {
+      "w": 120,
+      "h": 120,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "escape-stump": {
+      "w": 160,
+      "h": 116,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "escape-shelf": {
+      "w": 140,
+      "h": 96,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "bowl-lane": {
+      "w": 800,
+      "h": 70,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "bowl-pin": {
+      "w": 24,
+      "h": 24,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "bowl-pinecone": {
+      "w": 24,
+      "h": 24,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "tag-station": {
+      "w": 160,
+      "h": 110,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "tag-feather": {
+      "w": 48,
+      "h": 48,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "party-stump": {
+      "w": 300,
+      "h": 150,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "party-seat": {
+      "w": 80,
+      "h": 40,
+      "kind": "piece",
+      "format": "webp",
+      "key_colour": "#FF00FF",
+      "with_2x": true
     }
   },
   "helpers": {
