@@ -694,6 +694,12 @@ Object.assign(MODELS, {
     gemini: { model: 'gemini-3-pro-image', tiers: ['1K', '2K', '4K'] },
     price: { gemini: [{ maxPixels: 2048 * 2048, usd: 0.134 }, { maxPixels: Infinity, usd: 0.24 }] },
   },
+  'gemini-3.1-flash-image': {
+    label: 'Gemini 3.1 Flash Image',
+    family: 'gemini',
+    gemini: { model: 'gemini-3.1-flash-image', tiers: ['1K', '2K'] },
+    price: { gemini: [{ maxPixels: Infinity, usd: 0.067 }] },
+  },
   'gemini-2.5-flash-image': {
     label: 'Gemini 2.5 Flash Image',
     family: 'gemini',
