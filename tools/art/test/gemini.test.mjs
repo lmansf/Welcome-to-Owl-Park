@@ -103,3 +103,20 @@ test('revise --dry-run on published art spends nothing', async () => {
   const bad = await G.main(['revise', 'hub', 'final', 'x', '--provider', 'fal'], { env: {}, stdout: o.stream, stderr: e.stream });
   assert.equal(bad, 2);
 });
+
+test('the Gemini pass: every job validates, follows the formula and is framed positively', async () => {
+  const pass = await import('../gemini-pass.mjs');
+  const jobs = G.validateJobs(pass.JOBS, { assets: G.loadAssets(), helperKeys: pass.HELPER_KEYS, blocks: pass.BLOCKS });
+  assert.ok(jobs.length > 100);
+  assert.equal(pass.NEGATIVE_PROMPT, null);
+  for (const j of jobs) {
+    assert.match(j.gemini_prompt, /^A [^.]+\. (Scene|Sheet|Asset) 1 \(reference image\), painted in the style of Image 2 \(style reference\)\./, j.key);
+    assert.doesNotMatch(j.gemini_prompt, /\b(no|never|without|avoid)\b/i, `${j.key}: positive framing only`);
+    assert.equal(j.refs.length, 2, `${j.key}: identity lock and style reference`);
+  }
+  // One style string per batch of the same light: every item prompt carries the same descriptor.
+  const items = jobs.filter((j) => j.realm === 'items');
+  const style = (p) => p.slice(p.indexOf('Clean 2D'), p.indexOf(' The asset alone'));
+  assert.equal(new Set(items.map((j) => style(j.gemini_prompt))).size, 1);
+  assert.equal(pass.positive('dusk light, every sign blank, no letters anywhere, never any sky'), 'dusk light, every sign blank');
+});
