@@ -81,17 +81,6 @@ function pts(...p: ReadonlyArray<readonly [number, number]>): Polygon {
   return p.map(([x, y]) => ({ x, y }));
 }
 
-/**
- * The treehouse clearing's floor edge along the great tree's foot, west to east (OP-481): from the lawn's
- * top round the trunk, down round the roots spread west of the hollow's door, along the door's threshold
- * and round the roots east of it, then up to the east wing. Shared by the clearing's floor and its plaza's
- * back edge, so the two never part.
- */
-export const GROVE_ROOTS: Polygon = pts(
-  [1930, 510], [2548, 510], [2511, 633], [2403, 705], [2300, 778], [2310, 796], [2376, 800], [2457, 843], [2554, 845],
-  [2578, 808], [2645, 812], [2796, 812], [2823, 797], [2887, 824], [3011, 850], [3040, 800], [3050, 705],
-);
-
 /** A polygon from [x, y] pairs measured on one screen's painting (1600 x 900), that screen `screen` screens east (room px). */
 function onScreen(screen: number, ...p: ReadonlyArray<readonly [number, number]>): Polygon {
   return p.map(([x, y]) => ({ x: screen * ROOM_W + x, y }));
@@ -322,11 +311,13 @@ export const ROOMS: Record<string, RoomDef> = {
         { x: 790, y: 690 },
       ],
       [
-        // The clearing: the lawn, then the trunk and the roots spread at its foot are cut out (OP-481,
-        // the Nov 25 cleanup walk: the floor's edge ran straight across the trunk, over the roots, and an
-        // owl stood on them). Owls walk in straight lines, so the floor stays open in front of the roots
-        // and across the hollow's threshold.
-        ...GROVE_ROOTS,
+        // The clearing: the lawn, then the trunk is cut out above the roots. Owls walk in straight
+        // lines, so the floor stays open across the front of the roots and the hollow's threshold.
+        { x: 1930, y: 510 },
+        { x: 2550, y: 510 },
+        { x: 2525, y: 610 },
+        { x: 2505, y: 705 },
+        { x: 3050, y: 705 },
         { x: 3140, y: 695 },
         { x: 3140, y: 850 },
         { x: 3070, y: 870 },
@@ -453,8 +444,8 @@ export const ROOMS: Record<string, RoomDef> = {
       { x: 2120, y: 760 },
       { x: 2200, y: 540 },
       { x: 2300, y: 860 },
-      { x: 2420, y: 870 },
-      { x: 2560, y: 880 },
+      { x: 2420, y: 800 },
+      { x: 2560, y: 760 },
       { x: 3450, y: 720 },
       { x: 3600, y: 840 },
       { x: 3760, y: 700 },
@@ -1851,7 +1842,7 @@ ROOMS['grove'] = growToPlaza(ROOMS['grove']!, {
   corner: 'edge-clearing-corner-front',
   frontBumps: ['edge-clearing-ferns-a', 'edge-clearing-ferns-b', 'edge-clearing-ferns-a', 'edge-clearing-ferns-b', 'edge-clearing-ferns-a', 'edge-clearing-ferns-b', 'edge-clearing-ferns-a'],
   back: {
-    run: pts([0, 700], [390, 668], [560, 664], [722, 672], [1080, 668], [1200, 672], [1420, 664], [1520, 676], [1600, 690], [1680, 650], [1850, 600], [1862, 540], ...GROVE_ROOTS.map((p): [number, number] => [p.x, p.y]), [3100, 700], [3340, 688], [3420, 705], [3560, 700], [3640, 672], [3800, 640], [3950, 650], [4000, 700], [4250, 722], [4300, 690], [4420, 645], [4560, 650], [4800, 700]),
+    run: pts([0, 700], [390, 668], [560, 664], [722, 672], [1080, 668], [1200, 672], [1420, 664], [1520, 676], [1600, 690], [1680, 650], [1850, 600], [1862, 540], [1930, 510], [2550, 510], [2525, 610], [2505, 705], [3050, 705], [3100, 700], [3340, 688], [3420, 705], [3560, 700], [3640, 672], [3800, 640], [3950, 650], [4000, 700], [4250, 722], [4300, 690], [4420, 645], [4560, 650], [4800, 700]),
     others: [ROOMS['grove']!.walkable[1]!],
   },
   perches: [
