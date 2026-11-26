@@ -235,23 +235,26 @@ key whose sidecar names both sources; `room` and `wing` carry a `patch:` line in
 
 **A seam between two screens** (OP-125). A realm's second screen is painted out from the first
 screen's edge, as the wings are: two screens painted apart, the second with the first only as a
-style reference, do not continue at the join (the glass realm's buildings and pavement did not). To
-mend such a join, cut a crop across it from the two published screens laid side by side, repaint its
-middle half, join it back and finish each screen from the result:
+style reference, do not continue at the join (the glass realm's street did not, before its start went
+onto one screen, OP-276). To mend such a join, cut a crop across it from the two published screens
+laid side by side, repaint its middle half, join it back and finish each screen from the result. With
+`<seam>` the edit's helper job (an `anchor` deriving both screens, its prompt an edit of the crop),
+`<west>` and `<east>` the two screens:
 
 ```bash
-pnpm art:finish cut glass-seam --base-key glass --base <glass@2x.webp>,<glass-east@2x.webp> --box 2560,0,3840,1800 --half
-pnpm art:generate --provider fal --only glass-seam                 # repaints the crop's middle half
-pnpm art:finish sheet glass-seam && node tools/art/generate.mjs select glass-seam <hash16>
-pnpm art:finish patch glass --base-key glass --base <glass@2x.webp>,<glass-east@2x.webp> --edit-key glass-seam --at 2560,0 --threshold 0 --join <px>
-pnpm art:finish room glass --crop left && pnpm art:finish room glass-east --crop right
+pnpm art:finish cut <seam> --base-key <west> --base <west@2x.webp>,<east@2x.webp> --box 2560,0,3840,1800 --half
+pnpm art:generate --provider fal --only <seam>                     # repaints the crop's middle half
+pnpm art:finish sheet <seam> && node tools/art/generate.mjs select <seam> <hash16>
+pnpm art:finish patch <west> --base-key <west> --base <west@2x.webp>,<east@2x.webp> --edit-key <seam> --at 2560,0 --threshold 0 --join <px>
+pnpm art:finish room <west> --crop left && pnpm art:finish room <east> --crop right
 ```
 
 `--base a,b` lays the files side by side; `cut --half` writes the crop at half size when its PNG is
 over the generator's inline limit (the edit job still asks for the full size); `patch --join <px>`
 joins the edit to the painting along the cheapest top-to-bottom cut within that many pixels of the
 box's left and right sides, and with `--threshold 0` the whole box is the edit's; `room --crop
-left|right` finishes one screen from the joined row. The job is `GLASS_SEAM_JOB` in `prompts.mjs`.
+left|right` finishes one screen from the joined row. The glass street's seam (`glass-seam`) was the
+first such job; it was retired with the street's east screen.
 
 **The same for keyed layers, four screens in a row** (OP-162). Level 1's four playfields were mended
 the same way: the four selected playfields laid side by side west to east (8192 x 1152, the joins at

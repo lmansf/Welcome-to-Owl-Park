@@ -1606,46 +1606,47 @@ class TestCli(unittest.TestCase):
             east.write_bytes(webpmeta.encode(Image.new("RGB", (640, 360), (40, 40, 200)), 90))
             common = ["--work", str(work), "--now", "2026-10-27T09:00:00Z"]
             pair = f"{west},{east}"
-            # The realm as the room server sees it: one room two screens wide.
+            # A room two screens wide as the room server sees it: the market and its east screen. The edit key is
+            # the market's doorway edit (a helper), standing in for any edit of a crop across the join.
             geom = fixture_geometry()
-            geom["rooms"]["glass"] = {"size": {"w": 3200, "h": 900}, "background": "glass", "walkable": [[{"x": 0, "y": 690}, {"x": 3200, "y": 690}, {"x": 3200, "y": 888}, {"x": 0, "y": 888}]],
-                                      "spawns": {"default": {"x": 330, "y": 740}}, "doors": [], "backgrounds": [{"key": "glass", "x": 0, "y": 0}, {"key": "glass-east", "x": 1600, "y": 0}]}
+            geom["rooms"]["market"] = {"size": {"w": 3200, "h": 900}, "background": "market", "walkable": [[{"x": 0, "y": 690}, {"x": 3200, "y": 690}, {"x": 3200, "y": 888}, {"x": 0, "y": 888}]],
+                                      "spawns": {"default": {"x": 330, "y": 740}}, "doors": [], "backgrounds": [{"key": "market", "x": 0, "y": 0}, {"key": "market-east", "x": 1600, "y": 0}]}
             work.mkdir()
             (work / "geometry.json").write_text(json.dumps(geom), encoding="utf-8")
             with mock.patch("sys.stderr", new=io.StringIO()) as err, mock.patch("sys.stdout", new=io.StringIO()):
                 # The crop spans the join at x 640: half of it from each screen.
-                self.assertEqual(postprocess.main(["cut", "glass-seam", "--base-key", "glass", "--base", pair, "--box", "512,0,768,360"] + common), 0, err.getvalue())
-                crop = np.asarray(Image.open(work / "canvas" / "glass-seam.png")).astype(int)
+                self.assertEqual(postprocess.main(["cut", "market-arcade-door", "--base-key", "market", "--base", pair, "--box", "512,0,768,360"] + common), 0, err.getvalue())
+                crop = np.asarray(Image.open(work / "canvas" / "market-arcade-door.png")).astype(int)
                 self.assertEqual(crop.shape, (360, 256, 3))
                 self.assertLess(np.abs(crop[180, 100] - [200, 40, 40]).max(), 8)
                 self.assertLess(np.abs(crop[180, 156] - [40, 40, 200]).max(), 8)
                 # A crop too big to send whole goes at half size.
-                self.assertEqual(postprocess.main(["cut", "glass-seam", "--base-key", "glass", "--base", pair, "--box", "512,0,768,360", "--half"] + common), 0, err.getvalue())
-                self.assertEqual(Image.open(work / "canvas" / "glass-seam.png").size, (128, 180))
+                self.assertEqual(postprocess.main(["cut", "market-arcade-door", "--base-key", "market", "--base", pair, "--box", "512,0,768,360", "--half"] + common), 0, err.getvalue())
+                self.assertEqual(Image.open(work / "canvas" / "market-arcade-door.png").size, (128, 180))
                 # Screens of two heights cannot be laid side by side.
                 tall = Path(tmp) / "t.webp"
                 tall.write_bytes(webpmeta.encode(Image.new("RGB", (640, 400), (0, 0, 0)), 90))
-                self.assertEqual(postprocess.main(["cut", "glass-seam", "--base-key", "glass", "--base", f"{west},{tall}", "--box", "0,0,10,10"] + common), 1)
+                self.assertEqual(postprocess.main(["cut", "market-arcade-door", "--base-key", "market", "--base", f"{west},{tall}", "--box", "0,0,10,10"] + common), 1)
                 # The edit paints the crop grey; its middle half goes in, joined within 16 px of each side.
-                edits = work / "raw" / "glass-seam"
+                edits = work / "raw" / "market-arcade-door"
                 edits.mkdir(parents=True)
                 pngmeta.save(Image.new("RGB", (256, 360), (120, 120, 120)), edits / "e1.png")
-                self.assertEqual(postprocess.main(["patch", "glass", "--base-key", "glass", "--base", pair, "--edit-key", "glass-seam", "--edit", str(edits / "e1.png"),
+                self.assertEqual(postprocess.main(["patch", "market", "--base-key", "market", "--base", pair, "--edit-key", "market-arcade-door", "--edit", str(edits / "e1.png"),
                                                    "--at", "512,0", "--box", "64,0,192,360", "--threshold", "0", "--join", "16"] + common), 0, err.getvalue())
-                [patched] = (work / "raw" / "glass").glob("*.png")
+                [patched] = (work / "raw" / "market").glob("*.png")
                 sc = json.loads(patched.with_suffix(".json").read_text(encoding="utf-8"))
                 self.assertEqual((sc["patched"]["base"]["file"], sc["patched"]["join"], sc["width"], sc["height"]), ("w.webp+e.webp", 16, 1280, 360))
                 # Each screen is finished from its half of the patched pair.
-                self.assertEqual(postprocess.main(["room", "glass", "--raw", str(patched), "--crop", "left", "--grade", "none"] + common), 0, err.getvalue())
-                self.assertEqual(postprocess.main(["room", "glass-east", "--raw", str(patched), "--crop", "right", "--grade", "none"] + common), 0, err.getvalue())
-            w1 = np.asarray(Image.open(work / "final" / "glass.webp").convert("RGB")).astype(int)
-            e1 = np.asarray(Image.open(work / "final" / "glass-east.webp").convert("RGB")).astype(int)
+                self.assertEqual(postprocess.main(["room", "market", "--raw", str(patched), "--crop", "left", "--grade", "none"] + common), 0, err.getvalue())
+                self.assertEqual(postprocess.main(["room", "market-east", "--raw", str(patched), "--crop", "right", "--grade", "none"] + common), 0, err.getvalue())
+            w1 = np.asarray(Image.open(work / "final" / "market.webp").convert("RGB")).astype(int)
+            e1 = np.asarray(Image.open(work / "final" / "market-east.webp").convert("RGB")).astype(int)
             self.assertEqual((w1.shape, e1.shape), ((900, 1600, 3), (900, 1600, 3)))
             self.assertLess(np.abs(w1[450, 100] - [200, 40, 40]).max(), 10, "the west screen as it was")
             self.assertLess(np.abs(e1[450, 1500] - [40, 40, 200]).max(), 10, "the east screen as it was")
             self.assertLess(np.abs(w1[450, 1595] - [120, 120, 120]).max(), 10, "both screens meet in the edit")
             self.assertLess(np.abs(e1[450, 4] - [120, 120, 120]).max(), 10)
-            rec = json.loads((work / "final" / "glass-east.post.json").read_text(encoding="utf-8"))
+            rec = json.loads((work / "final" / "market-east.post.json").read_text(encoding="utf-8"))
             self.assertTrue(any(t.startswith("patch: None seed None (e1.png) pasted into w.webp+e.webp") and "joined along cuts in x" in t for t in rec["tools"]), rec["tools"])
             self.assertIn("room: crop=right", " ".join(rec["tools"]))
 
@@ -2182,3 +2183,32 @@ class TestKit(unittest.TestCase):
                 rec = json.loads((work / "final" / f"{pkey}.post.json").read_text())
                 self.assertEqual(rec["sheet"]["key"], key)
                 self.assertEqual(rec["sheet"]["cell"], sheet["pieces"].index(p) + 1)
+
+    def test_pieces_cuts_a_seven_piece_sheet_four_over_three(self):
+        # A realm's signs and hazards (OP-373) are seven to a sheet, four along the top and three below.
+        from PIL import Image, ImageDraw
+        key = "kit-sheet-clearing-signs-hazards"
+        sheet = postprocess.kit_table()["courses"]["clearing"]["signs-hazards"]
+        self.assertEqual(len(sheet["pieces"]), 7)
+        with tempfile.TemporaryDirectory() as td:
+            work = Path(td) / "work"
+            raw_dir = work / "raw" / key
+            raw_dir.mkdir(parents=True)
+            img = Image.new("RGB", (2048, 1152), (255, 0, 255))
+            d = ImageDraw.Draw(img)
+            centres = [((i + 0.5) * 512, 288) for i in range(4)] + [((i + 0.5) * 2048 / 3, 864) for i in range(3)]
+            for cx, cy in centres:
+                d.ellipse((cx - 160, cy - 120, cx + 160, cy + 120), fill=(74, 51, 34))
+            img.save(raw_dir / "aaaaaaaaaaaaaaaa.png")
+            (raw_dir / "aaaaaaaaaaaaaaaa.json").write_text(json.dumps({"schema": 1, "key": key, "key_colour": "#FF00FF", "hash16": "aaaaaaaaaaaaaaaa"}))
+            (raw_dir / "SELECTED").write_text("aaaaaaaaaaaaaaaa")
+            (work / "final").mkdir()
+            with mock.patch("sys.stderr", new=io.StringIO()), mock.patch("sys.stdout", new=io.StringIO()):
+                self.assertEqual(postprocess.main(["pieces", key, "--work", str(work)]), 0)
+            for i, p in enumerate(sheet["pieces"]):
+                rec = json.loads((work / "final" / f"kit-clearing-{p['name']}.post.json").read_text())
+                x0, y0, x1, y1 = rec["sheet"]["bbox"]
+                self.assertEqual(rec["sheet"]["cell"], i + 1)
+                # Each piece is cut from the blob in its own place: the top row's four, then the bottom row's three.
+                self.assertLess(abs((x0 + x1) / 2 - centres[i][0]), 40, p["name"])
+                self.assertLess(abs((y0 + y1) / 2 - centres[i][1]), 40, p["name"])

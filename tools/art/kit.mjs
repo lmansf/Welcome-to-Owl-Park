@@ -44,6 +44,10 @@ function areaTexturePrompt(area, desc) {
 
 function areaSheetPrompt(area, sheet) {
   const items = sheet.pieces.map((p, i) => `${i + 1}) ${p.desc}`);
+  // A course's signs and hazards (OP-373) are seven to a sheet: four along the top, three below.
+  if (items.length === 7) {
+    return `A sheet of seven separate game props on a flat, solid, uniform pure magenta ${KIT_KEY_COLOUR} backdrop, laid out in two rows, four along the top and three along the bottom, each prop whole and centred in its own space with clear flat magenta all round it, no prop touching another prop or the edge of the frame. Along the top row from left to right: ${items.slice(0, 4).join('; ')}. Along the bottom row from left to right: ${items.slice(4).join('; ')}. Every prop is seen straight from the side as in a side-scrolling platform game, standing on nothing, with no ground, no cast shadow and no glow painted on the magenta. The light of this area: ${area.light}. ${KIT_STYLE}`;
+  }
   return `A sheet of six separate game props on a flat, solid, uniform pure magenta ${KIT_KEY_COLOUR} backdrop, laid out in a grid of three across and two down, each prop whole and centred in its own cell with clear flat magenta all round it, no prop touching another prop or the edge of the frame, each cell the same size. Along the top row from left to right: ${items.slice(0, 3).join('; ')}. Along the bottom row from left to right: ${items.slice(3).join('; ')}. Every prop is seen straight from the side as in a side-scrolling platform game, standing on nothing, with no ground, no cast shadow and no glow painted on the magenta. The light of this area: ${area.light}. ${KIT_STYLE}`;
 }
 
@@ -79,7 +83,7 @@ for (const [areaName, area] of Object.entries(KIT_AREAS)) {
   }
 }
 
-/** Course props: extra six-prop sheets for a realm's course, keyed and cut like the area's own. */
+/** Course props: extra sheets of six props (seven for a realm's signs and hazards) for a realm's course, keyed and cut like the area's own. */
 export const KIT_COURSES = KIT.courses ?? {};
 export const KIT_COURSE_SHEET_KEYS = [];
 export const KIT_COURSE_PROMPTS = {};

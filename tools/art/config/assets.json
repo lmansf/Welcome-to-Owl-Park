@@ -20,24 +20,6 @@
       "kind": "room",
       "with_2x": true
     },
-    "commons-west": {
-      "w": 1600,
-      "h": 900,
-      "kind": "room",
-      "with_2x": true
-    },
-    "commons": {
-      "w": 1600,
-      "h": 900,
-      "kind": "room",
-      "with_2x": true
-    },
-    "commons-east": {
-      "w": 1600,
-      "h": 900,
-      "kind": "room",
-      "with_2x": true
-    },
     "hub-fg": {
       "w": 1600,
       "h": 900,
@@ -1829,12 +1811,6 @@
       "kind": "room",
       "with_2x": true
     },
-    "glass-east": {
-      "w": 1600,
-      "h": 900,
-      "kind": "room",
-      "with_2x": true
-    },
     "ink": {
       "w": 1600,
       "h": 900,
@@ -3470,6 +3446,30 @@
       "h": 120,
       "kind": "piece",
       "key_colour": "#FF00FF",
+      "format": "webp",
+      "with_2x": true
+    },
+    "mover-knot-hole-mouth": {
+      "w": 240,
+      "h": 120,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "format": "webp",
+      "with_2x": true
+    },
+    "mover-downdraft-column": {
+      "w": 260,
+      "h": 420,
+      "kind": "piece",
+      "key_colour": "#00FF00",
+      "format": "webp",
+      "with_2x": true
+    },
+    "mover-glide-lane-streamers": {
+      "w": 400,
+      "h": 90,
+      "kind": "piece",
+      "key_colour": "#00FF00",
       "format": "webp",
       "with_2x": true
     },
