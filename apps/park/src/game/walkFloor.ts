@@ -12,6 +12,7 @@
  */
 import type Phaser from 'phaser';
 import type { Polygon, RoomDef } from '@owl-park/shared';
+import { workBoxesShown } from './workBoxes';
 
 /** How strongly each part is drawn, with the painting under it or with size boxes. */
 export function floorLook(boxes: boolean): {
@@ -106,8 +107,18 @@ export function rgba(css: string): { color: number; alpha: number } {
  */
 export const BOWL_EDGE = { line: 'rgba(46, 24, 8, 0.4)', linePx: 4, shade: 'rgba(46, 24, 8, 0.13)', shadePx: 14 } as const;
 
-/** Draws the floor's edges as lines over the painting: the floor's in cream (a groove where a wall stands all round it), a solid perch's in amber. */
-export function drawFloorEdges(scene: Phaser.Scene, room: RoomDef, depth: number): Phaser.GameObjects.Graphics {
+/**
+ * How a solid perch is shown over the painting: an amber outline round its strip of floor only on a
+ * painter's or a keeper's tab (workBoxes.ts), and there only where no art of its own stands on it; else
+ * the soft shadow at its foot (OP-348). The amber boxes over the ink garden's bench and under the glass
+ * realm's lanterns read as a park not finished (the Nov 25 QA walk).
+ */
+export function solidPerchMark(room: Pick<RoomDef, 'pieces'>, perchId: string, workBoxes: boolean): 'outline' | 'footprint' {
+  return workBoxes && !standsOwnArt(room, perchId) ? 'outline' : 'footprint';
+}
+
+/** Draws the floor's edges as lines over the painting: the floor's in cream (a groove where a wall stands all round it), a solid perch's as solidPerchMark says. */
+export function drawFloorEdges(scene: Phaser.Scene, room: RoomDef, depth: number, workBoxes: boolean = workBoxesShown()): Phaser.GameObjects.Graphics {
   const look = floorLook(false);
   const g = scene.add.graphics().setDepth(depth);
   if (room.bowl) {
@@ -126,7 +137,7 @@ export function drawFloorEdges(scene: Phaser.Scene, room: RoomDef, depth: number
   for (const p of (room.perches ?? []).filter((x) => x.solid)) {
     // A perch its own art stands on (a root of the Great Hollow) is shown by that art and the shadow
     // at its foot: an amber box drawn round its strip of floor read as a mark left in by mistake (OP-348).
-    if (standsOwnArt(room, p.id)) footprint(g, p.area);
+    if (solidPerchMark(room, p.id, workBoxes) === 'footprint') footprint(g, p.area);
     else g.strokePoints(p.area, true, true);
   }
   return g;
