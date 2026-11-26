@@ -33,6 +33,8 @@ import type { EscapeLink } from '../net/transport';
 import type { Hud } from '../ui/hud';
 import { createCodePad, type CodePad } from '../ui/puzzle';
 import { PuzzleMarker, markKey, type PuzzleMarkKind, type PuzzleMarkLook } from './PuzzleMarker';
+import { standIn } from './standIn';
+import { workBoxesShown } from './workBoxes';
 
 /** What the words say (no phrase the owls type: chat stays the prewritten phrases). */
 export const ESCAPE_WORDS = {
@@ -168,7 +170,12 @@ export class EscapeDoorway {
   private asking = false;
 
   constructor(private readonly host: EscapeHost) {
-    this.box = sizeBox(host.scene, { x: ESCAPE_DOOR.at.x, y: ESCAPE_DOOR.rect.y + ESCAPE_DOOR.rect.h }, BOX.door, FILL.sign, ESCAPE_DOOR.label);
+    const foot = { x: ESCAPE_DOOR.at.x, y: ESCAPE_DOOR.rect.y + ESCAPE_DOOR.rect.h };
+    // A painter or a keeper sees the size box for its art (workBoxes.ts); every other visitor the park's
+    // own round door, shut, with its name over it, in the box's place.
+    this.box = workBoxesShown()
+      ? sizeBox(host.scene, foot, BOX.door, FILL.sign, ESCAPE_DOOR.label)
+      : standIn(host.scene, 'kit-door-round-closed', foot, BOX.door.w, foot.y - 2, [], { text: ESCAPE_DOOR.label, up: (BOX.door.w * 320) / 240 + 16 });
   }
 
   /** Whether the owl stands in the doorway. */

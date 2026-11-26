@@ -143,7 +143,8 @@ function clearOf(p: Placed, keepOut: readonly ScreenRect[], box: ScreenRect, scr
 /**
  * A chip for every target outside the view: on the line from the middle of the screen toward the
  * target, where it meets the inset edge, its arrow pointing that way. Chips on the same edge keep
- * `spacing` apart, and none covers a box in `keepOut` (OP-435).
+ * `spacing` apart, and none covers a box in `keepOut` (OP-435), nor, where its words are known (`reach`),
+ * another chip whose words are known (OP-467).
  */
 export function placeHints(targets: HintTarget[], view: ViewRect, screen: ScreenBox, spacing = 52, keepOut: readonly ScreenRect[] = []): HintPlace[] {
   const box = { left: screen.side, right: screen.w - screen.side, top: screen.top, bottom: screen.h - screen.bottom };
@@ -172,7 +173,15 @@ export function placeHints(targets: HintTarget[], view: ViewRect, screen: Screen
     const over = row.length ? row[row.length - 1]![along] - hi : 0;
     if (over > 0) for (const p of row) p[along] = Math.max(lo, p[along] - over);
   }
-  if (keepOut.length) for (const p of placed) clearOf(p, keepOut, box, screen.w);
+  // Each chip off the boxes, and a chip whose words are known off the chips laid before it as well (OP-467:
+  // in the Great Hollow two worded chips on the bottom edge lay over one another, and the HUD then moved
+  // one down over its own buttons).
+  const laid: ScreenRect[] = [];
+  for (const p of placed) {
+    const avoid = p.reach !== undefined ? [...keepOut, ...laid] : keepOut;
+    if (avoid.length) clearOf(p, avoid, box, screen.w);
+    if (p.reach !== undefined) laid.push(chipBox(p, screen.w));
+  }
   return placed.map(({ edge: _edge, reach: _reach, ...p }) => p);
 }
 

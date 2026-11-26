@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { actionButton, cameraView, dist, frames, openGround, openPark, settleCamera, state, tapRoomPoint, toScreen, waitForArrival, walkAndStop, walkToDoor } from './helpers';
+import { actionButton, cameraView, dist, feedbackOffered, frames, openGround, openPark, settleCamera, state, tapRoomPoint, toScreen, waitForArrival, walkAndStop, walkToDoor } from './helpers';
 
 /** A finger drawn down the screen from (x, y), `by` pixels, in a few steps, then lifted. */
 async function swipeDown(page: Page, x: number, y: number, by: number): Promise<void> {
@@ -261,14 +261,17 @@ test.describe('single visitor', () => {
     } else await menu.locator('[data-tab="settings"]').click();
     await expect(menu.locator('[data-setting="calm"]')).toBeVisible();
     // Feedback opens in the Menu's place, and its way back is to the Menu, on the Settings it came from.
-    await menu.locator('[data-screen="feedback"]').click();
-    const feedback = page.getByRole('dialog', { name: 'Feedback' });
-    await expect(feedback).toBeVisible();
-    await expect(menu).toBeHidden();
-    await feedback.getByRole('button', { name: 'Back to the menu' }).click();
-    await expect(feedback).toBeHidden();
-    await expect(menu).toBeVisible();
-    await expect(menu.locator('[data-tab="settings"]')).toHaveAttribute('aria-selected', 'true');
+    // From the full opening Settings have no Feedback (OP-449: feedback.spec.ts).
+    if (feedbackOffered()) {
+      await menu.locator('[data-screen="feedback"]').click();
+      const feedback = page.getByRole('dialog', { name: 'Feedback' });
+      await expect(feedback).toBeVisible();
+      await expect(menu).toBeHidden();
+      await feedback.getByRole('button', { name: 'Back to the menu' }).click();
+      await expect(feedback).toBeHidden();
+      await expect(menu).toBeVisible();
+      await expect(menu.locator('[data-tab="settings"]')).toHaveAttribute('aria-selected', 'true');
+    } else await expect(menu.locator('[data-screen="feedback"]')).toHaveCount(0);
     await menu.getByRole('button', { name: 'Close the menu' }).click();
     await expect(menu).toBeHidden();
     await expect(page.locator('[data-menu-btn]')).toHaveAttribute('aria-expanded', 'false');
@@ -352,6 +355,7 @@ test.describe('single visitor', () => {
   });
 
   test('Feedback from the Menu takes a note, and typing in it never walks the owl, plays an emote or opens a screen', async ({ page }) => {
+    test.skip(!feedbackOffered(), 'Feedback goes from the Menu at the full opening (OP-449)');
     test.slow(); // a dozen taps and 36 keystrokes, each answered by a park drawn with software WebGL on CI runners
     await openPark(page);
     const before = (await state(page)).pos;

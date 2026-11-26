@@ -1,5 +1,5 @@
 import type { Polygon } from '../src/geometry';
-import { isNestRoom } from '../src/homes';
+import { NEST_WORDS, isNestRoom } from '../src/homes';
 import { ESCAPE_BACK_SPAWN, ESCAPE_DOOR, ESCAPE_ROOM, isEscapeRoom } from '../src/escape';
 import { isPartyRoom } from '../src/party/ids';
 import { PARTY_ROOM } from './party';
@@ -414,6 +414,18 @@ export const ROOMS: Record<string, RoomDef> = {
     spawns: { 'default': { x: 2610, y: 860 } },
     doors: [
       { id: 'to-hub', rect: { x: 2675, y: 775, w: 125, h: 80 }, to: { room: 'hub', spawn: 'from-grove' }, marker: { x: 2737, y: 700 } },
+      // Up the dirt path between the treehouse trees, into the woods: the way on to the clearing's course,
+      // Updraft Canopy, signed and offered at its foot (the Nov 25 QA walk found no way in from here).
+      {
+        id: 'to-course',
+        // The new map's own (the course is one of its rooms, its way home into the Great Hollow): today's
+        // park has no way back here from the course, so there the path leads nowhere.
+        rect: { x: 3830, y: 640, w: 120, h: 45 },
+        toNew: { room: 'canopy-1', spawn: 'from-gate' },
+        label: 'On to Updraft Canopy',
+        marker: { x: 3890, y: 700 },
+        prompt: 'Go to Updraft Canopy',
+      },
       // The gathering spot beneath the guardian: standing here lets a ticket-holder vote for this realm.
       { id: 'idol', rect: { x: 2290, y: 560, w: 220, h: 120 }, marker: { x: 2400, y: 612 } },
     ],
@@ -467,6 +479,11 @@ export const ROOMS: Record<string, RoomDef> = {
         { x: 0, y: 690 },
         { x: 1500, y: 690 },
         { x: 1520, y: 705 },
+        // Along the candy stall counter's foot, not behind it (OP-483, the Nov 25 cleanup walk: an owl
+        // walked up behind the counter's line), to the food stall's step.
+        { x: 1528, y: 726 },
+        { x: 1744, y: 726 },
+        { x: 1748, y: 710 },
         { x: 1830, y: 712 },
         { x: 1840, y: 738 },
         { x: 1990, y: 738 },
@@ -680,9 +697,11 @@ export const ROOMS: Record<string, RoomDef> = {
       { id: 'to-market', rect: { x: 0, y: 700, w: 120, h: 100 }, to: { room: 'market', spawn: 'from-arcade' }, toNew: { room: 'm3-hall', spawn: 'from-under' }, marker: { x: 100, y: 640 } },
       // The three cabinets, each spot on the floor in front of its cabinet and each marker on its screen.
       // A spot reaches up to the cabinet's front (OP-323), so an owl standing against the front anywhere
-      // along it, or walking the hall at the height it came in at, is at the cabinet.
-      { id: 'cabinet-crossing', rect: { x: 540, y: 770, w: 160, h: 102 }, marker: { x: 652, y: 482 } },
-      { id: 'cabinet-flight', rect: { x: 1820, y: 766, w: 160, h: 84 }, marker: { x: 1862, y: 496 } },
+      // along it, or walking the hall at the height it came in at, is at the cabinet. Hoot & Hop's and
+      // Moon Flap's reach along the whole foot of the painted cabinet, its side panel included: an owl
+      // that walked up against the side or the right of the front was offered nothing (the Nov 25 QA walk).
+      { id: 'cabinet-crossing', rect: { x: 460, y: 760, w: 298, h: 112 }, marker: { x: 652, y: 482 } },
+      { id: 'cabinet-flight', rect: { x: 1720, y: 762, w: 272, h: 88 }, marker: { x: 1862, y: 496 } },
       { id: 'cabinet-sling', rect: { x: 3910, y: 756, w: 170, h: 84 }, marker: { x: 3975, y: 468 } },
     ],
   },
@@ -1585,12 +1604,23 @@ export const MARKET_PLAZA = { front: 1335, rings: [{ x: 900, y: 1110 }, { x: 240
 export const GROVE_PLAZA = { front: 1235, rings: [{ x: 900, y: 1060 }, { x: 2600, y: 1060 }, { x: 3900, y: 1060 }] } as const;
 /** How far the clearing's painted foot runs on over its plaza (OP-488): a short join, not a mirror of the doorway and mushrooms. */
 export const GROVE_SKIRT = 40;
+/**
+ * How far the nests' street's painted foot runs on over its plaza (OP-462): a short join, as the
+ * clearing's. A longer one mirrored the dark banks and the mound in the painting's foot upside down
+ * into the plaza, where they read as dark cut-outs in the floor that no one could tell were walkable.
+ */
+export const HOMES_SKIRT = 40;
 export const GLASS_PLAZA = { front: 1700, rings: [{ x: 800, y: 1260 }] } as const;
 export const INK_PLAZA = { front: 1335, rings: [{ x: 1600, y: 1110 }] } as const;
 export const HUB_PLAZA = { front: 1235, rings: [{ x: 1150, y: 1060 }, { x: 3650, y: 1060 }] } as const;
 
 /** A solid thing in a painting's foot that a grown floor now reaches, hopped up on (plaza.ts): its outline, closed at the painting's foot. */
 const footMound = (id: string, outline: Vec2[]): Perch => ({ id, area: outline, top: 36, solid: true });
+/**
+ * A foot mound the painting shows whole, too big and too ragged for a shadow box round it (Perch.painted):
+ * the nests' street's banks and its middle mound, where the box read as a dark hole in the floor (OP-462).
+ */
+const paintedMound = (id: string, outline: Vec2[]): Perch => ({ ...footMound(id, outline), painted: true });
 
 ROOMS['lobby'] = growToPlaza(ROOMS['lobby']!, {
   ...LOBBY_PLAZA,
@@ -1675,13 +1705,14 @@ ROOMS['homes'] = growToPlaza(ROOMS['homes']!, {
   east: 2 * ROOM_W,
   texture: 'kit-tex-ground-forest-floor',
   tint: 0xf8abc5,
+  skirt: HOMES_SKIRT,
   ring: 'edge-lane-ring',
   corner: 'edge-lane-corner-front',
   frontBumps: ['edge-lane-ferns-a', 'edge-lane-ferns-b', 'edge-lane-ferns-a', 'edge-lane-ferns-b', 'edge-lane-ferns-a'],
   perches: [
-    footMound('homes-bank-west', [{ x: 0, y: 750 }, { x: 312, y: 724 }, { x: 318, y: 770 }, { x: 345, y: 780 }, { x: 436, y: 782 }, { x: 444, y: 832 }, { x: 462, y: 880 }, { x: 470, y: 900 }, { x: 0, y: 900 }]),
-    footMound('homes-mound', [{ x: 1372, y: 900 }, { x: 1372, y: 880 }, { x: 1400, y: 834 }, { x: 1445, y: 794 }, { x: 1490, y: 774 }, { x: 1566, y: 768 }, { x: 1576, y: 756 }, { x: 1610, y: 756 }, { x: 1648, y: 760 }, { x: 1676, y: 780 }, { x: 1700, y: 806 }, { x: 1760, y: 830 }, { x: 1860, y: 880 }, { x: 1870, y: 900 }]),
-    footMound('homes-bank-east', [{ x: 2930, y: 900 }, { x: 2944, y: 880 }, { x: 3000, y: 832 }, { x: 3100, y: 772 }, { x: 3200, y: 750 }, { x: 3200, y: 900 }]),
+    paintedMound('homes-bank-west', [{ x: 0, y: 750 }, { x: 312, y: 724 }, { x: 318, y: 770 }, { x: 345, y: 780 }, { x: 436, y: 782 }, { x: 444, y: 832 }, { x: 462, y: 880 }, { x: 470, y: 900 }, { x: 0, y: 900 }]),
+    paintedMound('homes-mound', [{ x: 1372, y: 900 }, { x: 1372, y: 880 }, { x: 1400, y: 834 }, { x: 1445, y: 794 }, { x: 1490, y: 774 }, { x: 1566, y: 768 }, { x: 1576, y: 756 }, { x: 1610, y: 756 }, { x: 1648, y: 760 }, { x: 1676, y: 780 }, { x: 1700, y: 806 }, { x: 1760, y: 830 }, { x: 1860, y: 880 }, { x: 1870, y: 900 }]),
+    paintedMound('homes-bank-east', [{ x: 2930, y: 900 }, { x: 2944, y: 880 }, { x: 3000, y: 832 }, { x: 3100, y: 772 }, { x: 3200, y: 750 }, { x: 3200, y: 900 }]),
   ],
 });
 // The night market's street runs on past its stalls, wet and lit, a ring of puddles under each string of lights.
@@ -1754,8 +1785,16 @@ ROOMS['ink'] = growToPlaza(
       // Back through the tree's doorway: on the new map into the Great Hollow, in front of the ink Commons
       // (NEW_MAP_WAYS); today's park has no way in here, so its way out is the great tree's floor.
       { id: 'to-hub', rect: { x: 150, y: 735, w: 140, h: 45 }, to: at('hub', 'default'), marker: { x: 220, y: 760 } },
-      // Up the steps through the moon gate: the first of Brushstroke Bridges.
-      { id: 'to-course', rect: { x: 2200, y: 702, w: 160, h: 50 }, to: at('brush-1', 'from-gate'), marker: { x: 2280, y: 730 } },
+      // Up the steps through the moon gate: the first of Brushstroke Bridges, signed at the gate's foot and
+      // offered there (the Nov 25 QA walk: the moon gate had no words and no prompt).
+      {
+        id: 'to-course',
+        rect: { x: 2200, y: 702, w: 160, h: 50 },
+        to: at('brush-1', 'from-gate'),
+        label: 'Up to Brushstroke Bridges',
+        marker: { x: 2280, y: 730 },
+        prompt: 'Go to Brushstroke Bridges',
+      },
     ],
     // Hiding spots for finds (and the moonlit gate's last lock, puzzles.ts): on the floor, clear of the ways.
     spots: pts(
@@ -1808,7 +1847,10 @@ ROOMS['grove'] = growToPlaza(ROOMS['grove']!, {
   },
   perches: [
     footMound('grove-bank-west', pts([0, 700], [390, 668], [440, 760], [520, 860], [700, 880], [710, 900], [0, 900])),
-    footMound('grove-lantern-mound', pts([1100, 900], [1100, 860], [1300, 800], [1560, 790], [1660, 765], [1900, 765], [1890, 790], [1960, 880], [1965, 900])),
+    // Its east side slopes straight down from the rock's top to the floor's front: an owl held west along
+    // the path from the treehouse doorway slides up it and on toward the jetty, where a notch at its corner
+    // caught the owl (the Nov 25 QA walk: the feathers to the jetty could not be followed past the lantern).
+    footMound('grove-lantern-mound', pts([1100, 900], [1100, 860], [1300, 800], [1560, 790], [1660, 765], [1880, 765], [2000, 900])),
     footMound('grove-mushrooms', pts([3070, 900], [3070, 870], [3140, 850], [3140, 745], [3340, 745], [3340, 900])),
     footMound('grove-bank-east', pts([4340, 900], [4380, 860], [4450, 770], [4580, 720], [4800, 700], [4800, 900])),
   ],
@@ -1955,7 +1997,9 @@ export const NEST_ROOM: RoomDef = {
     // comes out by the nest door it went in by (`from-nest-<n>`, which only the visit knows), else
     // by door 0, its own nest's.
     // An owl walking the tree (OP-156) goes out into the tree instead: the nests' street is in its canopy.
-    { id: 'to-street', rect: { x: 245, y: 656, w: 100, h: 44 }, to: { room: 'homes', spawn: 'from-nest-0' }, toTree: { ...TREE_ARRIVAL }, marker: { x: 290, y: 580 } },
+    // Near it, its words come first on the action button, ahead of Decorate (the Nov 25 QA walk: a new
+    // owl at the door was offered Decorate, not the way out).
+    { id: 'to-street', rect: { x: 245, y: 656, w: 100, h: 44 }, to: { room: 'homes', spawn: 'from-nest-0' }, toTree: { ...TREE_ARRIVAL }, marker: { x: 290, y: 580 }, prompt: NEST_WORDS.toPark },
     // The floor in front of the mirror (NEST_MIRROR): standing here, Look in the mirror opens Your owl.
     { id: 'mirror', rect: { x: 560, y: 686, w: 140, h: 64 } },
   ],

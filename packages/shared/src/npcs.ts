@@ -282,12 +282,14 @@ export function getNpc(id: string): NpcDef | undefined {
  * Where an owl lives on the new map (map 3) when that is not its own room: the Party Grove's residents
  * moved into the Great Hollow when the Grove was folded into it (Nov 19, the owner's "The party grove
  * doesn't make sense. We already have a central hub" and "Fold into the hub"). Today's park keeps them
- * where they were, in its plaza (`hub`). Elder Bramble, keeper of the tree, welcomes owls just below
- * where they come down into the hollow from the Treetop Commons; Pip, who steps into feather tag when
+ * where they were, in its plaza (`hub`). Elder Bramble, keeper of the tree, welcomes owls a few steps
+ * down and to the west of where they come down into the hollow from the Treetop Commons, out beside the
+ * guardian's head where nothing of its picture is drawn over him or his name (the Nov 25 QA walk found
+ * him hidden behind it); Pip, who steps into feather tag when
  * an owl plays alone (party/tag.ts), waits by the tag ring's east end, where Pip's round starts.
  */
 export const NEW_MAP_HOMES: Readonly<Record<string, { room: string; pos: Vec2; facing: 1 | -1 }>> = {
-  bramble: { room: 'm3-hall', pos: { x: 2640, y: 720 }, facing: 1 },
+  bramble: { room: 'm3-hall', pos: { x: 2460, y: 750 }, facing: 1 },
   pip: { room: 'm3-hall', pos: { x: 3640, y: 1500 }, facing: -1 },
 };
 

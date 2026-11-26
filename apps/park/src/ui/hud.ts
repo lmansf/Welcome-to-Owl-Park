@@ -15,7 +15,7 @@ import { createClimbScreen, type ClimbBandView, type ClimbHandlers, type ClimbRe
 import { createDecorateSheet, type DecorateActions, type DecorateSheet, type DecorateView } from './decorate';
 import { createEmoteWheel, wheelEmotes, type EmoteWheel } from './emoteWheel';
 import { createFeedbackScreen, type FeedbackScreen } from './feedback';
-import { createFeedbackBug, feedbackIcon } from './feedbackBug';
+import { createFeedbackBug, feedbackIcon, feedbackOffered } from './feedbackBug';
 import { afterReward, createFeedbackCard, type FeedbackCard } from './feedbackReward';
 import { coveredBy, type CoveredEdges } from '../game/hudInset';
 import { walkingMap } from '../game/walkingMap';
@@ -307,6 +307,11 @@ export interface Hud {
   closeDecorate(): void;
   /** How far the HUD's controls (the owl count, the feathers, Menu, Emotes and Say) reach in from the top and bottom of the screen, in CSS px (OP-278). */
   coveredEdges(): CoveredEdges;
+  /**
+   * Where the HUD's own buttons stand on the screen (CSS px): Menu, Emotes, Say, a game's Start or Join,
+   * and on a touch screen the face buttons shown. The hint chips keep off them (OP-467).
+   */
+  controlBoxes(): Array<{ left: number; top: number; right: number; bottom: number }>;
 }
 
 const CSS = `
@@ -740,7 +745,7 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
         render: (panel) =>
           renderSettings(
             panel,
-            { settings, tickets: ticketsNow, canLeave: waysOut.leave, feedback: () => openScreen('feedback', true), title: () => openScreen('title'), leave: () => openScreen('leave'), account: accountCards(), retake: collectionActions ? () => retakeQuiz() : null, redeem },
+            { settings, tickets: ticketsNow, canLeave: waysOut.leave, feedback: feedbackOffered() ? () => openScreen('feedback', true) : null, title: () => openScreen('title'), leave: () => openScreen('leave'), account: accountCards(), retake: collectionActions ? () => retakeQuiz() : null, redeem },
             () => menu.refresh(),
           ),
       },
@@ -756,7 +761,8 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   /** The turnstiles' question (OP-198), before the card before the store. */
   const gatePrompt = createGatePrompt(root);
   // Its Send feedback opens the same form as the Menu's (OP-167); closed, it gives the focus back to the home screen's Settings button.
-  const settingsScreen = createSettingsScreen(root, settings, (opener) => openScreen('feedback', false, opener ?? menuBtn));
+  // Feedback goes at the full opening (OP-449): from then on these Settings have no Send feedback row.
+  const settingsScreen = createSettingsScreen(root, settings, (opener) => openScreen('feedback', false, opener ?? menuBtn), () => feedbackOffered());
   // Which owl are you (OP-076) covers the whole screen, like the owl builder.
   const whichOwl = createWhichOwlScreen(root);
   // A tree room on a phone held upright (OP-156): a card over the game asking to turn the phone.
@@ -1133,14 +1139,15 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
         toast,
         () => openScreen('menu'),
       );
-      // Feedback by the Menu's Close, on every tab (Logan, 2026-11-03: prominent in the Menu, OP-242).
+      // Feedback by the Menu's Close, on every tab (Logan, 2026-11-03: prominent in the Menu, OP-242),
+      // until the full opening takes it away with the bug and Settings' row (OP-449).
       const menuFeedback = document.createElement('button');
       menuFeedback.type = 'button';
       menuFeedback.className = 'mfeedback';
       menuFeedback.dataset['menuFeedback'] = '';
       menuFeedback.innerHTML = `${feedbackIcon('currentColor')}<span>Send feedback</span>`;
       menuFeedback.addEventListener('click', () => openScreen('feedback', true));
-      menu.headButton(menuFeedback);
+      if (feedbackOffered()) menu.headButton(menuFeedback);
       // The feedback bug (OP-208): on screen everywhere until the full opening. Over a game or a
       // covering screen the form opens on top and leaves it as it was; anywhere else it opens as Settings' does.
       const openFeedback = (button: HTMLElement) => {
@@ -1148,7 +1155,12 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
         if (arcade.isOpen() || climb.isOpen() || builder?.isOpen() || whichOwl.isOpen() || accountScreens?.isOpen()) feedback.open(false, button);
         else openScreen('feedback', false, button);
       };
-      createFeedbackBug(root, openFeedback);
+      // At the full opening (OP-449) the Menu's Send feedback goes with the bug, and an open Menu or
+      // Settings is drawn again without its row; a form already open may still send its note.
+      createFeedbackBug(root, openFeedback, Date.now, () => {
+        menuFeedback.remove();
+        if (menu.isOpen()) menu.refresh();
+      });
       // A press made before, or just after, the owl left the home screen was meant for Play, even when a
       // busy page hands it over late (its timeStamp says when it was made): it never opens Feedback.
       root.addEventListener(
@@ -1498,6 +1510,11 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     updateDecorate: (view) => decorate?.update(view),
     selectDecorateSpot: (spot) => decorate?.select(spot),
     closeDecorate: () => decorate?.close(),
+    controlBoxes: () =>
+      [...root.querySelectorAll<HTMLElement>('[data-menu-btn], [data-emotes-btn], [data-say-btn], .tag-btn, .pad-btn')]
+        .map((el) => el.getBoundingClientRect())
+        .filter((r) => r.width > 0 && r.height > 0)
+        .map((r) => ({ left: r.left, top: r.top, right: r.right, bottom: r.bottom })),
     coveredEdges: () =>
       coveredBy(
         [...root.querySelectorAll<HTMLElement>('.bar .pill, .bar .feathers, [data-menu-btn], [data-emotes-btn], [data-say-btn]')].map((el) => el.getBoundingClientRect()),

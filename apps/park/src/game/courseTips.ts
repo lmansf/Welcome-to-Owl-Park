@@ -1,4 +1,4 @@
-import { courseParts, roomsByAct, type CourseDef, type RoomDef, type Vec2 } from '@owl-park/shared';
+import { PLACE_NAMES, courseParts, roomsByAct, type CourseDef, type RoomDef, type Vec2 } from '@owl-park/shared';
 import { COURSE_WORDS } from '../ui/courseWords';
 
 /**
@@ -35,6 +35,12 @@ const TIP_LIFT = 240;
 const TIP_HIGH = 300;
 const TIP_UNDER = 150;
 
+/** A course's name as its gate and the map give it (PLACE_NAMES, by its first act), or null for a course with none (the keepers' test course). */
+export function courseName(def: Pick<CourseDef, 'acts'>): string | null {
+  const first = def.acts[0];
+  return first && Object.hasOwn(PLACE_NAMES, first) ? PLACE_NAMES[first]! : null;
+}
+
 /**
  * A course's tips, in the order its rooms are met (act by act): for each thing, one tip, at the first
  * room that has it and the westmost one there, since every act is entered at its west end. `ground`
@@ -52,12 +58,14 @@ export function courseTips(def: CourseDef, rooms: (id: string) => RoomDef | unde
     }
     return null;
   };
-  // At the trail gate's way in: what the course asks and the moves.
+  // At the trail gate's way in: the course's name over what it asks and the moves, so an owl coming in
+  // is told where it is (OP-475: the way in is instant, and nothing named the course).
   const gate = rooms(def.acts[0] ?? '');
   const way = gate?.spawns[def.gate.spawn];
   if (gate && way) {
     const moves = touch ? COURSE_WORDS.tips.moves.touch : COURSE_WORDS.tips.moves.keys;
-    out.push(tip('start', gate, way.x + 140, 0, `${COURSE_WORDS.tips.goal[def.objective](courseParts(def, rooms).length)}\n${moves}`));
+    const name = courseName(def);
+    out.push(tip('start', gate, way.x + 140, 0, `${name ? `${name}\n` : ''}${COURSE_WORDS.tips.goal[def.objective](courseParts(def, rooms).length)}\n${moves}`));
   }
   const pit = first((r) => r.course?.pits, (p) => Math.min(...p.map((v) => v.x)));
   if (pit) out.push(tip('pit', pit.room, Math.min(...pit.thing.map((v) => v.x)) + 40, 0, COURSE_WORDS.tips.pit[def.id] ?? COURSE_WORDS.tips.fall));

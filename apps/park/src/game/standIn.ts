@@ -1,0 +1,38 @@
+import Phaser from 'phaser';
+import type { ParkConfig } from '../config';
+import { artScale, loadArtKey } from './art';
+
+/**
+ * A piece of the park's own art standing in for a work box: `key` drawn `width` wide, its foot's middle
+ * at `foot`, at `depth`. It is added to `into` at once (an empty container, so whoever owns `into`
+ * puts it away with the rest) and filled when its picture has loaded; if that never loads, nothing shows.
+ */
+export function standIn(
+  scene: Phaser.Scene,
+  key: string,
+  foot: { x: number; y: number },
+  width: number,
+  depth: number,
+  into: Phaser.GameObjects.GameObject[],
+  words?: { text: string; up: number },
+): Phaser.GameObjects.Container {
+  const box = scene.add.container(foot.x, foot.y).setDepth(depth);
+  into.push(box);
+  const cfg = scene.registry.get('config') as ParkConfig | undefined;
+  const scale = artScale('piece', cfg?.pixelRatio ?? 1, cfg?.artScaleMax ?? 1);
+  void loadArtKey(scene, key, scale).then((ok) => {
+    if (!ok || !box.scene) return;
+    const img = scene.add.image(0, 0, key).setOrigin(0.5, 1);
+    img.setDisplaySize(width, (img.height / img.width) * width);
+    box.add(img);
+    // Words on the piece (the station's name on its board), in the doorways' sign lettering.
+    if (words) {
+      box.add(
+        scene.add
+          .text(0, -words.up, words.text, { fontFamily: 'system-ui, sans-serif', fontSize: '18px', fontStyle: 'bold', color: '#F6F1E3', stroke: '#0C1E36', strokeThickness: 5, align: 'center' })
+          .setOrigin(0.5),
+      );
+    }
+  });
+  return box;
+}

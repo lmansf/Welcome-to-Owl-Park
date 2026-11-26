@@ -159,7 +159,7 @@ test.describe('opening night (C42)', () => {
       await expect(ask).toBeHidden();
       await expectStoreCard(a);
       const card = a.locator(STORE_CARD);
-      await expect(card.locator('[data-store="say"]')).toContainText('A Day Ticket lets you keep what you win. You can get a Day Ticket right here.');
+      await expect(card.locator('[data-store="say"]')).toContainText('A Day Ticket adds feathers, quests and the shops. You can get a Day Ticket right here.');
       await expect(card.locator('[data-store="upgrade-line"]')).toHaveText('Or get the Annual Pass and come back all year.');
       await expect(card.locator('[data-store="continue"]')).toHaveText('Day Ticket');
       await expect(card.locator('[data-store="upgrade"]')).toHaveText('Annual Pass');

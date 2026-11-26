@@ -13,13 +13,15 @@
  *
  * The room server keeps the game and checks every step (party/tag.ts); this layer only asks it, and reads
  * what it says on the room's clock with tagAt, so every page shows the same moment. Without the room
- * server (the local park) the button says it needs the server.
+ * server (the local park, or a park that could not connect) the button says the park could not connect.
  *
  * Never a one-owl game (OP-426): if no one joins the call, Pip, the lantern keeper, plays, running round
  * the feather station where the clock has Pip (standInAt) on every page; Pip's own NPC owl is drawn
  * there while it plays, and goes home after.
  */
 import Phaser from 'phaser';
+import { standIn } from './standIn';
+import { workBoxesShown } from './workBoxes';
 import {
   BOWLING_LANE,
   FURNITURE,
@@ -44,6 +46,8 @@ import {
   type Vec2,
 } from '@owl-park/shared';
 import type { RoomConnection } from '../net/transport';
+import { ROOM_DOWN, roomReachable } from './roomDown';
+import { tagButtonTop } from './tagButton';
 
 export interface TagLayerOpts {
   scene: Phaser.Scene;
@@ -95,10 +99,17 @@ export interface TagDebug {
   prize: ServerTagPrize | null;
 }
 
+/**
+ * The game's line keeps the top's middle, under the bar; its button keeps the top-right corner, under
+ * the owl count, out over the room's edge rather than its middle, where it stood over what the room has
+ * there (OP-466, the Nov 25 cleanup walk: in the Great Hollow it floated over the telescope). While an
+ * activity card shows in that corner (the stage quiz's), the button stands just under it (tagButtonTop).
+ * The room's chips keep clear of it (RoomScene.hintsKeepOut, hud.controlBoxes).
+ */
 const CSS = `
 #hud .tag-line{position:absolute;z-index:11;left:50%;transform:translateX(-50%);top:calc(max(12px,env(safe-area-inset-top)) + 64px);max-width:min(460px,calc(calc(100vw/var(--vz,1)) - 24px));padding:8px 14px;border-radius:999px;background:rgba(12,30,54,.92);border:1px solid rgba(255,211,106,.6);color:#F6F1E3;font-size:15px;line-height:1.3;text-align:center;pointer-events:none;box-shadow:0 6px 22px rgba(0,0,0,.4)}
 #hud .tag-line.you{border-color:#ffd36a;background:rgba(84,58,8,.94)}
-#hud .tag-btn{position:absolute;z-index:11;left:50%;transform:translateX(-50%);top:calc(max(12px,env(safe-area-inset-top)) + 112px);min-height:44px;padding:8px 18px;border-radius:999px;background:rgba(12,30,54,.9);border:2px solid #ffd36a;color:#F6F1E3;font-size:15px;font-weight:700;pointer-events:auto;box-shadow:0 6px 22px rgba(0,0,0,.4)}
+#hud .tag-btn{position:absolute;z-index:11;right:max(12px,env(safe-area-inset-right));top:calc(max(12px,env(safe-area-inset-top)) + 64px);min-height:44px;padding:8px 18px;border-radius:999px;background:rgba(12,30,54,.9);border:2px solid #ffd36a;color:#F6F1E3;font-size:15px;font-weight:700;pointer-events:auto;box-shadow:0 6px 22px rgba(0,0,0,.4)}
 #hud .tag-btn.call{background:#C9A227;color:#0C1E36}
 `;
 let styled = false;
@@ -142,13 +153,14 @@ export class TagLayer {
   private btn: HTMLButtonElement | null = null;
   private btnText = '';
   private lookedAt = 0;
+  /** When the button was last placed against the activity cards (the frame clock). */
+  private placedAt = 0;
   private askedJoin = 0;
   /** Until when a Start or Join pressed is asked again, should it be lost on a line that dropped (OP-434). */
   private joinUntil = 0;
   private askedPass = 0;
   private passesAsked = 0;
   private readonly refused: TagRefusal[] = [];
-  private toldNoServer = false;
   private pipShown = false;
   private toldPip = false;
   private prize: ServerTagPrize | null = null;
@@ -169,9 +181,22 @@ export class TagLayer {
     return this.conn?.serverNow?.() ?? Date.now();
   }
 
-  /** The feather station and the bowling lane as size boxes on the floor, each with its dimensions on it. */
+  /**
+   * The feather station and the bowling lane. On a painter's or a keeper's tab, size boxes on the floor,
+   * each with its dimensions on it (workBoxes.ts); for every other visitor the park's own signboard,
+   * the game's name on it, at the station's foot, and the lane a soft worn strip with no outline or words.
+   */
   private drawSpaces(): void {
     const s = this.o.scene;
+    if (!workBoxesShown()) {
+      const st = TAG_STATION;
+      standIn(s, 'kit-clearing-sign-board', { x: st.x, y: st.y }, 140, st.y, this.drawn, { text: TAG_WORDS.ring, up: 130 });
+      const lane = s.add.graphics();
+      lane.fillStyle(0xffd36a, 0.07).fillRoundedRect(BOWLING_LANE.x, BOWLING_LANE.y, BOWLING_LANE.w, BOWLING_LANE.h, BOWLING_LANE.h / 2);
+      lane.setDepth(BOWLING_LANE.y);
+      this.drawn.push(lane);
+      return;
+    }
     const label = (x: number, y: number, words: string, depth: number) =>
       s.add.text(x, y, words, { fontFamily: 'system-ui, sans-serif', fontSize: '15px', color: '#ffd36a', align: 'center' }).setOrigin(0.5).setDepth(depth);
     // The station stands up from its foot: drawn at its foot's depth, so an owl in front of it is drawn over it.
@@ -263,14 +288,30 @@ export class TagLayer {
       if (target && now - this.askedPass >= PASS_AGAIN_MS) this.pass(target);
     }
     this.show(g, me, now);
+    if (this.btn && time - this.placedAt >= LOOK_EVERY_MS) {
+      this.placedAt = time;
+      this.placeButton();
+    }
+  }
+
+  /** The button under an activity card showing in its corner, or at its own place (OP-466, tagButtonTop). */
+  private placeButton(): void {
+    const btn = this.btn;
+    if (!btn) return;
+    const cards = this.o.hudRoot()?.querySelector<HTMLElement>('.cards');
+    const top = tagButtonTop(cards && cards.offsetParent ? { top: cards.offsetTop, height: cards.offsetHeight } : null);
+    const want = top === null ? '' : `${top}px`;
+    if (btn.style.top !== want) btn.style.top = want;
   }
 
   /** Start a game, or join the one calling (OP-434): from the button or the station. */
   join(): void {
     const link = this.conn?.tag;
-    if (!link) {
-      if (!this.toldNoServer) this.o.toast(TAG_WORDS.noServer, 4000);
-      this.toldNoServer = true;
+    // With no room server to ask (the park could not connect, or the local park), every press says so
+    // in the line Play and Talk use (OP-434, OP-407's pattern), never nothing.
+    if (!link || !roomReachable(link)) {
+      this.joinUntil = 0;
+      this.o.toast(ROOM_DOWN, 3200);
       return;
     }
     const now = this.now();

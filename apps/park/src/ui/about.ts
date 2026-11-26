@@ -20,6 +20,7 @@
  * of Nov 1), and the questions visitors ask, which the About page also marks up for search engines.
  */
 import { createModal, modalHeader } from './modal';
+import { FULL_OPENING_MS } from './preview';
 import { SPECTATOR_WORDS } from './spectator';
 
 /** What a guest gets, as the turnstiles say it. */
@@ -42,7 +43,7 @@ export const OUTSIDE_MENTIONS: readonly { where: string; date: string }[] = [];
 
 /** The tickets in one line: the price when the owner has set one, the guest rule either way. */
 export function ticketLine(price: string | null = DAY_TICKET_PRICE): string {
-  const rule = 'Guests play free and keep nothing they win; ticketed owls keep everything.';
+  const rule = 'Guests play free and keep the items they win; a Day Ticket adds feathers, quests and the shops.';
   return price ? `Day Ticket: ${price} for today. ${rule}` : rule;
 }
 
@@ -83,14 +84,14 @@ export const DO_LINES: readonly string[] = [
 export const WHO_LINES: readonly string[] = [
   ABOUT_WORDS.welcome,
   'For the spare minutes in a browser tab you would rather not spend alone: everyone who is in the park at the same time wanders it with you.',
-  'It is not for anyone who wants to chat freely with strangers: owls talk with set phrases only. And it is not finished: the park is in early preview, with more on the way before it fully opens.',
+  'It is not for anyone who wants to chat freely with strangers: owls talk with set phrases only. And it keeps growing: new rooms and things to do arrive as they are ready.',
 ];
 
 /** The Day Ticket's terms (the owner's answers of Nov 1): who takes the payment, a ticket that does not work, and refunds. */
 export const TICKET_TERMS: readonly string[] = [
   'A Day Ticket is paid for in the store’s checkout, which Shopify runs; the park never sees a card number.',
   'A ticket works for its owl on any screen. Its time starts at its first scan at the turnstiles.',
-  'A ticket can be refunded until it is used or it expires, so a ticket that will not scan at the turnstiles can be refunded. To ask, reply to the store’s order email, or send a feedback note from the park’s Menu.',
+  'A ticket can be refunded until it is used or it expires, so a ticket that will not scan at the turnstiles can be refunded. To ask, reply to the store’s order email.',
 ];
 
 /** A question visitors ask, and its answer in the park’s words. */
@@ -106,20 +107,20 @@ export interface Faq {
 export const WHAT_IT_IS = 'Owl Park is a cozy park you visit in your browser, with no download. You make an owl, then wander the park alongside everyone else who is here right now.';
 
 /**
- * How to write to the park (the SEO audit: a contact route on every page). Only the routes that exist
- * today: a feedback note from the Menu, and the store's order email for a ticket. A contact address
- * waits for the owner.
+ * How to write to the park (the SEO audit: a contact route on every page). Only the routes that exist:
+ * the store's order email for a ticket, which lasts, and a feedback note from the Menu until the
+ * feedback note goes off with the full opening (Dec 1, the owner's plan). A contact address waits for the owner.
  */
-export const CONTACT_LINES: readonly string[] = [
-  'To write to the park, send a feedback note from the Menu inside the park. Only the park’s keepers read it.',
-  'For a ticket, reply to the store’s order email.',
-];
+export function contactLines(now: number = Date.now()): string[] {
+  const ticket = 'For a ticket, reply to the store’s order email.';
+  return now < FULL_OPENING_MS ? ['To write to the park, send a feedback note from the Menu inside the park. Only the park’s keepers read it.', ticket] : [ticket];
+}
 
 /** The questions visitors ask (the second audit's FAQ, D5.5): the price only once the owner sets one, the keeper only once named. */
 export function faq(price: string | null = DAY_TICKET_PRICE, keeper: typeof KEEPER = KEEPER): Faq[] {
   const list: Faq[] = [
     { q: 'What is Owl Park?', a: WHAT_IT_IS },
-    { q: 'Is it free?', a: `Guests come in free. ${SPECTATOR_GUEST_NOTE} A Day Ticket lets an owl keep everything it wins, and opens the quests and the shops.` },
+    { q: 'Is it free?', a: 'Guests come in free, play every game and keep the items they win, like the welcome quest’s Leaf Crown. A Day Ticket adds feathers, the other quests and the shops.' },
     {
       q: 'What does a Day Ticket cost?',
       a: price ? `A Day Ticket is ${price}. Your ticket’s time starts at the turnstiles.` : 'The store’s checkout shows the price before you pay. Your ticket’s time starts at the turnstiles.',
@@ -127,7 +128,7 @@ export function faq(price: string | null = DAY_TICKET_PRICE, keeper: typeof KEEP
     { q: 'Who takes the payment?', a: TICKET_TERMS[0]! },
     { q: 'Can I get a refund?', a: TICKET_TERMS[2]! },
     { q: 'Is there typed chat?', a: 'No. Owls talk only with the 24 set phrases on the Say wheel, so nobody can type a message to anyone in the park.' },
-    { q: 'What does the park keep?', a: 'The owl, what it has found, and which rooms it visited, with no name, email or home address. Playing needs no account and no password: the owl lives in this browser.' },
+    { q: 'What does the park keep?', a: 'The owl, what it has found, and which rooms it visited, with no name or home address. Playing needs no account and no password: the owl lives in this browser. An email is kept only if you choose to protect your owl with one, and only to send its links.' },
     { q: 'Does it need a download?', a: 'No. The park opens in your browser, on a computer or a phone.' },
   ];
   if (keeper) list.splice(4, 0, { q: 'Who keeps the park?', a: `${keeper.name}. ${keeper.line}` });
@@ -143,7 +144,7 @@ export interface AboutPart {
 }
 
 /** About the park: what it is, what there is to do, who it is for and not for, tickets, and what is coming. */
-export function aboutParts(): AboutPart[] {
+export function aboutParts(now: number = Date.now()): AboutPart[] {
   const parts: AboutPart[] = [
     {
       heading: 'What it is',
@@ -162,26 +163,29 @@ export function aboutParts(): AboutPart[] {
   if (KEEPER) parts.push({ heading: 'Who keeps the park', lines: [`${KEEPER.name}. ${KEEPER.line}`] });
   if (PLAYER_QUOTES.length) parts.push({ heading: 'What owls say', lines: PLAYER_QUOTES.map((q) => `“${q.words}” ${q.who}`) });
   parts.push({ heading: 'Questions', lines: faq().flatMap((f) => [f.q, f.a]), faq: true });
-  parts.push({ heading: 'Contact', lines: CONTACT_LINES });
+  parts.push({ heading: 'Contact', lines: contactLines(now) });
   parts.push({ heading: 'What is coming', lines: ['New rooms and things to do arrive as they are ready. Every change, with its date, is listed at exploreowlpark.com/changelog.'] });
   return parts;
 }
 
 /** Safety and privacy: chat, what the park keeps, buying, and who runs it. */
-export function safetyParts(): AboutPart[] {
+export function safetyParts(now: number = Date.now()): AboutPart[] {
+  const feedbackOn = now < FULL_OPENING_MS;
   const parts: AboutPart[] = [
     {
       heading: 'Chat is set phrases only',
       lines: [
         'There is no typed chat. Owls talk only with the 24 set phrases on the Say wheel, so nobody can type a message to anyone in the park.',
-        'The only things anyone types are a feedback note, which only the park’s keepers read, and, where it is offered, an email to protect an owl.',
+        feedbackOn
+          ? 'The only things anyone types are a feedback note, which only the park’s keepers read, and, where it is offered, an email to protect an owl.'
+          : 'The only thing anyone types is, where it is offered, an email to protect an owl.',
       ],
     },
     {
       heading: 'What the park keeps',
       lines: [
         'Playing needs no account and no password: the owl lives in this browser.',
-        'The park keeps the owl, what it has found, and which rooms it visited, with no name, email or home address. A feedback note keeps the room and the device it came from, never a name.',
+        'The park keeps the owl, what it has found, and which rooms it visited, with no name or home address, and no email unless you give one to protect your owl. A feedback note keeps the room and the device it came from, never a name.',
         'An email given to protect an owl is used only to send its links, and is never shown to anyone.',
       ],
     },
@@ -189,7 +193,7 @@ export function safetyParts(): AboutPart[] {
       heading: 'Buying',
       lines: [
         'Nothing is sold inside the park. A Day Ticket is bought in the store’s checkout, and a card always asks first before the store opens.',
-        'The feather shop takes only feathers earned in play, never money. Guests can play free; they keep nothing they win.',
+        'The feather shop takes only feathers earned in play, never money. Guests play free and keep the items they win.',
       ],
     },
   ];

@@ -5,7 +5,10 @@ import {
   DOORS_TRIED_KEY,
   DOORS_TRIED_MAX,
   PLAY_SPOTS,
+  FEATHER_DRAWN,
   TRAIL,
+  TRAIL_DROP,
+  onTheFloor,
   TriedDoors,
   doorKey,
   doorSpot,
@@ -205,5 +208,30 @@ describe('the trail leads to a room’s own games first (OP-338)', () => {
     expect(playSpotsAt('hub', ROOMS['hub']!.spawns['default']!)).toEqual([]);
     expect(playSpotsAt('market', mid(COPY_SPOT)).map((s) => s.id)).toEqual(['play-copy']);
     expect(playSpotsAt('lobby', { x: 1000, y: 765 })).toEqual([]);
+  });
+});
+
+describe('the trail lies whole on the floor (OP-474)', () => {
+  const ink = ROOMS['ink']!;
+  const floor = (p: { x: number; y: number }) => isWalkable(p, ink.walkable);
+
+  it("moves a feather off the ink garden's idol plinth, down onto the floor in front of it", () => {
+    // Just under the plinth's foot: the spot is floor, but the feather drawn up from it would lie on the stone.
+    const under = { x: 1300, y: 830 };
+    expect(floor(under)).toBe(true);
+    expect(floor({ x: under.x, y: under.y - FEATHER_DRAWN.up })).toBe(false);
+    const [moved] = onTheFloor([under], floor);
+    expect(moved!.x).toBe(under.x);
+    expect(moved!.y).toBeGreaterThan(under.y);
+    expect(moved!.y - under.y).toBeLessThanOrEqual(TRAIL_DROP.most);
+    expect(floor(moved!)).toBe(true);
+    expect(floor({ x: moved!.x, y: moved!.y - FEATHER_DRAWN.up })).toBe(true);
+  });
+
+  it('leaves feathers already whole on the floor where they are, and one with no floor below it too', () => {
+    const open = { x: 700, y: 850 };
+    expect(onTheFloor([open], floor)).toEqual([open]);
+    const nowhere = { x: 50, y: 50 };
+    expect(onTheFloor([nowhere], floor)).toEqual([nowhere]);
   });
 });

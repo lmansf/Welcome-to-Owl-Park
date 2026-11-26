@@ -11,7 +11,8 @@
  * floor is tinted and the edges are stronger, since the boxes show no painting of a floor to read.
  */
 import type Phaser from 'phaser';
-import type { Polygon, RoomDef } from '@owl-park/shared';
+import type { Perch, Polygon, RoomDef } from '@owl-park/shared';
+import { workBoxesShown } from './workBoxes';
 
 /** How strongly each part is drawn, with the painting under it or with size boxes. */
 export function floorLook(boxes: boolean): {
@@ -94,40 +95,54 @@ export function rgba(css: string): { color: number; alpha: number } {
 }
 
 /**
- * The floor's edge in a room whose painting has a wall all the way round its floor (RoomDef.bowl, the
- * Great Hollow). The wall's foot already shows where the floor ends, and the cream line drawn along it
- * read there as an outline left in by mistake (the owner's audit of Nov 12, OP-370: "bright polygon
- * lines"). So in such a room the edge is a worn groove at the wall's foot: a dark line with a soft
- * shade round it, still there to see where the owl stops (the owner's ask of Nov 7) and never brighter
- * than the floor it lies on.
+ * The floor's edge in every room seen from above: a worn groove at the floor's edge, a dark line with a
+ * soft shade round it, still there to see where the owl stops (the owner's ask of Nov 7) and never
+ * brighter than the floor it lies on. It was first drawn so in a room whose painting has a wall all the
+ * way round its floor (RoomDef.bowl, the Great Hollow), where a cream line read as an outline left in
+ * by mistake (the owner's audit of Nov 12, OP-370: "bright polygon lines"). The other rooms kept the
+ * cream line, so the park had two outline styles side by side (the Nov 25 cleanup walk, OP-455): now
+ * every room has the groove.
  *
- * TODO-DOCS (OP-370): docs/ARCHITECTURE.md's note on the floor's edge line says it is cream in every
- * room seen from above; in a room with a bowl it is this groove.
+ * TODO-DOCS (OP-370, OP-455): docs/ARCHITECTURE.md's note on the floor's edge line says it is cream in
+ * every room seen from above; it is this groove in every one now.
  */
 export const BOWL_EDGE = { line: 'rgba(46, 24, 8, 0.4)', linePx: 4, shade: 'rgba(46, 24, 8, 0.13)', shadePx: 14 } as const;
 
-/** Draws the floor's edges as lines over the painting: the floor's in cream (a groove where a wall stands all round it), a solid perch's in amber. */
-export function drawFloorEdges(scene: Phaser.Scene, room: RoomDef, depth: number): Phaser.GameObjects.Graphics {
+/**
+ * How a solid perch is shown over the painting: an amber outline round its strip of floor only on a
+ * painter's or a keeper's tab (workBoxes.ts), and there only where no art of its own stands on it; else
+ * the soft shadow at its foot (OP-348). The amber boxes over the ink garden's bench and under the glass
+ * realm's lanterns read as a park not finished (the Nov 25 QA walk). A perch the painting itself shows
+ * (Perch.painted: a mound at the painting's foot) gets no shadow either: a dark box laid over the
+ * painted mound read as a hole cut in the floor (OP-462, the nests' street).
+ */
+export function solidPerchMark(room: Pick<RoomDef, 'pieces'>, perch: Pick<Perch, 'id' | 'painted'>, workBoxes: boolean): 'outline' | 'footprint' | 'none' {
+  if (workBoxes && !standsOwnArt(room, perch.id)) return 'outline';
+  return perch.painted ? 'none' : 'footprint';
+}
+
+/** The one style the floor's edge is drawn in, in every room seen from above (OP-455): the groove's. */
+export function floorEdgeStyle(): { line: { color: number; alpha: number; px: number }; shade: { color: number; alpha: number; px: number } } {
+  return { line: { ...rgba(BOWL_EDGE.line), px: BOWL_EDGE.linePx }, shade: { ...rgba(BOWL_EDGE.shade), px: BOWL_EDGE.shadePx } };
+}
+
+/** Draws the floor's edges as lines over the painting: the floor's as a groove (floorEdgeStyle), a solid perch's as solidPerchMark says. */
+export function drawFloorEdges(scene: Phaser.Scene, room: RoomDef, depth: number, workBoxes: boolean = workBoxesShown()): Phaser.GameObjects.Graphics {
   const look = floorLook(false);
   const g = scene.add.graphics().setDepth(depth);
-  if (room.bowl) {
-    const shade = rgba(BOWL_EDGE.shade);
-    g.lineStyle(BOWL_EDGE.shadePx, shade.color, shade.alpha);
-    for (const poly of room.walkable) g.strokePoints(poly, true, true);
-    const line = rgba(BOWL_EDGE.line);
-    g.lineStyle(BOWL_EDGE.linePx, line.color, line.alpha);
-  } else {
-    const edge = rgba(look.edge);
-    g.lineStyle(look.edgePx, edge.color, edge.alpha);
-  }
+  const { line, shade } = floorEdgeStyle();
+  g.lineStyle(shade.px, shade.color, shade.alpha);
+  for (const poly of room.walkable) g.strokePoints(poly, true, true);
+  g.lineStyle(line.px, line.color, line.alpha);
   for (const poly of room.walkable) g.strokePoints(poly, true, true);
   const solid = rgba(look.solidEdge);
   g.lineStyle(look.edgePx, solid.color, solid.alpha);
   for (const p of (room.perches ?? []).filter((x) => x.solid)) {
     // A perch its own art stands on (a root of the Great Hollow) is shown by that art and the shadow
     // at its foot: an amber box drawn round its strip of floor read as a mark left in by mistake (OP-348).
-    if (standsOwnArt(room, p.id)) footprint(g, p.area);
-    else g.strokePoints(p.area, true, true);
+    const mark = solidPerchMark(room, p, workBoxes);
+    if (mark === 'footprint') footprint(g, p.area);
+    else if (mark === 'outline') g.strokePoints(p.area, true, true);
   }
   return g;
 }
