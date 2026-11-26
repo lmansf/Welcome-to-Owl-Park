@@ -137,9 +137,10 @@ export const PLAZA_CLUSTERS: readonly FloorCluster[] = [
   {
     id: 'market-planter',
     room: 'market',
-    story: "Pale mushrooms took over a planter box at the street's end, springy enough for an owl to bounce on.",
+    // No mushrooms on the neon street (OP-482, OP-511): its gardener's old satellite dish, turned to the sky.
+    story: "A rooftop garden at the street's end, and an old satellite dish its keeper turned to the sky to watch the stars over the neon.",
     decor: [{ key: 'kit-neon-rooftop-garden', x: 3010, y: 1000 }],
-    things: [{ kind: 'mushroom', x: 2950, y: 1080, piece: PALE_MUSHROOMS }],
+    things: [{ kind: 'telescope', x: 2950, y: 1080, piece: 'kit-neon-satellite-dish', label: 'Look up through the dish' }],
   },
   // The glass street: west of its ring, and in the middle of its front.
   {
