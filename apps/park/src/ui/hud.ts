@@ -307,6 +307,11 @@ export interface Hud {
   closeDecorate(): void;
   /** How far the HUD's controls (the owl count, the feathers, Menu, Emotes and Say) reach in from the top and bottom of the screen, in CSS px (OP-278). */
   coveredEdges(): CoveredEdges;
+  /**
+   * Where the HUD's own buttons stand on the screen (CSS px): Menu, Emotes, Say, a game's Start or Join,
+   * and on a touch screen the face buttons shown. The hint chips keep off them (OP-467).
+   */
+  controlBoxes(): Array<{ left: number; top: number; right: number; bottom: number }>;
 }
 
 const CSS = `
@@ -1505,6 +1510,11 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     updateDecorate: (view) => decorate?.update(view),
     selectDecorateSpot: (spot) => decorate?.select(spot),
     closeDecorate: () => decorate?.close(),
+    controlBoxes: () =>
+      [...root.querySelectorAll<HTMLElement>('[data-menu-btn], [data-emotes-btn], [data-say-btn], .tag-btn, .pad-btn')]
+        .map((el) => el.getBoundingClientRect())
+        .filter((r) => r.width > 0 && r.height > 0)
+        .map((r) => ({ left: r.left, top: r.top, right: r.right, bottom: r.bottom })),
     coveredEdges: () =>
       coveredBy(
         [...root.querySelectorAll<HTMLElement>('.bar .pill, .bar .feathers, [data-menu-btn], [data-emotes-btn], [data-say-btn]')].map((el) => el.getBoundingClientRect()),

@@ -65,6 +65,7 @@ import {
   parkwardDoor,
   parseVariant,
   pointInRect,
+  isWalkable,
   positionAlongWalk,
   putOn,
   resolveTarget,
@@ -222,7 +223,7 @@ import { PUZZLE_ART_KEYS, artScale, drawnAsSizeBox, drawsSkinTrial, loadArt, ope
 import { SpeechBubbles } from './bubbles';
 import { backWaits, carriedIn, doorwayUnder, doorwaysOff, heldAtFall, roomsAhead, stillCarried, stillHeldSinceFall, takesDoorway, upCounts, type HeldAtFall } from './doors';
 import { PLAY_SPOTS, RISE_SPOT, ROOTS_SPOT, TriedDoors, doorSpot, leadsToPlay, playSpotsAt, trailTo, type PlaySpot } from './featherTrail';
-import { CALLS, GUARDIAN_ROOM, GUARDIAN_VIEW, guardianShade, lookShowing, mustShow, presence, type OwlSeen } from './guardian';
+import { CALLS, GUARDIAN_ROOM, GUARDIAN_VIEW, guardianBoxes, guardianShade, lookShowing, mustShow, presence, type OwlSeen } from './guardian';
 import { GuardianView, type GuardianState } from './guardianView';
 import { VOTE_DESK_ROOM, type DeskState } from './voteDesk';
 import { VoteDeskView } from './voteDeskView';
@@ -230,7 +231,7 @@ import { FIRST_FLIGHT_MARK, glidedOff, hallTipFor, hallTips } from './hallTips';
 import { FIRST_RISE_MARK, marksFirstRise, rodeUp } from './firstRise';
 import { INTO_HOLE_PX, INTO_MOUTH_MS, MOVER_FADE_IN_MS, MOVER_WORDS, headingOf, lanePush, roomWithMovers } from './movers';
 import { MoversView, type MoverPiece } from './moversView';
-import { COMMONS_WORDS, HALL_WORDS } from '../ui/hallWords';
+import { COMMONS_WORDS, HALL_WORDS, beamWords } from '../ui/hallWords';
 import { FeatherTrail } from './featherTrailView';
 import { admitTarget } from './gateAdmit';
 import { enteredRoom, walkingMap } from './walkingMap';
@@ -413,6 +414,8 @@ const TOUCH_HINT_BOTTOM = 190;
 /** Seen from the side, hints point only at doorways within this far above or below the view (room px): a screen's height. */
 const SIDE_HINT_REACH = ROOM_H;
 const TOUCH_SCREEN = globalThis.matchMedia?.('(pointer: coarse)').matches ?? false;
+/** How long the moonbeam's line shows (OP-463): long enough to read twice. */
+const BEAM_WORDS_MS = 5200;
 /** Hint chip colours: doorways glow like the realm they lead to, spots are gold. */
 const DOOR_TINTS: Record<string, string> = { market: '#FF2AA1', arcade: '#00E5FF', grove: '#FFB347', glass: '#9FD0FF' };
 /** The action that goes through the doorway an owl stands in, seen from the side (OP-212). */
@@ -2190,7 +2193,8 @@ export class RoomScene extends Phaser.Scene {
       if (door.id === toPark) return NEST_WORDS.toPark;
       return this.doorTo(door) ? (doorLabel(door, this.walking()) ?? (ground !== null ? this.sideChip(door) : undefined)) : undefined;
     };
-    if (keepOut.length) targets = targets.map((t) => ({ ...t, reach: chipReach(chipText(t.id)) }));
+    // Each chip's reach, so it keeps off what it must and off the other chips (OP-435, OP-467).
+    targets = targets.map((t) => ({ ...t, reach: chipReach(chipText(t.id)) }));
     const places = placeHints(targets, view, { w: window.innerWidth, h: window.innerHeight, ...HINT_INSETS, ...(TOUCH_SCREEN ? { bottom: touchBottom(TOUCH_HINT_BOTTOM, window.innerHeight) } : {}) }, undefined, keepOut);
     const shown = places.map((p) => `${p.id}:${Math.round(p.x)},${Math.round(p.y)},${p.angle.toFixed(2)}`).join('|');
     if (shown === this.hintsShown) return;
@@ -2228,15 +2232,18 @@ export class RoomScene extends Phaser.Scene {
    * card shows, its answer plates on the floor, so a chip never hides an answer or the plate to stand on.
    */
   private hintsKeepOut(v: Phaser.Geom.Rectangle): ScreenRect[] {
+    // The HUD's own buttons always (OP-467), and the Great Hollow's guardian while it is in the room.
+    const out: ScreenRect[] = [...this.hud.controlBoxes()];
+    const seen = v.width > 0 && v.height > 0;
+    const sx = seen ? window.innerWidth / v.width : 0;
+    const sy = seen ? window.innerHeight / v.height : 0;
+    const onScreen = (r: Rect): ScreenRect => ({ left: (r.x - v.x) * sx, top: (r.y - v.y) * sy, right: (r.x + r.w - v.x) * sx, bottom: (r.y + r.h - v.y) * sy });
+    if (this.guardian && seen) out.push(...guardianBoxes().map(onScreen));
     const card = this.hud.cardsBox();
-    if (!card) return [];
-    const out: ScreenRect[] = [card];
+    if (!card) return out;
+    out.push(card);
     const stage = quizStage(this.room.id);
-    if (stage && v.width > 0 && v.height > 0) {
-      const sx = window.innerWidth / v.width;
-      const sy = window.innerHeight / v.height;
-      for (const r of Object.values(stage.zones)) out.push({ left: (r.x - v.x) * sx, top: (r.y - v.y) * sy, right: (r.x + r.w - v.x) * sx, bottom: (r.y + r.h - v.y) * sy });
-    }
+    if (stage && seen) for (const r of Object.values(stage.zones)) out.push(onScreen(r));
     return out;
   }
 
@@ -2447,7 +2454,8 @@ export class RoomScene extends Phaser.Scene {
     // Round the guardian, where it is (OP-359): no feather is laid behind it.
     const shade = this.guardian ? guardianShade() : [];
     const legs = wayAround(from, aim, f.walkable, [...f.shut, ...shade, ...doorwaysOff(this.room, from, aim, (id) => this.realmClosed(id), this.walking())]) ?? [];
-    trail.lay([from, ...legs, aim]);
+    // Each feather lies whole on the floor, off the foot of whatever stands in it (OP-474), and clear of the guardian.
+    trail.lay([from, ...legs, aim], (p) => isWalkable(p, f.walkable, [...f.shut, ...shade]));
   }
 
   /** Each frame: feathers the owl reaches fade; once they are all gone, standing still a while lays the trail again. */
@@ -2457,7 +2465,12 @@ export class RoomScene extends Phaser.Scene {
     trail.tick(this.me.pos);
     // Standing at one of the room's own games for the first time: found, so the trail leads on from here (OP-338).
     let found = false;
-    for (const s of playSpotsAt(this.room.id, this.me.pos)) found = triedDoors().add(this.room.id, s.id) || found;
+    for (const s of playSpotsAt(this.room.id, this.me.pos)) {
+      const fresh = triedDoors().add(this.room.id, s.id);
+      // At the moonbeam the trail led to, before its first ride: what the light is for (OP-463).
+      if (fresh && s.id === RISE_SPOT && this.riseWaits) this.hud.toast(beamWords(TOUCH_SCREEN), BEAM_WORDS_MS);
+      found = fresh || found;
+    }
     if (found) return this.layTrail();
     if (this.me.walk || trail.showing) this.trailIdleAt = now;
     else if (now - this.trailIdleAt > TRAIL_IDLE_MS) this.layTrail();

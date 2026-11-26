@@ -3,6 +3,7 @@ import { FIT, SPRITES, speciesOf, type NpcDef, type Vec2 } from '@owl-park/share
 import type { NpcMark } from '../collect/quests';
 import { SPECIES_LAYERS } from './art';
 import type { NpcFit } from './fitOverlay';
+import { npcLabelDepth, NPC_LABEL } from './npcLabel';
 import { OWL_SCALE, Owl } from './Owl';
 import { symbolTexture, type SymbolName } from './symbols';
 
@@ -77,9 +78,10 @@ export class NpcOwl {
     this.owl.setInteractive({ hitArea: npcHitArea(def), hitAreaCallback: Phaser.Geom.Rectangle.Contains, useHandCursor: true });
     this.owl.on(Phaser.Input.Events.GAMEOBJECT_POINTER_UP, (pointer: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => onTap(this, pointer, event));
     this.label = scene.add
-      .text(x, y + 16, def.name, { fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif', fontSize: '17px', fontStyle: '700', color: '#F6F1E3', stroke: '#0C1E36', strokeThickness: 4, resolution: 2 })
+      .text(x, y + NPC_LABEL.below, def.name, { fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif', fontSize: '17px', fontStyle: '700', color: '#F6F1E3', stroke: '#0C1E36', strokeThickness: 4, resolution: 2 })
       .setOrigin(0.5, 0)
-      .setDepth(y + 1);
+      // Over the feather trail laid in front of the owl (OP-454, npcLabel.ts).
+      .setDepth(npcLabelDepth(y));
     this.markGlow = scene.add.image(x, this.markFoot(), 'fx-glow').setScale(0.3).setBlendMode(Phaser.BlendModes.ADD).setDepth(y + 2).setVisible(false);
     this.mark = scene.add.image(x, this.markFoot(), symbolTexture(scene, 'bang')).setScale(1.15).setDepth(y + 3).setVisible(false);
     // Drawn as shapes, so it stays crisp however the room is scaled; tapping it talks, as tapping the owl does.

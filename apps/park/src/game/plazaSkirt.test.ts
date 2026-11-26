@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ROOM_H, ROOM_W } from '@owl-park/shared';
-import { GROVE_SKIRT, PLAZA_SKIRT } from '@owl-park/shared/rooms';
+import { GROVE_SKIRT, HOMES_SKIRT, PLAZA_SKIRT } from '@owl-park/shared/rooms';
 import { ROOMS } from '../rooms';
 import { artLookRoom } from './artLooks';
 import { skirtStrips } from './plazaSkirt';
@@ -32,6 +32,13 @@ describe("a plaza's skirt (the painting's foot run on over its floor)", () => {
     for (const s of strips) expect(s.h).toBe(GROVE_SKIRT);
     expect(GROVE_SKIRT).toBeLessThan(PLAZA_SKIRT);
     expect(skirtStrips(ROOMS['lobby']!).every((s) => s.h === PLAZA_SKIRT)).toBe(true);
+  });
+
+  it("the nests' street's runs only a short way, so its dark banks are not mirrored into the plaza as cut-outs (OP-462)", () => {
+    const strips = skirtStrips(ROOMS['homes']!);
+    expect(strips.length).toBeGreaterThan(0);
+    for (const s of strips) expect(s.h).toBe(HOMES_SKIRT);
+    expect(HOMES_SKIRT).toBeLessThan(PLAZA_SKIRT);
   });
 
   it('a room that was not grown has none', () => {

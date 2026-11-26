@@ -1,6 +1,6 @@
 import { distance, type DoorDef, type Vec2 } from '@owl-park/shared';
 import Phaser from 'phaser';
-import { doorSpot, trailPoints } from './featherTrail';
+import { FEATHER_SCALE, doorSpot, featherDepth, onTheFloor, trailPoints } from './featherTrail';
 import { tintImage } from './canvasTint';
 import { type SymbolName, symbolTexture } from './symbols';
 
@@ -13,8 +13,6 @@ export const TRAIL_PASSED_PX = 70;
  */
 const FEATHER_TINT = 0xfff3c4;
 const FEATHER_ALPHA = 1;
-/** A feather about as long as an owl's foot to its knee: big enough to spot on a phone (the symbol is 32 px). */
-const FEATHER_SCALE = 1.7;
 /** A dark edge under each feather and glint, so a pale shape still reads on a pale floor (a flat bright shape vanishes there). */
 const EDGE_TINT = 0x2b1d08;
 const EDGE_ALPHA = 0.8;
@@ -70,11 +68,12 @@ export class FeatherTrail {
     }
   }
 
-  /** Lays the feathers along `way` (from the owl to a doorway), the old trail gone. */
-  lay(way: readonly Vec2[]): void {
+  /** Lays the feathers along `way` (from the owl to a doorway), the old trail gone; with `onFloor`, each feather lies whole on the floor (onTheFloor). */
+  lay(way: readonly Vec2[], onFloor?: (p: Vec2) => boolean): void {
     this.clear();
-    trailPoints(way).forEach((p, i) => {
-      const f = edged(this.scene, p.x, p.y - 18, 'feather', FEATHER_TINT, FEATHER_SCALE).setAlpha(0).setDepth(p.y + 1).setRotation(((i % 3) - 1) * 0.35);
+    const points = trailPoints(way);
+    (onFloor ? onTheFloor(points, onFloor) : points).forEach((p, i) => {
+      const f = edged(this.scene, p.x, p.y - 18, 'feather', FEATHER_TINT, FEATHER_SCALE).setAlpha(0).setDepth(featherDepth(p)).setRotation(((i % 3) - 1) * 0.35);
       this.scene.tweens.add({ targets: f, alpha: FEATHER_ALPHA, duration: 500, delay: i * 140 });
       if (!this.calm()) this.scene.tweens.add({ targets: f, y: p.y - 26, duration: 1400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: i * 140 });
       this.feathers.push(f);

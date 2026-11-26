@@ -1,6 +1,6 @@
 import { roomFor } from '../rooms';
 import { describe, expect, it } from 'vitest';
-import { BOWL_EDGE, FOOTPRINT, floorLook, paintFloor, rgba, standsOwnArt } from './walkFloor';
+import { BOWL_EDGE, FOOTPRINT, floorEdgeStyle, floorLook, paintFloor, rgba, solidPerchMark, standsOwnArt } from './walkFloor';
 
 function recorder() {
   const calls: Array<{ op: string; args: unknown[] }> = [];
@@ -45,6 +45,13 @@ describe('the walkable floor, seen from above', () => {
     // The Great Hollow is such a room; a plaza is not.
     expect(roomFor('m3-hall')!.bowl).toBeDefined();
     expect(roomFor('hub')!.bowl).toBeUndefined();
+  });
+
+  it('edges the floor in one style in every room seen from above: the groove, never a cream line in some and another in others (OP-455)', () => {
+    const style = floorEdgeStyle();
+    expect(style.line).toEqual({ ...rgba(BOWL_EDGE.line), px: BOWL_EDGE.linePx });
+    expect(style.shade).toEqual({ ...rgba(BOWL_EDGE.shade), px: BOWL_EDGE.shadePx });
+    expect(style.line.color).not.toBe(rgba(floorLook(false).edge).color);
   });
 
   it("reads the look's colours as Phaser takes them", () => {
@@ -101,6 +108,16 @@ describe('a perch its own art stands on (OP-348)', () => {
     expect(standsOwnArt({ pieces: [] }, 'stump')).toBe(false);
     expect(standsOwnArt({}, 'stump')).toBe(false);
     expect(standsOwnArt({ pieces: [{ id: 'other', key: 'kit-under-root-knot', x: 0, y: 0 }] }, 'stump')).toBe(false);
+  });
+
+  it("marks nothing over a mound the painting itself shows: the nests' street's banks and mound (OP-462)", () => {
+    const homes = roomFor('homes')!;
+    const painted = (homes.perches ?? []).filter((p) => p.painted);
+    expect(painted.map((p) => p.id).sort()).toEqual(['homes-bank-east', 'homes-bank-west', 'homes-mound']);
+    for (const p of painted) expect(solidPerchMark(homes, p, false), p.id).toBe('none');
+    // A painter still sees its outline, and a perch the painting does not show keeps its shadow.
+    expect(solidPerchMark(homes, painted[0]!, true)).toBe('outline');
+    expect(solidPerchMark({ pieces: [] }, { id: 'stump' }, false)).toBe('footprint');
   });
 
   it('darkens the floor under such a perch only a little', () => {

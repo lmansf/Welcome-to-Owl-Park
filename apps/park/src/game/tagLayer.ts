@@ -98,10 +98,16 @@ export interface TagDebug {
   prize: ServerTagPrize | null;
 }
 
+/**
+ * The game's line keeps the top's middle, under the bar; its button keeps the top-right corner, under
+ * the owl count, out over the room's edge rather than its middle, where it stood over what the room has
+ * there (OP-466, the Nov 25 cleanup walk: in the Great Hollow it floated over the telescope). The room's
+ * chips keep clear of it (RoomScene.hintsKeepOut, hud.controlBoxes).
+ */
 const CSS = `
 #hud .tag-line{position:absolute;z-index:11;left:50%;transform:translateX(-50%);top:calc(max(12px,env(safe-area-inset-top)) + 64px);max-width:min(460px,calc(calc(100vw/var(--vz,1)) - 24px));padding:8px 14px;border-radius:999px;background:rgba(12,30,54,.92);border:1px solid rgba(255,211,106,.6);color:#F6F1E3;font-size:15px;line-height:1.3;text-align:center;pointer-events:none;box-shadow:0 6px 22px rgba(0,0,0,.4)}
 #hud .tag-line.you{border-color:#ffd36a;background:rgba(84,58,8,.94)}
-#hud .tag-btn{position:absolute;z-index:11;left:50%;transform:translateX(-50%);top:calc(max(12px,env(safe-area-inset-top)) + 112px);min-height:44px;padding:8px 18px;border-radius:999px;background:rgba(12,30,54,.9);border:2px solid #ffd36a;color:#F6F1E3;font-size:15px;font-weight:700;pointer-events:auto;box-shadow:0 6px 22px rgba(0,0,0,.4)}
+#hud .tag-btn{position:absolute;z-index:11;right:max(12px,env(safe-area-inset-right));top:calc(max(12px,env(safe-area-inset-top)) + 64px);min-height:44px;padding:8px 18px;border-radius:999px;background:rgba(12,30,54,.9);border:2px solid #ffd36a;color:#F6F1E3;font-size:15px;font-weight:700;pointer-events:auto;box-shadow:0 6px 22px rgba(0,0,0,.4)}
 #hud .tag-btn.call{background:#C9A227;color:#0C1E36}
 `;
 let styled = false;
