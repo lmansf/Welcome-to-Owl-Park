@@ -31,6 +31,7 @@ import {
   type BowlRoll,
   type Vec2,
 } from '@owl-park/shared';
+import { laneArt } from './standIn';
 import { workBoxesShown } from './workBoxes';
 
 export interface BowlLayerOpts {
@@ -116,12 +117,9 @@ export class BowlLayer {
   /** The lane as a size box with its dimensions on it, when feather tag is not drawing it. */
   private drawLane(): void {
     const s = this.o.scene;
-    // For every visitor but a painter or a keeper (workBoxes.ts), a soft worn strip, no outline or size.
+    // For every visitor but a painter or a keeper (workBoxes.ts), the lane's own art (laneArt), no outline or size.
     if (!workBoxesShown()) {
-      const worn = s.add.graphics();
-      worn.fillStyle(0xffd36a, 0.07).fillRoundedRect(BOWLING_LANE.x, BOWLING_LANE.y, BOWLING_LANE.w, BOWLING_LANE.h, BOWLING_LANE.h / 2);
-      worn.setDepth(BOWLING_LANE.y);
-      this.drawn.push(worn);
+      laneArt(s, this.drawn);
       return;
     }
     const lane = s.add.graphics();

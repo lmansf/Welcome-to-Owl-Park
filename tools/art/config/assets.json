@@ -8098,6 +8098,104 @@
       "key_colour": "#FF00FF",
       "format": "webp",
       "with_2x": true
+    },
+    "party-old-stump": {
+      "w": 336,
+      "h": 188,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "party-stump-seat": {
+      "w": 100,
+      "h": 57,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "tag-feather-station": {
+      "w": 184,
+      "h": 123,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "bowl-lane": {
+      "w": 800,
+      "h": 96,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "party-board": {
+      "w": 1000,
+      "h": 640,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "party-acorn": {
+      "w": 90,
+      "h": 90,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "party-moon-perch": {
+      "w": 48,
+      "h": 48,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "party-space-berry": {
+      "w": 64,
+      "h": 44,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "party-space-bramble": {
+      "w": 64,
+      "h": 44,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "party-space-updraft": {
+      "w": 64,
+      "h": 44,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "party-space-downdraft": {
+      "w": 64,
+      "h": 44,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "party-space-fact": {
+      "w": 64,
+      "h": 44,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "party-space-knot": {
+      "w": 64,
+      "h": 44,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "party-space-hollow": {
+      "w": 64,
+      "h": 44,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
     }
   },
   "helpers": {

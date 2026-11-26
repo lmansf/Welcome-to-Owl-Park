@@ -53,18 +53,18 @@ describe('the work boxes (the Nov 25 QA walk: size boxes showed to every visitor
     expect(workBoxesShown('?room=m3-hall&keeper=1')).toBe(true);
   });
 
-  it('draw the feather station as the park’s signboard with the game’s name, and the lane with no size on it', async () => {
+  it('draw the feather station’s and the lane’s own art, the game’s name over the station, no size on either', async () => {
     vi.stubGlobal('location', { search: '?room=m3-hall' });
     const { TagLayer } = await import('./tagLayer');
     const { scene, texts, images } = recordingScene();
     new TagLayer({ scene: scene as never, hudRoot: () => null, toast: () => undefined, me: () => 'me', posOf: () => null });
     await settle();
     expect(sized(texts)).toEqual([]);
-    expect(images).toEqual(['kit-clearing-sign-board']);
+    expect(images).toEqual(['tag-feather-station', 'bowl-lane']);
     expect(texts).toEqual(['Feather tag']);
   });
 
-  it('draw the Old Stump as the park’s stump, its seats as nothing', async () => {
+  it('draw the Old Stump and its four seats as their own art', async () => {
     vi.stubGlobal('location', { search: '' });
     const { PartyLayer } = await import('./partyLayer');
     const { STUMP_ROOM } = await import('@owl-park/shared');
@@ -72,15 +72,17 @@ describe('the work boxes (the Nov 25 QA walk: size boxes showed to every visitor
     new PartyLayer({ scene: scene as never, room: STUMP_ROOM, hudRoot: () => null, toast: () => undefined, walkTo: () => undefined, goTo: () => undefined, back: () => undefined });
     await settle();
     expect(sized(texts)).toEqual([]);
-    expect(images).toEqual(['decor-stump-table']);
+    expect(images).toEqual(['party-old-stump', 'party-stump-seat', 'party-stump-seat', 'party-stump-seat', 'party-stump-seat']);
   });
 
   it('draw the bowling lane with no outline’s size on it', async () => {
     vi.stubGlobal('location', { search: '' });
     const { BowlLayer } = await import('./bowlLayer');
-    const { scene, texts } = recordingScene();
+    const { scene, texts, images } = recordingScene();
     new BowlLayer({ scene: scene as never, hudRoot: () => null, myPos: () => ({ x: 0, y: 0 }), drawLane: true });
+    await settle();
     expect(sized(texts)).toEqual([]);
+    expect(images).toEqual(['bowl-lane']);
   });
 
   it('keep every size box for a painter', async () => {
