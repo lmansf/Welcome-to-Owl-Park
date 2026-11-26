@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
 import type { APIRequestContext, Browser, Page } from '@playwright/test';
+import { LEAF_RESPAWN_MS } from '../../../packages/shared/src/interactables';
 import { expect, test } from './fixtures';
 import { flyThrough, playAt, untilOver } from './arcadePlay';
 import { E2E_ADMIN_KEY, E2E_STORE, GATE_ASK, GATE_ASK_LINE, STORE_CARD, doAction, enterAsGuest, expectStoreCard, openPark, state, storeContinue, walkToDoor } from './helpers';
@@ -296,7 +297,12 @@ test.describe('spectators (OP-191)', () => {
     await openPark(page, { transport: 'edge', room: 'grove' });
     await spectating(page, 'grove');
     await expect.poll(step, { timeout: 15_000 }).toBe(2);
-    expect(await page.evaluate(() => window.owlPark.use('grove-leaves-2'))).toBe(true);
+    // Any of the clearing's piles will do for the step. The room server is shared by the tests in a shard,
+    // and a pile another test flopped into stays gone for up to LEAF_RESPAWN_MS: so a pile that is here, or
+    // the first one back.
+    const pileHere = async () => (await state(page)).objects.find((o) => o.kind === 'leaf-pile' && o.here)?.id ?? '';
+    await expect.poll(pileHere, { timeout: LEAF_RESPAWN_MS[1] }).not.toBe('');
+    expect(await page.evaluate((id) => window.owlPark.use(id), await pileHere())).toBe(true);
     await expect.poll(step, { timeout: 15_000 }).toBe(3);
     // Hazel's acorns, right here: a ticket holder's quest, and the room server says no to a guest.
     expect(await page.evaluate(() => window.owlPark.accept('story-hazel-acorns'))).toBe(false);

@@ -9,6 +9,7 @@ import { footOrigin, hitArea } from './fit';
 import { GUARDIAN_ROOM } from './guardian';
 import { carvedTexture } from './guardianView';
 import { IDOL_FLARE } from './idolFlare';
+import { writeNotices } from './noticeBoard';
 
 /** Generated helper textures shared by every room. */
 export function ensureFxTextures(scene: Phaser.Scene): void {
@@ -290,6 +291,8 @@ export function addSetPieces(
     // Named by its piece, so a painting of the whole room that already shows it can put it away (artTrial.ts).
     img.setName(p.id);
     standing.push(img);
+    // A notice board standing in for the quest post has its lines written on it (OP-478).
+    writeNotices(scene, room.id, p, img);
   }
   for (const door of room.doors) {
     const m = door.marker;

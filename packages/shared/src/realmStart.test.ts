@@ -5,7 +5,7 @@ import { interactablesIn } from './interactables';
 import { KIT_ART } from './kitArt';
 import { NPC_TALK_RADIUS, npcsIn } from './npcs';
 import { QUESTS, TOWN_NPCS } from './questCatalog';
-import { START_FLOOR, START_OPENINGS, START_SPOTS, START_VOTE } from './realmStart';
+import { START_FLOOR, START_NOTICES, START_OPENINGS, START_SPOTS, START_VOTE } from './realmStart';
 import { ROOM_H, ROOM_W } from './room';
 
 /** The realms whose start is laid out on the template so far (OP-276: the stained-glass realm first, for the owner to look at before the rest). */
@@ -33,8 +33,34 @@ describe("every realm's start, one screen from above (OP-276)", () => {
     expect(START_SPOTS.decor.length).toBeLessThanOrEqual(5);
   });
 
+  it('stands the planter by the post on the street at the guardian\'s feet, not hung on the start screen\'s tree (OP-480)', () => {
+    const [first] = START_SPOTS.decor;
+    const { questPost, idol } = START_SPOTS;
+    // Between the post and the guardian, right of the post's box: the knot-hole's tree is painted left of the post.
+    expect(first.x - first.w / 2).toBeGreaterThan(questPost.x);
+    expect(first.x).toBeLessThan(idol.x - 120);
+    // Its foot on the floor's back edge, in front of the guardian's base: floor just in front of it, none behind it.
+    expect(onFloor({ x: first.x, y: first.y + 8 })).toBe(true);
+    expect(onFloor({ x: first.x, y: first.y - 8 })).toBe(false);
+    expect(first.y).toBeGreaterThan(questPost.y);
+  });
+
   for (const realm of STARTS) {
     describe(realm, () => {
+      it('has a few short lines on its notice board, plain words for a young player (OP-478)', () => {
+        const lines = START_NOTICES[realm] ?? [];
+        expect(lines.length).toBeGreaterThanOrEqual(3);
+        expect(lines.length).toBeLessThanOrEqual(5);
+        for (const line of lines) {
+          // Short enough to read on the board's face at a glance; plain letters, no emoji.
+          expect(line.length, line).toBeLessThanOrEqual(20);
+          expect(line, line).toMatch(/^[A-Za-z0-9 ,.!'’?-]+$/);
+          expect(line.toLowerCase(), line).not.toMatch(/grown/);
+        }
+        // What it says to do is here: its quest owl by name.
+        expect(lines.some((l) => l.includes(npcsIn(realm)[0]!.name))).toBe(true);
+      });
+
       const room = ROOMS[realm]!;
 
       it('is one screen wide, painted by its start-screen slot, its floor the template (or the template opened onto a plaza below it)', () => {

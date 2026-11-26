@@ -72,6 +72,44 @@ function joinWhenCalled(page: Page): Promise<string> {
   );
 }
 
+/** The game as a page showed it, and what the room sent it. */
+type TagSeen = {
+  phase: string;
+  line: string;
+  players: string[];
+  holder: string | null;
+  self: string;
+  score: number;
+  prize: unknown;
+  heard: string[];
+};
+
+/**
+ * The game as this page shows it once the round is over, read in the page itself. The result shows for
+ * TAG_REST_MS and then the hollow is free; on a busy runner a read from the test can take seconds and
+ * come after it. Resolves once the line has caught up with the end (or a second after it, as it was).
+ */
+function overOn(page: Page): Promise<TagSeen | null> {
+  return page.evaluate(
+    ({ left, waitMs }) =>
+      new Promise<TagSeen | null>((done) => {
+        const until = Date.now() + waitMs;
+        let overAt = 0;
+        const look = () => {
+          const t = window.owlPark.state()?.tag ?? null;
+          if (t?.phase === 'over') {
+            overAt ||= Date.now();
+            if (t.line === left || Date.now() - overAt > 1000) return done(t);
+          }
+          if (Date.now() > until) return done(t);
+          requestAnimationFrame(look);
+        };
+        look();
+      }),
+    { left: TAG_WORDS.holderLeft, waitMs: 20_000 },
+  );
+}
+
 test.describe('feather tag across the Great Hollow (OP-434)', () => {
   test('a plain address has the game and its Start button, on for every visitor', async ({ page }) => {
     await openPark(page, HOLLOW);
@@ -110,13 +148,25 @@ test.describe('feather tag across the Great Hollow (OP-434)', () => {
     // busy runner a slow page can still be touching then; so the owl with the feather leaves only once its
     // own page has it and sees the other owl out of reach, and the walk goes again if it went back.
     const reach = TAG_REACH + TAG_SLACK;
-    const apart = async () => {
-      const s = await state(phone);
-      const c = s.peers.find((o) => o.id === cid);
+    /** Whether this page sees the other owl out of reach. */
+    const apartOn = async (page: Page, other: string) => {
+      const s = await state(page);
+      const c = s.peers.find((o) => o.id === other);
       return !!c && Math.hypot(c.pos.x - s.pos.x, c.pos.y - s.pos.y) > reach;
     };
+    const apart = () => apartOn(phone, cid);
     const live = async () => (await tagOf(computer))?.phase === 'live';
-    /** The feather passed to the phone's owl and the owls apart, in this round; false if its time ran out first. */
+    /** The round's seconds left, as the line on the computer's page says them. */
+    const secondsLeft = async () => Number(/· (\d+)s ·/.exec((await tagOf(computer))?.line ?? '')?.[1] ?? 0);
+    /**
+     * Enough of the round left for the phone's owl to leave in it: the reads and the tab's goodbye take a
+     * few seconds on a busy runner, and a round that runs out first ends by its time, not by the holder leaving.
+     */
+    const LEAVE_S = 8;
+    /**
+     * The feather passed to the phone's owl and the owls apart, in this round; false if its time ran out
+     * first, or too little of it is left to leave in.
+     */
     const passAndPart = async (): Promise<boolean> => {
       for (let i = 0; i < 4; i++) {
         const p = (await state(phone)).pos;
@@ -132,20 +182,32 @@ test.describe('feather tag across the Great Hollow (OP-434)', () => {
           throw e;
         }
         if (!(await live())) return false;
-        if ((await tagOf(phone))?.holder === pid) return true;
+        if ((await tagOf(phone))?.holder === pid) return (await secondsLeft()) >= LEAVE_S;
       }
       return false;
     };
     // The round lasts TAG_ROUND_MS on the room's clock, and a slow runner's walks and screenshots eat into
     // it. The owl with the feather must leave while the round is still on (a round that ran out first ends
     // by its time, which is the other test's ending, not this one), so if this round's time runs out
-    // first, the test waits for the hollow to be free and the same two owls play one more round.
+    // first, or too little of it is left to leave in, the test waits for the hollow to be free and the
+    // same two owls play one more round.
     let prizeBefore: unknown = null;
     let ready = false;
     try {
       for (let round = 0; round < 2 && !ready; round++) {
         if (round > 0) {
           for (const page of [computer, phone]) await expect.poll(async () => (await tagOf(page))?.phase, { timeout: 20_000 }).toBe('waiting');
+          // The round that ran out may have left the computer's owl beside the phone's, and the owl that
+          // starts holds the feather the moment the round is live: touching then, its page passes it at
+          // once. So it walks off first, until both pages see the owls out of reach.
+          const p = (await state(phone)).pos;
+          await walkAndStop(computer, p.x - (reach + 60), p.y);
+          for (const [page, other] of [
+            [computer, pid],
+            [phone, cid],
+          ] as const) {
+            await expect.poll(() => apartOn(page, other), { timeout: 10_000, intervals: [100] }).toBe(true);
+          }
           const again = joinWhenCalled(phone);
           await tagButton(computer).click();
           expect(await again).toBe('call');
@@ -178,33 +240,26 @@ test.describe('feather tag across the Great Hollow (OP-434)', () => {
     }
     // It closes its tab the way a player does, so its page says goodbye and the room has it out at once
     // (a page that went without one is out only once TAG_GRACE_MS is up, by when the round may be over).
+    // The computer's page is watched from before the close, so its result is read while it shows.
+    const over = overOn(computer);
     await phone.close({ runBeforeUnload: true });
     expect((await tagOf(computer))!.passesAsked).toBeGreaterThanOrEqual(1);
-    // The game ends, with no prizes.
-    try {
-      // Read together, and all of it, so a miss shows who the page still counts in the game.
-      await expect
-        .poll(
-          async () => {
-            const t = await tagOf(computer);
-            return { phase: t?.phase, line: t?.line, players: t?.players, holder: t?.holder, self: t?.self };
-          },
-          // A goodbye ends it at once; a page that went without one is out once TAG_GRACE_MS is up. Read
-          // often: the result shows for TAG_REST_MS before the hollow is free again.
-          { timeout: 20_000, intervals: [250] },
-        )
-        .toEqual({ phase: 'over', line: TAG_WORDS.holderLeft, players: [cid], holder: null, self: cid });
-    } catch (e) {
-      // What the room sent the page, to say why.
-      console.log('tag heard:', JSON.stringify((await tagOf(computer))?.heard));
-      throw e;
-    }
-    const end = (await tagOf(computer))!;
+    // The game ends, with no prizes. Read together, and all of it, so a miss shows who the page still
+    // counts in the game; and what the room sent the page, to say why.
+    const end = await over;
+    if (end?.line !== TAG_WORDS.holderLeft) console.log('tag heard:', JSON.stringify(end?.heard));
+    expect(end && { phase: end.phase, line: end.line, players: end.players, holder: end.holder, self: end.self }).toEqual({
+      phase: 'over',
+      line: TAG_WORDS.holderLeft,
+      players: [cid],
+      holder: null,
+      self: cid,
+    });
     // Two owls held it, so the score is the passes times two: one pass, or more if the feather went back
     // and forth before the owls were apart.
-    expect(end.score).toBeGreaterThanOrEqual(2);
-    expect(end.score % 2).toBe(0);
-    expect(end.prize).toEqual(prizeBefore);
+    expect(end!.score).toBeGreaterThanOrEqual(2);
+    expect(end!.score % 2).toBe(0);
+    expect(end!.prize).toEqual(prizeBefore);
     await phone.context().close();
     await computer.context().close();
   });

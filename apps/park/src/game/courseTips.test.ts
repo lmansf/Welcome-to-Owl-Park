@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { courseParts } from '@owl-park/shared';
 import { COURSES, ROOMS, groundOf } from '../rooms';
 import { COURSE_WORDS } from '../ui/courseWords';
-import { TIP_REACH, courseTips, tipFor, type CourseTip } from './courseTips';
+import { TIP_REACH, courseName, courseTips, tipFor, type CourseTip } from './courseTips';
 
 const rooms = (id: string) => ROOMS[id];
 const LIVE = Object.values(COURSES).filter((c) => !c.keeper && !c.test);
@@ -28,9 +28,22 @@ describe("a course's tips (OP-344)", () => {
     }
   });
 
+  it('the first tip names the course, so an owl coming in through its gate is told where it is (OP-475)', () => {
+    expect(tip(tipsOf('brush'), 'start').words.split('\n')[0]).toBe('Brushstroke Bridges');
+    expect(tip(tipsOf('brush', true), 'start').words.split('\n')[0]).toBe('Brushstroke Bridges');
+    for (const def of LIVE) {
+      const name = courseName(def);
+      expect(name, def.id).toBeTruthy();
+      expect(courseTips(def, rooms, groundOf, false).find((t) => t.id === 'start')!.words.split('\n')[0], def.id).toBe(name);
+      // Said where the owl comes in: the first tip it reads, standing at the gate's spawn.
+      const way = ROOMS[def.acts[0]!]!.spawns[def.gate.spawn]!;
+      expect(tipFor(courseTips(def, rooms, groundOf, false), way.x, 0)?.id, def.id).toBe('start');
+    }
+  });
+
   it('the first tip says how many parts the course has and names the keys, or the buttons on a phone', () => {
     const keys = tip(tipsOf('canopy'), 'start');
-    expect(keys.words).toBe(`Ring all ${courseParts(COURSES['canopy']!, rooms).length} bells, then reach the finish.\n${COURSE_WORDS.tips.moves.keys}`);
+    expect(keys.words).toBe(`Updraft Canopy\nRing all ${courseParts(COURSES['canopy']!, rooms).length} bells, then reach the finish.\n${COURSE_WORDS.tips.moves.keys}`);
     expect(keys.words).toContain('Space to jump');
     expect(keys.words).toContain('Shift to dash');
     const touch = tip(tipsOf('canopy', true), 'start');

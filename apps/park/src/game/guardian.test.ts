@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { distance, pointInRect, type Vec2 } from '@owl-park/shared';
+import { distance, isWalkable, npcIn, npcsIn, pointInRect, type Vec2 } from '@owl-park/shared';
 import { HALL_ROOM, RUN_Y } from '@owl-park/shared/rooms';
 import { PLAY_SPOTS } from './featherTrail';
 import {
@@ -97,6 +97,22 @@ describe('where the guardian stands (OP-359)', () => {
     }
     for (const d of HALL_ROOM.doors) if (d.marker) expect(shade.some((s) => pointInRect(d.marker!, s)), d.id).toBe(false);
     expect(shade.some((s) => pointInRect(KNOTHOLE, s))).toBe(false);
+  });
+
+  it('hides none of the hollow’s own owls: each owl, its quest mark over it and its name under it stand clear of the floor the guardian covers (the Nov 25 QA walk: Elder Bramble behind its head, his name cut to "Elde…")', () => {
+    const shade = guardianShade();
+    for (const n of npcsIn(HALL_ROOM.id, 3)) {
+      // The owl's body and its quest mark over it, and its name drawn under its feet (Npc.ts), as wide as a long name.
+      const drawn = { x: n.pos.x - 70, y: n.pos.y - 170, w: 140, h: 215 };
+      const over = shade.find((s) => drawn.x < s.x + s.w && s.x < drawn.x + drawn.w && drawn.y < s.y + s.h && s.y < drawn.y + drawn.h);
+      expect(over, `${n.name} at ${n.pos.x},${n.pos.y}`).toBeUndefined();
+    }
+  });
+
+  it('leaves Elder Bramble, whose welcome is a new owl’s first quest, a few steps from where owls come in by the knothole', () => {
+    const bramble = npcIn('bramble', HALL_ROOM.id, 3)!;
+    expect(distance(bramble.pos, KNOTHOLE)).toBeLessThan(450);
+    expect(isWalkable(bramble.pos, HALL_ROOM.walkable)).toBe(true);
   });
 
   it('puts a point of its painting in the room by its foot and its size', () => {
