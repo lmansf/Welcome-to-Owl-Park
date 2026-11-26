@@ -136,6 +136,24 @@ const median = (xs: number[]): number => {
  * (a median, so ear tufts do not lift a hat into the air); the neck is the top of the belly; the
  * brow and chin are the face's top and bottom rows (the feet, painted on the face layer too, aside).
  */
+/**
+ * The body's outline across one row (owl canvas pixels, 200 x 240): its leftmost and rightmost opaque
+ * pixels, whatever the layer's own resolution. The wings' shoulders are set from it (Owl.ts), not from
+ * the chest, because a three-quarter owl's belly sits off its body's middle. Null for an empty row.
+ */
+export function rowSpan(body: Mask, y: number): { l: number; r: number } | null {
+  const sx = 200 / body.width;
+  const row = Math.min(body.height - 1, Math.max(0, Math.round((y * body.height) / 240)));
+  let l = -1;
+  let r = -1;
+  for (let x = 0; x < body.width; x++) {
+    if ((body.alpha[row * body.width + x] ?? 0) < OPAQUE) continue;
+    if (l < 0) l = x;
+    r = x;
+  }
+  return l < 0 ? null : { l: l * sx, r: (r + 1) * sx };
+}
+
 export function measureAnchors(body: Mask, face: Mask, belly: Mask): OwlAnchors {
   const sx = 200 / body.width;
   const sy = 240 / body.height;

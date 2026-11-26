@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_ANCHORS, GILD_STOPS, artFacing, gild, hueRotateMatrix, measureAnchors, multiplyTint, rotateHue, type Mask } from './pixels';
+import { DEFAULT_ANCHORS, GILD_STOPS, artFacing, gild, hueRotateMatrix, measureAnchors, multiplyTint, rotateHue, rowSpan, type Mask } from './pixels';
 
 const px = (...rgba: number[]) => new Uint8ClampedArray(rgba);
 
@@ -178,5 +178,26 @@ describe('artFacing', () => {
   it('counts a front-on owl (or unmeasured art) as facing right', () => {
     expect(artFacing(DEFAULT_ANCHORS)).toBe(1);
     expect(artFacing({ ...DEFAULT_ANCHORS, eyes: { x: 95, y: 80, w: 82 } })).toBe(1);
+  });
+});
+
+describe('a body row (the wings\' shoulders)', () => {
+  it('spans the body\'s outline, not the belly: a three-quarter owl\'s belly is off its middle', () => {
+    const body = mask(ellipse(100, 150, 60, 80));
+    const belly = mask(ellipse(80, 160, 30, 50)); // turned toward the left
+    const face = mask(ellipse(85, 90, 20, 15));
+    const neck = measureAnchors(body, face, belly).neck;
+    expect(neck.x).toBeLessThan(90); // the chest's middle is the belly's, off to one side
+    const span = rowSpan(body, neck.y + 10)!;
+    expect((span.l + span.r) / 2).toBeCloseTo(100.5, 0); // the body's middle
+    expect(span.r - span.l).toBeGreaterThan(100);
+  });
+
+  it('reads a 2x layer in owl canvas pixels, and an empty row as nothing', () => {
+    const alpha = new Uint8ClampedArray(400 * 480);
+    for (let x = 100; x < 300; x++) alpha[200 * 400 + x] = 255; // 2x row 200 = canvas row 100
+    const two = { width: 400, height: 480, alpha };
+    expect(rowSpan(two, 100)).toEqual({ l: 50, r: 150 });
+    expect(rowSpan(two, 10)).toBeNull();
   });
 });
