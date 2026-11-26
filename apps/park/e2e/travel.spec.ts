@@ -66,6 +66,11 @@ test.describe('travel from the map (OP-130)', () => {
     card = await mapCard(page, 'homes');
     await expect(menu.locator('button.pin[data-place="lobby"]')).toHaveAttribute('data-lit', '');
     await expect(menu.locator('button.pin[data-place="lobby"] .spark')).toHaveCount(1);
+    // The marks have a legend while the map shows them (OP-468), and the card says what is there (OP-469).
+    await expect(menu.locator('.mlegend [data-mark="new"]')).toBeVisible();
+    await expect(menu.locator('.mlegend [data-mark="here"]')).toBeVisible();
+    await expect(menu.locator('.mlegend [data-mark="closed"]')).toBeVisible();
+    await expect(card.locator('[data-place-line]')).toHaveText('The street of nests, where owls open theirs to visitors.');
     await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-travel-map.png` });
 
     // Tapped and confirmed, the street's card travels there: the Menu closes and the owl lands where walking in would.

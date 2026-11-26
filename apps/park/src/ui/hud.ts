@@ -41,6 +41,7 @@ import { SPECTATOR_WORDS, createSpectatorBadge } from './spectator';
 import { watchTopStack } from './topStack';
 import { createTurnPhone } from './turnPhone';
 import { owlBox, toastLift, type Box } from './toastLift';
+import { toastToReplace } from './toastStack';
 
 /** The highest the tips go, lifted clear of the chips (OP-415): under the bar along the top. */
 const TOASTS_TOP = 64;
@@ -1020,13 +1021,24 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     const next = toasts.childElementCount ? toastLift(column, chips, TOASTS_TOP) : 0;
     if (Math.abs(next - lift) >= 0.5) toasts.style.setProperty('--toasts-lift', `${next.toFixed(1)}px`);
   };
+  const toastTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
   const dropToast = (el: HTMLElement, ms: number) =>
-    setTimeout(() => {
-      el.remove();
-      liftToasts();
-    }, ms);
+    toastTimers.set(
+      el,
+      setTimeout(() => {
+        el.remove();
+        liftToasts();
+      }, ms),
+    );
 
   const toast = (message: string, ms = 2600, accent?: string) => {
+    // The same news once (OP-458, toastStack.ts): a tip already saying it, or saying the park could not connect, makes way.
+    const plain = [...toasts.children].filter((c): c is HTMLElement => c instanceof HTMLElement && c.dataset['spectatorOffer'] === undefined);
+    const old = plain[toastToReplace(plain.map((c) => c.textContent ?? ''), message)];
+    if (old) {
+      clearTimeout(toastTimers.get(old));
+      old.remove();
+    }
     const el = document.createElement('div');
     el.className = accent ? 'toast accent' : 'toast';
     if (accent) el.style.setProperty('--accent', accent);

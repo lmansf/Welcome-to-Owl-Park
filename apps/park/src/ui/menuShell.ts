@@ -141,6 +141,18 @@ const CSS = `
 #hud .menu-shell .mmap button.pin.picked{outline:3px solid var(--m-accent);outline-offset:2px}
 #hud .menu-shell .mmap .pin .spark{position:absolute;top:-10px;right:-8px;font-style:normal;font-size:20px;line-height:1;color:var(--m-accent);pointer-events:none;animation:msparkle 1.2s ease-out 2}
 @keyframes msparkle{0%{transform:scale(.3) rotate(0);opacity:0}45%{transform:scale(1.35) rotate(45deg);opacity:1}100%{transform:scale(1) rotate(90deg);opacity:1}}
+#hud .menu-shell .mlegend{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px 16px;color:var(--m-muted)}
+#hud .menu-shell .mlegend li{display:flex;align-items:center;gap:6px}
+#hud .menu-shell .mlegend .mk{flex:none;display:inline-block;width:22px;height:16px;border-radius:5px;border:2px solid var(--m-frame);background:var(--m-raised);text-align:center;line-height:12px;font-style:normal;color:var(--m-accent)}
+#hud .menu-shell .mlegend .mk.here{border:3px solid var(--m-accent);line-height:10px}
+#hud .menu-shell .mlegend .mk.here::before{content:'★';font-size:11px}
+#hud .menu-shell .mlegend .mk.new{border:none;background:none;font-size:18px;line-height:16px}
+#hud .menu-shell .mlegend .mk.new::before{content:'✦'}
+#hud .menu-shell .mlegend .mk.closed{border-style:dashed}
+#hud .menu-shell .mlegend .mk.unlit{border-style:dotted}
+#hud .menu-shell .mtravel .mthere{margin:0}
+#hud .menu-shell .mcollected{margin:0;font-weight:700}
+#hud .menu-shell .mcollected b{font-size:calc(var(--m-body) * 1.6);font-weight:800;color:var(--m-accent)}
 #hud .menu-shell .mtravel:empty{display:none}
 #hud .menu-shell .mtravel .mcard{border:2px solid var(--m-accent)}
 #hud .menu-shell .quests{display:flex;flex-direction:column;gap:10px}

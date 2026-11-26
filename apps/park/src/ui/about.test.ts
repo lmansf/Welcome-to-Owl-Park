@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ABOUT_WORDS, contactLines, DAY_TICKET_PRICE, KEEPER, OUTSIDE_MENTIONS, PLAYER_QUOTES, STILLS, aboutParts, faq, safetyParts, presenceLine, ticketLine, WHAT_IT_IS } from './about';
+import { ABOUT_WORDS, contactLines, DAY_TICKET_PRICE, KEEPER, OUTSIDE_MENTIONS, PLAYER_QUOTES, STILLS, TICKET_TERMS, aboutParts, faq, freshFaq, safetyParts, presenceLine, ticketLine, WHAT_IT_IS } from './about';
 import { FULL_OPENING_MS } from './preview';
 import { SPECTATOR_WORDS } from './spectator';
 // @ts-expect-error: a plain script, no types
@@ -43,6 +43,26 @@ describe('what the park is, said plainly (the site audit)', () => {
     expect(faq('$2').find((f) => f.q === 'What does a Day Ticket cost?')?.a).toBe('A Day Ticket is $2. Your ticket’s time starts at the turnstiles.');
     const named = faq(null, { name: 'A keeper', line: 'One line.' });
     expect(named.find((f) => f.q === 'Who keeps the park?')?.a).toBe('A keeper. One line.');
+  });
+
+  it('asks no question on the park’s About screen that its parts above already answer word for word (OP-459)', () => {
+    const parts = aboutParts();
+    const questions = parts.find((p) => p.heading === 'Questions')!;
+    const said = parts.filter((p) => p !== questions).flatMap((p) => p.lines);
+    // The answers, every other line of the Questions part.
+    const answers = questions.lines.filter((_, i) => i % 2 === 1);
+    for (const a of answers) expect(said, a).not.toContain(a);
+    // What it is and the ticket's terms are said once, above; the questions they answered are gone from the screen.
+    const asked = questions.lines.filter((_, i) => i % 2 === 0);
+    expect(asked).not.toContain('What is Owl Park?');
+    expect(asked).not.toContain('Who takes the payment?');
+    expect(asked).not.toContain('Can I get a refund?');
+    expect(said).toContain(WHAT_IT_IS);
+    expect(said).toEqual(expect.arrayContaining([TICKET_TERMS[0], TICKET_TERMS[2]]));
+    // The rest are still asked, in order.
+    expect(asked).toEqual(['Is it free?', 'What does a Day Ticket cost?', 'Is there typed chat?', 'What does the park keep?', 'Does it need a download?']);
+    // Nothing said above, nothing left out.
+    expect(freshFaq([])).toEqual(faq());
   });
 
   it('marks the About page’s questions up for search engines, word for word', () => {

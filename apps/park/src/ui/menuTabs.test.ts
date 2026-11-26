@@ -1,7 +1,7 @@
-import { TRAVEL_WORDS, doorLabel, doorTarget, mapOf, placeShown } from '@owl-park/shared';
+import { STYLE_SETS, TRAVEL_WORDS, doorLabel, doorTarget, mapOf, placeShown } from '@owl-park/shared';
 import { ROOMS } from '../rooms';
 import { describe, expect, it } from 'vitest';
-import { ARCADE_PLACE, MAP_LIT_KEY, MAP_PLACES, NEW_MAP_COURSE_PLACES, mapLayout, mapNote, mapPlaceOf, newlyLit, placeCard } from './menuTabs';
+import { ARCADE_PLACE, MAP_LEGEND, MAP_LIT_KEY, MAP_PLACES, NEW_MAP_COURSE_PLACES, NEW_MAP_PLACES, PLACE_LINES, collectedWords, mapLayout, mapLegend, mapNote, mapPlaceOf, newlyLit, placeCard } from './menuTabs';
 
 const walked = (places: string[], gate = false) => ({ places, gate });
 
@@ -195,5 +195,42 @@ describe('one name per place on the new map (OP-346)', () => {
     expect(ARCADE_PLACE).toContain('the arcade');
     const sign = doorLabel(ROOMS['m3-hall']!.doors.find((d) => d.id === 'down')!, 3)!;
     expect(sign).toContain('the arcade');
+  });
+});
+
+describe('the map says what its marks mean, and what is at each place (OP-468, OP-469)', () => {
+  it('explains each mark the map shows, and only those', () => {
+    expect(mapLegend(new Set())).toEqual([]);
+    expect(mapLegend(new Set(['closed', 'here'] as const))).toEqual([
+      { mark: 'here', words: MAP_LEGEND.here },
+      { mark: 'closed', words: MAP_LEGEND.closed },
+    ]);
+    expect(mapLegend(new Set(['unlit', 'new', 'closed', 'here'] as const)).map((l) => l.mark)).toEqual(['here', 'new', 'closed', 'unlit']);
+    // The legend's words are the card's own: travel that does not go somewhere is said the same way.
+    expect(`${MAP_LEGEND.unlit}.`).toBe(TRAVEL_WORDS.notYet);
+  });
+
+  it('gives every open place on both maps one line on what is there, short enough for a phone', () => {
+    for (const p of [...MAP_PLACES, ...NEW_MAP_PLACES].filter((p) => !p.closed)) {
+      const line = PLACE_LINES[p.id];
+      expect(line, p.id).toBeTruthy();
+      expect(line!.length, p.id).toBeLessThanOrEqual(90);
+      expect(line, p.id).toMatch(/^[A-Z].*\.$/);
+      expect(line, p.id).not.toMatch(/\n|\bhold\b/);
+    }
+  });
+});
+
+describe('the collection feels reachable (OP-471, OP-472)', () => {
+  it('counts what the owl has found up, not against every colour of every item', () => {
+    expect(collectedWords(0)).toEqual({ count: '0', words: 'things collected' });
+    expect(collectedWords(1)).toEqual({ count: '1', words: 'thing collected' });
+    expect(collectedWords(1194)).toEqual({ count: '1,194', words: 'things collected' });
+    expect(Object.values(collectedWords(7)).join(' ')).not.toMatch(/ of /);
+  });
+
+  it('has no style set at launch, so the Collection shows no Sets card that only promises them', () => {
+    // renderCollection draws the Sets card only for sets that exist (setsCard); none do yet.
+    expect(STYLE_SETS).toEqual([]);
   });
 });

@@ -269,7 +269,7 @@ import { artTrialFor, drawArtTrial, hidePaintedPieces } from './artTrial';
 import { drawEdges } from './edgeView';
 import { drawSkirts } from './plazaSkirt';
 import { setVignette } from './vignette';
-import { ROOM_DOWN } from './roomDown';
+import { ROOM_DOWN, WANDERING_ALONE } from './roomDown';
 import { doorPromptAt } from './doorPrompt';
 import { MOTION, motion } from '../calmMotion';
 
@@ -1830,7 +1830,7 @@ export class RoomScene extends Phaser.Scene {
     if (s === 'online') this.takeKeptTravel();
     // The quest board says it isn't answering instead of loading for ever (OP-280); a board clears it.
     if (wentOffline) this.quests.setOffline(true);
-    if (wentOffline && !this.leaving) this.hud.toast('You are wandering alone for now: the park could not connect.', 4000);
+    if (wentOffline && !this.leaving) this.hud.toast(WANDERING_ALONE, 4000);
   }
 
   private async roomFull(roomId: string, spectators = false): Promise<void> {

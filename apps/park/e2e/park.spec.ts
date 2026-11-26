@@ -246,7 +246,10 @@ test.describe('single visitor', () => {
     await menu.locator('[data-tab="collection"]').click();
     await expect(menu.locator('[data-tab="collection"]')).toHaveAttribute('aria-selected', 'true');
     await expect(menu.locator('[data-tab="quests"]')).toHaveAttribute('aria-selected', 'false');
-    await expect(menu.locator('[data-panel="collection"] [role="progressbar"]')).toHaveCount(5);
+    // One bar for each kind; the headline counts what the owl has found up (OP-471), and no Sets card stands empty (OP-472).
+    await expect(menu.locator('[data-panel="collection"] [role="progressbar"]')).toHaveCount(4);
+    await expect(menu.locator('[data-panel="collection"] .mcollected')).toContainText('collected');
+    await expect(menu.locator('[data-panel="collection"]').getByRole('heading', { name: 'Sets', exact: true })).toHaveCount(0);
     await menu.locator('[data-tab="nest"]').click();
     await expect(menu.locator('[data-screen="map"]')).toBeVisible();
     await menu.locator('[data-tab="map"]').click();

@@ -1,4 +1,4 @@
-import { ARCADE_NAME, NEST_WORDS, TRAVEL_WORDS, WAY_OUT_WORDS, WHICH_OWL_WORDS, allVariants, canTravel, needsGate, parseVariant, setProgress, type ItemKind, type SetProgress, type TravelRefusal } from '@owl-park/shared';
+import { ARCADE_NAME, NEST_WORDS, SHARE_ACTIVITIES, TRAVEL_WORDS, WAY_OUT_WORDS, WHICH_OWL_WORDS, allVariants, canTravel, needsGate, parseVariant, setProgress, type ItemKind, type SetProgress, type TravelRefusal } from '@owl-park/shared';
 import type { CollectionState } from '../collect/state';
 import { rasterNames } from '../game/artNames';
 import { PUBLISHED_ART, versioned } from '../game/publishedArt';
@@ -82,6 +82,22 @@ const meter = (have: number, of: number, label: string): HTMLElement => {
   return row;
 };
 
+/**
+ * The collection's headline (OP-471): what the owl has found, counted up. Against every colour of every
+ * item in the park ("7 of 1,194") a first visit's finds looked like nothing; the kinds below still say
+ * how many of each there are.
+ */
+export function collectedWords(have: number): { count: string; words: string } {
+  return { count: have.toLocaleString('en-US'), words: have === 1 ? 'thing collected' : 'things collected' };
+}
+
+const collectedLine = (have: number): HTMLElement => {
+  const said = collectedWords(have);
+  const p = el('p', 'mcollected');
+  p.append(el('b', '', said.count), ` ${said.words}`);
+  return p;
+};
+
 export function renderCollection(panel: HTMLElement, state: CollectionState | null): void {
   if (!state?.inv) {
     panel.appendChild(note('Your collection shows here once the park has it.'));
@@ -90,8 +106,7 @@ export function renderCollection(panel: HTMLElement, state: CollectionState | nu
   const owned = state.inv.owned;
   const counts = collectionCounts(owned);
   const have = counts.reduce((a, c) => a + c.have, 0);
-  const of = counts.reduce((a, c) => a + c.of, 0);
-  const all = card('Your collection', meter(have, of, 'Collected'));
+  const all = card('Your collection', collectedLine(have));
   all.dataset['collected'] = String(have);
   const feathers = el('p', 'mnote', `${state.inv.feathers} feathers to spend in the shop on the neon street.`);
   all.appendChild(feathers);
@@ -99,7 +114,8 @@ export function renderCollection(panel: HTMLElement, state: CollectionState | nu
   const kinds = card('By kind');
   for (const c of counts) kinds.appendChild(meter(c.have, c.of, c.name));
   panel.appendChild(kinds);
-  panel.appendChild(setsCard(setProgress(owned, state.inv.furniture ?? [])));
+  const sets = setProgress(owned, state.inv.furniture ?? []);
+  if (sets.length) panel.appendChild(setsCard(sets));
   panel.appendChild(note('Quests and the shop bring new things. Wear them at the mirror in your nest.'));
 }
 
@@ -113,10 +129,10 @@ const pieceArt = (art: string, x2: boolean): string =>
 /**
  * The style sets (OP-110): for each, how many of its pieces the owl has and which (a tick, not a
  * colour, marks the ones it has), and its capstone, a silhouette without a name until the set is
- * complete. While no set exists, a word about what is coming.
+ * complete. While no set exists the Collection shows no Sets card at all (OP-472: a card that only
+ * promised what each realm "will bring" stood empty at launch).
  */
 export function setsCard(sets: readonly SetProgress[]): HTMLElement {
-  if (!sets.length) return card('Sets', note('Each realm will bring its own set of things to collect and furnish your nest with. Your progress on each set will show here.'));
   const c = card('Sets');
   for (const s of sets) {
     const box = el('div', s.done ? 'mset done' : 'mset');
@@ -364,6 +380,41 @@ export function newlyLit(storage: Pick<Storage, 'getItem' | 'setItem'> | null, p
 }
 
 /**
+ * One line on what is at each place, under its name on its card (OP-469: the card showed only the name
+ * and its travel button). The words the activity links already use where there is one.
+ */
+const shareLine = (id: string): string | undefined => SHARE_ACTIVITIES.find((a) => a.id === id)?.line;
+export const PLACE_LINES: Readonly<Record<string, string>> = {
+  nest: 'Your own nest: the mirror to change your look, and furniture to decorate it with.',
+  homes: 'The street of nests, where owls open theirs to visitors.',
+  lobby: 'The turnstiles, where every visit into the park begins.',
+  hub: 'The great tree, where Elder Bramble starts the welcome quest.',
+  'm3-hall': shareLine('great-hollow')!,
+  grove: shareLine('treehouse-clearing')!,
+  market: 'The feather shop, and the robot owl’s copy game.',
+  arcade: 'Quick skill games on the arcade’s screens.',
+  glass: shareLine('glass-realm')!,
+  ink: 'An ink-wash garden, with the gate to its course.',
+  'brush-1': 'A parkour course: jump and glide from its start to its end.',
+  'canopy-1': 'A parkour course: jump and glide from its start to its end.',
+  'circuit-1': 'A parkour course: jump and glide from its start to its end.',
+};
+
+/** What the map's marks mean (OP-468), each only while the map shows it. */
+export type MapMark = 'here' | 'new' | 'closed' | 'unlit';
+export const MAP_LEGEND: Readonly<Record<MapMark, string>> = {
+  here: 'Where your owl is',
+  new: 'A place you have just been to for the first time',
+  closed: 'Not open yet',
+  unlit: 'Travel does not go there yet',
+};
+
+/** The legend's lines for the marks on this map, in the order above. */
+export function mapLegend(shown: ReadonlySet<MapMark>): Array<{ mark: MapMark; words: string }> {
+  return (Object.keys(MAP_LEGEND) as MapMark[]).filter((m) => shown.has(m)).map((mark) => ({ mark, words: MAP_LEGEND[mark] }));
+}
+
+/**
  * `open`: the gated realms the keepers have opened (the realms switch); their arches draw as doorways.
  * With `travel` (OP-130) each open place is a button: lit once walked into (the nest always), and a
  * tap opens its card below the map, whose travel button asks once and travels on Go (OP-385).
@@ -390,6 +441,12 @@ export function renderMap(panel: HTMLElement, here: string | null, open: readonl
     const what = placeCard(place.id, here, travel, walking);
     const box = card(place.name);
     box.dataset['travelCard'] = place.id;
+    const there = PLACE_LINES[place.id];
+    if (there) {
+      const line = el('p', 'mthere', there);
+      line.dataset['placeLine'] = '';
+      box.appendChild(line);
+    }
     const said = note(what.line ?? '');
     said.hidden = !what.line;
     said.dataset['travelLine'] = '';
@@ -439,9 +496,14 @@ export function renderMap(panel: HTMLElement, here: string | null, open: readonl
     }
     cardBox.appendChild(box);
   };
+  const marks = new Set<MapMark>();
   for (const p of at.values()) {
     const tappable = travel !== null && !p.closed && !p.noTravel;
     const lit = tappable && (p.id === 'nest' || canTravel(p.id, walking));
+    if (p.closed) marks.add('closed');
+    if (p.id === here) marks.add('here');
+    if (tappable && !lit) marks.add('unlit');
+    if (tappable && travel.fresh.includes(p.id)) marks.add('new');
     const pin = el(tappable ? 'button' : 'div', `pin${p.closed ? ' closed' : ''}${p.id === here ? ' here' : ''}${tappable && !lit ? ' unlit' : ''}`);
     pin.dataset['place'] = p.id;
     pin.style.gridColumn = String(p.col + 1);
@@ -474,6 +536,20 @@ export function renderMap(panel: HTMLElement, here: string | null, open: readonl
     map.appendChild(pin);
   }
   panel.appendChild(map);
+  const legend = mapLegend(marks);
+  if (legend.length) {
+    const list = el('ul', 'mlegend');
+    list.setAttribute('aria-label', 'What the marks mean');
+    for (const { mark, words } of legend) {
+      const item = el('li');
+      item.dataset['mark'] = mark;
+      const sample = el('span', `mk ${mark}`);
+      sample.setAttribute('aria-hidden', 'true');
+      item.append(sample, words);
+      list.appendChild(item);
+    }
+    panel.appendChild(list);
+  }
   panel.appendChild(cardBox);
   drawCard();
   if (travel) panel.appendChild(note(mapNote(walking)));
