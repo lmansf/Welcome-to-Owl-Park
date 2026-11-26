@@ -72,10 +72,11 @@ def _num(v: float) -> int | float:
 def build(public: Path) -> dict:
     """The manifest of every sprite in ``public``: its 1x PNGs and cut-out WebPs, keyed by name
     without the extension, in the order of the file names (a WebP beside a PNG of the same name wins,
-    as in the loader)."""
+    as in the loader). A skin trial's files (``trial-*``, apps/park/src/game/skinTrial.ts) are left out:
+    they are drawn only on a page that names the trial, as the slots they fill."""
     sprites: dict[str, dict] = {}
     for path in sorted([*public.glob("*.png"), *public.glob("*.webp")]):
-        if path.stem.endswith("@2x"):
+        if path.stem.endswith("@2x") or path.name.startswith("trial-"):
             continue
         two = public / f"{path.stem}@2x{path.suffix}"
         with Image.open(path) as one:
