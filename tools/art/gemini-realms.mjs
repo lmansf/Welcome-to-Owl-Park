@@ -60,7 +60,7 @@ export const SCENES = {
   'climb-balcony': { area: 'glass', what: 'a full-width balcony of pale stone with a low balustrade of small lit stained-glass panes along its front, its top flat and level across the whole width, a coloured-glass lantern at each end' },
   ink: { area: 'ink', what: "the ink-wash realm's garden screen on a broad branch of the great tree: a floor of pale stepping stones and raked gravel across the whole width, misty pines and tall rock pillars rising behind in layered washes, a curved wooden bridge over a narrow stream at the left, a stone lantern and a tea stall with a tiled roof, hanging blank paper scrolls, a round gateway in a pale wall at floor level at the far left" },
   'ink-east': { area: 'ink', what: 'the east screen of the same paper garden, continuing its stepping stones and raked gravel, misty pines and rock pillars behind, a small pavilion with a curved tiled roof and paper lanterns, a stone basin by the path' },
-  'ink-idol': { area: 'ink', what: 'the realm\'s idol: an owl painted in soft grey ink washes on cream, standing upright and calm on a plain carved stone pedestal, facing the viewer, its feathers drawn in flowing brushstrokes' },
+  'ink-idol': { area: 'ink', what: 'one single owl idol, shown once: an owl painted in soft grey ink washes on cream, standing upright and calm on a plain carved stone pedestal, facing the viewer, its feathers drawn in flowing brushstrokes' },
   'climb-cloud-cap': { area: 'glass', what: "the very top of the tower meeting the clouds: a flat rooftop terrace of pale stone with a low balustrade of lit panes across the whole width along the bottom third, its top flat and level, soft moonlit clouds all round it" },
 };
 
