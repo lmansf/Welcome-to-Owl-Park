@@ -86,6 +86,30 @@ describe('chips keep off the stage quiz (OP-435)', () => {
     for (const r of plates) expect(meets(chipBox({ ...p!, reach }, wide.w), { left: r.left - CHIP_GAP, top: r.top - CHIP_GAP, right: r.right + CHIP_GAP, bottom: r.bottom + CHIP_GAP })).toBe(false);
   });
 
+  it('two worded chips on the bottom edge, as in the Great Hollow, no longer lie over one another (OP-467)', () => {
+    const a = { id: 'to-brush', x: 1500, y: 2000, reach: chipReach('Up to Brushstroke Bridges') };
+    const b = { id: 'to-arcade', x: 1700, y: 2000, reach: chipReach('Down to Neon Roost, the arcade') };
+    // Laid as before, by the spacing alone (their words not given):
+    const [was1, was2] = placeHints([a, b].map(({ reach: _r, ...t }) => t), seen, wide);
+    expect(meets(chipBox({ ...was1!, reach: a.reach }, wide.w), chipBox({ ...was2!, reach: b.reach }, wide.w))).toBe(true); // the fault as filed
+    const [p1, p2] = placeHints([a, b], seen, wide);
+    expect(meets(chipBox({ ...p1!, reach: a.reach }, wide.w), chipBox({ ...p2!, reach: b.reach }, wide.w))).toBe(false);
+    // Both still inside the edges kept for chips, so the HUD never has to move one down over its buttons.
+    for (const p of [p1!, p2!]) {
+      expect(p.y).toBeLessThanOrEqual(wide.h - wide.bottom);
+      expect(p.y).toBeGreaterThanOrEqual(wide.top);
+      expect(p.x).toBeGreaterThanOrEqual(wide.side);
+      expect(p.x).toBeLessThanOrEqual(wide.w - wide.side);
+    }
+  });
+
+  it("keeps a chip off the HUD's own buttons and the guardian when they are kept out (OP-467)", () => {
+    const reach = chipReach('Down to Neon Roost, the arcade');
+    const guardian: ScreenRect = { left: 640, top: 560, right: 980, bottom: 813 };
+    const [p] = placeHints([{ id: 'down', x: 1780, y: 2000, reach }], seen, wide, 52, [guardian]);
+    expect(meets(chipBox({ ...p!, reach }, wide.w), guardian)).toBe(false);
+  });
+
   it("on a phone, where the card runs the screen's width, a chip on the top edge goes below it", () => {
     const phone: ScreenBox = { w: 390, h: 844, top: 64, bottom: 160, side: 30 };
     const v: ViewRect = { x: 1000, y: 1000, w: 390, h: 844 };

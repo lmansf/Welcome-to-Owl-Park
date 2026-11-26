@@ -479,6 +479,11 @@ export const ROOMS: Record<string, RoomDef> = {
         { x: 0, y: 690 },
         { x: 1500, y: 690 },
         { x: 1520, y: 705 },
+        // Along the candy stall counter's foot, not behind it (OP-483, the Nov 25 cleanup walk: an owl
+        // walked up behind the counter's line), to the food stall's step.
+        { x: 1528, y: 726 },
+        { x: 1744, y: 726 },
+        { x: 1748, y: 710 },
         { x: 1830, y: 712 },
         { x: 1840, y: 738 },
         { x: 1990, y: 738 },
@@ -1599,12 +1604,23 @@ export const MARKET_PLAZA = { front: 1335, rings: [{ x: 900, y: 1110 }, { x: 240
 export const GROVE_PLAZA = { front: 1235, rings: [{ x: 900, y: 1060 }, { x: 2600, y: 1060 }, { x: 3900, y: 1060 }] } as const;
 /** How far the clearing's painted foot runs on over its plaza (OP-488): a short join, not a mirror of the doorway and mushrooms. */
 export const GROVE_SKIRT = 40;
+/**
+ * How far the nests' street's painted foot runs on over its plaza (OP-462): a short join, as the
+ * clearing's. A longer one mirrored the dark banks and the mound in the painting's foot upside down
+ * into the plaza, where they read as dark cut-outs in the floor that no one could tell were walkable.
+ */
+export const HOMES_SKIRT = 40;
 export const GLASS_PLAZA = { front: 1700, rings: [{ x: 800, y: 1260 }] } as const;
 export const INK_PLAZA = { front: 1335, rings: [{ x: 1600, y: 1110 }] } as const;
 export const HUB_PLAZA = { front: 1235, rings: [{ x: 1150, y: 1060 }, { x: 3650, y: 1060 }] } as const;
 
 /** A solid thing in a painting's foot that a grown floor now reaches, hopped up on (plaza.ts): its outline, closed at the painting's foot. */
 const footMound = (id: string, outline: Vec2[]): Perch => ({ id, area: outline, top: 36, solid: true });
+/**
+ * A foot mound the painting shows whole, too big and too ragged for a shadow box round it (Perch.painted):
+ * the nests' street's banks and its middle mound, where the box read as a dark hole in the floor (OP-462).
+ */
+const paintedMound = (id: string, outline: Vec2[]): Perch => ({ ...footMound(id, outline), painted: true });
 
 ROOMS['lobby'] = growToPlaza(ROOMS['lobby']!, {
   ...LOBBY_PLAZA,
@@ -1689,13 +1705,14 @@ ROOMS['homes'] = growToPlaza(ROOMS['homes']!, {
   east: 2 * ROOM_W,
   texture: 'kit-tex-ground-forest-floor',
   tint: 0xf8abc5,
+  skirt: HOMES_SKIRT,
   ring: 'edge-lane-ring',
   corner: 'edge-lane-corner-front',
   frontBumps: ['edge-lane-ferns-a', 'edge-lane-ferns-b', 'edge-lane-ferns-a', 'edge-lane-ferns-b', 'edge-lane-ferns-a'],
   perches: [
-    footMound('homes-bank-west', [{ x: 0, y: 750 }, { x: 312, y: 724 }, { x: 318, y: 770 }, { x: 345, y: 780 }, { x: 436, y: 782 }, { x: 444, y: 832 }, { x: 462, y: 880 }, { x: 470, y: 900 }, { x: 0, y: 900 }]),
-    footMound('homes-mound', [{ x: 1372, y: 900 }, { x: 1372, y: 880 }, { x: 1400, y: 834 }, { x: 1445, y: 794 }, { x: 1490, y: 774 }, { x: 1566, y: 768 }, { x: 1576, y: 756 }, { x: 1610, y: 756 }, { x: 1648, y: 760 }, { x: 1676, y: 780 }, { x: 1700, y: 806 }, { x: 1760, y: 830 }, { x: 1860, y: 880 }, { x: 1870, y: 900 }]),
-    footMound('homes-bank-east', [{ x: 2930, y: 900 }, { x: 2944, y: 880 }, { x: 3000, y: 832 }, { x: 3100, y: 772 }, { x: 3200, y: 750 }, { x: 3200, y: 900 }]),
+    paintedMound('homes-bank-west', [{ x: 0, y: 750 }, { x: 312, y: 724 }, { x: 318, y: 770 }, { x: 345, y: 780 }, { x: 436, y: 782 }, { x: 444, y: 832 }, { x: 462, y: 880 }, { x: 470, y: 900 }, { x: 0, y: 900 }]),
+    paintedMound('homes-mound', [{ x: 1372, y: 900 }, { x: 1372, y: 880 }, { x: 1400, y: 834 }, { x: 1445, y: 794 }, { x: 1490, y: 774 }, { x: 1566, y: 768 }, { x: 1576, y: 756 }, { x: 1610, y: 756 }, { x: 1648, y: 760 }, { x: 1676, y: 780 }, { x: 1700, y: 806 }, { x: 1760, y: 830 }, { x: 1860, y: 880 }, { x: 1870, y: 900 }]),
+    paintedMound('homes-bank-east', [{ x: 2930, y: 900 }, { x: 2944, y: 880 }, { x: 3000, y: 832 }, { x: 3100, y: 772 }, { x: 3200, y: 750 }, { x: 3200, y: 900 }]),
   ],
 });
 // The night market's street runs on past its stalls, wet and lit, a ring of puddles under each string of lights.

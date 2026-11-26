@@ -194,6 +194,21 @@ export function trailTo<D extends Pick<DoorDef, 'rect' | 'marker' | 'markAt'>>(f
   return nearestDoor(from, spots) ?? trailDoor(from, doors, toPlay);
 }
 
+/** A feather about as long as an owl's foot to its knee: big enough to spot on a phone (the symbol is 32 px). */
+export const FEATHER_SCALE = 1.7;
+
+/**
+ * How far a feather of the trail is drawn above and below its spot (room px): drawn 18 over it and bobbing
+ * 8 higher, the symbol (32 px) at FEATHER_SCALE with its dark edge a quarter bigger again, tipped up to a
+ * third of a turn. What lies over a feather (an NPC's name, OP-454) is drawn deeper than this reach.
+ */
+export const FEATHER_DRAWN = { up: 18 + 8 + Math.ceil((32 * FEATHER_SCALE * 1.25) / 2) + 6, down: Math.ceil((32 * FEATHER_SCALE * 1.25) / 2) - 18 + 6 } as const;
+
+/** How deep a feather lying at `spot` is drawn: just in front of what stands at its spot. */
+export function featherDepth(spot: Vec2): number {
+  return spot.y + 1;
+}
+
 /** How a trail is laid: a feather every `gap` px along the way, none nearer the owl than `start` or the doorway than `end`, at most `most`. */
 export const TRAIL = { gap: 110, start: 80, end: 60, most: 10 } as const;
 
@@ -217,4 +232,24 @@ export function trailPoints(way: readonly Vec2[], t: { gap: number; start: numbe
     }
   }
   return out;
+}
+
+/** How far down a feather may be moved to lie whole on the floor (room px), and in what steps. */
+export const TRAIL_DROP = { most: 90, step: 6 } as const;
+
+/**
+ * The trail's feathers each moved down, where need be, so the whole feather as drawn lies over floor
+ * (OP-474): a way that runs close along the foot of something standing in the floor (the ink garden's
+ * idol plinth) laid its feathers up over it, the quill drawn on the stone. A feather whose top would be
+ * off the floor goes down in TRAIL_DROP steps until its top and its spot are both on the floor; one
+ * that finds no such place within TRAIL_DROP.most stays where it was. `onFloor` is the room's own test
+ * of where an owl may stand.
+ */
+export function onTheFloor(points: readonly Vec2[], onFloor: (p: Vec2) => boolean, reach = FEATHER_DRAWN.up): Vec2[] {
+  return points.map((p) => {
+    const whole = (y: number) => onFloor({ x: p.x, y }) && onFloor({ x: p.x, y: y - reach });
+    if (whole(p.y)) return p;
+    for (let dy = TRAIL_DROP.step; dy <= TRAIL_DROP.most; dy += TRAIL_DROP.step) if (whole(p.y + dy)) return { x: p.x, y: p.y + dy };
+    return p;
+  });
 }

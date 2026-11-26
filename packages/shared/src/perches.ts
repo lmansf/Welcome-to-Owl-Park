@@ -31,6 +31,11 @@ export interface Perch {
   solid?: boolean;
   /** A sloped perch's top along x (OP-238): its points left to right; off either end it keeps the end's height. */
   profile?: readonly ProfilePoint[];
+  /**
+   * Drawn in the room's painting itself (a mossy mound at a painting's foot that a grown plaza now reaches,
+   * plaza.ts): the painting already shows it, so nothing is drawn on the floor to mark it (walkFloor.ts).
+   */
+  painted?: true;
 }
 
 /** A point of a sloped perch's profile: its height `top` at `x` (room px). */

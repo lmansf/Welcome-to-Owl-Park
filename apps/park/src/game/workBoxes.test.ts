@@ -101,8 +101,9 @@ describe('the work boxes (the Nov 25 QA walk: size boxes showed to every visitor
     ] as const) {
       const r = roomFor(room)!;
       expect(r.perches?.find((p) => p.id === perch)?.solid, `${room} ${perch}`).toBe(true);
-      expect(solidPerchMark(r, perch, false), `${room} ${perch}`).toBe('footprint');
-      expect(solidPerchMark(r, perch, true), `${room} ${perch}`).toBe('outline');
+      const p = r.perches!.find((x) => x.id === perch)!;
+      expect(solidPerchMark(r, p, false), `${room} ${perch}`).toBe('footprint');
+      expect(solidPerchMark(r, p, true), `${room} ${perch}`).toBe('outline');
     }
   });
 });

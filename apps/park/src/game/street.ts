@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { LOBBY_ROOM, NEST_WORDS, isNestRoom, isStreetRoom, nestDoorIndex, parkwardDoor, type DoorDef, type NestLook, type RoomDef } from '@owl-park/shared';
 import { NEST_PARK_SIGN } from '../rooms';
 import type { StreetDoor } from './nestPlan';
+import { edgeSignAt } from './edgeSign';
 
 const INK = 0x0c1e36;
 
@@ -100,12 +101,12 @@ const SIGN_STYLE = { fontSize: '24px', fontStyle: 'bold', color: '#F6F1E3', font
  * pointing the way out of the picture.
  */
 function edgeSign(scene: Phaser.Scene, room: RoomDef, d: DoorDef, words: string): void {
-  const m = d.marker ?? { x: d.rect.x + d.rect.w / 2, y: d.rect.y };
-  const west = m.x < room.size.w / 2;
+  // Kept in from the room's end, so it is whole on screen (OP-461, edgeSign.ts).
+  const at = edgeSignAt(room, d);
   scene.add
-    .text(west ? Math.max(16, d.rect.x + 16) : Math.min(room.size.w - 16, d.rect.x + d.rect.w - 16), m.y - 12, west ? `← ${words}` : `${words} →`, SIGN_STYLE)
-    .setOrigin(west ? 0 : 1, 1)
-    .setDepth(m.y);
+    .text(at.x, at.y, at.west ? `← ${words}` : `${words} →`, SIGN_STYLE)
+    .setOrigin(at.west ? 0 : 1, 1)
+    .setDepth(at.y + 12);
 }
 
 /** "To the nests" by each door from the park's rooms to the street (the lobby's west end), pointing the way. */
