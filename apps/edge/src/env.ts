@@ -14,6 +14,12 @@ export interface Env extends Cloudflare.Env {
   /** Local load testing only: trust X-Forwarded-For as the client address. Never set in production. */
   TRUST_FORWARDED_FOR?: string;
   /**
+   * Browser tests only: the hour (UTC, 0 to 23) the Old Stump takes for the nightly restart, so its
+   * closing window (no game that could not finish before the restart) never falls on a test run.
+   * Unset: RESTART_HOUR_UTC, the cron's. Never set in production: the cron is the real restart.
+   */
+  TEST_RESTART_HOUR_UTC?: string;
+  /**
    * Pages served somewhere else that may open the park's sockets and read its answers (src/guard.ts),
    * as origins separated by commas, e.g. "https://owner.github.io" for the client on GitHub Pages
    * (docs/DEPLOY.md mode A). Unset: only the park's own pages (and, on this machine, local ones).

@@ -121,7 +121,8 @@ let state: FakeState;
 let collections: FakeCollections;
 let sockets = 0;
 
-const roomObject = () => new RoomObject(state as unknown as DurableObjectState, { GATE: 'open', COLLECTIONS: { getByName: () => fakeCollections(collections) } } as unknown as Env);
+const roomObject = (vars: Partial<Env> = {}) =>
+  new RoomObject(state as unknown as DurableObjectState, { GATE: 'open', COLLECTIONS: { getByName: () => fakeCollections(collections) }, ...vars } as unknown as Env);
 type Obj = ReturnType<typeof roomObject>;
 
 function connect(room: string, id: string, cid?: string, spec = false): FakeSocket {
@@ -252,6 +253,46 @@ describe('the Old Stump (OP-314)', () => {
     expect(a.last('stump')).toMatchObject({ ok: false, reason: 'closing' });
     // The restart's own hour is the cron's.
     expect(RESTART_CRON).toBe(`0 ${RESTART_HOUR_UTC} * * *`);
+  });
+
+  it('keeps the closing window before the restart hour the browser tests set, and only that one', async () => {
+    // 08:30 UTC: in the live park's window, so refused without the setting.
+    const inLiveWindow = Date.UTC(2026, 10, 8, RESTART_HOUR_UTC, 0, 0) - 30 * 60_000;
+    clock = inLiveWindow;
+    const live = roomObject();
+    const l = await atStump(live, 'l');
+    await party(live, l, 'sit');
+    expect(l.last('stump')).toMatchObject({ ok: false, reason: 'closing' });
+    // With the restart moved to 21:00 UTC the same moment is open, and the game it starts closes at 21:00.
+    state = new FakeState();
+    const moved = roomObject({ TEST_RESTART_HOUR_UTC: '21' });
+    const a = await atStump(moved, 'a');
+    await party(moved, a, 'stump');
+    expect(a.last('stump')!.stump.closing).toBe(false);
+    await party(moved, a, 'sit');
+    clock += PARTY_STANDIN_WAIT_MS;
+    await party(moved, a, 'start', { standin: true });
+    const go = a.of('stump').find((f) => f.go)?.go;
+    expect(isPartyRoom(go)).toBe(true);
+    expect((state.kept.get(`party:${go}`) as { closesAt: number }).closesAt).toBe(Date.UTC(2026, 10, 8, 21));
+    // Before 21:00 the window still applies.
+    clock = Date.UTC(2026, 10, 8, 21, 0, 0) - PARTY_LONGEST_MS + 1;
+    state = new FakeState();
+    const late = roomObject({ TEST_RESTART_HOUR_UTC: '21' });
+    const b = await atStump(late, 'b');
+    await party(late, b, 'stump');
+    expect(b.last('stump')!.stump.closing).toBe(true);
+    await party(late, b, 'sit');
+    expect(b.last('stump')).toMatchObject({ ok: false, reason: 'closing' });
+    // Anything but a whole hour 0 to 23 leaves the live hour, so 08:30 stays closing.
+    clock = inLiveWindow;
+    for (const bad of ['24', '-1', '9.5', 'nine', '']) {
+      state = new FakeState();
+      const obj = roomObject({ TEST_RESTART_HOUR_UTC: bad });
+      const c = await atStump(obj, 'c');
+      await party(obj, c, 'stump');
+      expect(c.last('stump')!.stump.closing, bad).toBe(true);
+    }
   });
 
   it('plays a game to its end by itself, pays the visitors who stayed by place, once, and never a free guest or a park owl', async () => {

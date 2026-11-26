@@ -51,9 +51,9 @@ export function newPartyRoomId(random: () => number): string {
 /** The nightly restart (OP-181, apps/edge/src/crons.ts RESTART_CRON): every day at this hour, UTC. */
 export const RESTART_HOUR_UTC = 9;
 
-/** When the park next restarts for the night (ms), after `now`. */
-export function nextRestartAt(now: number): number {
+/** When the park next restarts for the night (ms), after `now`; at `hour` UTC (the browser tests move it, OP-181). */
+export function nextRestartAt(now: number, hour: number = RESTART_HOUR_UTC): number {
   const d = new Date(now);
-  const today = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), RESTART_HOUR_UTC);
+  const today = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), hour);
   return today > now ? today : today + 24 * 3600_000;
 }

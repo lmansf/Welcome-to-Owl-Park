@@ -4,7 +4,7 @@ import { E2E_ACCOUNTS, E2E_ADMIN_KEY, E2E_STORE } from './e2e/helpers';
 /**
  * The room server's test settings: the admin key, a store that is the stand-in on this machine,
  * accounts on (OP-139), their mail kept by the same stand-in, Sign in with Google (OP-313) with Google
- * stood in by it too, and spectators on (OP-191).
+ * stood in by it too, spectators on (OP-191), and the nightly restart half a day away.
  */
 const EDGE_VARS = {
   ADMIN_KEY: E2E_ADMIN_KEY,
@@ -27,6 +27,9 @@ const EDGE_VARS = {
   GOOGLE_CLIENT_ID: E2E_ACCOUNTS.googleClientId,
   GOOGLE_CLIENT_SECRET: E2E_ACCOUNTS.googleClientSecret,
   GOOGLE_TEST_ORIGIN: E2E_STORE.origin,
+  // The Old Stump refuses a game that could not finish before the nightly restart (09:00 UTC live); the
+  // room server here takes it twelve hours from now, so no run, whatever its hour, falls in that window.
+  TEST_RESTART_HOUR_UTC: String((new Date().getUTCHours() + 12) % 24),
 };
 
 export default defineConfig({

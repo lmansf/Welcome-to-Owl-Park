@@ -26,6 +26,7 @@ import {
   newParty,
   newPartyRoomId,
   nextRestartAt,
+  RESTART_HOUR_UTC,
   partyArrive,
   partyDone,
   partyDue,
@@ -77,6 +78,8 @@ export interface PartyDeps {
   logOf(att: PartyAtt): Logger;
   /** When the nightly restart closes every socket here, once the Worker said so; null otherwise. */
   closingAt(): number | null;
+  /** The hour (UTC) of the nightly restart a game must finish before: RESTART_HOUR_UTC but in the browser tests (restartHourOf). */
+  restartHour: number;
   /** A uniform draw from the platform's cryptographic source. */
   random(): number;
   /** The collections object pays a finished game's feathers. */
@@ -95,6 +98,18 @@ const SAVE_EVERY_MS = 2_000;
 const REACH_SLACK = 40;
 /** The most games one object holds at once (four owls each): far past a busy night at the Old Stump. */
 const MAX_GAMES = 60;
+
+/**
+ * The restart hour the stump keeps to: TEST_RESTART_HOUR_UTC (browser tests only, a whole hour 0 to 23) or
+ * the live park's RESTART_HOUR_UTC, the cron's. The tests move it so no game is refused as `closing` for
+ * the hour a run happens to fall in; it moves nothing but the stump's window and a game's `closesAt`.
+ */
+export function restartHourOf(env: { TEST_RESTART_HOUR_UTC?: string }): number {
+  const raw = env.TEST_RESTART_HOUR_UTC?.trim();
+  if (!raw || !/^\d{1,2}$/.test(raw)) return RESTART_HOUR_UTC;
+  const hour = Number(raw);
+  return hour <= 23 ? hour : RESTART_HOUR_UTC;
+}
 
 const att = (ws: WebSocket) => ws.deserializeAttachment() as PartyAtt | null;
 /** The seat an owl sits in, for its own copy of the seats. */
@@ -154,7 +169,7 @@ export class PartyHost {
 
   /** No new game now: the park closes for the night before one could finish. */
   closing(now: number): boolean {
-    return this.d.closingAt() !== null || now + PARTY_LONGEST_MS > nextRestartAt(now);
+    return this.d.closingAt() !== null || now + PARTY_LONGEST_MS > nextRestartAt(now, this.d.restartHour);
   }
 
   /** The seated sockets, by seat (but the socket of session `except`, which is leaving). */
@@ -276,7 +291,7 @@ export class PartyHost {
     if (seats.length < PARTY_MIN_OWLS) return answer(false, 'few');
     let id = newPartyRoomId(() => this.d.random());
     while (this.games.has(id)) id = newPartyRoomId(() => this.d.random());
-    const s = newParty({ room: id, seats, seed: seedFrom(() => this.d.random()), now, closesAt: nextRestartAt(now) });
+    const s = newParty({ room: id, seats, seed: seedFrom(() => this.d.random()), now, closesAt: nextRestartAt(now, this.d.restartHour) });
     this.games.set(id, s);
     this.marks.set(id, markOf(s));
     this.save(s, now, true);

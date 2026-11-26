@@ -145,7 +145,7 @@ import { LIMITS, Room, type Leaver, type Peer, type PositionRejection, type Visi
 import { ROOMS, isRoomId, publicCounts, roomCap, roomDef, spectatorLimit } from './rooms';
 import { COURSES, HALL_ROOM } from '@owl-park/shared/rooms';
 import { isCollectorId, signingSecret, verifyKeeper, verifyPass } from './pass';
-import { PartyHost, type StumpMark } from './partyHost';
+import { PartyHost, restartHourOf, type StumpMark } from './partyHost';
 import type { Env } from './env';
 
 export interface Attachment {
@@ -490,6 +490,7 @@ export class RoomObject extends DurableObject<Env> {
       log: this.log,
       logOf: (att) => this.logOf(att as Attachment),
       closingAt: () => this.closingAt,
+      restartHour: restartHourOf(env),
       random: () => crypto.getRandomValues(new Uint32Array(1))[0]! / 4294967296,
       pay: (cid, place) => this.collections().partyGame(cid, place),
       wake: (at) => void this.wakeBy(at),
