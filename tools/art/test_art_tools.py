@@ -1127,6 +1127,31 @@ class TestSprites(unittest.TestCase):
             self.assertEqual(m["sprites"]["ab-cut"], m["sprites"]["b-thing"] | {"drawn": [5, 5, 5, 5]})
             self.assertEqual(sum(1 for line in text.splitlines() if '"size"' in line), 3)
 
+    def test_publishing_an_unrelated_key_leaves_the_skin_trials_out_and_touches_one_line(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pub = Path(tmp) / "art"
+            pub.mkdir()
+            a = Image.new("RGBA", (20, 20), (0, 0, 0, 0))
+            ImageDraw.Draw(a).rectangle((5, 5, 9, 9), fill=(1, 2, 3, 255))
+            a.save(pub / "lamp.png")
+            # A skin trial's cut-outs, 1x and 2x, as the dusk and forest kits ship them.
+            for name in ("trial-dusk-kit-clearing-hazard", "trial-forest-kit-clearing-knot-hole"):
+                (pub / f"{name}.webp").write_bytes(webpmeta.encode(a, 90))
+                (pub / f"{name}@2x.webp").write_bytes(webpmeta.encode(a.resize((40, 40)), 90))
+            out = Path(tmp) / "sprites.json"
+            ctx = postprocess.Ctx(postprocess.argparse.Namespace(public=str(pub)))
+            with mock.patch("sys.stderr", new=io.StringIO()):
+                postprocess.write_sprites(ctx, out)
+                before = out.read_text(encoding="utf-8")
+                a.save(pub / "owl-new.png")  # the key just published
+                postprocess.write_sprites(ctx, out)
+            after = out.read_text(encoding="utf-8")
+            self.assertEqual(list(json.loads(after)["sprites"]), ["lamp", "owl-new"], "no trial-* entry")
+            self.assertNotIn("trial-", after)
+            added = [line for line in after.splitlines() if line.rstrip(",") not in {b.rstrip(",") for b in before.splitlines()}]
+            self.assertEqual(len(added), 1, "one compact line per sprite: only the published key's line is new")
+            self.assertIn('"owl-new": {"size": [20, 20]', added[0])
+
     def test_the_committed_manifest_matches_the_published_art(self):
         with mock.patch("sys.stderr", new=io.StringIO()) as err:
             self.assertEqual(postprocess.main(["sprites", "--check"]), 0, err.getvalue())
