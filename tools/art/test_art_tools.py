@@ -1118,6 +1118,7 @@ class TestSprites(unittest.TestCase):
             Image.new("RGB", (10, 10)).save(pub / "a-flat.png")
             (pub / "room.webp").write_bytes(webpmeta.encode(Image.new("RGB", (16, 9), (40, 60, 80)), 80))  # opaque: a room, not a sprite
             (pub / "ab-cut.webp").write_bytes(webpmeta.encode(a, 90))  # a cut-out shipped as WebP is one
+            (pub / "trial-sample-slot.webp").write_bytes(webpmeta.encode(a, 90))  # a skin trial's slot is not one
             text = sprites.dumps(sprites.build(pub))
             self.assertEqual(text, sprites.dumps(sprites.build(pub)))
             m = json.loads(text)
@@ -1422,11 +1423,13 @@ class TestCli(unittest.TestCase):
             buf = io.BytesIO()
             Image.new("RGB", (1600, 900), (9, 9, 9)).save(buf, "WEBP", quality=80, exif=b"Exif\0\0MM\0*\0\0\0\x08\0\0")
             (public / "hub.webp").write_bytes(buf.getvalue())
-            (public / "guardian.webp").write_bytes(webpmeta.encode(Image.new("RGB", (720, 820), (9, 9, 9)), 80))
+            # A cut-out the table leaves PNG (the guardian ships as WebP since its idol parts, OP-397).
+            self.assertIsNone(load_assets()["blockade-hatching-soon"].get("format"))
+            (public / "blockade-hatching-soon.webp").write_bytes(webpmeta.encode(Image.new("RGB", (300, 300), (9, 9, 9)), 80))
             with mock.patch("sys.stderr", new=io.StringIO()), mock.patch("sys.stdout", new=io.StringIO()) as out:
-                self.assertEqual(postprocess.main(["check", "hub", "guardian"] + common), 1)
+                self.assertEqual(postprocess.main(["check", "hub", "blockade-hatching-soon"] + common), 1)
             self.assertIn("hub.webp: disallowed WebP chunks: EXIF", out.getvalue())
-            self.assertIn("guardian: published as WebP, but only room backgrounds and the art the table marks webp ship as WebP", out.getvalue())
+            self.assertIn("blockade-hatching-soon: published as WebP, but only room backgrounds and the art the table marks webp ship as WebP", out.getvalue())
 
     def test_check_takes_webp_for_a_painting_the_table_marks_webp(self):
         # The arcade's game fields are opaque paintings, not rooms: the table marks them "format": "webp".
@@ -1489,8 +1492,9 @@ class TestCli(unittest.TestCase):
                 # Nothing is left to re-encode, and only cut-outs the table marks webp are.
                 self.assertEqual(postprocess.main(["webp", "decor-rug"] + common), 1)
                 self.assertIn("no published decor-rug.png to re-encode", err.getvalue())
-                self.assertEqual(postprocess.main(["webp", "guardian"] + common), 1)
-                self.assertIn("'guardian' is not a cut-out the table marks", err.getvalue())
+                self.assertIsNone(load_assets()["blockade-hatching-soon"].get("format"))
+                self.assertEqual(postprocess.main(["webp", "blockade-hatching-soon"] + common), 1)
+                self.assertIn("'blockade-hatching-soon' is not a cut-out the table marks", err.getvalue())
 
     def test_piece_finishes_a_key_the_table_marks_webp_as_webp(self):
         with tempfile.TemporaryDirectory() as tmp:
