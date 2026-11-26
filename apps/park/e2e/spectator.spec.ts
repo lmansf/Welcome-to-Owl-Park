@@ -26,7 +26,7 @@ const LOCKED = 'Quests and the shops are for ticket holders. You can get a Day T
 /** The Quests tab, and an NPC owl with nothing for a guest (OP-428). */
 const GUEST_QUESTS = 'Guests can do Elder Bramble’s welcome quest. The other quests and the shops are for ticket holders.';
 const IDOL = 'Ticket holders vote here, one vote a day.';
-const KEEP = 'A Day Ticket lets you keep what you win. You can get a Day Ticket right here.';
+const KEEP = 'A Day Ticket adds feathers, quests and the shops. You can get a Day Ticket right here.';
 const ADMITTED = 'Your Day Ticket is in. Have fun!';
 const LEAVES = 'With a Day Ticket, leaf piles can turn up feathers.';
 const STALL_LINES = /Neon trinkets|A tray of buttons|Paper lanterns/;

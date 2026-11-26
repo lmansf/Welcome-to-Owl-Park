@@ -17,13 +17,13 @@ import { gateRefusal } from './tickets';
 /** Everything a spectator is told, in one place (drafts for the owner). */
 export const SPECTATOR_WORDS = {
   /** At the turnstiles, with no ticket that works: the turnstiles' question (OP-198, gatePrompt.ts) says this above its buttons. */
-  turnstile: 'No ticket yet? A Day Ticket lets you keep what you win.',
+  turnstile: 'No ticket yet? A Day Ticket adds feathers, quests and the shops.',
   /** The question's first button: the turnstiles' sale. */
   buy: 'Buy a Day Ticket',
   /** Its second: in as a spectator. */
   guest: 'Enter as a guest',
   /** Under its buttons. */
-  guestNote: 'Guests can look around and play, but keep nothing they win.',
+  guestNote: 'Guests play free and keep the items they win. A Day Ticket adds feathers, quests and the shops.',
   /** What a screen reader calls the question. */
   askLabel: 'At the turnstiles',
   /** Once a guest is through the turnstiles. */
@@ -47,13 +47,13 @@ export const SPECTATOR_WORDS = {
   /** A room past its spectators' share turned the owl away (`full` with `spectators`). */
   busy: 'This part of the park is busy. A Day Ticket gets you in.',
   /** The card before the store from the badge's button, or after a game: the turnstiles' line's last sentence. */
-  keep: 'A Day Ticket lets you keep what you win.',
+  keep: 'A Day Ticket adds feathers, quests and the shops.',
   /** The end of a game that would have earned nothing anyway. */
   noFeathers: 'With a Day Ticket, games earn feathers.',
   /** Through the turnstiles the first time for an owl that came in by Play free now (OP-421): it chose free already, so no question and no ticket here. */
   freeIn: 'Welcome in! Follow the feathers to the next place to fly.',
   /** That owl's first glide off the Great Hollow's roots, a moment after the room says so (OP-421): the Day Ticket's first word to it. */
-  freeLater: 'Want to keep what you win? A Day Ticket does that, from the button up top.',
+  freeLater: 'Want feathers, quests and the shops? A Day Ticket adds them, from the button up top.',
 } as const;
 
 const feathersOf = (n: number) => `${n} feather${n === 1 ? '' : 's'}`;

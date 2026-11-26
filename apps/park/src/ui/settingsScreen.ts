@@ -35,7 +35,7 @@ const CSS = `
 export const KEY_HELP: ReadonlyArray<[keys: string[], what: string]> = [
   [['W', 'A', 'S', 'D'], 'Walk (or the arrow keys)'],
   // In the tree, seen from the side, up goes through doorways and stairs (OP-212).
-  [['W'], 'In the tree: through the doorway or up the stair you stand in (or the up arrow)'],
+  [['W'], 'In rooms seen from the side: through the doorway you stand in (or the up arrow)'],
   [['E'], 'Do what you are standing at'],
   [['Space'], 'Jump; again in the air to flap, held on the way down to glide'],
   [['Shift'], 'Dash, in a parkour course: once a jump, in the air'],

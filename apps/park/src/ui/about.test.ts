@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ABOUT_WORDS, CONTACT_LINES, DAY_TICKET_PRICE, KEEPER, OUTSIDE_MENTIONS, PLAYER_QUOTES, STILLS, aboutParts, faq, safetyParts, presenceLine, ticketLine, WHAT_IT_IS } from './about';
+import { ABOUT_WORDS, contactLines, DAY_TICKET_PRICE, KEEPER, OUTSIDE_MENTIONS, PLAYER_QUOTES, STILLS, aboutParts, faq, safetyParts, presenceLine, ticketLine, WHAT_IT_IS } from './about';
+import { FULL_OPENING_MS } from './preview';
+import { SPECTATOR_WORDS } from './spectator';
 // @ts-expect-error: a plain script, no types
 import { INDEXNOW_KEY, indexNowBody, sitemapUrls } from '../../../../tools/indexnow.mjs';
 
@@ -9,8 +11,8 @@ const page = (path: string) => readFileSync(join(__dirname, '../../public', path
 
 describe('what the park is, said plainly (the site audit)', () => {
   it('says the tickets in one line, with the price only once the owner sets one', () => {
-    expect(ticketLine(null)).toBe('Guests play free and keep nothing they win; ticketed owls keep everything.');
-    expect(ticketLine('$2')).toBe('Day Ticket: $2 for today. Guests play free and keep nothing they win; ticketed owls keep everything.');
+    expect(ticketLine(null)).toBe('Guests play free and keep the items they win; a Day Ticket adds feathers, quests and the shops.');
+    expect(ticketLine('$2')).toBe('Day Ticket: $2 for today. Guests play free and keep the items they win; a Day Ticket adds feathers, quests and the shops.');
   });
 
   it('counts the owls in the park in plain words, and says nothing it does not know', () => {
@@ -57,7 +59,8 @@ describe('what the park is, said plainly (the site audit)', () => {
     const about = page('about/index.html');
     expect(about).toContain(ABOUT_WORDS.lead);
     expect(about).toContain(ABOUT_WORDS.safetyTitle);
-    for (const p of [...aboutParts(), ...safetyParts()]) {
+    // The page lasts past the full opening (Dec 1), when the feedback note goes off, so it says what is true from then.
+    for (const p of [...aboutParts(FULL_OPENING_MS), ...safetyParts(FULL_OPENING_MS)]) {
       expect(about, p.heading).toContain(p.heading);
       // The park's screen says "at exploreowlpark.com/changelog" (no link in the park); the page links it.
       for (const line of p.lines) if (!line.includes('changelog')) expect(about, line).toContain(line);
@@ -84,7 +87,7 @@ describe('what the park is, said plainly (the site audit)', () => {
   it('opens with "Owl Park is", names the site as one Organization, and links Contact on every page (the SEO audit)', () => {
     expect(WHAT_IT_IS.startsWith('Owl Park is ')).toBe(true);
     expect(faq()[0]).toEqual({ q: 'What is Owl Park?', a: WHAT_IT_IS });
-    expect(aboutParts().find((p) => p.heading === 'Contact')?.lines).toEqual(CONTACT_LINES);
+    expect(aboutParts().find((p) => p.heading === 'Contact')?.lines).toEqual(contactLines());
     const home = readFileSync(join(__dirname, '../../index.html'), 'utf8').replace(/\s+/g, ' ');
     expect(home).toContain('<p>Owl Park is a cozy park you visit in your browser');
     for (const html of [home, page('about/index.html'), page('changelog/index.html'), page('chatroom-worlds/index.html')]) {
@@ -117,5 +120,32 @@ describe('what the park is, said plainly (the site audit)', () => {
     const dates = [...page('changelog/index.html').matchAll(/<time datetime="(\d{4}-\d\d-\d\d)">/g)].map((m) => m[1]!);
     expect(dates.length).toBeGreaterThan(5);
     expect([...dates].sort().reverse()).toEqual(dates);
+  });
+
+  it('gives a contact route that outlasts the feedback note, which goes off with the full opening (Dec 1)', () => {
+    const before = FULL_OPENING_MS - 1;
+    expect(contactLines(before)).toHaveLength(2);
+    expect(contactLines(before)[0]).toMatch(/feedback note/);
+    expect(contactLines(FULL_OPENING_MS)).toEqual(['For a ticket, reply to the store’s order email.']);
+    for (const now of [before, FULL_OPENING_MS]) expect(faq().find((f) => f.q === 'Can I get a refund?')?.a, String(now)).not.toMatch(/feedback/);
+    const typed = safetyParts(FULL_OPENING_MS).flatMap((p) => p.lines).join(' ');
+    expect(typed).not.toMatch(/feedback note, which/);
+    expect(safetyParts(before).flatMap((p) => p.lines).join(' ')).toMatch(/feedback note, which/);
+  });
+
+  it('says what a guest keeps as the owner decided (Nov 18: guests earn and display the items), and the same about email everywhere', () => {
+    const said = [
+      ticketLine(null),
+      ...Object.values(SPECTATOR_WORDS),
+      ...[...aboutParts(), ...safetyParts()].flatMap((p) => p.lines),
+      ...faq().map((f) => f.a),
+      page('about/index.html'),
+      page('chatroom-worlds/index.html'),
+      page('llms.txt'),
+    ].join(' ');
+    expect(said).not.toMatch(/keep nothing|keep what you win|keeps? everything/i);
+    expect(said).not.toMatch(/no name, email/);
+    expect(said).not.toMatch(/early preview/);
+    expect(faq().find((f) => f.q === 'What does the park keep?')?.a).toMatch(/email is kept only if you choose to protect your owl/);
   });
 });
