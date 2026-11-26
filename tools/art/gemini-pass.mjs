@@ -139,7 +139,8 @@ function geminiPrompt(job, style, hasStyleRef = true) {
   const lock = `${subject} (reference image)${hasStyleRef ? ', painted in the style of Image 2 (style reference)' : ''}.`;
   const keep = REDRAW.has(job.key) ? `Paint a new ${subject} in the same style.` : job.kind === 'sheet' ? `Repaint ${subject}, keeping every prop's design, proportions and place.` : job.kind === 'texture' ? `Repaint ${subject} as an even, seamless tile of the same material.` : `Repaint ${subject}, keeping its design, proportions, pose and placement.`;
   // The collectibles' one defect (audit): thick dark outlines, which the identity lock would carry over.
-  const itemFix = job.realm === 'items' ? 'Its shapes are painted in soft cel shading, each edge defined by a change of colour and shade, its rim catching a soft highlight.' : '';
+  const lenses = /glasses|shades|specs|monocle|goggles|mask/.test(job.key) ? ' Each lens is an empty open ring, the flat background showing straight through it.' : '';
+  const itemFix = job.realm === 'items' ? `Its shapes are painted in soft cel shading, each edge defined by a change of colour and shade, its rim catching a soft highlight.${lenses}` : '';
   const action = [keep, FIX[job.key] ?? itemFix].filter(Boolean).join(' ');
   return formula({ context: contextFor(job), lock, action, style, canvas: canvasFor(job) });
 }

@@ -89,7 +89,9 @@ export function realmContent(job) {
 const LAYER_CANVAS = (job) => {
   const [w, h] = job.size.split('x').map(Number);
   if (/-sky-/.test(job.key)) return `A full-bleed ${w}x${h} sky plate, its left edge continuing into its right edge so it repeats sideways.`;
-  return `A ${w}x${h} backdrop band whose left edge continues into its right edge so it repeats sideways, the open space above it one unbroken flat solid ${job.key_colour ?? '#FF00FF'} field from edge to edge.`;
+  // A keyed layer must leave open sky to show the layers behind it (opaque middles flattened the parallax).
+  const k = job.key_colour ?? '#FF00FF';
+  return `A ${w}x${h} backdrop band filling the lower ${/-far-/.test(job.key) ? 'half' : 'two thirds'} of the canvas, its left edge continuing into its right edge so it repeats sideways, its top a soft broken skyline; everything above that skyline, the whole upper part of the canvas, is one unbroken flat solid ${k} field from edge to edge.`;
 };
 
 function realmJob(base, { area, what }) {
@@ -113,3 +115,42 @@ const built = Object.keys(SCENES).filter((k) => !withJobs.has(k) && k in ASSETS)
 export const JOBS = [...P.JOBS, ...built].map((j) => [j, realmContent(j)]).filter(([, c]) => c).map(([j, c]) => realmJob(j, c));
 JOBS.push(...G.REALM_REF_JOBS);
 export const REALM_KEYS = Object.fromEntries(REALMS.map((a) => [a, JOBS.filter((j) => j.batch === `realm-${a}`).map((j) => j.key)]));
+
+// ---------------------------------------------------------------------------------------------
+// One prop per image: a sheet's props shuffled between cells came out under each other's names, so
+// the props still on their old art are painted alone, each from its realm's reference and its own
+// description in kit.json, and finished with `art:finish piece <key>` straight to the key.
+
+function pieceDesc(key) {
+  for (const job of P.JOBS) {
+    const m = /^kit-sheet-(clearing|glass|neon|ink)-(.+)$/.exec(job.key);
+    if (!m || !job.derives?.includes(key)) continue;
+    const sheet = KIT.areas[m[1]].sheets?.[m[2]] ?? KIT.courses?.[m[1]]?.[m[2]];
+    const piece = sheet?.pieces?.[job.derives.indexOf(key)];
+    if (piece) return { area: m[1], what: plain(piece.desc), w: piece.w ?? sheet.w, h: piece.h ?? sheet.h };
+  }
+  return null;
+}
+
+export function singleJob(key) {
+  const d = pieceDesc(key);
+  const a = ASSETS[key];
+  if (!d || !a) throw new Error(`gemini-realms: no sheet description for ${key}`);
+  const W = a.w * 2; const H = a.h * 2;
+  const job = { key, kind: 'piece', realm: d.area, size: `${W}x${H}`, seed: 21000, variants: 2, key_colour: '#FF00FF', refs: [{ ref: `@guide:realm-ref-${d.area}`, role: "the realm's new reference screen", optional: false }], prompt: `single prop: ${key}`, batch: `single-${d.area}` };
+  job.gemini_prompt = G.formula({
+    context: 'A single prop for a 2D side-scrolling game.',
+    lock: "Image 1 (reference image) is this realm's reference screen: paint the prop in its exact brush, palette, light and materials.",
+    action: `Paint ${d.what.replace(/\.$/, '')}, seen straight from the side.`,
+    style: G.styleFor(d.area),
+    canvas: G.canvasFor(job),
+  });
+  return job;
+}
+
+/** The realm props still on their old art after the sheet passes (work/art/singles.txt), minus the seal stamp. */
+export const SINGLE_KEYS = (() => {
+  const f = path.join(TOOLS, '..', '..', 'work', 'art', 'singles.txt');
+  return fs.existsSync(f) ? fs.readFileSync(f, 'utf8').split('\n').map((s) => s.trim()).filter((k) => k && k !== 'kit-ink-seal-red' && k in ASSETS) : [];
+})();
+JOBS.push(...SINGLE_KEYS.map(singleJob));
