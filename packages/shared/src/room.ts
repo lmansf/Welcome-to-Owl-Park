@@ -616,6 +616,13 @@ export interface DoorDef {
   labelAnchor?: 0 | 0.5 | 1;
   /** Where to place a visual hint (sign, glow) for the door. */
   marker?: Vec2;
+  /**
+   * The action button's words (and E's prompt over the owl) for an owl standing near the doorway, in a
+   * room seen from above: a way out a new owl must find, such as a course's gate or a nest's door, is
+   * offered ahead of anything else to do there, and the button walks the owl through it (the Nov 25 QA
+   * walk: at the nest's door the button said Decorate, and the course gates had no prompt at all).
+   */
+  prompt?: string;
 }
 
 export const ROOM_W = 1600;

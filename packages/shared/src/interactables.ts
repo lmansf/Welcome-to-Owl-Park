@@ -104,7 +104,9 @@ export const INTERACTABLES: readonly InteractableDef[] = [
   // they pile against the trading nest, where an owl can browse what the realm has.
   { id: 'glass-leaves-start', kind: 'leaf-pile', room: 'glass', pos: { ...START_LEAVES } },
   { id: 'glass-nest', kind: 'stall', room: 'glass', pos: { ...START_STALL } },
-  { id: 'market-stall-1', kind: 'stall', room: 'market', pos: { x: 400, y: 705 } },
+  // The street's stall row. The first stood so near the doorway in from the tree that "Browse the stall"
+  // came up the moment an owl arrived (the Nov 25 QA walk); it is a booth further along the row.
+  { id: 'market-stall-1', kind: 'stall', room: 'market', pos: { x: 500, y: 705 } },
   { id: 'market-stall-2', kind: 'stall', room: 'market', pos: { x: 640, y: 705 } },
   { id: 'market-stall-3', kind: 'stall', room: 'market', pos: { x: 780, y: 705 } },
   // The Treetop Commons (OP-306, OP-417): leaves blown off the lantern trees settle under the bench by the

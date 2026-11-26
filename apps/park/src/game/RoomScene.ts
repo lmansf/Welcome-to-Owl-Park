@@ -4,6 +4,7 @@ import {
   AIR_REFILL_PER_S,
   CABINETS,
   CABINET_OFF,
+  rectCenter,
   EMOTE_IDS,
   FLIGHT_STEP_MS,
   GAMES,
@@ -268,6 +269,7 @@ import { drawEdges } from './edgeView';
 import { drawSkirts } from './plazaSkirt';
 import { setVignette } from './vignette';
 import { ROOM_DOWN } from './roomDown';
+import { doorPromptAt } from './doorPrompt';
 import { MOTION, motion } from '../calmMotion';
 
 export interface RoomStart {
@@ -2165,7 +2167,7 @@ export class RoomScene extends Phaser.Scene {
     // Seen from the side, each doorway is pointed at on its own landing, and only the near ones (hints.ts).
     const ground = this.sideView() ? groundOf(this.room) : null;
     const view = { x: v.x, y: v.y, w: v.width, h: v.height };
-    const all = this.room.doors.filter((d) => d.to || this.interactions[d.id] || d.id === own).map((d) => doorHintTarget(d, ground));
+    const all = this.room.doors.filter((d) => this.doorTo(d) || this.interactions[d.id] || d.id === own).map((d) => doorHintTarget(d, ground));
     // Seen from above, one doorway at a time has its sign and chip (OP-309): the one the owl is walking
     // to or standing by. The owl's own nest door and the way to the park keep their chips (OP-105).
     let targets: typeof all;
@@ -2186,7 +2188,7 @@ export class RoomScene extends Phaser.Scene {
       const door = this.room.doors.find((d) => d.id === id);
       if (!door) return undefined;
       if (door.id === toPark) return NEST_WORDS.toPark;
-      return door.to ? (doorLabel(door, this.walking()) ?? (ground !== null ? this.sideChip(door) : undefined)) : undefined;
+      return this.doorTo(door) ? (doorLabel(door, this.walking()) ?? (ground !== null ? this.sideChip(door) : undefined)) : undefined;
     };
     if (keepOut.length) targets = targets.map((t) => ({ ...t, reach: chipReach(chipText(t.id)) }));
     const places = placeHints(targets, view, { w: window.innerWidth, h: window.innerHeight, ...HINT_INSETS, ...(TOUCH_SCREEN ? { bottom: touchBottom(TOUCH_HINT_BOTTOM, window.innerHeight) } : {}) }, undefined, keepOut);
@@ -2198,10 +2200,12 @@ export class RoomScene extends Phaser.Scene {
         const door = this.room.doors.find((d) => d.id === p.id)!;
         const spot = this.interactions[p.id];
         // Its sign's words, or seen from the side (no signs there) where it leads or which way along the course it goes.
-        const named = door.to ? (doorLabel(door, this.walking()) ?? (ground !== null ? this.sideChip(door) : undefined)) : undefined;
+        // A way only the new map has (DoorDef.toNew alone, the clearing's course path) is a way here too.
+        const to = this.doorTo(door);
+        const named = to ? (doorLabel(door, this.walking()) ?? (ground !== null ? this.sideChip(door) : undefined)) : undefined;
         return {
           ...p,
-          tint: door.to ? (DOOR_TINTS[this.doorTo(door)?.room ?? door.to.room] ?? '#C9A227') : '#FFD36A',
+          tint: to ? (DOOR_TINTS[to.room] ?? '#C9A227') : '#FFD36A',
           ...(door.id === toPark ? { text: NEST_WORDS.toPark } : named ? { text: named } : {}),
           label: spot
             ? `${spot.label}, off screen: walk there`
@@ -4413,7 +4417,12 @@ export class RoomScene extends Phaser.Scene {
     const here = side ? this.doorwayHere() : null;
     if (side) this.showUpHint(here);
     const goIn: Action[] = here ? [{ id: `door:${here.id}`, label: GO_IN, run: () => void this.upKey() }] : [];
-    this.actions = [...goIn, ...this.actionsHere(spots), ...(this.hollow?.actions() ?? [])];
+    // Seen from above, a way out with words of its own (a course's gate, a nest's door) comes first near
+    // it: the button walks the owl through (the Nov 25 QA walk: Decorate won at the nest's door). Not the
+    // doorway the owl just came in by, until it has stepped away once (OP-337), nor one leading nowhere.
+    const way = side ? null : doorPromptAt(this.room.doors, pos, (d) => d.id === this.signKept || !this.doorTo(d) || this.realmClosed(this.doorTo(d)?.room));
+    const wayOut: Action[] = way ? [{ id: `way:${way.id}`, label: way.prompt!, run: () => void this.walkTo(rectCenter(way.rect)) }] : [];
+    this.actions = [...goIn, ...wayOut, ...this.actionsHere(spots), ...(this.hollow?.actions() ?? [])];
     this.hud.setActions(this.actions.map(({ id, label }) => ({ id, label })));
     // The same, over the owl itself (OP-344): not while it talks, sleeps, decorates, leaves, or says something of its own.
     const busy = this.talkingTo !== null || this.decorating || this.leaving || !!this.sleptAt || (this.bubbles?.showing().some((b) => b.id === this.me.id) ?? false);
