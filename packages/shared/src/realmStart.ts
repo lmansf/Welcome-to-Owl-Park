@@ -26,13 +26,26 @@ export const START_SPOTS = {
   idol: { x: 830, y: 700, w: 520, h: 416 },
   questPost: { x: 480, y: 620, w: 240, h: 300 },
   tradingNest: { x: 1270, y: 620, w: 320, h: 320 },
-  /** Three to five decor pieces: the first by the post, then one each side at the front, the right one mirrored. */
+  /**
+   * Three to five decor pieces: the first by the post, then one each side at the front, the right one
+   * mirrored. The first stands on the street between the post and the guardian's base, at the guardian's
+   * feet (OP-480): left of the post it stood over the start screen's tree, hung in mid-air on the trunk.
+   */
   decor: [
-    { x: 280, y: 620, w: 160, h: 200 },
+    { x: 650, y: 700, w: 160, h: 200 },
     { x: 200, y: 870, w: 160, h: 200 },
     { x: 1460, y: 870, w: 160, h: 200, flip: true },
   ],
 } as const;
+
+/**
+ * The few lines pinned on each realm start's notice board, its quest post until the realm's own post is
+ * painted (OP-478): a welcome, and where the start's two things to do are. Short, so each line fits the
+ * board's face; plain words a young player reads at a glance.
+ */
+export const START_NOTICES: Readonly<Record<string, readonly string[]>> = {
+  glass: ['Notices', 'Welcome, friend!', 'Prism has a job.', 'The climb is east.'],
+};
 
 /** The vote spot, front and centre under the guardian: an owl standing in it may vote. */
 export const START_VOTE = { x: 720, y: 705, w: 220, h: 55 } as const;

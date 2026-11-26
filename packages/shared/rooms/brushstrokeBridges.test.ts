@@ -40,6 +40,16 @@ const tiersFrom = (id: string, ink = true) => {
 };
 
 describe('Brushstroke Bridges (OP-235)', () => {
+  it('draws the owl as big as in today\'s park, not the tree\'s quarter bigger, next to its small stones (OP-477)', () => {
+    for (const id of ids) {
+      const r = ROOMS[id]!;
+      expect(mapOf(r), id).toBe(2);
+      expect(r.owlScale ?? 1, id).toBe(1);
+    }
+    // The tree's own rooms keep theirs.
+    expect(ROOMS['l1']!.owlScale).toBe(1.25);
+  });
+
   it('is a course with nothing wrong with it: three acts, five rooms, four seals, a bench on every screen, five lost feathers and the shrine at the summit', () => {
     expect(COURSES[BRUSH_COURSE.id]).toBe(BRUSH_COURSE);
     expect(courseProblems(BRUSH_COURSE, rooms)).toEqual([]);
