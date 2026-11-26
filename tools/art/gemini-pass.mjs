@@ -59,7 +59,7 @@ const FIX = {
   'kit-sheet-glass-tower-a': 'Prop 4 is a stone buttress: a tall tapering wedge of grey stone set against a wall, standing on its own base, as tall as its cell.',
   'kit-sheet-entrance-plaza-a': 'The pennant pole is a tall iron pole as tall as its cell with a plain cream and navy cloth pennant at its top.',
   'kit-sheet-stalls-a': 'Prop 3 is a ticket booth: a small wooden kiosk with a counter at the front, an open ticket window above the counter and a little brass bell on it.',
-  'kit-sheet-barriers-a': 'The locked gate stands between warm grey stone pillars, its iron bars dark against flat magenta.',
+  'kit-sheet-barriers-a': 'The locked gate stands between warm grey stone pillars, its iron bars dark against flat magenta, and the boarded doorway sits in an arch of warm grey stone.',
   commons: 'Scene 1 becomes the Commons screen of the great hollow, its own painting, with the same floor line and doorways.',
   'glass-east': 'The floor is laid in cobbles and flagstones with worn edges, as detailed as the floor in Image 2.',
   'kit-sheet-cut-run-neon-deck': 'Each run is lit by neon: glowing pink and cyan tubes along its edges and soft neon light on its top surface.',
@@ -105,7 +105,7 @@ const TARGET_OF = { neon: '@final:kit-neon-mid-b', glass: '@guide:target-l4-ref'
 
 export function canvasFor(job) {
   const [w, h] = job.size.split('x').map(Number);
-  const bg = job.key_colour ? `isolated on one unbroken flat solid ${job.key_colour} field running from edge to edge, the same flat ${job.key_colour} between and around every shape` : '';
+  const bg = job.key_colour ? `isolated on one unbroken flat solid ${job.key_colour} field running from edge to edge, the same flat ${job.key_colour} between and around every shape, every light and glow held inside its own shape, each shape floating with a crisp clean edge where it meets the flat field` : '';
   if (job.kind === 'room' || job.kind === 'anchor' || job.kind === 'wing') return `Full-bleed ${w}x${h} 16:9 scene, the walkable floor running across the whole width along the bottom with its top edge level, clear and bare, doorways at floor level, every element in the place Scene 1 has it.`;
   if (job.kind === 'texture') return `A seamless tileable square texture, ${w}x${h}, the pattern continuing across all four edges, even light and the same scale of detail everywhere, seen flat on.`;
   if (job.kind === 'sheet' && /cut-run/.test(job.key)) return `A ${w}x${h} canvas with three long horizontal runs stacked with clear space between them, each run spanning from near the left edge to near the right edge, ${bg}.`;
