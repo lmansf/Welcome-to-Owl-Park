@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { DEFAULT_ANCHORS, measureAnchors, type Mask, type OwlAnchors } from '../collect/pixels';
+import { DEFAULT_ANCHORS, measureAnchors, rowSpan, type Mask, type OwlAnchors } from '../collect/pixels';
 import { itemCanvas, petArtCanvas } from './itemArt';
 
 /** The texture key a variant is drawn with at a scale (textures are shared by every scene). */
@@ -87,4 +87,27 @@ export function owlAnchors(scene: Phaser.Scene, layers: readonly string[] = ['ow
   }
   cached.set(bodyKey, { source, anchors });
   return anchors;
+}
+
+const spans = new Map<string, { source: unknown; span: { l: number; r: number } | null }>();
+
+/**
+ * The body layer `key` across row `y` (owl canvas pixels): where its outline starts and ends, measured
+ * once per texture and row. Null while the texture is missing or the row is empty.
+ */
+export function owlRowSpan(scene: Phaser.Scene, key: string, y: number): { l: number; r: number } | null {
+  if (!scene.textures.exists(key)) return null;
+  const source = scene.textures.get(key).getSourceImage();
+  const id = `${key}@${Math.round(y)}`;
+  const hit = spans.get(id);
+  if (hit && hit.source === source) return hit.span;
+  let span: { l: number; r: number } | null = null;
+  try {
+    const m = maskOf(scene, key);
+    if (m) span = rowSpan(m, y);
+  } catch {
+    span = null; // a tainted canvas: the wings keep the chest's shoulders
+  }
+  spans.set(id, { source, span });
+  return span;
 }
