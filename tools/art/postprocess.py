@@ -722,16 +722,17 @@ def cmd_pieces(ctx: Ctx, a: argparse.Namespace) -> int:
     if a.clear_haze:
         rgba, n = clear_key_haze(rgba, cinfo["backdrop"])
         note(f"{key}: clear-haze {n} px")
-    cols, rows = {1: (1, 1), 3: (3, 1), 4: (2, 2)}.get(len(sheet["pieces"]), (3, 2))
+    # Six to a sheet, three across and two down; a course's signs and hazards seven, four over three (kit.mjs).
+    cols, rows = {1: (1, 1), 3: (3, 1), 4: (2, 2), 7: (4, 2)}.get(len(sheet["pieces"]), (3, 2))
     alpha = np.asarray(rgba.getchannel("A"))
     blobs = sheet_blobs(alpha, scale=4, grow=a.grow, min_px=a.min_blob)
-    n = cols * rows
+    n = min(cols * rows, len(sheet["pieces"]))
     if len(blobs) < n:
         raise ArtError(f"{key}: {len(blobs)} prop(s) found, not {n}; the sheet painted fewer props or two touch (try --grow 1); pick another candidate")
     extra = blobs[n:]
     if extra:
         note(f"warning: {key}: {len(extra)} small blob(s) past the {n} prop(s) dropped (largest {extra[0]['area']} px); a lantern on a thread or a leaf may be lost")
-    ordered = order_blobs(blobs, cols, rows)
+    ordered = order_blobs(blobs[:n], cols, rows)
     only = set(a.only.split(",")) if a.only else None
     review = rgba.convert("RGB")
     drw = ImageDraw.Draw(review)

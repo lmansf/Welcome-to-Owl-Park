@@ -171,6 +171,10 @@ const OWL_REGIONS = { body: '#FF0000', belly: '#00FF00', accent: '#0000FF' };
  * the owl master uses for the three tintable layers. `derives` lists the shipped keys that post
  * produces from this job's output. `providers` holds per-provider body overrides.
  */
+// Each idol's parts (OP-397, apps/park/src/game/idolParts.ts): a head, a body, two wings and what it
+// stands on, cut from a sheet of them painted to the idol's own brief and laid out to stand as it does.
+const idolParts = (idol) => ['base', 'body', 'wing-left', 'wing-right', 'head'].map((part) => `${idol}-${part}`);
+
 export const JOBS = [
   {
     key: 'tree-master',
@@ -190,8 +194,6 @@ export const JOBS = [
     variants: 4,
     refs: [treeRef, guide('hub')],
     prompt: PROMPTS.hub,
-    // The hollow hall's Commons stand on a copy of this painting until their own screens land.
-    derives: ['commons'],
   },
   {
     key: 'hub-fg',
@@ -239,6 +241,7 @@ export const JOBS = [
     // PNG: the edit endpoint otherwise answers in JPEG, whose ringing leaves a halo once keyed.
     providers: { fal: { output_format: 'png' } },
     prompt: PROMPTS.guardian,
+    derives: idolParts('guardian'),
   },
   {
     key: 'market',
@@ -273,6 +276,7 @@ export const JOBS = [
     key_colour: '#00FF00',
     refs: [published('market')],
     prompt: PROMPTS['robot-owl'],
+    derives: idolParts('robot-owl'),
   },
   {
     key: 'owl-master',
@@ -764,8 +768,6 @@ const WING_JOBS = WING_KEYS.map((key) => ({
   refs: [{ ref: `@canvas:${key}`, role: "the painting's edge on a grey canvas to paint over", optional: false }],
   providers: { fal: { output_format: 'png' } },
   prompt: WING_PROMPTS[key],
-  // The hub's wings are copied as the walls of the hollow hall's Commons (commons-west, commons-east).
-  ...(key.startsWith('hub-') ? { derives: [key.replace('hub-', 'commons-')] } : {}),
 }));
 Object.assign(PROMPTS, WING_PROMPTS);
 JOBS.push(...WING_JOBS);
@@ -1242,8 +1244,11 @@ for (const j of GAME_ART_JOBS) PROMPTS[j.key] = j.prompt;
 JOBS.push(...GAME_ART_JOBS);
 
 // ---------------------------------------------------------------------------------------------
-// The stained-glass realm and its climb (designs/the-stained-glass-climb.md): the room's two
-// screens, the six pieces the climb's tower is built from, and the Glass Circlet the clouds grant.
+// The stained-glass realm and its climb (designs/the-stained-glass-climb.md): the room's screen,
+// the six pieces the climb's tower is built from, and the Glass Circlet the clouds grant. The street
+// was two screens until the realm's start went onto one (OP-276): `glass`, the old west screen, stands
+// in for the start screen's kit slot (kitCatalog.ts), and the east screen and the seam between the
+// two (OP-125) are retired.
 // Everything here waits for the owner's pick, as every piece of art does.
 
 const GLASS_STYLE = `STYLE (use verbatim in every stained-glass prompt): hand-painted 2D game background, clean cel-shaded shapes with soft painted gradients, matte-painting depth, slightly stylised proportions, no outlines, no photorealism, no film grain, large flat colour areas that compress cleanly. Dusk in a city of mosaic skyscrapers whose every wall is leaded stained glass lit from within, towers rising out of sight into a violet evening sky with the first stars, a few small clouds catching the last light. PALETTE: deep lapis #1A2D5A and midnight violet #3A3F78 for the glass in shadow; Glass Blue #9FD0FF, warm gold #FFD36A, rose #FF8AD0, mint #7BE0C8 and lilac #CDB0FF for lit panes; dark lead lines #2A3B63 between the panes; the lit glass glows softly, never neon. No text, no watermark.`;
@@ -1254,7 +1259,6 @@ const GLASS_PIECE_STYLE = `STYLE: hand-painted 2D game prop in the stained-glass
 const GLASS_PROMPTS = {
   glass: `${GLASS_FRAME} The west screen of the stained-glass realm's street: at the far left a tall round-topped archway back into a great tree, its inside glowing warm gold; to its right the street runs along the foot of mosaic skyscrapers whose stained-glass walls climb out of frame, their lowest storeys showing shopfronts of coloured glass panes; a little right of the middle stands a plinth of pale stone with an empty top where a realm's idol will be placed by the game (leave the top of the plinth clear and lit). The pavement is a mosaic of small glass tiles in muted blues with a few gold ones. Lanterns of coloured glass hang on brackets between the storeys. Evening sky in violet above. ${GLASS_STYLE} AVOID: any text, letters, glyphs, numbers or signage lettering; owls, birds, animals, people or characters; a second archway; daylight; photorealism; the floor band cluttered.`,
   'glass-idol': `The stained-glass realm's idol: a single barn owl made entirely of leaded stained glass, perched upright and facing the viewer, a calm monumental figure lit from within, ${GLASS_PIECE} Landscape proportions 600x480, generated at 1200x960, the owl centred with its talons and the small pale stone cap it grips touching the bottom edge of the frame and the whole figure bottom-centre anchored, the top of the head near the top edge, the folded wings spreading the figure wide. The barn owl silhouette is unmistakable: no ear tufts at all, a smooth gently rounded head, a large heart-shaped facial disc filling most of the face and edged in a thin rim of dark lead, two large round dark eyes set in it, a small hooked beak at the lower point of the heart, a slim upright body, long folded wings, talons gripping the stone cap. Its body is a mosaic of glass panes: the facial disc and chest in pale cream and white glass #FFF8EC lit warm from behind, the head, back and wings in warm gold #FFD36A and honey amber #D9A066 panes flecked with Glass Blue #9FD0FF, rose #FF8AD0 and lilac #CDB0FF, each pane edged in dark lead lines #2A3B63, the eyes two round panes of deep navy #0C1E36 glass each with a small point of light, a soft inner glow lighting every pane from behind without bleeding past the silhouette. STYLE: hand-painted 2D game character art in the stained-glass realm's style, clean cel-shaded shapes with soft painted gradients, slightly stylised proportions, no outlines, no photorealism, no film grain. No text, no watermark. AVOID: ear tufts or horns of any kind; glowing yellow or orange eyes; any text, letters, glyphs or numbers; any second owl, bird, animal, person or character; any background scenery, sky, tower or ground beyond the small stone cap; the owl cut off by any edge except the cap at the bottom; green tint on the glass; photographic textures; lens flare.`,
-  'glass-east': `${GLASS_FRAME} The east screen of the stained-glass realm's street, continuing the same pavement and skyline from its west screen so the two join at the left edge: more mosaic skyscrapers of leaded stained glass climbing out of frame, and in the right half a single tall arched window of glass lit brighter than any other, reaching from the pavement to the top of the frame, its foot a step of pale stone where a character will stand (keep that spot clear): the portal up the tower. Threads of light rise inside the window's glass toward the sky. A few small clouds high up catch gold. ${GLASS_STYLE} AVOID: any text, letters, glyphs, numbers or signage lettering; owls, birds, animals, people or characters; a door or archway other than the window; daylight; photorealism; the floor band cluttered.`,
   'climb-sky': `A tall vertical game background tile, portrait 960x1800, filling the entire canvas edge to edge with no border and no empty space: the inner face of a mosaic skyscraper seen from a few metres away while climbing it, a wall of leaded stained-glass panes in deep lapis and violet with a few panes lit in gold, rose, mint and lilac, dark lead lines between them, the pattern tiling seamlessly from its bottom edge to its top edge so copies stack without a seam. No ledges, balconies or figures on it. Painted on a flat pure chroma green #00FF00 backdrop that must not show anywhere, the tile covering all of it. ${GLASS_PIECE_STYLE}`,
   'climb-column': `A tall vertical game piece, portrait 1024x3840: one slender column of leaded stained glass and dark lead, a mullion of a mosaic skyscraper, lit panes of gold and rose running up it, tiling seamlessly from its bottom edge to its top edge, ${GLASS_PIECE} ${GLASS_PIECE_STYLE}`,
   'climb-ledge-a': `A small wide game platform piece, landscape 2240x560: a short balcony ledge of pale stone edged with a strip of lit stained glass in Glass Blue #9FD0FF and gold #FFD36A, its top surface flat and level across the whole width so a character can stand on it, a little dark lead bracket under each end, ${GLASS_PIECE} ${GLASS_PIECE_STYLE}`,
@@ -1267,9 +1271,8 @@ const GLASS_PROMPTS = {
 const glassPiece = (key, size, seed) => ({ key, kind: 'piece', realm: 'glass', size, seed, variants: 4, key_colour: '#00FF00', refs: [published('glass')], providers: { fal: { output_format: 'png' } }, prompt: GLASS_PROMPTS[key] });
 const GLASS_JOBS = [
   { key: 'glass', kind: 'room', realm: 'glass', size: '3200x1800', seed: 7101, variants: 4, refs: [published('hub'), guide('glass')], providers: { fal: { output_format: 'png' } }, prompt: GLASS_PROMPTS.glass },
-  { key: 'glass-east', kind: 'room', realm: 'glass', size: '3200x1800', seed: 7111, variants: 4, refs: [published('glass'), guide('glass')], providers: { fal: { output_format: 'png' } }, prompt: GLASS_PROMPTS['glass-east'] },
   // The idol stands on the west screen's plinth; the owl is the piece, so it has its own prompt rather than the props' one.
-  { key: 'glass-idol', kind: 'piece', realm: 'glass', size: '1200x960', seed: 7171, variants: 4, key_colour: '#00FF00', refs: [published('glass')], providers: { fal: { output_format: 'png' } }, prompt: GLASS_PROMPTS['glass-idol'] },
+  { key: 'glass-idol', kind: 'piece', realm: 'glass', size: '1200x960', seed: 7171, variants: 4, key_colour: '#00FF00', refs: [published('glass')], providers: { fal: { output_format: 'png' } }, prompt: GLASS_PROMPTS['glass-idol'], derives: idolParts('glass-idol') },
   glassPiece('climb-sky', '960x1800', 7201),
   // The flat pieces are painted at four to one (the widest the image models take) and drawn at their own size.
   glassPiece('climb-column', '1024x3840', 7211),
@@ -1283,32 +1286,44 @@ export const GLASS_KEYS = Object.keys(GLASS_PROMPTS);
 Object.assign(PROMPTS, GLASS_PROMPTS);
 JOBS.push(...GLASS_JOBS);
 
-// The seam between the realm's two screens (OP-125). They were painted apart, the east one with the
-// west one only as a style reference, so at the join the buildings and the pavement do not continue.
-// The edit is a crop across the join of the two published screens laid side by side (`pnpm
-// art:finish cut glass-seam --base-key glass --base <glass@2x.webp>,<glass-east@2x.webp> --box
-// 2560,0,3840,1800 --half`); its middle half is repainted, `patch --threshold 0 --join` joins that
-// band to each screen where the two agree, and `room glass --crop left` and `room glass-east --crop
-// right` finish each screen.
-const GLASS_SEAM_PROMPT = `Edit this painting, a tall strip of a city street at dusk in a realm of mosaic skyscrapers whose walls are leaded stained glass lit from within. It was made from two paintings set side by side, and they meet in a hard vertical line down the exact middle of the frame where nothing continues: on the left a shopfront of glowing rose and blue stained-glass panes under a hanging lantern, standing on blue cobblestones; on the right the foot of a tall tower of large lit glass panes in gold, rose and mint, standing on smooth dark paving with a low kerb. Repaint only the middle half of the frame, a quarter of the width either side of that line, so the two sides become one continuous street with no line, seam or change of style anywhere: the shopfront ends in a slim pilaster of dark stone and lead; beside it a narrow shadowed gap between the two buildings rises to a sliver of violet evening sky with a first star; on the far side of the gap the tower begins, its lit panes as they are now. At the bottom the street runs on unbroken across the whole width at one level: the blue cobblestones give way to the smooth dark paving along a plain pale stone edge, so the ground reads as one walkable floor at the same height, open and uncluttered. Keep the left and right quarters of the frame exactly as they are, and match their colours, light and brushwork in the repainted middle: the same framing, straight side-on with no perspective tilt, a hand-painted 2D game background with clean cel-shaded shapes and soft painted gradients. No text, letters or numbers anywhere. No owls, birds, animals, people or characters.`;
-
-export const GLASS_SEAM_JOB = {
-  key: 'glass-seam',
-  // A detail edit, not a screen of a room: a helper, patched into both screens.
-  kind: 'anchor',
-  derives: ['glass', 'glass-east'],
-  realm: 'glass',
-  optional: true,
-  size: '1280x1800',
-  seed: 7125,
-  variants: 4,
-  refs: [{ ref: '@canvas:glass-seam', role: "a crop across the join of the realm's two screens", optional: false }],
-  providers: { fal: { output_format: 'png' } },
-  prompt: GLASS_SEAM_PROMPT,
+// The ink garden (OP-402): the ink-wash realm's own room, two screens side by side that meet with no
+// seam, an overlay of branches over its front, and its idol, a snowy owl on the plinth of its first
+// screen. The art shipped with the room, painted outside this list; these jobs describe it as it is,
+// so a new version is generated from them and waits for the owner's pick like every other piece.
+const INK_STYLE = `STYLE: hand-painted 2D game background in the style of an ink-wash painting on warm cream rice paper: soft grey and black ink washes and dry-brush strokes, misty layered distance, the paper's grain showing through, only a few touches of colour (warm lantern gold, a little vermilion on tassels and small blank seal squares), slightly stylised proportions, no outlines beyond the brushwork, no photorealism, no film grain, large calm areas that compress cleanly.`;
+const INK_FRAME = `A wide side-on game room screen, 3200x1800, drawn for a camera looking straight at the scene with no perspective tilt, the floor a broad level paving of large pale grey flagstones across the bottom fifth where small characters will walk (keep it clear of clutter).`;
+const INK_AVOID = `No text, no watermark. AVOID: any text, letters, calligraphy, glyphs or numbers, and any writing on the seal squares; owls, birds, animals, people or characters; daylight colour; photorealism; the floor band cluttered.`;
+const INK_PROMPTS = {
+  ink: `${INK_FRAME} The west screen of the ink garden: at the far left the gnarled trunk of an ancient tree fills the edge, a tall round-topped doorway in its foot glowing warm gold from inside; from a crooked bamboo pole beside it hang two round paper lanterns lit gold with vermilion tassels, a few bamboo leaves around it. Behind the paving a long low garden wall of pale plaster under a wavy roof of dark grey tiles runs from the tree to the right edge, with boulders and low shrubs at its foot; on the right, against the wall, a stone lantern lit softly from within, and right of the middle on the paving a low square plinth of pale stone with an empty flat top where the realm's idol will be placed by the game (leave the top clear). Beyond the wall, misty ink mountains, wind-bent pines, a small pavilion on a rocky crag and one tiny floating island with a pine. ${INK_STYLE} ${INK_AVOID}`,
+  'ink-east': `${INK_FRAME} The east screen of the ink garden, continuing the same paving, wall and misty mountains from its west screen so the two join at the left edge with no seam: the pale plaster wall under its wavy tiled roof runs across the whole width, rising in a gentle arch over a round moon gate in its middle through which stone steps climb away into the mist; a lit paper lantern on an iron bracket hangs on the wall beside the gate. Left of the gate a plain stone bench stands against the wall; boulders and low shrubs at the wall's foot. At the right end a gateway under a small tiled roof on two dark wooden posts is closed by a lowered bamboo blind glowing warm gold from behind, a vermilion tassel hanging at its side. Beyond the wall, misty ink mountains, wind-bent pines, a small pavilion on a crag and two tiny floating islands with pines. ${INK_STYLE} ${INK_AVOID}`,
+  'ink-fg': `Foreground overlay for a side-on game room, 3200x1800, isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills everything not covered by the painting, no gradient, no vignette, no glow and no cast shadows on the green: only two branches reaching in over the top of the frame, everything below them left as flat green. From the top left corner a pine bough with tufts of grey-green needles, a round paper lantern lit warm gold hanging from it on a cord with a vermilion tassel; from the top right corner a dark crooked plum branch with a few cream white blossoms and buds, a vermilion knotted tassel hanging from it. Crisp clean opaque edges against the green. ${INK_STYLE} No text, no watermark. AVOID: any text, letters or glyphs; anything in the lower four fifths of the frame; owls, birds, animals, people or characters; green tint on the branches.`,
+  'ink-idol': `The ink garden's idol: a single large snowy owl, round and calm, sitting upright on a small six-sided stone plinth and facing the viewer, ${GLASS_PIECE} Landscape proportions 600x480, generated at 1200x960, the owl centred with the plinth touching the bottom edge of the frame and the whole figure bottom-centre anchored, the top of the head near the top edge. The snowy owl silhouette is unmistakable: a smooth round head with no ear tufts, a pale face with two dark gentle eyes and a small dark beak, a broad soft rounded body with the wings folded at its sides, feathered talons gripping the plinth. Its plumage is cream white #F6F1E3 painted in soft ink wash, flecked with short grey-black #3A3A3A brush marks across the head, wings and breast, wisps of pale ink mist curling around its feet, one small blank vermilion seal square on its breast. STYLE: hand-painted 2D game character art in the ink garden's ink-wash style on warm paper, soft washes and dry-brush feathers, slightly stylised proportions, no outlines, no photorealism, no film grain. No text, no watermark. AVOID: ear tufts or horns; glowing eyes; any text, letters, glyphs or numbers; any second owl, bird, animal, person or character; any background scenery beyond the small plinth; the owl cut off by any edge except the plinth at the bottom; green tint on the feathers; photographic textures.`,
 };
-PROMPTS['glass-seam'] = GLASS_SEAM_PROMPT;
-HELPER_KEYS.push('glass-seam');
-JOBS.push(GLASS_SEAM_JOB);
+const INK_JOBS = [
+  { key: 'ink', kind: 'room', realm: 'ink', size: '3200x1800', seed: 7401, variants: 4, refs: [published('ink')], providers: { fal: { output_format: 'png' } }, prompt: INK_PROMPTS.ink },
+  { key: 'ink-east', kind: 'room', realm: 'ink', size: '3200x1800', seed: 7411, variants: 4, refs: [published('ink')], providers: { fal: { output_format: 'png' } }, prompt: INK_PROMPTS['ink-east'] },
+  { key: 'ink-fg', kind: 'overlay', realm: 'ink', size: '3200x1800', seed: 7421, variants: 2, key_colour: '#00FF00', refs: [published('ink')], providers: { fal: { output_format: 'png' } }, prompt: INK_PROMPTS['ink-fg'] },
+  { key: 'ink-idol', kind: 'piece', realm: 'ink', size: '1200x960', seed: 7471, variants: 4, key_colour: '#00FF00', refs: [published('ink')], providers: { fal: { output_format: 'png' } }, prompt: INK_PROMPTS['ink-idol'] },
+];
+Object.assign(PROMPTS, INK_PROMPTS);
+JOBS.push(...INK_JOBS);
+
+// The movers' three pieces (OP-287, packages/shared/src/movers.ts), for rooms seen from above such as the
+// Great Hollow. None is painted yet: the page draws each as its size box until a file lands under its key.
+// Each is painted at twice its logical size and waits for the owner's pick.
+const MOVER_PIECE = `isolated on a flat, solid, uniform pure chroma green #00FF00 background that fills everything not covered by the piece, no gradient, no vignette, no cast shadows on the backdrop, a crisp clean opaque silhouette against the green with no glow bleeding onto the backdrop.`;
+const MOVER_STYLE = `STYLE: hand-painted 2D game prop in the house style of the inside of a colossal living tree at night: clean cel-shaded shapes with soft painted gradients, warm inner-wood browns #5C4632 to #8F8068, navy shadow #0C1E36, warm gold light #FFD36A and cream moonlight #F6F1E3, slightly stylised proportions, no outlines, no photorealism, no film grain. No text, no watermark. AVOID: any text, letters or numbers; owls, birds, animals, people or characters; green tint on the piece; photographic textures.`;
+const MOVER_PROMPTS = {
+  'mover-knot-hole-mouth': `A game piece seen from above at a gentle angle, landscape 480x240: the mouth of a round knot hole in a floor of pale worn inner wood, an oval opening falling away into deep navy darkness, its rim a thick rounded lip of bark and growth rings worn smooth, a few small gold leaves at its edge, the front of the rim touching the bottom edge of the frame, ${MOVER_PIECE} ${MOVER_STYLE}`,
+  'mover-downdraft-column': `A tall game piece, portrait 520x840: a column of cool sinking air seen from the side, drawn as soft curving streaks of pale cream and moonlit blue-grey wind spiralling gently downward, a few small gold leaves and seeds falling inside it, the column narrowing a little toward its foot at the bottom edge of the frame where it sinks into a hole, its top fading out near the top edge, the streaks solid brushed shapes rather than haze, ${MOVER_PIECE} ${MOVER_STYLE}`,
+  // The streamers are painted at four to one (the widest the image models take) and drawn at their own size.
+  'mover-glide-lane-streamers': `A wide flat game piece, landscape 800x200: a run of light cloth streamers and ribbons in cream, warm gold and dusk blue streaming sideways along a single level line as if carried on a steady breeze from left to right, a few small gold leaves riding with them, the run thin top to bottom and its two ends tapering away so copies sit side by side, ${MOVER_PIECE} ${MOVER_STYLE}`,
+};
+const MOVER_JOBS = Object.entries(MOVER_PROMPTS).map(([key, prompt], i) => ({
+  key, kind: 'piece', realm: 'hub', size: prompt.match(/(\d+x\d+)/)[1], seed: 7501 + i * 10, variants: 4, key_colour: '#00FF00', refs: [published('hub')], providers: { fal: { output_format: 'png' } }, prompt,
+}));
+Object.assign(PROMPTS, MOVER_PROMPTS);
+JOBS.push(...MOVER_JOBS);
 
 // ---- The tree (map 2, OP-155): the style frame (OP-157) ----
 // The new park is one side-scrolling world around the colossal tree: the trunk is the spine and

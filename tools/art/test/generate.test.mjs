@@ -39,6 +39,22 @@ function parseArtTable() {
   for (const list of roomsSrc.matchAll(/(?:backgrounds|foregrounds):\s*\[([^\]]*)\]/g)) {
     for (const m of list[1].matchAll(/key:\s*'([a-z][a-z0-9-]*)'/g)) table[m[1]] ??= { w: consts.ROOM_W, h: consts.ROOM_H, kind: 'room' };
   }
+  // A kit slot not yet delivered loads its stand-in's files (kitCatalog.ts, kitFilesOf): a stand-in that is
+  // no kit piece of its own is art under its own key, a screen for a layer slot and a piece otherwise.
+  const kitSrc = fs.readFileSync(path.join(G.REPO_ROOT, 'packages/shared/src/kitCatalog.ts'), 'utf8');
+  for (const m of kitSrc.matchAll(/^\s*'kit-[a-z0-9-]+': \{ w: (\d+), h: (\d+), kind: '(\w+)'[^}]*standIn: '([a-z][a-z0-9-]*)'/gm)) {
+    if (!m[4].startsWith('kit-')) table[m[4]] ??= { w: Number(m[1]), h: Number(m[2]), kind: m[3] === 'layer' ? 'room' : 'piece' };
+  }
+  // And each idol's parts (OP-397), `<idol>-<part>` at the size idolParts.ts measures, as pieces.
+  const idolSrc = fs.readFileSync(path.join(G.REPO_ROOT, 'apps/park/src/game/idolParts.ts'), 'utf8');
+  const idolStart = idolSrc.indexOf('export const IDOL_PARTS');
+  const idolBlock = idolSrc.slice(idolStart, idolSrc.indexOf('\n};', idolStart));
+  const idols = [...idolBlock.matchAll(/^ {2}'?([a-z][a-z0-9-]*)'?: \{$/gm)];
+  assert.ok(idols.length >= 3, 'parsed the idols in IDOL_PARTS');
+  idols.forEach((idol, i) => {
+    const body = idolBlock.slice(idol.index, idols[i + 1]?.index);
+    for (const m of body.matchAll(/^ {6}'?([a-z][a-z-]*)'?: \{ x: \d+, y: \d+, w: (\d+), h: (\d+),/gm)) table[`${idol[1]}-${m[1]}`] = { w: Number(m[2]), h: Number(m[3]), kind: 'piece' };
+  });
   return table;
 }
 
@@ -308,19 +324,14 @@ test("the arcade: its painting in the market's style, and an edit of the street'
   assert.match(door.prompt, /no letters/);
 });
 
-test("the stained-glass realm's seam (OP-125): an edit of a crop across the join, patched into both screens, never published itself", () => {
+test("the stained-glass realm's street is one screen (OP-276): `glass` stands in for its start screen; the east screen and the seam are retired", () => {
   const jobs = new Map(G.validateJobs(P.JOBS, { assets: ASSETS, helperKeys: P.HELPER_KEYS, blocks: P.BLOCKS }).map((j) => [j.key, j]));
-  const seam = jobs.get('glass-seam');
-  assert.ok(P.HELPER_KEYS.includes('glass-seam'), 'the edit is a helper, never published');
-  assert.ok(!('glass-seam' in ASSETS.keys), 'no asset of its own');
-  assert.deepEqual([seam.kind, seam.size, seam.variants, seam.derives], ['anchor', '1280x1800', 4, ['glass', 'glass-east']]);
-  assert.deepEqual(seam.refs.map((r) => [r.ref, r.optional]), [['@canvas:glass-seam', false]]);
-  assert.match(seam.prompt, /^Edit this painting/);
-  assert.match(seam.prompt, /Repaint only the middle half of the frame/);
-  assert.match(seam.prompt, /No text, letters or numbers anywhere/);
-  // Under the 1536 x 1536 pixel count, so each candidate costs the lower price.
-  const [w, h] = seam.size.split('x').map(Number);
-  assert.ok(w * h <= 1536 * 1536);
+  const kitSrc = fs.readFileSync(path.join(G.REPO_ROOT, 'packages/shared/src/kitCatalog.ts'), 'utf8');
+  assert.match(kitSrc, /'kit-glass-start-screen': \{[^}]*standIn: 'glass'/, "the start screen's slot stands in with the glass painting");
+  assert.deepEqual([jobs.get('glass')?.kind, ASSETS.keys.glass?.kind], ['room', 'room']);
+  for (const key of ['glass-east', 'glass-seam']) {
+    assert.ok(!jobs.has(key) && !(key in ASSETS.keys) && !P.HELPER_KEYS.includes(key), `${key} is retired`);
+  }
 });
 
 test("the arcade's bays: an edit of the published hall, each hall candidate's two east wings, three titles; the picks are the arcade's own", () => {
@@ -474,7 +485,7 @@ test('selectJobs supports lists and globs and rejects unmatched patterns', () =>
   const flight = Object.keys(P.FLIGHT_MASTERS);
   assert.deepEqual(G.selectJobs(jobs, 'hub,owl-*').map((j) => j.key), ['hub', 'owl-master', 'owl-blink-src', ...P.SPECIES_MASTER_KEYS, ...flight, 'owl-wing-right']);
   assert.deepEqual(G.selectJobs(jobs, 'owl-*-master').map((j) => j.key), [...P.SPECIES_MASTER_KEYS, ...flight]);
-  assert.deepEqual(G.selectJobs(jobs, '*-fg').map((j) => j.key), ['hub-fg', 'grove-fg', 'market-fg', 'tree-l1-0-fg', 'tree-l1-w1-fg', 'tree-l1-e1-fg', 'tree-l1-e2-fg', 'tree-l4-0-fg', 'tree-l4-e1-fg', 'tree-l3-0-fg', 'tree-l3-e1-fg', 'tree-l3-e2-fg', 'tree-l2-0-fg', 'tree-l2-w1-fg', 'tree-l2-w2-fg', 'tree-l5-0-fg', 'tree-l5-w2-fg', 'tree-l5-w1-fg', 'tree-l5-e1-fg', 'tree-l5-e2-fg', 'tree-l5-e3-fg', 'tree-l0-0-fg', 'tree-l0-w1-fg', 'tree-l0-c0-fg', 'tree-l0-c1-fg', 'tree-l0-c2-fg']);
+  assert.deepEqual(G.selectJobs(jobs, '*-fg').map((j) => j.key), ['hub-fg', 'grove-fg', 'market-fg', 'ink-fg', 'tree-l1-0-fg', 'tree-l1-w1-fg', 'tree-l1-e1-fg', 'tree-l1-e2-fg', 'tree-l4-0-fg', 'tree-l4-e1-fg', 'tree-l3-0-fg', 'tree-l3-e1-fg', 'tree-l3-e2-fg', 'tree-l2-0-fg', 'tree-l2-w1-fg', 'tree-l2-w2-fg', 'tree-l5-0-fg', 'tree-l5-w2-fg', 'tree-l5-w1-fg', 'tree-l5-e1-fg', 'tree-l5-e2-fg', 'tree-l5-e3-fg', 'tree-l0-0-fg', 'tree-l0-w1-fg', 'tree-l0-c0-fg', 'tree-l0-c1-fg', 'tree-l0-c2-fg']);
   assert.throws(() => G.selectJobs(jobs, 'nothing'), /matches no job/);
   assert.deepEqual(G.variantSeeds({ seed: 10, variants: 3 }), [10, 11, 12]);
   assert.deepEqual(G.variantSeeds({ seed: 10, variants: 3 }, { variants: 2, seed: 50 }), [50, 51]);
@@ -745,9 +756,19 @@ test('geometry exports the live room data with the assets table', () => {
   // Every room the shared data declares, whatever rooms the park has grown since: the export is the live data.
   const roomsDir = path.join(G.REPO_ROOT, 'packages/shared/rooms');
   // rooms/kit.ts is left out: its rooms are the kit's stand-ins for rooms declared elsewhere and the
-  // rooms laid out ahead of the park (the plaza, OP-241), which the export does not carry.
-  const declared = fs.readdirSync(roomsDir).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && f !== 'kit.ts')
-    .flatMap((f) => [...fs.readFileSync(path.join(roomsDir, f), 'utf8').matchAll(/^ {2,4}id:\s*'([a-z0-9-]+)'/gm)].map((m) => m[1])); // rooms (and the nest's own RoomDef) sit at one indent or two; ledges and props deeper
+  // rooms laid out ahead of the park (the plaza, OP-241), which the export does not carry. So is
+  // rooms/party.ts: like the nest a template (each party game is it under its own id), but painted
+  // with the hub's art, so the export has nothing of its own to carry for it.
+  const sources = fs.readdirSync(roomsDir).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && f !== 'kit.ts' && f !== 'party.ts')
+    .map((f) => fs.readFileSync(path.join(roomsDir, f), 'utf8'));
+  const idConsts = Object.fromEntries(sources.flatMap((src) => [...src.matchAll(/^export const ([A-Z_]+_ID) = '([a-z0-9-]+)';/gm)].map((m) => [m[1], m[2]])));
+  const declared = sources.flatMap((src) => [
+    // A RoomDef written out (and the nest's own) sits at one indent or two, its size a few lines on (ledges
+    // and props sit deeper; a thermal's id has no size), its id a string or a named constant (HALL_ID).
+    ...[...src.matchAll(/^ {2,4}id:\s*(?:'([a-z0-9-]+)'|([A-Z_]+_ID)),(?:\n.*){0,8}?\n\s*size:/gm)].map((m) => m[1] ?? idConsts[m[2]]),
+    // A room made by a builder takes its id first: the courses' acts, a realm's start, the new map's levels.
+    ...[...src.matchAll(/\b(?:[a-z]+Room|realmStart|newMapLevel)\(\s*'([a-z0-9-]+)'/g)].map((m) => m[1]),
+  ]);
   for (const id of ['hub', 'grove', 'market', 'l1', 'l5']) assert.ok(declared.includes(id), `${id} is declared`);
   assert.deepEqual(Object.keys(g.rooms).sort(), [...new Set(declared)].sort());
   // The tree's level 1 (map 2, OP-156, OP-162): four screens, each a sky plate, a middle distance and an
@@ -758,15 +779,15 @@ test('geometry exports the live room data with the assets table', () => {
   assert.deepEqual(l1.backgrounds.filter((t) => t.rate === 0.75).map((t) => t.key), ['tree-l1-w1-mid', 'tree-l1-0-mid', 'tree-l1-e1-mid', 'tree-l1-e2-mid']);
   assert.deepEqual(l1.backgrounds.find((t) => t.key === 'tree-l1-0-bg'), { key: 'tree-l1-0-bg', x: 1600, y: 0, rate: 0.5, fade: { left: 220, right: 220 } });
   assert.deepEqual(l1.foregrounds.map((t) => [t.key, t.rate]), [['tree-l1-w1-fg', 1.2], ['tree-l1-0-fg', 1.2], ['tree-l1-e1-fg', 1.2], ['tree-l1-e2-fg', 1.2]]);
-  assert.deepEqual([g.rooms.arcade.size, g.rooms.arcade.background], [{ w: 4800, h: 900 }, 'arcade']);
+  assert.deepEqual([g.rooms.arcade.size, g.rooms.arcade.background], [{ w: 4800, h: 1350 }, 'arcade']); // grown into a plaza toward the viewer (#179)
   assert.deepEqual(g.rooms.arcade.backgrounds.map((t) => [t.key, t.x]), [['arcade', 0], ['arcade-mid', 1600], ['arcade-end', 3200]]);
   assert.deepEqual(g.rooms.homes.backgrounds.map((t) => [t.key, t.x]), [['homes-west', 0], ['homes', 1600]]);
   // Every nest is one template, painted once.
   assert.deepEqual([g.rooms.nest.size, g.rooms.nest.background], [{ w: 1600, h: 900 }, 'nest']);
   assert.ok(g.rooms.nest.doors.some((d) => d.id === 'to-street'));
-  assert.deepEqual(g.rooms.lobby.size, { w: 3200, h: 900 });
+  assert.deepEqual(g.rooms.lobby.size, { w: 3200, h: 1350 });
   assert.deepEqual(g.rooms.lobby.backgrounds.map((t) => [t.key, t.x]), [['lobby-west', 0], ['lobby', 1600]]);
-  assert.deepEqual(g.rooms.hub.size, { w: 4800, h: 900 });
+  assert.deepEqual(g.rooms.hub.size, { w: 4800, h: 1250 });
   assert.deepEqual(g.rooms.hub.backgrounds.map((t) => [t.key, t.x]), [['hub-west', 0], ['hub', 1600], ['hub-east', 3200]]);
   assert.deepEqual(g.rooms.hub.foregrounds, []);
   assert.deepEqual(g.rooms.market.foregrounds.map((t) => [t.key, t.x]), [['market-fg', 0], ['market-east-fg', 1600]]);
@@ -1047,14 +1068,18 @@ test('the art kit (OP-229): kit.json, the jobs, the loader table and the assets 
     assert.ok(K.KIT_AREAS[areaName], `${areaName}: a course belongs to an area set`);
     for (const [name, sheet] of Object.entries(sheets)) {
       const key = `kit-sheet-${areaName}-${name}`;
-      assert.equal(sheet.pieces.length, 6, `${key}: six pieces`);
+      // Six props, three across and two down; a realm's signs and hazards seven, four over three (OP-373).
+      assert.ok([6, 7].includes(sheet.pieces.length), `${key}: six or seven pieces, not ${sheet.pieces.length}`);
+      const job = jobs.get(key);
+      assert.match(job.prompt, sheet.pieces.length === 7 ? /^A sheet of seven .* four along the top and three along the bottom/ : /^A sheet of six .* three across and two down/, `${key}: the prompt names its grid`);
+      for (const p of sheet.pieces) assert.ok(job.prompt.includes(p.desc), `${key}: the prompt names ${p.name}`);
       assert.ok(!(name in K.KIT_AREAS[areaName].sheets), `${key}: not also an area sheet`);
       assert.ok(P.HELPER_KEYS.includes(key) && jobs.get(key)?.kind === 'sheet' && jobs.get(key).size === K.SHEET_SIZE, `${key} is a helper key with a sheet job`);
       for (const p of sheet.pieces) assert.deepEqual(art[`kit-${areaName}-${p.name}`], { w: p.w ?? sheet.w, h: p.h ?? sheet.h, kind: 'piece' });
     }
   }
   // Landmarks: one prop each on a square canvas of its own, cut to kit-landmark-<name>.
-  assert.equal(Object.keys(K.KIT_LANDMARKS).length, 21);
+  assert.equal(Object.keys(K.KIT_LANDMARKS).length, 33);
   for (const [name, piece] of Object.entries(K.KIT_LANDMARKS)) {
     const key = `kit-sheet-landmark-${name}`;
     assert.ok(K.KIT_AREAS[piece.area], `${key}: lit as its area`);
