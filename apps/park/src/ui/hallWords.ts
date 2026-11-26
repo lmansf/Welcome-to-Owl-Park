@@ -24,18 +24,4 @@ export const HALL_WORDS = {
  */
 export const COMMONS_WORDS = {
   flown: 'That is flying!',
-  /**
-   * When the owl first stands in the moonbeam, where the feather trail led it (OP-463, the Nov 25
-   * cleanup walk: the light at the trail's end said nothing about what it is for). Only while this
-   * device's owl has not ridden it yet.
-   */
-  beam: {
-    keys: 'Warm air rises in the moonbeam. Jump in it and hold Space to ride it up.',
-    touch: 'Warm air rises in the moonbeam. Jump in it and hold Jump to ride it up.',
-  },
 } as const;
-
-/** The moonbeam's line by what this device plays with. */
-export function beamWords(touch: boolean): string {
-  return touch ? COMMONS_WORDS.beam.touch : COMMONS_WORDS.beam.keys;
-}

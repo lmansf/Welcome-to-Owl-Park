@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { edgeArt, edgeDraws } from '@owl-park/shared';
-import { HOMES_PLAZA, MARKET_PLAZA } from '@owl-park/shared/rooms';
+import { COMMONS_THERMAL, HOMES_PLAZA, MARKET_PLAZA } from '@owl-park/shared/rooms';
 import { roomFor } from '../rooms';
 import { FRONT_FADE, edgeShown, frontFadeBands, waitingFront } from './edgeView';
 
@@ -23,6 +23,16 @@ describe("a room's edge pieces while their art is not delivered (the Nov 25 clea
   it("the neon street's front, whose placeholder read as mushrooms, is not drawn (OP-482)", () => {
     expect(drawn('market', none).some((d) => d.key.startsWith('edge-market-clutter') || d.key === 'edge-market-corner-front')).toBe(false);
     expect(waitingFront(roomFor('market')!, none)).toBe(MARKET_PLAZA.front);
+  });
+
+  it("leaves the Treetop Commons' moonbeam standing in no placeholder stone circle (OP-463)", () => {
+    const under = (d: { x: number; y: number; w: number; h: number }) => {
+      const { x, y } = COMMONS_THERMAL.pos;
+      return x >= d.x && x <= d.x + d.w && y >= d.y && y <= d.y + d.h;
+    };
+    // The circle the walk asked about: a plaza ring drawn round the moonbeam's foot.
+    expect(edgeDraws(roomFor('lobby')!.edges ?? []).some((d) => d.kind === 'ring' && under(d))).toBe(true);
+    expect(drawn('lobby', none).some((d) => d.kind === 'ring' && under(d))).toBe(false);
   });
 
   it("keeps the Great Hollow's own pool of light and the roots at its walls' foot", () => {

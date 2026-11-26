@@ -231,7 +231,7 @@ import { FIRST_FLIGHT_MARK, glidedOff, hallTipFor, hallTips } from './hallTips';
 import { FIRST_RISE_MARK, marksFirstRise, rodeUp } from './firstRise';
 import { INTO_HOLE_PX, INTO_MOUTH_MS, MOVER_FADE_IN_MS, MOVER_WORDS, headingOf, lanePush, roomWithMovers } from './movers';
 import { MoversView, type MoverPiece } from './moversView';
-import { COMMONS_WORDS, HALL_WORDS, beamWords } from '../ui/hallWords';
+import { COMMONS_WORDS, HALL_WORDS } from '../ui/hallWords';
 import { FeatherTrail } from './featherTrailView';
 import { admitTarget } from './gateAdmit';
 import { enteredRoom, walkingMap } from './walkingMap';
@@ -414,8 +414,6 @@ const TOUCH_HINT_BOTTOM = 190;
 /** Seen from the side, hints point only at doorways within this far above or below the view (room px): a screen's height. */
 const SIDE_HINT_REACH = ROOM_H;
 const TOUCH_SCREEN = globalThis.matchMedia?.('(pointer: coarse)').matches ?? false;
-/** How long the moonbeam's line shows (OP-463): long enough to read twice. */
-const BEAM_WORDS_MS = 5200;
 /** Hint chip colours: doorways glow like the realm they lead to, spots are gold. */
 const DOOR_TINTS: Record<string, string> = { market: '#FF2AA1', arcade: '#00E5FF', grove: '#FFB347', glass: '#9FD0FF' };
 /** The action that goes through the doorway an owl stands in, seen from the side (OP-212). */
@@ -2465,12 +2463,7 @@ export class RoomScene extends Phaser.Scene {
     trail.tick(this.me.pos);
     // Standing at one of the room's own games for the first time: found, so the trail leads on from here (OP-338).
     let found = false;
-    for (const s of playSpotsAt(this.room.id, this.me.pos)) {
-      const fresh = triedDoors().add(this.room.id, s.id);
-      // At the moonbeam the trail led to, before its first ride: what the light is for (OP-463).
-      if (fresh && s.id === RISE_SPOT && this.riseWaits) this.hud.toast(beamWords(TOUCH_SCREEN), BEAM_WORDS_MS);
-      found = fresh || found;
-    }
+    for (const s of playSpotsAt(this.room.id, this.me.pos)) found = triedDoors().add(this.room.id, s.id) || found;
     if (found) return this.layTrail();
     if (this.me.walk || trail.showing) this.trailIdleAt = now;
     else if (now - this.trailIdleAt > TRAIL_IDLE_MS) this.layTrail();
