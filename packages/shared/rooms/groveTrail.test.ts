@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, inject, it } from 'vitest';
 import { FISHING_REACH, FISHING_ROOM, FISHING_SPOT } from '../src/activities';
 import { distance, isWalkable, snapToWalkable } from '../src/geometry';
 import { footing } from '../src/perches';
@@ -16,6 +16,16 @@ import { ROOMS } from './index';
  */
 const room = ROOMS[FISHING_ROOM]!;
 const floor = footing(room, 0);
+
+/**
+ * How far apart the rows of the path are that the walk past the mound starts from: 10 px under
+ * `vitest run`, so all sixteen rows; 30 px under Stryker (`mutationRun`, vitest.stryker.config.mjs),
+ * where each frame of a walk is some 230 times slower. The sixteen took 40 s there on four cores, and
+ * CI's runners are half as slow again: the test ran past the minute Stryker gives one and failed the
+ * floor's first pass (CI's runs 1783 and 1791). The six rows left take 16 s here: the path's two edges,
+ * the first row to meet the mound, and three of the rows that stopped in its old corner.
+ */
+const ROW_STEP = inject('mutationRun') ? 30 : 10;
 
 /**
  * Where an owl held toward `dir` from `from` ends up after `frames` frames of a few px each, or as soon
@@ -64,7 +74,7 @@ describe('the treehouse clearing: the feathers to the jetty can be followed', ()
     // West of the jetty's east end: the fishing spot is then a step up the floor.
     const atJetty = (p: Vec2) => p.x <= FISHING_SPOT.x + 100;
     const stuck: string[] = [];
-    for (let y = 740; y <= 890; y += 10) {
+    for (let y = 740; y <= 890; y += ROW_STEP) {
       const from = { x: startX, y };
       if (!isWalkable(from, floor.walkable, floor.shut)) continue;
       const end = held(from, { x: -1, y: 0 }, 700, atJetty);
