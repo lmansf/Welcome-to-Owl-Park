@@ -17,7 +17,7 @@ const cfgFor = (env = {}, flags = {}) => G.resolveConfig({ provider: 'gemini', o
 
 test('gemini picks its own model family and refuses a Seedream one', () => {
   assert.equal(cfgFor().model, G.DEFAULT_GEMINI_MODEL);
-  assert.equal(cfgFor().gemini.model, 'gemini-3-pro-image-preview');
+  assert.equal(cfgFor().gemini.model, 'gemini-3-pro-image');
   assert.equal(cfgFor({}, { model: 'gemini-2.5-flash-image' }).gemini.model, 'gemini-2.5-flash-image');
   assert.throws(() => cfgFor({}, { model: 'seedream-v4' }), /needs a Gemini model/);
   assert.throws(() => G.resolveConfig({ provider: 'fal', model: 'gemini-3-pro-image' }, {}, P.DEFAULTS), /only with --provider gemini/);
@@ -41,7 +41,7 @@ test('the request carries the formula prompt, inline refs as tokens, no negative
   const ref = { ref: 'refs/x.png', status: 'ok', token: 'sha256:abc', mime: 'image/png' };
   const job = { key: 'hub', prompt: 'seedream text', gemini_prompt: 'formula text', negative: 'no owls', width: 1600, height: 900, seed: 7 };
   const req = G.PROVIDERS.gemini.buildRequest(job, cfg, [ref]);
-  assert.equal(req.url, 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent');
+  assert.equal(req.url, 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image:generateContent');
   assert.deepEqual(req.body.contents[0].parts, [{ text: 'formula text' }, { inlineData: { mimeType: 'image/png', data: 'sha256:abc' } }]);
   assert.deepEqual(req.body.generationConfig, { responseModalities: ['IMAGE'], seed: 7, imageConfig: { aspectRatio: '16:9', imageSize: '2K' } });
   assert.doesNotMatch(JSON.stringify(req.body), /no owls/);
@@ -62,7 +62,7 @@ test('a response image is decoded with its thought signature; a refusal names it
   assert.throws(() => G.parseGeminiResponse({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: 'I cannot' }] } }] }), /STOP\): I cannot/);
 });
 
-test('generate posts once and needs a key', async () => {
+test('generate posts once; the key header is optional', async () => {
   const png = tinyPng();
   const calls = [];
   const fetchImpl = async (url, init) => { calls.push({ url, init }); return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ inlineData: { mimeType: 'image/png', data: png.toString('base64') } }] } }] }), { status: 200 }); };
@@ -74,7 +74,8 @@ test('generate posts once and needs a key', async () => {
   assert.equal(calls.length, 1);
   const sent = JSON.parse(calls[0].init.body);
   assert.equal(sent.contents[0].parts[1].inlineData.data, png.toString('base64'));
-  await assert.rejects(G.PROVIDERS.gemini.generate(req, { cfg: cfgFor({ GEMINI_API_KEY: '' }), refs: [], http: {} }), /GEMINI_API_KEY is not set/);
+  // Without a key the header is left off, so a proxy holding the key can add it.
+  assert.ok(!('x-goog-api-key' in G.PROVIDERS.gemini.buildRequest({ key: 'hub', prompt: 'p', width: 1600, height: 900, seed: 1 }, cfgFor({ GEMINI_API_KEY: '' }), []).headers));
 });
 
 test('revise continues a Gemini conversation, or edits other art in one turn', () => {

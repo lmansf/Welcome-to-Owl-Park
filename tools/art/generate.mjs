@@ -691,7 +691,7 @@ Object.assign(MODELS, {
   'gemini-3-pro-image': {
     label: 'Gemini 3 Pro Image',
     family: 'gemini',
-    gemini: { model: 'gemini-3-pro-image-preview', tiers: ['1K', '2K', '4K'] },
+    gemini: { model: 'gemini-3-pro-image', tiers: ['1K', '2K', '4K'] },
     price: { gemini: [{ maxPixels: 2048 * 2048, usd: 0.134 }, { maxPixels: Infinity, usd: 0.24 }] },
   },
   'gemini-2.5-flash-image': {
@@ -804,7 +804,7 @@ export function resolveConfig(flags = {}, env = process.env, defaults = {}) {
       extraJson: envJson(env.FAL_EXTRA_JSON, 'FAL_EXTRA_JSON'),
     },
     gemini: {
-      // In a cloud session the proxy may inject the real key: any placeholder value then works.
+      // Unset, the request goes without the header, for a proxy that adds the key itself (a cloud session's network secret).
       apiKey: env.GEMINI_API_KEY ?? '',
       baseUrl: (env.GEMINI_BASE_URL ?? 'https://generativelanguage.googleapis.com/v1beta').replace(/\/$/, ''),
       model: env.GEMINI_MODEL ?? prof.gemini?.model ?? '',
@@ -1130,7 +1130,7 @@ const geminiProvider = {
     Object.assign(body, job.providers?.gemini ?? {}, gemini.extraJson);
     return {
       url: `${gemini.baseUrl}/models/${gemini.model}:generateContent`,
-      headers: { 'x-goog-api-key': gemini.apiKey, 'Content-Type': 'application/json' },
+      headers: { ...(gemini.apiKey ? { 'x-goog-api-key': gemini.apiKey } : {}), 'Content-Type': 'application/json' },
       body,
       model: gemini.model,
       meta: { refMode: 'base64' },
@@ -1138,7 +1138,6 @@ const geminiProvider = {
   },
   async generate(req, ctx) {
     const { cfg, refs, http } = ctx;
-    if (!cfg.gemini.apiKey) throw new Error('GEMINI_API_KEY is not set (in a cloud session whose proxy holds the key, any placeholder value works)');
     const sent = materialise(req.body, refs, 'base64');
     const res = await fetchJson(req.url, { method: 'POST', headers: req.headers, body: JSON.stringify(sent) }, http);
     return parseGeminiResponse(res);
@@ -1552,7 +1551,7 @@ export async function main(argv = process.argv.slice(2), { env = process.env, st
     if (provider.name !== 'mock') {
       const keyName = { ark: 'ARK_API_KEY', fal: 'FAL_KEY', gemini: 'GEMINI_API_KEY' }[provider.name];
       const set = Boolean({ ark: cfg.ark.apiKey, fal: cfg.fal.key, gemini: cfg.gemini.apiKey }[provider.name]);
-      out(`${keyName}: ${set ? 'set' : 'NOT set'}`);
+      out(`${keyName}: ${set ? 'set' : provider.name === 'gemini' ? 'not set (sent without a key header, for a proxy that adds it)' : 'NOT set'}`);
     }
     out('dry run: no requests made, nothing written');
     return 0;
