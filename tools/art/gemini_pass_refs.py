@@ -8,7 +8,8 @@ Writes into <work>/guides/:
     row per material for a run sheet, side by side for a column sheet), so the model's Sheet 1 is
     the art as it ships today;
   - target-<name>-ref.png: the approved art targets (tools/art/targets) at 1280 x 720, under the
-    generator's inline reference limit.
+    generator's inline reference limit;
+  - realm-ref-<area>.png: each realm's picked new reference screen, the same way.
 Reads only published files; writes nothing under apps/ or tools/.
 """
 from __future__ import annotations
@@ -116,6 +117,13 @@ def main() -> int:
     for t in sorted((TOOLS / "targets").glob("target-*.png")):
         save(Image.open(t), guides / f"{t.stem}-ref.png")
         n += 1
+    # The picked realm references (generate.mjs select realm-ref-<area> ...), under the inline limit.
+    for marker in sorted((Path(args.work) / "raw").glob("realm-ref-*/SELECTED")):
+        h = marker.read_text().strip()
+        src = next((f for f in (marker.parent / f"{h}.png", marker.parent / f"{h}.jpg") if f.exists()), None)
+        if src:
+            save(Image.open(src), guides / f"{marker.parent.name}.png")
+            n += 1
     print(f"wrote {n} references to {guides}")
     return 0
 

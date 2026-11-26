@@ -110,10 +110,17 @@ test('the Gemini pass: every job validates, follows the formula and is framed po
   const jobs = G.validateJobs(pass.JOBS, { assets: G.loadAssets(), helperKeys: pass.HELPER_KEYS, blocks: pass.BLOCKS });
   assert.ok(jobs.length > 100);
   assert.equal(pass.NEGATIVE_PROMPT, null);
-  for (const j of jobs) {
-    assert.match(j.gemini_prompt, /^A [^.]+\. (Scene|Sheet|Asset) 1 \(reference image\), painted in the style of Image 2 \(style reference\)\./, j.key);
+  for (const j of jobs.filter((x) => x.kind === 'anchor' && x.key.startsWith('realm-ref-'))) {
+    // A new realm reference is painted from the three approved main-area targets only, never from the realm's art.
+    assert.deepEqual(j.refs.map((r) => r.ref), ['@guide:target-l4-ref', '@guide:target-plaza-ref', '@guide:target-clearing-ref'], j.key);
     assert.doesNotMatch(j.gemini_prompt, /\b(no|never|without|avoid)\b/i, `${j.key}: positive framing only`);
-    assert.equal(j.refs.length, 2, `${j.key}: identity lock and style reference`);
+  }
+  for (const j of jobs.filter((x) => !x.key.startsWith('realm-ref-'))) {
+    assert.match(j.gemini_prompt, /^A [^.]+\. (Scene|Sheet|Asset) 1 \(reference image\)(, painted in the style of Image 2 \(style reference\))?\./, j.key);
+    assert.doesNotMatch(j.gemini_prompt, /\b(no|never|without|avoid)\b/i, `${j.key}: positive framing only`);
+    // Cut-outs: identity lock only (a scene reference paints a scene behind them); rooms and textures add the style target.
+    assert.equal(j.refs.length, j.key_colour ? 1 : 2, `${j.key}: identity lock and style reference`);
+    assert.equal(/Image 2/.test(j.gemini_prompt), !j.key_colour, j.key);
   }
   // One style string per batch of the same light: every item prompt carries the same descriptor.
   const items = jobs.filter((j) => j.realm === 'items');

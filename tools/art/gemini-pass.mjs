@@ -53,8 +53,8 @@ export const BATCHES = {
 const FIX = {
   market: 'Every sign and storefront carries a plain glowing neon shape: rings, arrows, stars and abstract tubes.',
   'ink-idol': "The owl's chest is plain ink-washed feathers from throat to feet.",
-  'kit-sheet-ink-course-a': 'Every rock and cliff face is plain ink wash on paper, its surface marked only by brushed texture.',
-  'kit-sheet-ink-commons-a': 'The pedestal top is a plain ring of carved stone.',
+  'kit-sheet-ink-course-a': 'Every rock and cliff face is plain grey ink wash, its surface marked only by brushed texture, every surface unstamped.',
+  'kit-sheet-ink-commons-a': 'The pedestal top is a plain ring of carved stone, every surface unstamped.',
   'icon-hop': 'A round owl caught mid-hop: its body in the air, wings half raised, its two feet tucked under it, and a short curved motion arc beneath.',
   'kit-sheet-glass-tower-a': 'Prop 4 is a stone buttress: a tall tapering wedge of grey stone set against a wall, standing on its own base, as tall as its cell.',
   'kit-sheet-entrance-plaza-a': 'The pennant pole is a tall iron pole as tall as its cell with a plain cream and navy cloth pennant at its top.',
@@ -75,7 +75,7 @@ const FIX = {
 const PALETTE = KIT.palette;
 /** A description with its negative clauses removed. */
 export function positive(text) {
-  return text.split(/,\s*/).filter((c) => !/^(no|never|nothing|without)\b/i.test(c.trim()) && !/\b(no|never)\s+(letters|text|writing|sky|outlines?)\b/i.test(c)).join(', ').replace(/[.\s]+$/, '');
+  return text.split(/[,;]\s*/).filter((c) => !/\b(no|not|never|nothing|without|nor)\b/i.test(c)).join(', ').replace(/[.\s]+$/, '');
 }
 const HOUSE = 'Hand-painted 2D side-scrolling game art in one house style: clean cel-shaded shapes with soft painted gradients, large flat colour areas, every edge drawn by colour and value alone, a clean matte finish.';
 const LIGHT = {
@@ -83,12 +83,14 @@ const LIGHT = {
   // The kit's area lights, with their "no ..." and "never ..." clauses dropped: positive framing only.
   ...Object.fromEntries(Object.entries(KIT.areas).map(([a, v]) => [a, `Light: ${positive(v.light)}.`])),
 };
+// The ink realm keeps its washes but takes the park's night light; its seal stamps read as lettering (audit).
+LIGHT.ink = 'Light: a soft cool moon through drifting mist, the scene painted in layered grey-navy ink washes on warm paper cream #F6F1E3, the far layers fading into the mist, lantern gold #C9A227 and #FFD36A only inside paper lanterns, vermilion #C8322B only on small cord tassels.';
 /** The style string for a batch: identical in every prompt that shares the light. */
 export function styleFor(light) {
   return `${HOUSE} ${LIGHT[light] ?? LIGHT.house} Palette: ${PALETTE}.`;
 }
-const ITEM_STYLE = 'Clean 2D cel-shaded game art for a cozy owl game: bold flat colour shapes with simple soft shading and one gentle highlight, every edge drawn by colour and value alone, crisp opaque silhouette, readable at a small size, the same painted finish as Image 2.';
-const ICON_STYLE = 'A single bold emblem painted in pure white and soft pale greys only, gentle cel-shaded modelling and one crisp highlight, every edge drawn by value alone, a crisp opaque silhouette, readable at 32 pixels, the same simple round owl as Image 2.';
+const ITEM_STYLE = 'Clean 2D cel-shaded game art for a cozy owl game: bold flat colour shapes with simple soft shading and one gentle highlight, every edge drawn by colour and value alone, crisp opaque silhouette, readable at a small size, a soft painted matte finish.';
+const ICON_STYLE = 'A single bold emblem painted in pure white and soft pale greys only, gentle cel-shaded modelling and one crisp highlight, every edge drawn by value alone, a crisp opaque silhouette, readable at 32 pixels, the owl drawn as a simple round chibi owl with a round facial disc and two short ear tufts.';
 
 const AREA_OF = (key) => {
   const m = /^kit-(?:sheet-|tex-)?([a-z]+)-/.exec(key);
@@ -101,20 +103,20 @@ const ROOM_LIGHT = { market: 'neon', 'market-east': 'neon', arcade: 'neon', 'arc
 /** The approved target each light paints toward (tools/art/targets, copied under the reference limit by gemini_pass_refs.py). */
 const TARGET_OF = { neon: '@final:kit-neon-mid-b', glass: '@guide:target-l4-ref', high: '@guide:target-l4-ref', canopy: '@guide:target-plaza-ref', entrance: '@guide:target-plaza-ref', clearing: '@guide:target-clearing-ref', low: '@guide:target-clearing-ref', ground: '@guide:target-clearing-ref', ink: '@final:kit-ink-paper-cliff', house: '@guide:target-l4-ref', under: '@guide:target-clearing-ref' };
 
-function canvasFor(job) {
+export function canvasFor(job) {
   const [w, h] = job.size.split('x').map(Number);
-  const bg = job.key_colour ? `isolated on a flat, solid, uniform ${job.key_colour} background that fills the whole canvas` : '';
+  const bg = job.key_colour ? `isolated on one unbroken flat solid ${job.key_colour} field running from edge to edge, the same flat ${job.key_colour} between and around every shape` : '';
   if (job.kind === 'room' || job.kind === 'anchor' || job.kind === 'wing') return `Full-bleed ${w}x${h} 16:9 scene, the walkable floor running across the whole width along the bottom with its top edge level, clear and bare, doorways at floor level, every element in the place Scene 1 has it.`;
   if (job.kind === 'texture') return `A seamless tileable square texture, ${w}x${h}, the pattern continuing across all four edges, even light and the same scale of detail everywhere, seen flat on.`;
   if (job.kind === 'sheet' && /cut-run/.test(job.key)) return `A ${w}x${h} canvas with three long horizontal runs stacked with clear space between them, each run spanning from near the left edge to near the right edge, ${bg}.`;
   if (job.kind === 'sheet') {
     const n = job.derives?.length ?? 6;
-    return n === 1 ? `One prop centred in a ${w}x${h} frame with even empty padding around it, ${bg}.` : `A ${w}x${h} sheet of ${n} separate props in a grid of three across and ${Math.ceil(n / 3)} down, each prop whole in its own cell with clear space all round it, in the same order as Sheet 1, ${bg}.`;
+    return n === 1 ? `One prop centred in a ${w}x${h} frame with even empty padding around it, ${bg}.` : `A ${w}x${h} sheet of ${n} separate props spaced three across and ${Math.ceil(n / 3)} down, each prop whole with wide clear space all round it, in the same order as Sheet 1, ${bg}.`;
   }
   return `The asset alone, centred in a ${w}x${h} frame with even empty padding around the edges, ${job.realm === 'items' ? 'its bottom resting near the bottom edge' : 'standing on the bottom edge'}, ${bg}.`;
 }
 
-function contextFor(job) {
+export function contextFor(job) {
   if (job.kind === 'room' || job.kind === 'wing' || job.kind === 'anchor') return 'A 2D side-scrolling game background screen.';
   if (job.kind === 'texture') return 'A tileable 2D game texture.';
   if (job.kind === 'sheet') return /cut-run/.test(job.key) ? 'A sheet of platform runs for a 2D side-scrolling game.' : 'A sheet of props for a 2D side-scrolling game.';
@@ -132,7 +134,7 @@ export function formula({ context, lock, action, style, canvas }) {
   return [context, lock, action, style, canvas].map((s) => s.trim()).join(' ');
 }
 
-function geminiPrompt(job, style, hasStyleRef) {
+function geminiPrompt(job, style, hasStyleRef = true) {
   const subject = SUBJECT(job);
   const lock = `${subject} (reference image)${hasStyleRef ? ', painted in the style of Image 2 (style reference)' : ''}.`;
   const keep = REDRAW.has(job.key) ? `Paint a new ${subject} in the same style.` : job.kind === 'sheet' ? `Repaint ${subject}, keeping every prop's design, proportions and place.` : job.kind === 'texture' ? `Repaint ${subject} as an even, seamless tile of the same material.` : `Repaint ${subject}, keeping its design, proportions, pose and placement.`;
@@ -140,13 +142,44 @@ function geminiPrompt(job, style, hasStyleRef) {
   return formula({ context: contextFor(job), lock, action, style, canvas: canvasFor(job) });
 }
 
+
+// ---------------------------------------------------------------------------------------------
+// New realm references (the owner, November 2026: the realms differ too much in style and quality
+// from the main area to want to explore them). Each realm gets a fresh reference screen painted from
+// the three approved main-area targets only, never from the realm's current art; the realm's rooms,
+// kit and layers are then repainted with that screen as their reference (REALM_REF_OF).
+
+export const REALM_REFS = {
+  clearing: 'the Commons of the Treehouse Clearing: a calm round clearing under the lower boughs of great trees, a floor of soft earth and ferns across the whole width, small round huts of planks and leaves on the boughs behind with lit windows, rope bridges and lantern strings between them, a carved wooden owl idol on a round pedestal at the centre with open floor either side, a striped merch stall at the right, a glowing wooden portal arch at the far left',
+  glass: 'the Commons of the stained-glass realm: a terrace of pale fitted stone high in the great tree in cool haze, across the whole width, tall pointed stained-glass windows set in dark stone frames along the back glowing from within in jewel panes between dark lead lines, a slender glass-paned lamp post, a stone owl idol with stained-glass wings on a round pedestal at the centre with open floor either side, a tall stone portal arch at the right glowing with jewel light, neighbouring tree crowns far below in mist',
+  neon: 'the Commons of Neon Street: a narrow street of dark navy wooden shopfronts built into the great tree at dusk, wet dark paving across the whole width reflecting the light, paper lanterns in warm gold strung between the eaves, neon tubes in pink and cyan bent into simple shapes (rings, stars, arrows) over blank sign boards, a chrome owl idol on a round pedestal at the centre with open floor either side, a small market stall with a striped awning at the left, an arched doorway glowing pink at the right',
+  ink: 'the Commons of the ink-wash realm: a paper garden on a broad branch in soft grey mist, a floor of pale stepping stones and raked gravel across the whole width, misty pines and tall rock pillars rising behind in layered grey washes, a curved wooden bridge over a narrow stream at the left, a stone lantern and a tea stall with a tiled roof, an ink-wash owl idol on a round stone pedestal at the centre with open floor either side, hanging blank paper scrolls',
+};
+export const REALM_REF_KEYS = Object.keys(REALM_REFS).map((a) => `realm-ref-${a}`);
+const REF_CANVAS = 'Full-bleed 1600x900 16:9 screen for a side-scrolling game, the walkable floor running across the whole width with its top edge level 130 pixels above the bottom, its top clear and bare, the backdrop darker, softer and lower in contrast than the floor, the floor the brightest and sharpest band.';
+function realmRefJob(area, i) {
+  const prompt = formula({
+    context: 'A finished reference screen for a realm of a 2D side-scrolling game.',
+    lock: 'Images 1, 2 and 3 (style references) are approved screens of the same game: match their brush, palette, light and value bands exactly.',
+    action: `Paint ${REALM_REFS[area]}.`,
+    style: styleFor(area),
+    canvas: REF_CANVAS,
+  });
+  return {
+    key: `realm-ref-${area}`, kind: 'anchor', realm: area, size: '1600x900', seed: 13000 + i * 10, variants: 3,
+    refs: ['target-l4', 'target-plaza', 'target-clearing'].map((t) => ({ ref: `@guide:${t}-ref`, role: 'an approved main-area target: the house style', optional: false })),
+    prompt: `realm reference: ${area}`, gemini_prompt: prompt, batch: 'realm-refs',
+  };
+}
+export const REALM_REF_JOBS = Object.keys(REALM_REFS).map(realmRefJob);
+
 // ---------------------------------------------------------------------------------------------
 // The jobs.
 
 const existing = new Map(P.JOBS.map((j) => [j.key, j]));
 
 /** A job for a published key the job list never had (painted outside it, or copied from another key). */
-function builtJob(key) {
+export function builtJob(key) {
   const a = ASSETS[key];
   if (!a) throw new Error(`gemini-pass: ${key} is neither a job nor a published key`);
   const kind = a.kind === 'room' ? 'room' : a.kind === 'texture' ? 'texture' : 'piece';
@@ -169,11 +202,14 @@ function passJob(key, batch) {
   const base = existing.get(key) ?? builtJob(key);
   const light = base.kind === 'room' || ['commons', 'commons-west', 'commons-east', 'hub', 'hub-west', 'hub-east'].includes(key) ? ROOM_LIGHT[key] ?? 'clearing' : AREA_OF(key);
   const style = base.realm === 'items' ? ITEM_STYLE : base.realm === 'icons' ? ICON_STYLE : styleFor(light);
-  const refs = [identityRef(base), styleRef(base, light)];
+  // A cut-out on a key colour gets the identity lock only: a scene as style reference makes the model
+  // paint a scene behind the props (first run, November 2026). Rooms and textures keep the target.
+  const keyed = Boolean(base.key_colour);
+  const refs = keyed ? [identityRef(base)] : [identityRef(base), styleRef(base, light)];
   const job = { ...base, refs, variants: batch === 'items' || batch === 'kit' || batch === 'textures' || batch === 'icons' ? 2 : 3, providers: { ...(base.providers ?? {}) }, batch };
   // A room is generated at the size the post stage expects (3200x1800 for a screen).
   if (job.kind === 'room' && job.size === '1600x900') job.size = '3200x1800';
-  job.gemini_prompt = geminiPrompt(job, style, true);
+  job.gemini_prompt = geminiPrompt(job, style, !keyed);
   return job;
 }
 
@@ -181,3 +217,5 @@ export const JOBS = Object.entries(BATCHES).flatMap(([batch, keys]) => [...new S
   // A key flagged in two batches is generated once, in the first.
   .filter((j, i, all) => all.findIndex((x) => x.key === j.key) === i);
 export const PASS_KEYS = JOBS.map((j) => j.key);
+JOBS.push(...REALM_REF_JOBS);
+HELPER_KEYS.push(...REALM_REF_KEYS);
