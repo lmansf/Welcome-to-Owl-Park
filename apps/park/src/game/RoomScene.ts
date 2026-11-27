@@ -224,7 +224,7 @@ import { PUZZLE_ART_KEYS, artScale, drawnAsSizeBox, drawsSkinTrial, loadArt, ope
 import { SpeechBubbles } from './bubbles';
 import { backWaits, carriedIn, doorwayUnder, doorwaysOff, heldAtFall, roomsAhead, stillCarried, stillHeldSinceFall, takesDoorway, upCounts, type HeldAtFall } from './doors';
 import { PLAY_SPOTS, RISE_SPOT, ROOTS_SPOT, TriedDoors, doorSpot, leadsToPlay, playSpotsAt, trailTo, type PlaySpot } from './featherTrail';
-import { CALLS, GUARDIAN_ROOM, GUARDIAN_VIEW, guardianBoxes, guardianShade, lookShowing, mustShow, presence, type OwlSeen } from './guardian';
+import { CALLS, GUARDIAN_ROOM, GUARDIAN_VIEW, guardianBoxes, guardianShade, lookOnOwl, lookShowing, mustShow, presence, upright, type OwlSeen } from './guardian';
 import { GuardianView, type GuardianState } from './guardianView';
 import { VOTE_DESK_ROOM, type DeskState } from './voteDesk';
 import { VoteDeskView } from './voteDeskView';
@@ -1563,6 +1563,8 @@ export class RoomScene extends Phaser.Scene {
     this.posOverlay?.frame(this.me.pos, now, this.room.id, pace);
     this.tag?.update(now);
     this.bowl?.update(now);
+    // The guardian sorted for the owl first (OP-497): an owl it is drawn behind is not one it hides.
+    this.guardian?.sortFor(this.me.pos);
     this.seeThrough?.frame(this.me.pos, this.flier.air.z);
     this.guardian?.frame(now, this.owlsSeen());
     this.frameGuardianCam(now);
@@ -2834,6 +2836,8 @@ export class RoomScene extends Phaser.Scene {
     /** Snowballs this page threw and saw land, and who each landing hit (OP-074). */
     snowballs: { thrown: number; landed: number; hits: string[] };
     pos: Vec2;
+    /** The depth the visitor's own owl is drawn at among the room's art and owls (OP-497). */
+    depth: number;
     walking: boolean;
     look: OwlLook;
     /** How high the owl is drawn above the floor (OP-084), in room pixels; its place stays at `pos`. */
@@ -3006,6 +3010,7 @@ export class RoomScene extends Phaser.Scene {
       room: this.room.id,
       doors: this.room.doors.map((d) => ({ id: d.id, x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2, to: this.doorTo(d)?.room, shut: this.realmClosed(this.doorTo(d)?.room) })),
       pos: { ...this.me.pos },
+      depth: this.me.depth,
       walking: this.me.walking,
       look: this.look,
       height: this.me.flightHeight(),
@@ -5473,7 +5478,10 @@ export class RoomScene extends Phaser.Scene {
     const near = this.nearLook(g.covered);
     const edges = this.viewEdges(g.covered);
     const toRoom = this.cfg.pixelRatio / near.zoom;
-    const far = lookShowing(near, mustShow(this.me.pos, this.flier.air.z, { over: g.covered.top * toRoom, under: g.covered.bottom * toRoom }), { w: width, h: height });
+    const must = mustShow(this.me.pos, this.flier.air.z, { over: g.covered.top * toRoom, under: g.covered.bottom * toRoom });
+    // On a screen held upright the owl stays at the middle and the view draws back for its head (OP-497).
+    const screen = { w: width, h: height };
+    const far = upright(screen) ? lookOnOwl(near, must, screen) : lookShowing(near, must, screen);
     // Held to the room, as the owl's own view is.
     const held = { zoom: far.zoom, ...restAt(far, { w: width / far.zoom, h: height / far.zoom }, cameraBounds(this.room.size, edges, this.cfg.pixelRatio / far.zoom)) };
     const look = lookBetween(near, held, g.hold);

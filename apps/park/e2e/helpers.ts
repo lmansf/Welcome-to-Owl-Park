@@ -46,6 +46,8 @@ export interface ParkState {
   /** In a parkour course: the course as the room has it for this owl, and the falls and finishes this page had answered. */
   course: { course: string; act: number; run: { ms: number; parts: string[]; bench: string | null; practice?: true } | null; feathers: string[]; shortcuts: string[]; cleared: boolean; bestMs: number | null; falls: number; finishes: number } | null;
   pos: { x: number; y: number };
+  /** The depth the visitor's own owl is drawn at among the room's art and owls (OP-497). */
+  depth: number;
   walking: boolean;
   look: { body: string; belly: string; accent: string; species?: string; wear?: { head?: string; face?: string; neck?: string; pet?: string; fx?: string } };
   peers: Array<{
@@ -141,6 +143,8 @@ export interface ParkState {
     head: { roll: number; dx: number; dy: number };
     alpha: number;
     boxes: Array<{ x: number; y: number; w: number; h: number }>;
+    /** The depth it is drawn at: its foot, or just behind the visitor's own owl beside it (OP-497). */
+    depth: number;
   } | null;
   /** The vote desk in the Great Hollow (OP-288): null in any other room. */
   desk: { at: { x: number; y: number }; month: string | null; shares: Record<string, number> | null; lines: string[] } | null;
