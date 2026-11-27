@@ -234,6 +234,7 @@ import { INTO_HOLE_PX, INTO_MOUTH_MS, MOVER_FADE_IN_MS, MOVER_WORDS, headingOf, 
 import { MoversView, type MoverPiece } from './moversView';
 import { COMMONS_WORDS, HALL_WORDS } from '../ui/hallWords';
 import { FeatherTrail } from './featherTrailView';
+import { firstDoor, leadIn, mapDoorsOf, type Lead } from './walkRoute';
 import { admitTarget } from './gateAdmit';
 import { enteredRoom, walkingMap } from './walkingMap';
 import { storedKeeper } from '../net/keeper';
@@ -330,6 +331,8 @@ export const NEST_FADE_MS = 400;
 /** The feather trail (OP-307): how long after the room is in it comes out, and how long an owl stands still with none out before it comes again. */
 const TRAIL_AFTER_MS = 1200;
 const TRAIL_IDLE_MS = 8000;
+/** The registry's key for a walk there from the map under way (OP-513): it outlasts the room. */
+const LEAD_KEY = 'leadTo';
 
 /** This device's doorways tried (OP-307), read once. */
 let tried: TriedDoors | null = null;
@@ -1532,6 +1535,8 @@ export class RoomScene extends Phaser.Scene {
       this.trailIdleAt = Date.now();
       this.time.delayedCall(TRAIL_AFTER_MS, () => this.layTrail());
     }
+    // A walk there from the map (OP-513) leads on through this room, or ends here.
+    this.time.delayedCall(TRAIL_AFTER_MS, () => this.leadOn());
     // An owl that has not played yet is named the arcade and the nearest course (OP-370), once the doorway it came in by is counted.
     this.firstNamed = this.nameFirstWays();
     // Back from checkout in a page of its own (OP-190): in front of the turnstiles, and on through them with the ticket.
@@ -2358,6 +2363,78 @@ export class RoomScene extends Phaser.Scene {
     return null;
   }
 
+  /** The doorway of this room that starts the way on foot to a room (walkRoute.ts), or null when none does. */
+  private wayOnFoot(to: string): DoorDef | null {
+    const id = firstDoor(this.room.id, to, mapDoorsOf(this.walking(), (room) => this.realmClosed(room)));
+    return id ? (this.room.doors.find((d) => d.id === id) ?? null) : null;
+  }
+
+  /**
+   * Whether the map's card offers Walk there to a place (OP-513): a place of the map, not the owl's own
+   * nest (travel home goes there), not where the owl is, with a way on foot from here.
+   */
+  canWalkThere(place: string): boolean {
+    if (!this.built || place === 'nest') return false;
+    const to = travelLanding(place, this.walking());
+    return to !== undefined && to.room !== this.room.id && this.wayOnFoot(to.room) !== null;
+  }
+
+  /**
+   * Walk there from the Menu's map (OP-513, making OP-385 effective): the owl walks to the doorway that
+   * starts the way on foot, the feathers lead to it, and in each room it comes into on the way it walks
+   * on to the next, until it is in the place (leadOn). Not in the middle of a climb, a game or the
+   * turnstiles. Null when the owl is on its way, otherwise why not.
+   */
+  walkThere(place: string): TravelRefusal | null {
+    if (!this.built || this.leaving) return 'busy';
+    const climb = this.climb?.debug();
+    if (this.passingGate || this.decorating || this.askedAt || this.goingAway || this.arcade?.debug() || (climb && !climb.over)) return 'busy';
+    if (place === 'nest') return 'not-yet';
+    const to = travelLanding(place, this.walking());
+    if (!to) return 'not-yet';
+    if (to.room === this.room.id) return 'here';
+    const door = this.wayOnFoot(to.room);
+    if (!door) return 'not-yet';
+    this.hud.closeDialogue();
+    this.talkingTo = null;
+    this.registry.set(LEAD_KEY, { place, room: to.room, next: this.doorTo(door)?.room ?? null } satisfies Lead);
+    this.walkToDoorway(door.id);
+    this.layTrail();
+    return null;
+  }
+
+  /** The walk there under way, if any (OP-513). */
+  private lead(): Lead | null {
+    return (this.registry.get(LEAD_KEY) as Lead | null | undefined) ?? null;
+  }
+
+  /** The doorway the walk there leads to next in this room, or null with none under way or no way on. */
+  private leadDoor(): DoorDef | null {
+    const lead = this.lead();
+    return lead && lead.room !== this.room.id ? this.wayOnFoot(lead.room) : null;
+  }
+
+  /**
+   * In a room the owl has just come into (OP-513): a walk there ends here, in the place asked for (a line
+   * says so) or anywhere it was not leading (the owl went its own way), else walks on to its next doorway.
+   */
+  private leadOn(): void {
+    const lead = this.lead();
+    if (!lead || !this.built || this.leaving) return;
+    const now = leadIn(lead, this.room.id);
+    const door = now === 'on' ? this.wayOnFoot(lead.room) : null;
+    if (!door) {
+      this.registry.set(LEAD_KEY, null);
+      if (now === 'arrived') this.hud.toast(TRAVEL_WORDS.walkedThere, 3000);
+      // The feathers go back to leading to what is not found yet.
+      this.layTrail();
+      return;
+    }
+    this.registry.set(LEAD_KEY, { ...lead, next: this.doorTo(door)?.room ?? null } satisfies Lead);
+    this.walkToDoorway(door.id);
+    this.layTrail();
+  }
+
   /** The doorways of this room that lead somewhere open and the owl has not been through yet (OP-307). */
   private untriedDoors(): DoorDef[] {
     const tried = triedDoors();
@@ -2446,8 +2523,10 @@ export class RoomScene extends Phaser.Scene {
     const trail = this.trail;
     if (!trail || !this.built || this.leaving) return;
     this.trailIdleAt = Date.now();
-    const doors = this.trailOn ? this.untriedDoors() : [];
-    const spots = this.trailOn ? this.untriedSpots() : [];
+    // On a walk there from the map (OP-513), the feathers lead to its next doorway, the trail switch on or off: it was asked for.
+    const leading = this.leadDoor();
+    const doors = leading ? [leading] : this.trailOn ? this.untriedDoors() : [];
+    const spots = leading || !this.trailOn ? [] : this.untriedSpots();
     trail.glint([...spots, ...doors]);
     // To the room's own games first (OP-338), then to play beyond it (OP-337): a course's gate or the
     // arcade's hatch while one is untried, then the nearest of the rest.
@@ -2959,6 +3038,8 @@ export class RoomScene extends Phaser.Scene {
     desk: DeskState | null;
     /** The feather trail (OP-307): the feathers out now (room px) and the doorways that glint; null in a course. */
     trail: { feathers: Vec2[]; glints: string[]; on: boolean } | null;
+    /** A walk there from the map under way (OP-513, walkRoute.ts): the place, its room, and the room the next doorway leads to. */
+    lead: Lead | null;
     floorShown: boolean;
     edges: number;
     /** The map's places walked into and whether the owl is through the front gate, as this page has them (OP-130). */
@@ -3086,6 +3167,7 @@ export class RoomScene extends Phaser.Scene {
       guardian: this.guardian?.state() ?? null,
       desk: this.desk?.state() ?? null,
       trail: this.trail ? { ...this.trail.debug(), on: this.trailOn } : null,
+      lead: this.lead(),
       floorShown: this.floorShown,
       edges: this.edgesDrawn,
       travel: this.travelNow(),

@@ -137,6 +137,9 @@ const CSS = `
 #hud .menu-shell .mmap .pin{position:relative;align-self:center;justify-self:center;display:flex;flex-direction:column;align-items:center;gap:2px;max-width:100%;padding:8px 10px;border-radius:var(--m-card-radius);background:var(--m-raised);border:2px solid var(--m-frame);text-align:center;font-weight:700;line-height:1.2}
 #hud .menu-shell .mmap .pin.closed{border-style:dashed;font-weight:500;color:var(--m-muted)}
 #hud .menu-shell .mmap .pin.here{border-width:3px;border-color:var(--m-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--m-accent) 35%,transparent)}
+#hud .menu-shell .mmap .pin .cicon{display:block;width:26px;height:26px;color:var(--m-accent)}
+#hud .menu-shell .mmap .pin .cicon svg{display:block}
+#hud .menu-shell .mmap .pin.course{border-style:double;border-width:4px}
 #hud .menu-shell .mmap .pin .you{font-size:var(--m-body);font-weight:800;color:var(--m-text)}
 #hud .menu-shell .mmap .pin .you::before{content:'★ ';color:var(--m-accent)}
 #hud .menu-shell .mmap button.pin{cursor:pointer;min-height:var(--m-target);touch-action:manipulation}

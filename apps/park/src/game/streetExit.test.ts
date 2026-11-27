@@ -94,7 +94,9 @@ describe("the nests' street's way to the park (OP-499)", () => {
     }
   });
 
-  it("walks the chip's owl there from anywhere on the street's floor", () => {
+  // A sweep of a few hundred walks found round the street's floor: about 1.5 s here, about 8 s on a busy CI
+  // runner beside the Worker's tests, past vitest's 5 s, so it has a budget of its own (red on main from Nov 27).
+  it("walks the chip's owl there from anywhere on the street's floor", { timeout: 30_000 }, () => {
     const stuck: string[] = [];
     let tried = 0;
     for (let x = 340; x < street.size.w; x += 80) {

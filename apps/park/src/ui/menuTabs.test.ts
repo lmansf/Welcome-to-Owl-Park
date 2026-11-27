@@ -1,7 +1,7 @@
 import { STYLE_SETS, TRAVEL_WORDS, doorLabel, doorTarget, mapOf, placeShown } from '@owl-park/shared';
 import { ROOMS } from '../rooms';
 import { describe, expect, it } from 'vitest';
-import { ARCADE_PLACE, MAP_LEGEND, MAP_LIT_KEY, MAP_PLACES, NEW_MAP_COURSE_PLACES, NEW_MAP_PLACES, PLACE_LINES, collectedWords, mapLayout, mapLegend, mapNote, mapPlaceOf, newlyLit, placeCard } from './menuTabs';
+import { ARCADE_PLACE, COURSE_ICONS, MAP_LEGEND, MAP_LIT_KEY, MAP_PLACES, NEW_MAP_COURSE_PLACES, NEW_MAP_PLACES, PLACE_LINES, collectedWords, mapLayout, mapLegend, mapNote, mapPlaceOf, newlyLit, placeCard } from './menuTabs';
 
 const walked = (places: string[], gate = false) => ({ places, gate });
 
@@ -232,5 +232,19 @@ describe('the collection feels reachable (OP-471, OP-472)', () => {
   it('has no style set at launch, so the Collection shows no Sets card that only promises them', () => {
     // renderCollection draws the Sets card only for sets that exist (setsCard); none do yet.
     expect(STYLE_SETS).toEqual([]);
+  });
+});
+
+describe('the courses’ marks on the map (OP-513)', () => {
+  it('gives each of the three courses a mark of its own, and no other place one', () => {
+    const courses = Object.values(NEW_MAP_COURSE_PLACES);
+    expect(Object.keys(COURSE_ICONS).sort()).toEqual([...courses].sort());
+    const svgs = new Set(courses.map((c) => COURSE_ICONS[c]!.svg));
+    expect(svgs.size).toBe(3);
+    for (const c of courses) {
+      expect(COURSE_ICONS[c]!.label).toMatch(/^Course: /);
+      expect(COURSE_ICONS[c]!.svg).toMatch(/^<svg [^>]*aria-hidden="true"/);
+      expect(NEW_MAP_PLACES.some((p) => p.id === c)).toBe(true);
+    }
   });
 });

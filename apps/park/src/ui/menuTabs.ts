@@ -267,6 +267,26 @@ export const NEW_MAP_PLACES: readonly Place[] = [
   { id: 'circuit-1', name: courseName('market', 'Blackout Circuit'), col: 2, row: 4 },
 ];
 
+/**
+ * Each parkour course's own mark on the map (OP-513, making OP-385 effective), drawn small in the map's
+ * ink: the ink garden's course a seal stamp, the treehouse clearing's an updraft, the neon street's a
+ * breaker's lightning. Stand-ins drawn in code until an artist's icons replace them (same size, 26 px).
+ */
+export const COURSE_ICONS: Readonly<Record<string, { label: string; svg: string }>> = {
+  'brush-1': {
+    label: 'Course: a seal stamp',
+    svg: '<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M8.5 9h7M12 9v7M8.5 15.5h7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg>',
+  },
+  'canopy-1': {
+    label: 'Course: an updraft',
+    svg: '<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M7 20c-2-4 2-6 0-10M12 20c-2-5 2-8 0-13M17 20c-2-4 2-6 0-10" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M9.5 7 12 4l2.5 3" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  },
+  'circuit-1': {
+    label: 'Course: a breaker’s lightning',
+    svg: '<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M13.5 3 6 13.5h5L9.5 21 18 10h-5.2z" fill="currentColor"/></svg>',
+  },
+};
+
 /** The new map's paths, as its doorways join the places; a course hangs under its realm, whose Commons has its gate. */
 export const NEW_MAP_PATHS: ReadonlyArray<[string, string]> = [
   ['nest', 'homes'],
@@ -314,6 +334,10 @@ export interface MapTravel {
   pick(place: string): void;
   /** Its travel button held to the end: null when the owl is on its way, otherwise why not. */
   go(place: string): TravelRefusal | null;
+  /** Whether its card offers Walk there (OP-513): a way on foot from where the owl stands. */
+  canWalk(place: string): boolean;
+  /** Walk there: null when the owl is on its way on foot, otherwise why not. */
+  walk(place: string): TravelRefusal | null;
 }
 
 /** What a place's card says, and the travel it offers: its button's words and the place it travels to. */
@@ -494,6 +518,24 @@ export function renderMap(panel: HTMLElement, here: string | null, open: readonl
       });
       box.append(row, ask);
     }
+    // Walk there (OP-513): one press, no question, since walking is undone by walking back. The Menu
+    // closes and the owl walks to the first doorway of the way on foot, the feathers leading, room by room.
+    if (place.id !== here && travel.canWalk(place.id)) {
+      const w = el('button', 'mbtn ghost', TRAVEL_WORDS.walk);
+      w.type = 'button';
+      w.dataset['walk'] = place.id;
+      w.dataset['key'] = 'walk';
+      w.addEventListener('click', () => {
+        const why = travel.walk(place.id);
+        if (!why) return;
+        said.textContent = REFUSAL_WORDS[why];
+        said.hidden = false;
+      });
+      const row = el('div', 'mrow');
+      row.dataset['walkRow'] = '';
+      row.appendChild(w);
+      box.appendChild(row);
+    }
     cardBox.appendChild(box);
   };
   const marks = new Set<MapMark>();
@@ -508,6 +550,17 @@ export function renderMap(panel: HTMLElement, here: string | null, open: readonl
     pin.dataset['place'] = p.id;
     pin.style.gridColumn = String(p.col + 1);
     pin.style.gridRow = String(p.row + 1);
+    const icon = COURSE_ICONS[p.id];
+    if (icon) {
+      // A course's own mark (OP-513), so the three courses read as courses, not places like the realms.
+      pin.classList.add('course');
+      const mark = el('span', 'cicon');
+      mark.dataset['courseIcon'] = p.id;
+      mark.setAttribute('role', 'img');
+      mark.setAttribute('aria-label', icon.label);
+      mark.innerHTML = icon.svg;
+      pin.appendChild(mark);
+    }
     pin.appendChild(el('span', 'name', p.name));
     if (p.id === here) pin.appendChild(el('b', 'you', 'You are here'));
     if (tappable) {
