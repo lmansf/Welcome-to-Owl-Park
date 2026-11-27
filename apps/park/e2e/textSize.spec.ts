@@ -6,6 +6,7 @@ import { openPark } from './helpers';
  * Text size (OP-386, Dec 1 plan D8): at 200% every tab of the Menu is still on the screen, upright and
  * on its side, with nothing pushed off its edge; the setting is chosen in Settings and kept. Pinch zoom
  * stays off, so zoom.spec.ts (OP-104) holds as it was. The rules are in src/textSize.test.ts.
+ * On a narrow phone (OP-495) the tabs stay in one row on the screen and Settings never scrolls sideways.
  */
 const ROOM = { room: 'hub', spawn: 'default' };
 const TABS = ['quests', 'collection', 'nest', 'map', 'settings'] as const;
@@ -31,6 +32,49 @@ async function offScreen(page: Page): Promise<string[]> {
       if (r.left < -1 || r.right > w + 1) out.push(`${el.tagName.toLowerCase()}.${String((el as HTMLElement).className)} ${Math.round(r.left)}..${Math.round(r.right)} of ${w}`);
     }
     return out.slice(0, 8);
+  });
+}
+
+/**
+ * What of the Menu's tabs and text size buttons is not wholly on the screen and inside its own row or
+ * panel, and whether the tabs or the panel scroll sideways (OP-495). Each button is scrolled to
+ * (up or down) before its height is checked, as an owl would scroll the panel to it.
+ */
+async function outOfReach(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const out: string[] = [];
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const nav = document.querySelector<HTMLElement>('.menu-shell .mtabs');
+    const panel = document.querySelector<HTMLElement>('.menu-shell .mpanel');
+    if (!nav || !panel) return ['no menu'];
+    if (nav.scrollWidth > nav.clientWidth + 1) out.push(`the tabs scroll sideways: ${nav.scrollWidth} wide in ${nav.clientWidth}`);
+    if (panel.scrollWidth > panel.clientWidth + 1) out.push(`the panel scrolls sideways: ${panel.scrollWidth} wide in ${panel.clientWidth}`);
+    const check = (el: HTMLElement, within: HTMLElement, what: string, scroll: boolean) => {
+      const box = within.getBoundingClientRect();
+      const left = Math.max(0, box.left) - 1;
+      const right = Math.min(w, box.right) + 1;
+      let r = el.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) {
+        out.push(`${what} is not drawn`);
+        return;
+      }
+      if (r.left < left || r.right > right) out.push(`${what} spans ${Math.round(r.left)}..${Math.round(r.right)}, its room ${Math.round(left)}..${Math.round(right)} of ${w}`);
+      if (scroll) {
+        el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        r = el.getBoundingClientRect();
+      }
+      const top = Math.max(0, box.top) - 1;
+      const bottom = Math.min(h, box.bottom) + 1;
+      if (r.top < top || r.bottom > bottom) out.push(`${what} spans ${Math.round(r.top)}..${Math.round(r.bottom)} down, its room ${Math.round(top)}..${Math.round(bottom)} of ${h}`);
+    };
+    const tabs = [...nav.querySelectorAll<HTMLElement>('[data-tab]')];
+    if (tabs.length !== 5) out.push(`${tabs.length} tabs`);
+    for (const t of tabs) check(t, nav, `the ${t.dataset['tab']} tab`, false);
+    const sizes = [...panel.querySelectorAll<HTMLElement>('[data-text-size]')];
+    if (sizes.length !== 3) out.push(`${sizes.length} text size buttons`);
+    for (const b of sizes) check(b, panel, `the ${b.textContent} button`, true);
+    return out;
   });
 }
 
@@ -68,6 +112,34 @@ test.describe('text size (OP-386)', () => {
     await page.waitForFunction(() => window.owlPark?.state()?.connected === true, null, { timeout: 20_000 });
     await expect(page.locator('#hud')).toHaveAttribute('data-text', '200');
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem('owl-park:settings') ?? '{}').text)).toBe(200);
+  });
+
+  test('on a phone 360 wide, at 200 and 150%, every tab and every text size button is on the screen and nothing scrolls sideways (OP-495)', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 740 });
+    await page.addInitScript(() => localStorage.setItem('owl-park:settings', JSON.stringify({ text: 200 })));
+    await openPark(page, ROOM);
+    await expect(page.locator('#hud')).toHaveAttribute('data-text', '200');
+    await page.locator('[data-menu-btn]').click();
+    const menu = page.getByRole('dialog', { name: 'Menu' });
+    await expect(menu).toBeVisible();
+    await menu.locator('[data-tab="settings"]').click();
+    await expect(menu.locator('[data-tab="settings"]')).toHaveAttribute('aria-selected', 'true');
+    await expect.poll(() => outOfReach(page), { message: 'Settings at 200%, 360 wide' }).toEqual([]);
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-text-200-360.png` });
+
+    // 150%, chosen right there: the same holds.
+    await menu.locator('[data-text-size="150"]').click();
+    await expect(page.locator('#hud')).toHaveAttribute('data-text', '150');
+    await expect.poll(() => outOfReach(page), { message: 'Settings at 150%, 360 wide' }).toEqual([]);
+
+    // Every tab is a tap away, and so is the way back to 100%.
+    for (const tab of TABS) {
+      await menu.locator(`[data-tab="${tab}"]`).click();
+      await expect(menu.locator(`[data-tab="${tab}"]`)).toHaveAttribute('aria-selected', 'true');
+    }
+    await expect(menu.getByRole('tablist', { name: 'Menu' }).getByRole('tab')).toHaveText(['Quests', 'Collection', 'Nest', 'Map', 'Settings']);
+    await menu.locator('[data-text-size="100"]').click();
+    await expect(page.locator('#hud')).toHaveAttribute('data-text', '100');
   });
 
   test('at 200% every tab of the Menu stays on the screen, upright and on its side', async ({ page, isMobile }) => {

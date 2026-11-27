@@ -5,8 +5,9 @@ import { MENU_THEMES, themeAt, tokenStyle, type MenuThemeId, type MenuTokens } f
  * tokens (menuTheme.ts), so a realm's skin (OP-109) changes its wood and never its layout. It rises
  * from the bottom on a phone, 70% of the screen high so the park stays in sight, and stands as a card
  * on a wider screen; it keeps one height whatever its tab shows, so the tabs never move under a
- * finger. Tabs across its top, each with its word always shown: Quests, Collection, Nest, Map and
- * Settings; the tab shown is told by its weight and its amber bar, not by colour alone.
+ * finger. Tabs across its top, each with its word shown wherever the words fit (icons only where they
+ * do not, OP-495): Quests, Collection, Nest, Map and Settings; the tab shown is told by its weight and
+ * its amber bar, not by colour alone.
  *
  * One tap opens it and one closes it: the Menu button again, the dimmed park, Close, a swipe down on
  * its top, Escape, or a phone's back. It opens with a soft knock on wood unless the park's sounds are
@@ -87,17 +88,19 @@ const CSS = `
 #hud .menu-shell .mtabs{flex:none;display:flex;gap:2px;padding:0 6px;border-bottom:2px solid color-mix(in srgb,var(--m-frame) 45%,transparent)}
 #hud .menu-shell .mtab{position:relative;flex:1 1 0;min-width:max-content;min-height:calc(var(--m-target) + 18px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px 4px 9px;margin:0;background:transparent;border:0;border-radius:var(--m-tab-radius) var(--m-tab-radius) 0 0;font-weight:500;white-space:nowrap}
 #hud .menu-shell .mtab svg{width:26px;height:26px}
+/* Where the tabs' words do not fit across the Menu (large text on a phone, OP-495), the tabs show their
+   icons only, all five in one row on the screen; each keeps its word for a screen reader. */
+#hud .menu-shell .mtabs.icons{padding:0 4px}
+#hud .menu-shell .mtabs.icons .mtab{min-width:0;padding:6px 2px 9px}
+#hud .menu-shell .mtabs.icons .mtab span{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 /* Large text (OP-386): at 150 and 200% the Menu takes the screen's height, the title shares its row with
-   Close and Feedback has the row under them (its words wrap), and the tabs keep their words in a strip
-   that scrolls sideways, the chosen tab always in view. At 100% none of this applies. */
+   Close and Feedback has the row under them (its words wrap). At 100% none of this applies. */
 #hud:is([data-text="150"],[data-text="200"]) .menu-shell{height:min(calc(100dvh/var(--vz,1) - 16px),600px)}
 #hud:is([data-text="150"],[data-text="200"]) .menu-shell .mhead{flex-wrap:wrap;row-gap:4px;padding:4px 10px}
 #hud:is([data-text="150"],[data-text="200"]) .menu-shell .mtitle{order:0;flex:1 1 0}
 #hud:is([data-text="150"],[data-text="200"]) .menu-shell .mhead h2{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #hud:is([data-text="150"],[data-text="200"]) .menu-shell .x{order:1;flex:none}
 #hud:is([data-text="150"],[data-text="200"]) .menu-shell .mhead .mfeedback{order:2;flex:1 0 100%;min-width:0;justify-content:center;white-space:normal;text-align:center}
-#hud:is([data-text="150"],[data-text="200"]) .menu-shell .mtabs{overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;scrollbar-width:thin}
-#hud:is([data-text="150"],[data-text="200"]) .menu-shell .mtab{flex:0 0 auto;padding:6px 12px 9px}
 #hud .menu-shell .mtab .i1{fill:var(--m-icon-main);stroke:var(--m-icon-main)}
 #hud .menu-shell .mtab .i2{fill:var(--m-icon-accent);opacity:.55}
 #hud .menu-shell .mtab[aria-selected=true]{font-weight:800;background:color-mix(in srgb,var(--m-raised) 70%,transparent)}
@@ -342,6 +345,17 @@ export function createMenuShell(root: HTMLElement, tabs: readonly MenuTab[], opt
     }
   };
 
+  /**
+   * Icons only on the tabs while their words do not fit across the Menu (OP-495: at 150 and 200% text
+   * on a phone a sideways strip of words put Quests or Settings off the screen). Asked when a tab is
+   * shown and whenever the Menu changes width, as it does when the text size changes.
+   */
+  const fitTabs = () => {
+    nav.classList.remove('icons');
+    if (nav.scrollWidth > nav.clientWidth + 1) nav.classList.add('icons');
+  };
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => fitTabs()).observe(box);
+
   function show(id: MenuTabId) {
     const t = byId.get(id);
     if (!t) return;
@@ -350,12 +364,8 @@ export function createMenuShell(root: HTMLElement, tabs: readonly MenuTab[], opt
       b.setAttribute('aria-selected', String(tid === id));
       b.tabIndex = tid === id ? 0 : -1;
     }
-    // In the sideways strip of large text (OP-386) the chosen tab is scrolled into view.
-    const chosen = tabButtons.get(id);
-    if (chosen && nav.scrollWidth > nav.clientWidth) {
-      const left = chosen.getBoundingClientRect().left - nav.getBoundingClientRect().left + nav.scrollLeft;
-      nav.scrollLeft = Math.max(0, left - (nav.clientWidth - chosen.offsetWidth) / 2);
-    }
+    // The chosen tab's word is bolder, so whether the words fit is asked again.
+    fitTabs();
     panel.setAttribute('aria-labelledby', `menu-tab-${id}`);
     panel.dataset['panel'] = id;
     panel.innerHTML = '';
