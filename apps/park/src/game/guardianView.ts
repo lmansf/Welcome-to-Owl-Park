@@ -7,7 +7,8 @@
  * by a plain image) that the room draws: the head and the wings lie over the body where they meet, so
  * drawn apart the guardian would show darker bands there whenever it goes see-through (seeThrough.ts).
  * As one picture it fades as one, stands among the owls with its foot as its depth like any tall
- * piece, and takes the hall's light as the idols do. Its head turns about its neck, its chest swells
+ * piece (but just behind the visitor's own owl stood beside it under its wings, OP-497: sortFor), and
+ * takes the hall's light as the idols do. Its head turns about its neck, its chest swells
  * with its breath and beat, and its wings open a little with each beat and wide with a hoot.
  *
  * Round it: a soft glow that breathes with it, a shadow at its foot, the rings of its hoot and the
@@ -20,7 +21,7 @@ import type { Vec2 } from '@owl-park/shared';
 import { HALL_ROOM } from '@owl-park/shared/rooms';
 import { FOOT_SHADOW_DEPTH, footShadow } from './bowlView';
 import { onCanvas } from './canvasTint';
-import { GUARDIAN_ART, GUARDIAN_AT, GUARDIAN_SCALE, GuardianMind, composeDue, guardianBoxes, inRoom, type Call, type GuardianFrame, type HeadPose, type Lids, type OwlSeen } from './guardian';
+import { GUARDIAN_ART, GUARDIAN_AT, GUARDIAN_SCALE, GuardianMind, composeDue, guardianBoxes, guardianDepth, inRoom, type Call, type GuardianFrame, type HeadPose, type Lids, type OwlSeen } from './guardian';
 import { carved, lidded, type Pixels } from './guardianArt';
 import { IDOL_PARTS, PARTS, WING_OPEN_MAX, partKey, reach, tuckedPose, wingOpen, type IdolPart } from './idolParts';
 import { symbolTexture } from './symbols';
@@ -136,6 +137,8 @@ export interface GuardianState {
   alpha: number;
   /** The boxes hugging what it draws, in the room. */
   boxes: Array<{ x: number; y: number; w: number; h: number }>;
+  /** The depth it is drawn at among the owls: its foot, or just behind the visitor's own owl beside it (OP-497). */
+  depth: number;
 }
 
 export class GuardianView {
@@ -236,6 +239,20 @@ export class GuardianView {
   /** An owl has called to it: a hoot, a bow or a tilt. */
   called(id: string, call: Call, now: number): void {
     this.mind.called(id, call, now);
+  }
+
+  /**
+   * Sorts it among the owls for the visitor's own owl, its feet at `feet` (OP-497, guardian.ts,
+   * guardianDepth): just behind that owl where it stands beside its bough under its wings, on its foot
+   * anywhere else. Its glow goes with it, under its picture; its motes and the rings of its hoot stay
+   * over the owls as ever. Set before the room's see-through rule looks at it (seeThroughArt.ts), so an
+   * owl it is drawn behind is not one it hides.
+   */
+  sortFor(feet: Vec2): void {
+    const depth = guardianDepth(feet, this.at, this.scale);
+    if (depth === this.image.depth) return;
+    this.image.setDepth(depth);
+    this.glow.setDepth(depth - 1);
   }
 
   /** One frame: the owls in the hall now. */
@@ -340,6 +357,7 @@ export class GuardianView {
       head: f ? { ...f.head } : { roll: 0, dx: 0, dy: 0 },
       alpha: this.image.alpha,
       boxes: guardianBoxes(this.at, this.scale),
+      depth: this.image.depth,
     };
   }
 }

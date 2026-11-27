@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { distance, isWalkable, npcIn, npcsIn, pointInRect, type Vec2 } from '@owl-park/shared';
-import { HALL_ROOM, RUN_Y } from '@owl-park/shared/rooms';
+import { HALL_ROOM, RUN_Y, rootId } from '@owl-park/shared/rooms';
 import { PLAY_SPOTS } from './featherTrail';
 import {
   COMPOSE,
   composeDue,
   AT_REST,
+  boxInRoom,
   CALLS,
   GUARDIAN_ART,
   GUARDIAN_AT,
@@ -17,18 +18,24 @@ import {
   eased,
   GUARDIAN_VIEW,
   guardianBoxes,
+  guardianDepth,
   guardianShade,
   headToward,
   inRoom,
+  lookOnOwl,
   lookShowing,
   mustShow,
   presence,
+  ROOT_LINE,
   seeded,
   seenAt,
   type GuardianFrame,
   type Lids,
   type OwlSeen,
+  upright,
 } from './guardian';
+import { innerRuns, rootSpots } from './hallTips';
+import { IDOL_PARTS, WING_OPEN_MAX, reach } from './idolParts';
 import { OWL_BODY, hiddenBehind } from './seeThrough';
 
 const FACE = inRoom(GUARDIAN_ART.face);
@@ -290,6 +297,153 @@ describe('the camera near the guardian: its face stays in view', () => {
     const hv = { w: phone.w / held.zoom, h: phone.h / held.zoom };
     expect(held.y - hv.h / 2).toBeLessThanOrEqual(close.head.y + 1e-6);
     expect(held.y + hv.h / 2).toBeGreaterThanOrEqual(close.owl.y + close.owl.h - 1e-6);
+  });
+});
+
+describe('the guardian sorted among the owls beside it (OP-497)', () => {
+  /** Each inner log, either side of it: where its perch stands (room px) and its piece's foot, which is its depth. */
+  const logs = innerRuns().map((run) => {
+    const id = rootId(run.level, 'log');
+    const perch = HALL_ROOM.perches!.find((p) => p.id === id)!;
+    const piece = HALL_ROOM.pieces!.find((p) => p.id === id)!;
+    const xs = perch.area.map((p) => p.x);
+    const ys = perch.area.map((p) => p.y);
+    return { id, x0: Math.min(...xs), x1: Math.max(...xs), back: Math.min(...ys), front: Math.max(...ys), foot: piece.y };
+  });
+  /** Its wings opened as wide as they go (a hoot on a beat), across the room. */
+  const wings = reach(IDOL_PARTS.guardian, WING_OPEN_MAX);
+  const wingsX = [inRoom({ x: wings.x0, y: 0 }).x, inRoom({ x: wings.x1, y: 0 }).x] as const;
+  const bough = boxInRoom(IDOL_PARTS.guardian.parts.base);
+  /** Where an owl's feet stand along a log under its wings: every 10 px of it the wings reach over. */
+  const underWings = (x0: number, x1: number) => {
+    const out: number[] = [];
+    for (let x = Math.max(x0, wingsX[0]); x <= Math.min(x1, wingsX[1]); x += 10) out.push(x);
+    return out;
+  };
+  /** An owl is drawn at its feet's depth (Owl.ts): on the floor and on a root alike, in a room seen from above. */
+  const owlDepth = (feet: Vec2) => feet.y;
+
+  it('stands with its foot in front of the inner logs, and its wings, opened, reach over each of them: sorted by its foot alone it hid an owl on one', () => {
+    expect(logs.map((l) => l.id).sort()).toEqual([rootId('grove', 'log'), rootId('ink', 'log')].sort());
+    for (const log of logs) {
+      expect(log.foot).toBe(ROOT_LINE);
+      expect(log.back).toBe(ROOT_LINE);
+      expect(GUARDIAN_AT.y).toBeGreaterThan(log.front);
+      expect(underWings(log.x0, log.x1).length).toBeGreaterThan(5);
+    }
+  });
+
+  it('is drawn under an owl stood anywhere on either inner log under its wings, and still over the log', () => {
+    for (const log of logs) {
+      for (const x of underWings(log.x0, log.x1)) {
+        for (const y of [log.back + 1, (log.back + log.front) / 2, log.front]) {
+          const feet = { x, y };
+          const depth = guardianDepth(feet);
+          expect(depth, `${log.id} at ${x},${y}`).toBeLessThan(owlDepth(feet));
+          expect(depth, `${log.id} at ${x},${y}`).toBeGreaterThan(log.foot);
+        }
+      }
+    }
+  });
+
+  it('is drawn under an owl on the floor just in front of either inner log, where the feather trail leads a new owl', () => {
+    const spots = rootSpots(HALL_ROOM);
+    expect(spots).toHaveLength(2);
+    for (const spot of spots) {
+      for (const x of underWings(spot.x, spot.x + spot.w)) {
+        for (let y = spot.y; y <= spot.y + spot.h; y += 10) {
+          const feet = { x, y };
+          expect(isWalkable(feet, HALL_ROOM.walkable), `${x},${y}`).toBe(true);
+          expect(guardianDepth(feet), `${x},${y}`).toBeLessThan(owlDepth(feet));
+          expect(guardianDepth(feet), `${x},${y}`).toBeGreaterThan(ROOT_LINE);
+        }
+      }
+    }
+  });
+
+  it('is sorted by its foot everywhere else: behind the root line, in front of its bough, out past its wings, at the heart and out in front of it', () => {
+    const at = GUARDIAN_AT.y;
+    for (const log of logs) {
+      const x = (Math.max(log.x0, wingsX[0]) + Math.min(log.x1, wingsX[1])) / 2;
+      expect(guardianDepth({ x, y: ROOT_LINE - 1 })).toBe(at);
+      expect(guardianDepth({ x, y: ROOT_LINE - 200 })).toBe(at);
+      expect(guardianDepth({ x, y: at })).toBe(at);
+      expect(guardianDepth({ x, y: at + 100 })).toBe(at);
+    }
+    // In front of its bough, between the root line and its foot: the bough is in front of that owl.
+    for (let x = bough.x; x <= bough.x + bough.w; x += 20) expect(guardianDepth({ x, y: (ROOT_LINE + at) / 2 })).toBe(at);
+    // Out past where its wings reach, either side.
+    expect(guardianDepth({ x: wingsX[0] - 60, y: RUN_Y + 40 })).toBe(at);
+    expect(guardianDepth({ x: wingsX[1] + 60, y: RUN_Y + 40 })).toBe(at);
+    expect(guardianDepth(HEART.pos)).toBe(at);
+    expect(guardianDepth(KNOTHOLE)).toBe(at);
+    expect(guardianDepth(IN_FRONT)).toBe(at);
+    expect(guardianDepth(HALL_ROOM.spawns['default']!)).toBe(at);
+  });
+});
+
+describe('the camera near the guardian on a screen held upright (OP-497)', () => {
+  /** A phone held upright, 360 by 740 CSS px at 2.625 game px to one, at the hall's zoom for it (townView.ts: 0.42 a CSS px). */
+  const PHONE = { w: 945, h: 1943 };
+  const ZOOM = 0.42 * 2.625;
+  const near = (p: Vec2) => ({ zoom: ZOOM, x: p.x, y: p.y });
+  /** How far down the view an owl's feet stand: 0 at its top, 1 at its foot. */
+  const down = (look: { zoom: number; y: number }, p: Vec2) => (p.y - (look.y - PHONE.h / look.zoom / 2)) / (PHONE.h / look.zoom);
+  const holds = (look: { zoom: number; x: number; y: number }, r: { x: number; y: number; w: number; h: number }) => {
+    const w = PHONE.w / look.zoom;
+    const h = PHONE.h / look.zoom;
+    return look.x - w / 2 <= r.x + 1e-6 && look.x + w / 2 >= r.x + r.w - 1e-6 && look.y - h / 2 <= r.y + 1e-6 && look.y + h / 2 >= r.y + r.h - 1e-6;
+  };
+  /** A phone's HUD: its bar over the view, and the face buttons under it (CSS px, as room px at this zoom). */
+  const covered = { over: (60 * 2.625) / ZOOM, under: (130 * 2.625) / ZOOM };
+  /** In front of the inner log west of it, where the feather trail leads a new owl; a few strides out in front of it; and well out in front. */
+  const spot = rootSpots(HALL_ROOM)[0]!;
+  const BY_THE_LOG = { x: spot.x + spot.w * 0.7, y: spot.y + spot.h / 2 };
+  const OUT_IN_FRONT = { x: GUARDIAN_AT.x, y: GUARDIAN_AT.y + 300 };
+
+  it('is a screen taller than it is wide; a computer’s and a phone held sideways are not', () => {
+    expect(upright(PHONE)).toBe(true);
+    expect(upright({ w: 1440, h: 900 })).toBe(false);
+    expect(upright({ w: 844, h: 390 })).toBe(false);
+  });
+
+  it('keeps the owl at the middle of the screen, its head in view over it, by the inner log', () => {
+    const must = mustShow(BY_THE_LOG, 0, covered);
+    const look = lookOnOwl(near(BY_THE_LOG), must, PHONE);
+    expect(down(look, BY_THE_LOG)).toBeGreaterThanOrEqual(0.5 - 1e-9);
+    expect(down(look, BY_THE_LOG)).toBeLessThanOrEqual(0.5 + GUARDIAN_VIEW.low + 1e-9);
+    expect(holds(look, must.owl)).toBe(true);
+    expect(holds(look, must.head)).toBe(true);
+    expect(look.zoom).toBeGreaterThanOrEqual(ZOOM * GUARDIAN_VIEW.least);
+  });
+
+  it('draws back for its head rather than send the owl down the screen, out in front of it, where a wider screen’s rule sent it most of the way down', () => {
+    const must = mustShow(OUT_IN_FRONT, 0, covered);
+    const wide = lookShowing(near(OUT_IN_FRONT), must, PHONE);
+    expect(down(wide, OUT_IN_FRONT)).toBeGreaterThan(0.65);
+    const look = lookOnOwl(near(OUT_IN_FRONT), must, PHONE);
+    expect(down(look, OUT_IN_FRONT)).toBeCloseTo(0.5 + GUARDIAN_VIEW.low, 9);
+    expect(look.zoom).toBeLessThan(ZOOM);
+    expect(look.zoom).toBeGreaterThanOrEqual(ZOOM * GUARDIAN_VIEW.least);
+    expect(holds(look, must.owl)).toBe(true);
+    expect(holds(look, must.head)).toBe(true);
+  });
+
+  it('leaves the owl’s own view as it is where that already holds the two', () => {
+    const owl = { x: GUARDIAN_AT.x, y: HEART.pos.y };
+    const own = near(owl);
+    const must = mustShow(owl, 0, covered);
+    expect(holds(own, must.owl) && holds(own, must.head)).toBe(true);
+    expect(lookOnOwl(own, must, PHONE)).toEqual(own);
+  });
+
+  it('keeps the owl whole on the screen where even drawn back the two do not fit, well out in front of it', () => {
+    const owl = { x: GUARDIAN_AT.x, y: GUARDIAN_AT.y + 850 };
+    const must = mustShow(owl, 0, covered);
+    const look = lookOnOwl(near(owl), must, PHONE);
+    expect(look.zoom).toBeCloseTo(ZOOM * GUARDIAN_VIEW.least, 9);
+    expect(holds(look, must.owl)).toBe(true);
+    expect(down(look, owl)).toBeLessThanOrEqual(0.5 + GUARDIAN_VIEW.low + 1e-9);
   });
 });
 
