@@ -358,7 +358,11 @@ hud.attachWayOut({
     const room = roomScene();
     return room ? room.travel(place) : 'busy';
   },
-  walk: (place) => roomScene()?.walkThere(place) ?? 'busy',
+  // Null is the owl on its way, so no `??` here: it would read that as busy and leave the Menu open.
+  walk: (place) => {
+    const room = roomScene();
+    return room ? room.walkThere(place) : 'busy';
+  },
   canWalk: (place) => roomScene()?.canWalkThere(place) ?? false,
   title: () => void roomScene()?.toHomeScreen(),
 });
