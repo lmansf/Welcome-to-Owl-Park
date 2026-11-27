@@ -255,11 +255,12 @@ import { StreetDoors, addNestsSign, addParkSign } from './street';
 import { FOLLOW_EASE, cameraBounds, followEaseAt, followLead, rowAcross, type CoveredEdges } from './hudInset';
 import { RISE_HEAD, lookBetween, openingAt, restAt, riseBack, screenZoom, townZoom, wholeLook, wholeZoom, type Look } from './townView';
 import { SizeLabels } from './sizeLabels';
-import { CourseTipSigns } from './courseTipSigns';
+import { CourseTipSigns, type Box } from './courseTipSigns';
 import { courseTips, tipFor } from './courseTips';
 import { DoorSigns } from './doorSigns';
 import { ReachPrompt, promptPlace, promptWords } from './reachPrompt';
 import { SeeThrough } from './seeThroughArt';
+import { OWL_BODY } from './seeThrough';
 import { parkSfx, type Sfx } from './sfx';
 import { STEP_MOST_MS, sideCamAt, sideCamStep, speedAlong, type SideCam } from './sideCamera';
 import { airCues, type CueName } from './sfxCues';
@@ -1362,7 +1363,9 @@ export class RoomScene extends Phaser.Scene {
     const pick = tips.length
       ? () => tipFor(tips, this.me.pos.x, this.flier.air.z)?.id ?? null
       : () => (this.firstFlown ? null : (hallTipFor(hall, this.me.pos, this.flier.air.z)?.id ?? null));
-    this.tips = tips.length || hall.length ? new CourseTipSigns(this, tips.length ? tips : hall, () => this.cfg.pixelRatio / this.cameras.main.zoom, pick, room.size.h + 130) : null;
+    // The tips keep off the visitor's own owl (OP-512).
+    this.tips =
+      tips.length || hall.length ? new CourseTipSigns(this, tips.length ? tips : hall, () => this.cfg.pixelRatio / this.cameras.main.zoom, pick, room.size.h + 130, () => this.ownOwlBox()) : null;
     const settings = this.registry.get('settings') as SettingsStore | undefined;
     if (settings) {
       ambience.setCalm(settings.get().calm);
@@ -2916,6 +2919,9 @@ export class RoomScene extends Phaser.Scene {
     signBox: { left: number; right: number; top: number; bottom: number } | null;
     /** The words of the course's tip showing now (OP-344), if any. */
     tipShown: string | null;
+    /** The showing tip's words as drawn (room px), and the visitor's own owl as drawn (OP-512). */
+    tipBox: Box | null;
+    owlBox: Box | null;
     /**
      * The movers (OP-287): null on a page without the `movers` flag. Else the pieces drawn in this room, the
      * downdraft that has taken the owl down, the last dive one took it on as its flight stepped it (which
@@ -3056,6 +3062,8 @@ export class RoomScene extends Phaser.Scene {
       firstWays: [...this.firstNamed],
       signBox: this.doorSigns?.shownBox() ?? null,
       tipShown: this.tips?.shown() ?? null,
+      tipBox: this.tips?.shownBox() ?? null,
+      owlBox: this.ownOwlBox(),
       movers: this.moversOn
         ? {
             pieces: this.moversView?.pieces() ?? [],
@@ -5294,6 +5302,19 @@ export class RoomScene extends Phaser.Scene {
     // A plaza (seen from above, taller than a screen): the owl stands lower on screen, the back of the room in view (hudInset.ts).
     cam.setFollowOffset(0, this.leadOver(h / cam.zoom));
     for (const { t, img } of this.parallax) this.placeParallax(t, img);
+  }
+
+  /**
+   * The visitor's own owl as drawn now (room px): from its feet, up in the air as it flies, to the top
+   * of its head or hat, and as wide as its body or two thirds of its height, whichever is more. Null
+   * before it has one. What a course's tips keep off (OP-512).
+   */
+  private ownOwlBox(): Box | null {
+    if (!this.me) return null;
+    const feet = this.me.y - this.me.flightHeight();
+    const tall = Math.max(OWL_BODY.h, -this.me.crown());
+    const half = Math.max(OWL_BODY.w, tall * (2 / 3)) / 2;
+    return { left: this.me.x - half, right: this.me.x + half, top: feet - tall, bottom: feet };
   }
 
   /**
