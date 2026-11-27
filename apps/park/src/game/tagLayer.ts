@@ -20,7 +20,7 @@
  * there while it plays, and goes home after.
  */
 import Phaser from 'phaser';
-import { laneArt, standIn } from './standIn';
+import { artOrShape, laneArt, standIn } from './standIn';
 import { workBoxesShown } from './workBoxes';
 import {
   BOWLING_LANE,
@@ -143,7 +143,7 @@ export function prizeWords(f: ServerTagPrize): string {
 
 export class TagLayer {
   private readonly drawn: Phaser.GameObjects.GameObject[] = [];
-  private readonly feather: Phaser.GameObjects.Graphics;
+  private readonly feather: Phaser.GameObjects.Container;
   private conn: RoomConnection | null = null;
   private game: TagState = newTag();
   private heard: string[] = [];
@@ -167,8 +167,13 @@ export class TagLayer {
 
   constructor(private readonly o: TagLayerOpts) {
     this.drawSpaces();
-    this.feather = o.scene.add.graphics().setDepth(1_000_000).setVisible(false);
-    this.drawFeather();
+    // The feather over the holder's head: its art (tag-feather) once it loads, a plain drawn feather until then.
+    this.feather = artOrShape(o.scene, 'tag-feather', 52, 52, (g) => {
+      g.fillStyle(0xfff3c4, 1).fillEllipse(0, -34, 22, 52);
+      g.lineStyle(2, 0xb07a1a, 1).strokeEllipse(0, -34, 22, 52);
+      g.lineBetween(0, -64, 0, -2);
+    }, { origin: { x: 0.5, y: 1 }, keepShape: workBoxesShown() });
+    this.feather.setRotation(0.35).setDepth(1_000_000).setVisible(false);
   }
 
   /** The room's connection, once the scene holds it: the game is asked for. */
@@ -212,15 +217,6 @@ export class TagLayer {
   }
 
   /** A feather drawn in code, as a size box would be: a quill and its vane, floating over the holder's head. */
-  private drawFeather(): void {
-    const g = this.feather;
-    g.clear();
-    g.fillStyle(0xfff3c4, 1).fillEllipse(0, -34, 22, 52);
-    g.lineStyle(2, 0xb07a1a, 1).strokeEllipse(0, -34, 22, 52);
-    g.lineBetween(0, -64, 0, -2);
-    g.setRotation(0.35);
-  }
-
   /** The room's word about the game: an answer or a push. */
   onTag(f: ServerTag): void {
     this.game = f.tag;

@@ -26,7 +26,7 @@ import { parseArgs } from 'node:util';
 
 export const TOOLS_DIR = path.dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = path.resolve(TOOLS_DIR, '..', '..');
-export const ROOMS = ['hub', 'grove', 'market', 'arcade', 'lobby', 'homes', 'nest', 'glass', 'l1'];
+export const ROOMS = ['hub', 'grove', 'market', 'arcade', 'lobby', 'homes', 'nest', 'glass', 'ink', 'l1', 'm3-hall', 'escape'];
 
 /** Which room shows each key. Owl layers and the blockades show in the hub (owls show everywhere). */
 const ROOM_OF = {
@@ -275,7 +275,8 @@ export async function main(argv = process.argv.slice(2), { stdout = process.stdo
     const b = await serve(next);
     servers.push(a.server, b.server);
     const { chromium } = await import('@playwright/test');
-    browser = await chromium.launch();
+    // ART_PREVIEW_CHROME: a Chrome binary to use instead of Playwright's own (a cloud session's preinstalled browser).
+    browser = await chromium.launch(process.env.ART_PREVIEW_CHROME ? { executablePath: process.env.ART_PREVIEW_CHROME } : {});
     fs.mkdirSync(outDir, { recursive: true });
     const written = [];
     for (const room of rooms) {

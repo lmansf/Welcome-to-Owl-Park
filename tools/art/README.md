@@ -70,6 +70,26 @@ Providers:
 - `ark`: BytePlus ModelArk (international) or Volcengine Ark (China) images API, Seedream models.
   Needs `ARK_API_KEY`.
 - `fal`: fal.ai queue API for the same models. Needs `FAL_KEY`. Recommended.
+- `gemini`: Google's Gemini image models (`--model gemini-3-pro-image`, the default for this
+  provider, or `gemini-2.5-flash-image`) through `generateContent`. The job's size picks the nearest
+  supported aspect ratio and the smallest size tier (1K, 2K, 4K) covering its longer side, and the
+  finish stage resizes as usual. References go inline. A job's `gemini_prompt`, when it has one, is
+  sent in place of its `prompt`, and no negative prompt is ever sent. `GEMINI_API_KEY` is sent as
+  `x-goog-api-key`; left unset, the request goes without that header, for a proxy that adds the key
+  (a cloud session's network secret for `generativelanguage.googleapis.com`, header
+  `x-goog-api-key`, no prefix). Behind such a proxy run Node with `NODE_USE_ENV_PROXY=1`, since its
+  built-in fetch ignores `HTTPS_PROXY` otherwise. Gemini answers in JPEG.
+
+`revise <key> <hash16|selected|latest|final> "<adjustment>" --provider gemini` changes a picked image
+with a short instruction ("Keep the owl identical, but ...") instead of a rewritten prompt. A Gemini
+candidate is revised as the next turn of its own conversation (its thought signature is kept in the
+sidecar); a Seedream candidate, or `final` (the published file), as a one-turn edit of the image.
+The result is a new candidate of the same key, with `revision` in its sidecar.
+
+`gemini-pass.mjs` is the November 2026 repaint pass for Gemini (`--prompts tools/art/gemini-pass.mjs`):
+the art the audit flagged, each job's prompt written to one formula (context, reference lock,
+action, style and canvas) with the published art as the first reference and an approved target as
+the second. `python3 -B tools/art/gemini_pass_refs.py` writes those references first.
 
 Cost: the estimate follows the chosen model, the generated size and the number of reference
 images (table above; `ART_PRICE_USD` overrides it with a flat per-image price when the list
@@ -97,7 +117,7 @@ Secrets come from the environment only and are never printed or written. You may
 
 | Flag | Meaning |
 | --- | --- |
-| `--provider mock\|ark\|fal` | default `ART_PROVIDER`, else `mock` |
+| `--provider mock\|ark\|fal\|gemini` | default `ART_PROVIDER`, else `mock` |
 | `--model <family>` | `seedream-v5-pro` (default), `seedream-v4.5` or `seedream-v4`; default `ART_MODEL` |
 | `--only k1,k2` | job keys to run; globs allowed (`owl-*`, `*-fg`) |
 | `--variants N` | seeds `seed .. seed+N-1` for each job, overriding the job's own count |

@@ -3,7 +3,8 @@
  * Art generator: stage 1 of the art pipeline (see tools/art/README.md).
  *
  * Reads the job list in prompts.mjs, builds one request per job and variant for a provider
- * (`mock` offline, `ark` for BytePlus ModelArk / Volcengine Ark, `fal` for fal.ai), caches by a
+ * (`mock` offline, `ark` for BytePlus ModelArk / Volcengine Ark, `fal` for fal.ai, `gemini` for
+ * Google's Gemini image models), caches by a
  * hash of the request, downloads raw candidates into the work directory with a JSON sidecar
  * each, and appends to a provenance log. Node 22, ES modules, built-ins only.
  *
@@ -13,8 +14,9 @@
  *   node tools/art/generate.mjs select <key> <hash16|latest>
  *   node tools/art/generate.mjs cost
  *   node tools/art/generate.mjs geometry
+ *   node tools/art/generate.mjs revise <key> <hash16|selected|latest|final> "<adjustment>" --provider gemini
  *
- * Secrets (ARK_API_KEY, FAL_KEY) are read from the environment only and are never printed.
+ * Secrets (ARK_API_KEY, FAL_KEY, GEMINI_API_KEY) are read from the environment only and are never printed.
  */
 import { parseArgs } from 'node:util';
 import { createHash } from 'node:crypto';
@@ -401,6 +403,7 @@ export function validateJobs(jobs, { assets, helperKeys = [], blocks = {}, forbi
       if (!Array.isArray(job.derives)) throw new Error(`job ${key}: derives must be an array`);
       for (const d of job.derives) if (!(d in (assets?.keys ?? {}))) throw new Error(`job ${key}: derives unknown asset key ${d}`);
     }
+    if (job.gemini_prompt !== undefined && (typeof job.gemini_prompt !== 'string' || !job.gemini_prompt.trim())) throw new Error(`job ${key}: gemini_prompt must be a non-empty string`);
     const prompt = expandPrompt(job.prompt, blocks, job);
     if (!prompt) throw new Error(`job ${key}: empty prompt`);
     const refs = (job.refs ?? []).map((r) => normaliseRef(r, job));
@@ -495,8 +498,12 @@ export class RefError extends Error {}
 
 /** The value a provider sends for a ref: a data URL, or the URL itself. */
 export function refValue(ref, mode) {
-  if (ref.url) return ref.url;
+  if (ref.url) {
+    if (mode === 'base64') throw new Error(`ref ${ref.ref} is a hosted URL; this provider takes local files only`);
+    return ref.url;
+  }
   if (mode === 'url') throw new Error(`ref ${ref.ref} is a local file but *_REF_MODE=url needs hosted https refs`);
+  if (mode === 'base64') return ref.bytes.toString('base64');
   return `data:${ref.mime};base64,${ref.bytes.toString('base64')}`;
 }
 
@@ -561,7 +568,7 @@ export class HttpError extends Error {
 }
 
 export function redactHeaders(headers) {
-  return Object.fromEntries(Object.entries(headers ?? {}).map(([k, v]) => [k, /^(authorization|x-api-key|api-key)$/i.test(k) ? '***' : v]));
+  return Object.fromEntries(Object.entries(headers ?? {}).map(([k, v]) => [k, /^(authorization|x-api-key|api-key|x-goog-api-key)$/i.test(k) ? '***' : v]));
 }
 
 function retryAfterMs(value) {
@@ -676,7 +683,33 @@ export const MODELS = {
     price: { fal: [{ maxPixels: Infinity, usd: 0.03 }], ark: [{ maxPixels: Infinity, usd: 0.03 }] },
   },
 };
+// Gemini image families (`--provider gemini`). Gemini takes an aspect ratio and a size tier, not
+// pixels, so these have no pixel limits: the job's size picks the nearest ratio and the smallest
+// tier that covers its longer side, and the finish stage resizes as for Seedream. Prices are
+// Google's list prices per output image as of November 2026; check them, or set ART_PRICE_USD.
+Object.assign(MODELS, {
+  'gemini-3-pro-image': {
+    label: 'Gemini 3 Pro Image',
+    family: 'gemini',
+    gemini: { model: 'gemini-3-pro-image', tiers: ['1K', '2K', '4K'] },
+    price: { gemini: [{ maxPixels: 2048 * 2048, usd: 0.134 }, { maxPixels: Infinity, usd: 0.24 }] },
+  },
+  'gemini-3.1-flash-image': {
+    label: 'Gemini 3.1 Flash Image',
+    family: 'gemini',
+    gemini: { model: 'gemini-3.1-flash-image', tiers: ['1K', '2K'] },
+    price: { gemini: [{ maxPixels: Infinity, usd: 0.067 }] },
+  },
+  'gemini-2.5-flash-image': {
+    label: 'Gemini 2.5 Flash Image',
+    family: 'gemini',
+    gemini: { model: 'gemini-2.5-flash-image', tiers: [] },
+    price: { gemini: [{ maxPixels: Infinity, usd: 0.039 }] },
+  },
+});
 export const DEFAULT_MODEL = 'seedream-v5-pro';
+export const DEFAULT_GEMINI_MODEL = 'gemini-3-pro-image';
+export const isGeminiModel = (id) => MODELS[id]?.family === 'gemini';
 
 /**
  * Scale width x height into a model family's limits, keeping the aspect ratio. Sides land on a
@@ -702,6 +735,12 @@ export function priceFor(cfg, providerName, width, height, nRefs = 0) {
   if (cfg.priceOverride !== null && cfg.priceOverride !== undefined) return cfg.priceOverride;
   const m = MODELS[cfg.model];
   const tiers = m?.price?.[providerName] ?? [{ maxPixels: Infinity, usd: 0.03 }];
+  if (providerName === 'gemini') {
+    const t = geminiTier(width, height, cfg.gemini?.tiers ?? m?.gemini?.tiers ?? []);
+    const side = { '1K': 1024, '2K': 2048, '4K': 4096 }[t] ?? 1024;
+    const px = side * side;
+    return (tiers.find((x) => px <= x.maxPixels) ?? tiers[tiers.length - 1]).usd;
+  }
   const px = width * height;
   const tier = tiers.find((t) => px <= t.maxPixels) ?? tiers[tiers.length - 1];
   return tier.usd + Math.max(0, nRefs - 1) * (providerName === 'fal' ? m?.extraRefUsd ?? 0 : 0);
@@ -713,11 +752,16 @@ export function resolveConfig(flags = {}, env = process.env, defaults = {}) {
   const now = nowFlag ?? nowEnv ?? new Date().toISOString();
   if (Number.isNaN(Date.parse(now))) throw new Error(`--now / ART_NOW must be an ISO-8601 timestamp, got ${now}`);
   const workDir = path.resolve(flags.out ?? flags.work ?? env.ART_WORK_DIR ?? path.join(REPO_ROOT, 'work', 'art'));
-  const model = flags.model ?? env.ART_MODEL ?? defaults.model ?? DEFAULT_MODEL;
+  const provider = flags.provider ?? env.ART_PROVIDER ?? defaults.provider ?? 'mock';
+  const asked = flags.model ?? env.ART_MODEL ?? null;
+  // Gemini runs its own families; the Seedream default (from prompts.mjs) never applies to it.
+  const model = provider === 'gemini' ? asked ?? env.GEMINI_FAMILY ?? DEFAULT_GEMINI_MODEL : asked ?? defaults.model ?? DEFAULT_MODEL;
   if (!MODELS[model]) throw new Error(`unknown model ${JSON.stringify(model)} (${Object.keys(MODELS).join(', ')})`);
+  if (provider === 'gemini' && !isGeminiModel(model)) throw new Error(`--provider gemini needs a Gemini model (${Object.keys(MODELS).filter(isGeminiModel).join(', ')}), got ${model}`);
+  if (provider !== 'gemini' && isGeminiModel(model)) throw new Error(`model ${model} runs only with --provider gemini`);
   const prof = MODELS[model];
   return {
-    provider: flags.provider ?? env.ART_PROVIDER ?? defaults.provider ?? 'mock',
+    provider,
     model,
     workDir,
     repoRoot: REPO_ROOT,
@@ -741,7 +785,7 @@ export function resolveConfig(flags = {}, env = process.env, defaults = {}) {
       apiKey: env.ARK_API_KEY ?? '',
       baseUrl: (env.ARK_BASE_URL ?? 'https://ark.ap-southeast.bytepluses.com').replace(/\/$/, ''),
       imagesPath: env.ARK_IMAGES_PATH ?? '/api/v3/images/generations',
-      model: env.SEEDREAM_MODEL ?? prof.ark.model,
+      model: env.SEEDREAM_MODEL ?? prof.ark?.model ?? '',
       responseFormat: env.ARK_RESPONSE_FORMAT ?? 'url',
       sizeMode: env.ARK_SIZE_MODE ?? 'wxh',
       sizePreset: env.ARK_SIZE_PRESET ?? '',
@@ -754,8 +798,8 @@ export function resolveConfig(flags = {}, env = process.env, defaults = {}) {
     },
     fal: {
       key: env.FAL_KEY ?? '',
-      endpoint: env.FAL_ENDPOINT ?? `https://queue.fal.run/${prof.fal.endpoint}`,
-      editEndpoint: env.FAL_EDIT_ENDPOINT ?? `https://queue.fal.run/${prof.fal.edit}`,
+      endpoint: env.FAL_ENDPOINT ?? (prof.fal ? `https://queue.fal.run/${prof.fal.endpoint}` : ''),
+      editEndpoint: env.FAL_EDIT_ENDPOINT ?? (prof.fal ? `https://queue.fal.run/${prof.fal.edit}` : ''),
       syncMode: envBool(env.FAL_SYNC_MODE, false),
       refField: env.FAL_REF_FIELD ?? 'image_urls',
       refMode: env.FAL_REF_MODE ?? 'data',
@@ -764,6 +808,14 @@ export function resolveConfig(flags = {}, env = process.env, defaults = {}) {
       safety: envBool(env.FAL_SAFETY, true),
       negativeField: env.FAL_NEGATIVE_FIELD ?? '',
       extraJson: envJson(env.FAL_EXTRA_JSON, 'FAL_EXTRA_JSON'),
+    },
+    gemini: {
+      // Unset, the request goes without the header, for a proxy that adds the key itself (a cloud session's network secret).
+      apiKey: env.GEMINI_API_KEY ?? '',
+      baseUrl: (env.GEMINI_BASE_URL ?? 'https://generativelanguage.googleapis.com/v1beta').replace(/\/$/, ''),
+      model: env.GEMINI_MODEL ?? prof.gemini?.model ?? '',
+      tiers: prof.gemini?.tiers ?? [],
+      extraJson: envJson(env.GEMINI_EXTRA_JSON, 'GEMINI_EXTRA_JSON'),
     },
   };
 }
@@ -1044,7 +1096,82 @@ export function decodeDataUrl(u) {
   return Buffer.from(u.slice(comma + 1), 'base64');
 }
 
-export const PROVIDERS = { mock: mockProvider, ark: arkProvider, fal: falProvider };
+// Gemini (generateContent with image output). The prompt is the job's `gemini_prompt` when it has
+// one (written to the formula in gemini-pass.mjs), else its `prompt`; no negative prompt is ever
+// sent, since Gemini is steered by positive constraints only. References travel inline as base64.
+
+export const GEMINI_ASPECTS = ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'];
+/** The supported aspect ratio nearest to width:height (compared on a log scale). */
+export function geminiAspect(width, height) {
+  const r = Math.log(width / height);
+  let best = GEMINI_ASPECTS[0];
+  for (const a of GEMINI_ASPECTS) {
+    const [w, h] = a.split(':').map(Number);
+    if (Math.abs(Math.log(w / h) - r) < Math.abs(Math.log(best.split(':')[0] / best.split(':')[1]) - r)) best = a;
+  }
+  return best;
+}
+/** The smallest size tier whose side covers the job's longer side, or the largest; null when the family has none. */
+export function geminiTier(width, height, tiers) {
+  if (!tiers?.length) return null;
+  const side = { '1K': 1024, '2K': 2048, '4K': 4096 };
+  return tiers.find((t) => side[t] >= Math.max(width, height)) ?? tiers[tiers.length - 1];
+}
+
+const geminiImagePart = (token, mime) => ({ inlineData: { mimeType: mime, data: token } });
+
+const geminiProvider = {
+  name: 'gemini',
+  buildRequest(job, cfg, refs) {
+    const { gemini } = cfg;
+    const parts = [{ text: job.gemini_prompt ?? job.prompt }];
+    for (const r of refs) if (r.token) parts.push(geminiImagePart(r.token, r.mime ?? 'image/png'));
+    const imageConfig = { aspectRatio: geminiAspect(job.width, job.height) };
+    const tier = geminiTier(job.width, job.height, gemini.tiers);
+    if (tier) imageConfig.imageSize = tier;
+    const body = {
+      contents: [{ role: 'user', parts }],
+      generationConfig: { responseModalities: ['IMAGE'], seed: job.seed, imageConfig },
+    };
+    Object.assign(body, job.providers?.gemini ?? {}, gemini.extraJson);
+    return {
+      url: `${gemini.baseUrl}/models/${gemini.model}:generateContent`,
+      headers: { ...(gemini.apiKey ? { 'x-goog-api-key': gemini.apiKey } : {}), 'Content-Type': 'application/json' },
+      body,
+      model: gemini.model,
+      meta: { refMode: 'base64' },
+    };
+  },
+  async generate(req, ctx) {
+    const { cfg, refs, http } = ctx;
+    const sent = materialise(req.body, refs, 'base64');
+    const res = await fetchJson(req.url, { method: 'POST', headers: req.headers, body: JSON.stringify(sent) }, http);
+    return parseGeminiResponse(res);
+  },
+};
+
+/** The first image of a generateContent response, with the thought signature a revision sends back. */
+export function parseGeminiResponse(res) {
+  const cand = res?.candidates?.[0];
+  const parts = cand?.content?.parts ?? [];
+  const part = parts.find((p) => p.inlineData?.data || p.inline_data?.data);
+  if (!part) {
+    const why = res?.promptFeedback?.blockReason ?? cand?.finishReason ?? 'no image part';
+    const said = parts.map((p) => p.text).filter(Boolean).join(' ');
+    throw new Error(`gemini returned no image (${why})${said ? `: ${trim(said, 200)}` : ''}`);
+  }
+  const data = part.inlineData ?? part.inline_data;
+  const bytes = Buffer.from(data.data, 'base64');
+  const providerMeta = {};
+  if (res.modelVersion) providerMeta.model_version = res.modelVersion;
+  if (res.responseId) providerMeta.request_id = res.responseId;
+  if (res.usageMetadata) providerMeta.usage = res.usageMetadata;
+  const sig = part.thoughtSignature ?? part.thought_signature;
+  if (sig) providerMeta.thought_signature = sig;
+  return { bytes, ...inspectImage(bytes), sourceUrl: null, seedReturned: null, providerMeta };
+}
+
+export const PROVIDERS = { mock: mockProvider, ark: arkProvider, fal: falProvider, gemini: geminiProvider };
 
 // ---------------------------------------------------------------------------------------------
 // Provenance: the work log (work/art/log.jsonl), one line per attempt. Fields are allowlisted;
@@ -1107,7 +1234,7 @@ export async function appendLog(file, entry, opts) {
 
 export function planTasks(jobs, cfg, { variants = null, seed = null, defaults = {}, negative = null } = {}) {
   const provider = PROVIDERS[cfg.provider];
-  if (!provider) throw new Error(`unknown provider ${cfg.provider} (mock, ark, fal)`);
+  if (!provider) throw new Error(`unknown provider ${cfg.provider} (mock, ark, fal, gemini)`);
   const tasks = [];
   const skipped = [];
   for (const job of jobs) {
@@ -1182,6 +1309,7 @@ function sidecarFor(task, cfg, result) {
   };
   if (job.regions) sc.regions = job.regions;
   if (job.derives) sc.derives = job.derives;
+  if (job.revision) sc.revision = job.revision;
   return sc;
 }
 
@@ -1192,7 +1320,8 @@ async function runTask(task, cfg, provider, ctx) {
   const bodyBytes = Buffer.byteLength(JSON.stringify(sent));
   if (bodyBytes > cfg.warnBodyBytes) ctx.warn(`${job.key} seed ${job.seed}: request body is ${(bodyBytes / 1048576).toFixed(1)} MB`);
   const result = await provider.generate(req, { job, cfg, refs: refsOk, http: ctx.http });
-  if (result.width !== job.width || result.height !== job.height) ctx.warn(`${job.key} seed ${job.seed}: provider returned ${result.width}x${result.height}, requested ${job.size}`);
+  // Gemini answers at its own size for the ratio and tier asked; the finish stage resizes.
+  if (provider.name !== 'gemini' && (result.width !== job.width || result.height !== job.height)) ctx.warn(`${job.key} seed ${job.seed}: provider returned ${result.width}x${result.height}, requested ${job.size}`);
   if (result.format === 'jpg' && (job.kind === 'piece' || job.kind === 'owl' || job.kind === 'owl-edit' || job.kind === 'overlay' || job.kind === 'sheet' || job.kind === 'layer')) {
     ctx.warn(`${job.key} seed ${job.seed}: provider returned JPEG; ringing around key-colour edges costs matte quality. Ask for PNG, e.g. ARK_EXTRA_JSON='{"output_format":"png"}'.`);
   }
@@ -1267,7 +1396,10 @@ const USAGE = `usage: node tools/art/generate.mjs [run] [flags]
        node tools/art/generate.mjs models
        node tools/art/generate.mjs geometry [--stdout]
 
-flags: --provider mock|ark|fal   --model seedream-v5-pro|seedream-v4.5|seedream-v4
+       node tools/art/generate.mjs revise <key> <hash16|selected|latest|final> "<adjustment>" --provider gemini
+
+flags: --provider mock|ark|fal|gemini
+       --model seedream-v5-pro|seedream-v4.5|seedream-v4|gemini-3-pro-image|gemini-2.5-flash-image
        --only k1,k2 (globs ok)   --variants N   --seed S
        --dry-run   --out <dir> (alias --work; default work/art)   --now <ISO-8601>
        --concurrency N   --fail-fast   --force   --max-spend <usd>   --require-refs
@@ -1342,8 +1474,8 @@ export async function main(argv = process.argv.slice(2), { env = process.env, st
     out(['model', 'name', 'fal endpoint', 'size limits', 'fal price per image'].join('\t'));
     for (const [id, m] of Object.entries(MODELS)) {
       const lim = [m.minPixels ? `>= ${(m.minPixels / 1e6).toFixed(2)} MP` : '', m.maxPixels ? `<= ${(m.maxPixels / 1e6).toFixed(2)} MP` : '', m.minSide ? `side >= ${m.minSide}` : '', m.maxSide ? `side <= ${m.maxSide}` : ''].filter(Boolean).join(', ');
-      const price = m.price.fal.map((t) => `$${t.usd}${Number.isFinite(t.maxPixels) ? ` up to ${(t.maxPixels / 1e6).toFixed(2)} MP` : ''}`).join(', ');
-      out([`${id}${id === cfg.model ? ' *' : ''}`, m.label, m.fal.endpoint, lim, price].join('\t'));
+      const price = (m.price.fal ?? m.price.gemini).map((t) => `$${t.usd}${Number.isFinite(t.maxPixels) ? ` up to ${(t.maxPixels / 1e6).toFixed(2)} MP` : ''}`).join(', ');
+      out([`${id}${id === cfg.model ? ' *' : ''}`, m.label, m.fal?.endpoint ?? `gemini: ${m.gemini.model}`, lim || '-', price].join('\t'));
     }
     out(`* = selected (--model, ART_MODEL, or the default ${DEFAULT_MODEL})`);
     return 0;
@@ -1387,6 +1519,8 @@ export async function main(argv = process.argv.slice(2), { env = process.env, st
     return 0;
   }
 
+  if (command === 'revise') return revise({ positionals, flags, cfg, jobs, forbidden, out, err, fetchImpl, sleep });
+
   if (command !== 'run' && command !== 'cost') { err(`unknown command ${command}`); err(USAGE); return 2; }
 
   let plan;
@@ -1421,9 +1555,9 @@ export async function main(argv = process.argv.slice(2), { env = process.env, st
     }
     out(summary);
     if (provider.name !== 'mock') {
-      const keyName = provider.name === 'ark' ? 'ARK_API_KEY' : 'FAL_KEY';
-      const set = provider.name === 'ark' ? Boolean(cfg.ark.apiKey) : Boolean(cfg.fal.key);
-      out(`${keyName}: ${set ? 'set' : 'NOT set'}`);
+      const keyName = { ark: 'ARK_API_KEY', fal: 'FAL_KEY', gemini: 'GEMINI_API_KEY' }[provider.name];
+      const set = Boolean({ ark: cfg.ark.apiKey, fal: cfg.fal.key, gemini: cfg.gemini.apiKey }[provider.name]);
+      out(`${keyName}: ${set ? 'set' : provider.name === 'gemini' ? 'not set (sent without a key header, for a proxy that adds it)' : 'NOT set'}`);
     }
     out('dry run: no requests made, nothing written');
     return 0;
@@ -1462,6 +1596,84 @@ export async function main(argv = process.argv.slice(2), { env = process.env, st
   });
   err(`done: ${tasks.length - failed} ok, ${failed} failed; raw candidates in ${showPath(path.join(cfg.workDir, 'raw'))}`);
   return failed ? 1 : 0;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Revising a picked image with a short, targeted adjustment instead of a rewritten prompt.
+// A Gemini candidate is revised as the next turn of its own conversation: the job's prompt and
+// references, the candidate as the model's answer (with its thought signature), then the
+// adjustment. Anything else (a Seedream candidate, or `final`, the published file) is revised as
+// a one-turn edit: the image, then the adjustment. The result is a new candidate of the same key.
+
+export function reviseRequest({ job, cfg, refs, image, adjustment, signature = null }) {
+  const hex = sha256(image.bytes);
+  const imgRef = { ref: '@revise', status: 'ok', bytes: image.bytes, mime: image.mime, sha256: hex, token: `sha256:${hex}` };
+  if (signature) {
+    const req = geminiProvider.buildRequest(job, cfg, refs);
+    const modelPart = { ...geminiImagePart(imgRef.token, imgRef.mime), thoughtSignature: signature };
+    req.body.contents.push({ role: 'model', parts: [modelPart] }, { role: 'user', parts: [{ text: adjustment }] });
+    return { req, refs: [...refs, imgRef] };
+  }
+  const req = geminiProvider.buildRequest({ ...job, gemini_prompt: `Image 1 is the current game asset. ${adjustment}` }, cfg, [imgRef]);
+  return { req, refs: [imgRef] };
+}
+
+async function revise({ positionals, flags, cfg, jobs, forbidden, out, err, fetchImpl, sleep }) {
+  const [, key, which, ...words] = positionals;
+  const adjustment = words.join(' ').trim();
+  if (!key || !which || !adjustment) { err(USAGE); return 2; }
+  if (cfg.provider !== 'gemini') { err('revise runs with --provider gemini'); return 2; }
+  const base = jobs.find((j) => j.key === key);
+  if (!base) { err(`no job ${key}`); return 1; }
+  if (forbidden && findForbidden(adjustment, forbidden).length) { err('the adjustment holds a forbidden word'); return 1; }
+  let image;
+  let sc = null;
+  if (which === 'final') {
+    const loc = refLocation(`@final:${key}`, cfg);
+    if (!loc.file || !fs.existsSync(loc.file)) { err(`no published file for ${key}`); return 1; }
+    const bytes = fs.readFileSync(loc.file);
+    image = { bytes, mime: isPng(bytes) ? 'image/png' : isWebp(bytes) ? 'image/webp' : 'image/jpeg' };
+  } else {
+    const { selected, candidates } = listCandidates(cfg.workDir, key);
+    const ok = candidates.filter((c) => c.status === 'ok');
+    const pick = which === 'latest' ? ok[ok.length - 1] : which === 'selected' ? ok.find((c) => c.hash16 === selected) : ok.find((c) => c.hash16 === which);
+    if (!pick) { err(`no candidate ${which} for ${key}`); return 1; }
+    sc = readSidecar(cfg.workDir, key, pick.hash16);
+    const bytes = fs.readFileSync(imagePath(cfg.workDir, key, pick.hash16, sc.format === 'jpg' ? 'jpg' : 'png'));
+    image = { bytes, mime: sc.format === 'jpg' ? 'image/jpeg' : 'image/png' };
+  }
+  const seed = flags.seed ?? sc?.seed ?? base.seed ?? 1;
+  const { width, height } = parseSize(base.size);
+  const job = { ...base, seed, width, height, requested_size: base.size, revision: { of: which === 'final' ? 'final' : sc.hash16, adjustment_sha256: sha256(adjustment) } };
+  const signature = sc?.provider === 'gemini' ? sc.provider_meta?.thought_signature ?? null : null;
+  const refs = signature ? resolveRefs(job, cfg).filter((r) => r.status === 'ok') : [];
+  const { req, refs: sentRefs } = reviseRequest({ job, cfg, refs, image, adjustment, signature });
+  const { hash, hash16 } = cacheKey({ provider: 'gemini', model: req.model, body: req.body });
+  const priceUsd = priceFor(cfg, 'gemini', width, height);
+  const task = { job, refs: sentRefs, req, hash, hash16, cached: false, priceUsd, costUsd: priceUsd };
+  const how = signature ? 'next turn of its conversation' : 'one-turn edit';
+  if (cfg.dryRun) {
+    out(JSON.stringify({ url: req.url, headers: redactHeaders(req.headers), body: req.body }, null, 2));
+    out(`revise ${key} from ${job.revision.of} (${how}): $${priceUsd.toFixed(3)}`);
+    out('dry run: no requests made, nothing written');
+    return 0;
+  }
+  if (priceUsd > cfg.maxSpend) { err(`refusing to start: estimated cost exceeds --max-spend ${cfg.maxSpend}`); return 1; }
+  const ctx = { warn: (m) => err(`warning: ${m}`), http: { retries: cfg.retries, timeoutMs: cfg.timeoutMs, fetchImpl, sleep } };
+  const logBase = { ts: cfg.now, key, provider: 'gemini', model: req.model, prompt_sha256: sha256(adjustment), seed, size: job.size, hash16 };
+  const logFile = path.join(cfg.workDir, 'log.jsonl');
+  const logOpts = { forbidden, repoRoot: cfg.repoRoot };
+  try {
+    const result = await runTask(task, cfg, geminiProvider, ctx);
+    await appendLog(logFile, { ...logBase, status: 'ok' }, logOpts);
+    out(`ok       ${key} revised from ${job.revision.of} (${how}) -> ${hash16} ${result.width}x${result.height}`);
+    return 0;
+  } catch (e) {
+    const message = trim(String(e?.message ?? e));
+    await appendLog(logFile, { ...logBase, status: 'failed', error: message }, logOpts);
+    err(`failed   ${key}: ${message}`);
+    return 1;
+  }
 }
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);

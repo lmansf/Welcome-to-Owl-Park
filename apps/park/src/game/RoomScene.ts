@@ -55,6 +55,7 @@ import {
   getQuest,
   insidePark,
   interactablesIn,
+  isEscapeRoom,
   isNestRoom,
   isPhrase,
   laneThrough,
@@ -218,7 +219,8 @@ import { WindStreaks } from './windStreaks';
 import { BrushInk } from './brushInk';
 import { NeonSigns } from './neonSigns';
 import { courseFor, drawPlaceholderRoom, type Course } from './course';
-import { ESCAPE_WORDS, escapeFor, type EscapeDoorway, type EscapeHollow } from './escapeRoom';
+import { ESCAPE_WORDS, drawHollowRoom, escapeFor, type EscapeDoorway, type EscapeHollow } from './escapeRoom';
+import { workBoxesShown } from './workBoxes';
 import { TRIAL_BACKDROP_VEIL, trialBackdropVeiled } from './skinTrial';
 import { PUZZLE_ART_KEYS, artScale, drawnAsSizeBox, drawsSkinTrial, loadArt, opensSoft, prefetchRoomArt, releaseArt, roomArtCap, roomArtKeys, roomOpeningArt, sharpCopy, sharpenArt } from './art';
 import { SpeechBubbles } from './bubbles';
@@ -1235,7 +1237,10 @@ export class RoomScene extends Phaser.Scene {
     // hairline of the clear colour shows at a join while the camera scrolls.
     const playTiles: Phaser.GameObjects.Image[] = [];
     // A room with no art (the test course, OP-224) is drawn in plain shapes.
-    if (room.drawn) drawPlaceholderRoom(this, room);
+    // The sealed hollow draws its own perches (its stump and shelves) and its walls and floor in the park's textures (escapeRoom.ts).
+    const hollowArt = isEscapeRoom(room.id) && !workBoxesShown();
+    if (room.drawn) drawPlaceholderRoom(this, room, { perches: !hollowArt });
+    if (room.drawn && isEscapeRoom(room.id)) drawHollowRoom(this, room);
     for (const t of room.drawn ? [] : backgroundTiles(art)) {
       for (const img of this.tileImages(t, -1, ROOM_W + 1, ROOM_H + 1)) {
         this.placeTile(t, img);
