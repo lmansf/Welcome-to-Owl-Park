@@ -61,6 +61,15 @@ describe('text size (OP-386, D8)', () => {
     expect(found).toEqual([]);
   });
 
+  it('nothing is made to scroll sideways at large text, so no tab or button is left off a narrow screen (OP-495)', () => {
+    const sideways = /overflow(?:-x)?\s*:\s*(?:auto|scroll)/;
+    const found: string[] = [];
+    for (const [file, text] of parkFiles()) {
+      for (const line of text.split('\n')) if (line.includes('[data-text=') && sideways.test(line)) found.push(`${file.split('/src/')[1]}: ${line.trim()}`);
+    }
+    expect(found).toEqual([]);
+  });
+
   it('the thumbstick, the controller pad and the doorway hints keep their own size', () => {
     for (const k of TEXT_KEEPS) expect(TEXT_CSS).toContain(`#hud ${k}`);
     expect(TEXT_CSS).toContain('zoom:var(--unzoom,1)');

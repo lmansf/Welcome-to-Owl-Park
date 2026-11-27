@@ -28,6 +28,13 @@ const CSS = `
 #hud .settings .sizes button{min-width:58px;padding:8px 10px;background:rgba(246,241,227,.12);color:#F6F1E3;border:1px solid rgba(246,241,227,.3);box-shadow:none}
 #hud .settings .sizes button[aria-pressed=true]{background:#C9A227;color:#0C1E36;border-color:#FFD36A}
 @media (max-width:420px){#hud .settings .opt.text-size{flex-wrap:wrap}}
+/* Large text (OP-495): a row too narrow for its words and its switch or buttons side by side puts the
+   words over them, the text sizes wrap rather than reach past the row, and the keys wrap too, so at
+   200% on a phone nothing in Settings is clipped or scrolls sideways. */
+#hud:is([data-text="150"],[data-text="200"]) .settings .opt{flex-wrap:wrap}
+#hud:is([data-text="150"],[data-text="200"]) .settings .opt > span{flex:1 1 12em}
+#hud:is([data-text="150"],[data-text="200"]) .settings .sizes{flex:0 1 auto;flex-wrap:wrap;min-width:0;max-width:100%}
+#hud:is([data-text="150"],[data-text="200"]) .settings .keys span:nth-child(odd){white-space:normal}
 #hud .settings .tips{font-size:13.5px;line-height:1.45;margin:0;opacity:.9}
 `;
 
