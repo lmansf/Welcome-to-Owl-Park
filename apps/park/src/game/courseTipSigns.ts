@@ -2,10 +2,14 @@
  * A course's tips, drawn (OP-344, courseTips.ts): each a few words in the room at the first of the
  * thing it is about, the same size on any screen, as a doorway's sign is (doorSigns.ts). Only the one
  * nearest the owl shows, fading in as the owl comes near and out as it goes on. The words keep inside
- * the screen, clear of the bars at its top and foot.
+ * the screen, clear of the bars at its top and foot, and off the visitor's own owl (OP-512): held at
+ * the screen's top band, the words could land right over it.
  */
 import Phaser from 'phaser';
 import type { Vec2 } from '@owl-park/shared';
+import { clearOfOwl, type Box } from './tipPlace';
+
+export type { Box } from './tipPlace';
 
 /** A tip as the signs draw it: a course's (courseTips.ts) or the Great Hollow's (hallTips.ts). */
 export interface TipSign {
@@ -18,6 +22,7 @@ export interface TipSign {
 /** Room pixels per screen pixel now: what keeps a tip the same size on any screen. */
 type Scale = () => number;
 
+
 /** The tip's words on screen, and the widest a line runs before it wraps (CSS px). */
 const FONT_PX = 15;
 const WRAP_PX = 400;
@@ -27,6 +32,9 @@ const FADE_MS = 260;
 const TOP_PX = 104;
 const FOOT_PX = 96;
 const SIDE_PX = 12;
+/** How far the words keep from the visitor's own owl (CSS px). */
+const OWL_GAP_PX = 10;
+
 
 export class CourseTipSigns {
   private readonly signs: Array<{ tip: TipSign; text: Phaser.GameObjects.Text }> = [];
@@ -40,6 +48,8 @@ export class CourseTipSigns {
     /** The id of the tip that speaks to the owl where it is now, or null for none (courseTips.ts tipFor, hallTips.ts hallTipFor). */
     private readonly pick: () => string | null,
     depth: number,
+    /** The visitor's own owl as drawn now (room px), which the words keep off; null while it has none. */
+    private readonly owl: () => Box | null = () => null,
   ) {
     for (const tip of tips) {
       const text = scene.add
@@ -66,6 +76,14 @@ export class CourseTipSigns {
   /** The words of the tip showing now, if any (the page's debug state and its tests). */
   shown(): string | null {
     return this.signs.find((s) => s.tip.id === this.focused)?.tip.words ?? null;
+  }
+
+  /** The showing tip's words as drawn (room px), if any (the page's debug state and its tests). */
+  shownBox(): Box | null {
+    const shown = this.signs.find((x) => x.tip.id === this.focused);
+    if (!shown) return null;
+    const b = shown.text.getBounds();
+    return { left: b.left, right: b.right, top: b.top, bottom: b.bottom };
   }
 
   private update(): void {
@@ -95,6 +113,7 @@ export class CourseTipSigns {
     text.x = left > right ? view.centerX : Math.min(right, Math.max(left, tip.at.x));
     const top = view.y + TOP_PX * s + text.displayHeight;
     const foot = view.bottom - FOOT_PX * s;
-    text.y = top > foot ? foot : Math.min(foot, Math.max(top, tip.at.y));
+    const y = top > foot ? foot : Math.min(foot, Math.max(top, tip.at.y));
+    text.y = clearOfOwl(text.x, y, text.displayWidth, text.displayHeight, this.owl(), view.y + TOP_PX * s, foot, OWL_GAP_PX * s);
   }
 }

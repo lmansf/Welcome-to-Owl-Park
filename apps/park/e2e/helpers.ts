@@ -103,6 +103,9 @@ export interface ParkState {
   signBox: { left: number; right: number; top: number; bottom: number } | null;
   /** The words of the course's tip showing now (OP-344), if any. */
   tipShown: string | null;
+  /** The showing tip's words as drawn, and the visitor's own owl as drawn (room px, OP-512). */
+  tipBox: { left: number; right: number; top: number; bottom: number } | null;
+  owlBox: { left: number; right: number; top: number; bottom: number } | null;
   /** Whether this device's owl has glided off one of the Great Hollow's roots (OP-347). */
   firstFlight: boolean;
   /** Whether this device's owl has ridden this room's rising air (OP-363); null in a room that marks no such ride. */
