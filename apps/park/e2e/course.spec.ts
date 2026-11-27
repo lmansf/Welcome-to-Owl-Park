@@ -135,12 +135,15 @@ test.describe('the parkour courses (OP-224)', () => {
     await expect.poll(async () => (await state(page)).room, { timeout: 15_000 }).toBe('canopy-hut');
   });
 
-  test('a course says what it asks and how it is played, where the owl is, and shows the run its clock (OP-344)', async ({ page }) => {
+  test('a course says what it asks and how it is played, where the owl is, and shows the run its clock (OP-344)', async ({ page, isMobile }) => {
     await openPark(page, { room: 'canopy-1', spawn: 'from-gate', kit: '1' });
     // At the way in from the trail gate: what the course asks, and the moves by what this device plays with.
     const touch = await page.evaluate(() => matchMedia('(pointer: coarse)').matches);
+    // A phone plays with the pad, so it reads the pad's words and no key's (OP-498).
+    expect(touch).toBe(isMobile);
     await expect.poll(async () => (await state(page)).tipShown, { timeout: 10_000 }).toContain('Ring all 5 bells, then reach the finish.');
     expect((await state(page)).tipShown).toContain(touch ? 'Tap Jump to jump' : 'Space to jump');
+    if (touch) expect((await state(page)).tipShown).not.toMatch(/\b(Space|Shift|press)\b/i);
     // The strip shows the run's clock, and the gold time it can still beat.
     await expect(page.locator('[data-objective-clock]')).toContainText(/^0:0\d · Gold under 1:45$/);
     // At the bank where the walk first ends, past the fern hollow (OP-361): what a fall does. One tip at a time.
@@ -188,6 +191,7 @@ test.describe('the parkour courses (OP-224)', () => {
       for (const c of courses) {
         await openPark(page, { room: c.room, spawn: 'from-gate', kit: '1' });
         const touch = await page.evaluate(() => matchMedia('(pointer: coarse)').matches);
+        expect(touch).toBe(isMobile);
         await expect(page.locator('[data-turn-phone]')).toBeHidden();
         const chip = page.locator(`[data-hint="${c.on}"]`);
         await expect(chip).toHaveText('Next part');
