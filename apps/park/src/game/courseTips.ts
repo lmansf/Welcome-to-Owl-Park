@@ -1,5 +1,5 @@
 import { PLACE_NAMES, courseParts, roomsByAct, type CourseDef, type RoomDef, type Vec2 } from '@owl-park/shared';
-import { COURSE_WORDS } from '../ui/courseWords';
+import { COURSE_WORDS, forDevice } from '../ui/courseWords';
 
 /**
  * The tips a parkour course shows in its rooms (OP-344): a line of words in the room itself at the
@@ -63,7 +63,7 @@ export function courseTips(def: CourseDef, rooms: (id: string) => RoomDef | unde
   const gate = rooms(def.acts[0] ?? '');
   const way = gate?.spawns[def.gate.spawn];
   if (gate && way) {
-    const moves = touch ? COURSE_WORDS.tips.moves.touch : COURSE_WORDS.tips.moves.keys;
+    const moves = forDevice(COURSE_WORDS.tips.moves, touch);
     const name = courseName(def);
     out.push(tip('start', gate, way.x + 140, 0, `${name ? `${name}\n` : ''}${COURSE_WORDS.tips.goal[def.objective](courseParts(def, rooms).length)}\n${moves}`));
   }

@@ -26,7 +26,7 @@ import { realmStart, realmStartAnchors } from '../src/realmStart';
 export { STREET_DOORS, STREET_ROOM } from '../src/homes';
 export { PARTY_ROOM } from './party';
 export { NEW_MAP } from '../src/newMap';
-export { HALL_KNOT_HOLE, HALL_MIDDLE, HALL_ROOM, ROOT_RUNS, RUN_Y, rootId, type HallLevel, type RootRun } from './hollowHall';
+export { HALL_KNOT_HOLE, HALL_MIDDLE, HALL_ROOM, ROOT_RUNS, RUN_HALF, RUN_Y, rootId, type HallLevel, type RootRun } from './hollowHall';
 
 /**
  * Room registry shared by the browser client and the room server, so both clamp walks
@@ -847,8 +847,17 @@ export const ROOMS: Record<string, RoomDef> = {
       'from-nest-5': { x: 565, y: 782 },
     },
     doors: [
-      // The lane back to the lobby, past the two posts at the east end.
-      { id: 'to-lobby', rect: { x: 3130, y: 670, w: 70, h: 66 }, to: { room: 'lobby', spawn: 'from-homes' }, marker: { x: 3170, y: 680 } },
+      // The lane back to the lobby, past the two posts at the east end. The whole east edge takes an
+      // owl there too (OP-499): the lane runs to it above the arch and below it, over the mossy bank,
+      // and so does the plaza's lower ground (down to its front, 1335), where an owl walked east stood
+      // pinned at the screen's edge.
+      {
+        id: 'to-lobby',
+        rect: { x: 3130, y: 670, w: 70, h: 66 },
+        alsoAt: [{ x: 3130, y: 600, w: 70, h: 750 }],
+        to: { room: 'lobby', spawn: 'from-homes' },
+        marker: { x: 3170, y: 680 },
+      },
       // The nest doors, one at the foot of each trunk, door 0 nearest the lobby: blue, red and yellow
       // on the east screen, green, teal and red on the west. Door 0 is always the visitor's own nest
       // and the others are other owls' open nests, so where each one leads is decided per visitor and

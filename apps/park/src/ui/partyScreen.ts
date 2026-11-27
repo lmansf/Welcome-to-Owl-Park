@@ -4,8 +4,9 @@
  * whose turn it is may do, and each minigame on its own canvas. Everything shown comes from the room
  * server's view of the game; the page only sends what its owl does (`send`).
  *
- * Every piece of the game's art is a plain size box with its size written on it until the artists'
- * art takes its place. The owls are drawn simply in their own colours. One thumb plays it on a phone;
+ * The board, its spaces, the Acorn and the Moon Perch are painted (boardArt); on a painter's or a
+ * keeper's tab, and wherever a picture has not loaded, each is a plain size box with its size written
+ * on it. The owls are drawn simply in their own colours. One thumb plays it on a phone;
  * on a computer the arrow keys and Space.
  */
 import {
@@ -22,6 +23,29 @@ import {
 } from '@owl-park/shared';
 import { MINI_DRAWERS, type MiniDrawer, type MiniHost } from './partyMinis';
 import { BOX_EDGE, BOX_FILL, drawOwl, sizeBox } from './partyDraw';
+import { publishedArtUrl } from '../game/art';
+import { workBoxesShown } from '../game/workBoxes';
+
+/** Where the Acorn's carved face is on its 90 by 90 picture: the roll is written there. */
+const ACORN_FACE = { x: 34, y: 57 } as const;
+
+/**
+ * The board's painted pieces, each fetched once (its sharper 2x copy: the board is drawn at up to
+ * twice its size on a phone). Until a picture has loaded, or where the build has none, it is null.
+ */
+const boardPictures = new Map<string, HTMLImageElement | null>();
+function boardArt(key: string): HTMLImageElement | null {
+  if (!boardPictures.has(key)) {
+    boardPictures.set(key, null);
+    const url = typeof Image === 'undefined' ? null : publishedArtUrl(key, 2) ?? publishedArtUrl(key);
+    if (url) {
+      const img = new Image();
+      img.onload = () => boardPictures.set(key, img);
+      img.src = url;
+    }
+  }
+  return boardPictures.get(key) ?? null;
+}
 
 export interface PartyScreen {
   /** The room server's word: the game as it stands, one owl's input, or what the game paid. */
@@ -348,11 +372,15 @@ export function createPartyScreen(opts: PartyScreenOpts): PartyScreen {
     const ox = (w - BOARD_W * scale) / 2;
     const oy = (h - BOARD_H * scale) / 2;
     ctx.setTransform(scale, 0, 0, scale, ox, oy);
-    // The stump's top, carved: one size box for the board.
-    sizeBox(ctx, 0, 0, BOARD_W, BOARD_H, 'Old Stump board', { fill: 'rgba(255,211,106,.05)', font: 18 });
-    // The ways between the spaces, and the hollow's way through the trunk.
+    // The stump's top, carved (its size box on a painter's tab, or until it has loaded).
+    const painted = !workBoxesShown();
+    const art = (key: string) => (painted ? boardArt(key) : null);
+    const board = art('party-board');
+    if (board) ctx.drawImage(board, 0, 0, BOARD_W, BOARD_H);
+    else sizeBox(ctx, 0, 0, BOARD_W, BOARD_H, 'Old Stump board', { fill: 'rgba(255,211,106,.05)', font: 18 });
+    // The ways between the spaces, and the hollow's way through the trunk: worn darker into the painted wood.
     ctx.lineWidth = 6;
-    ctx.strokeStyle = 'rgba(246,241,227,.22)';
+    ctx.strokeStyle = board ? 'rgba(74,44,22,.32)' : 'rgba(246,241,227,.22)';
     for (const sp of BOARD)
       for (const n of sp.next) {
         const to = BOARD[n]!;
@@ -371,18 +399,43 @@ export function createPartyScreen(opts: PartyScreenOpts): PartyScreen {
       ctx.stroke();
       ctx.setLineDash([]);
     }
-    for (const sp of BOARD) sizeBox(ctx, sp.at.x - 32, sp.at.y - 22, 64, 44, SPACE_WORDS[sp.kind].name, { font: 11, dims: '64×44', edge: sp.n === 0 ? '#F6F1E3' : BOX_EDGE });
+    for (const sp of BOARD) {
+      const token = art(`party-space-${sp.kind}`);
+      if (!token) {
+        sizeBox(ctx, sp.at.x - 32, sp.at.y - 22, 64, 44, SPACE_WORDS[sp.kind].name, { font: 11, dims: '64×44', edge: sp.n === 0 ? '#F6F1E3' : BOX_EDGE });
+        continue;
+      }
+      ctx.drawImage(token, sp.at.x - 32, sp.at.y - 22, 64, 44);
+      // The start space: a cream ring round its token.
+      if (sp.n === 0) {
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = '#F6F1E3';
+        ctx.beginPath();
+        ctx.ellipse(sp.at.x, sp.at.y, 26, 24, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
     // The Moon Perch on its branch.
     const perch = BOARD[v.perch];
-    if (perch) sizeBox(ctx, perch.at.x - 24, perch.at.y - 78, 48, 48, 'Moon Perch', { font: 9, dims: '48×48', fill: 'rgba(255,211,106,.28)' });
-    // The acorn die in the middle.
+    const perchArt = art('party-moon-perch');
+    if (perch && perchArt) ctx.drawImage(perchArt, perch.at.x - 24, perch.at.y - 78, 48, 48);
+    else if (perch) sizeBox(ctx, perch.at.x - 24, perch.at.y - 78, 48, 48, 'Moon Perch', { font: 9, dims: '48×48', fill: 'rgba(255,211,106,.28)' });
+    // The acorn die in the middle, the roll on its carved face.
     const roll = v.phase === 'turn' && v.turn?.roll ? String(v.turn.roll) : '?';
-    sizeBox(ctx, BOARD_W / 2 - 45, BOARD_H / 2 - 45, 90, 90, 'Acorn', { font: 12, dims: '90×90', fill: BOX_FILL });
-    ctx.fillStyle = '#FFD36A';
-    ctx.font = '700 40px system-ui,sans-serif';
+    const acorn = art('party-acorn');
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(roll, BOARD_W / 2, BOARD_H / 2 + 4);
+    if (acorn) {
+      ctx.drawImage(acorn, BOARD_W / 2 - 45, BOARD_H / 2 - 45, 90, 90);
+      ctx.fillStyle = '#5A3A1E';
+      ctx.font = '700 32px system-ui,sans-serif';
+      ctx.fillText(roll, BOARD_W / 2 - 45 + ACORN_FACE.x, BOARD_H / 2 - 45 + ACORN_FACE.y + 2);
+    } else {
+      sizeBox(ctx, BOARD_W / 2 - 45, BOARD_H / 2 - 45, 90, 90, 'Acorn', { font: 12, dims: '90×90', fill: BOX_FILL });
+      ctx.fillStyle = '#FFD36A';
+      ctx.font = '700 40px system-ui,sans-serif';
+      ctx.fillText(roll, BOARD_W / 2, BOARD_H / 2 + 4);
+    }
     // The owls, a little apart on a shared space.
     const now = performance.now();
     const offs = [

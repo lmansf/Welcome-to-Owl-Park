@@ -17,7 +17,7 @@ import { createEmoteWheel, wheelEmotes, type EmoteWheel } from './emoteWheel';
 import { createFeedbackScreen, type FeedbackScreen } from './feedback';
 import { createFeedbackBug, feedbackIcon, feedbackOffered } from './feedbackBug';
 import { afterReward, createFeedbackCard, type FeedbackCard } from './feedbackReward';
-import { coveredBy, type CoveredEdges } from '../game/hudInset';
+import { coveredBy, rowAcross, type CoveredEdges } from '../game/hudInset';
 import { walkingMap } from '../game/walkingMap';
 import { createTreeMinimap } from './treeMinimap';
 import { createJoystick, underStick } from './joystick';
@@ -41,6 +41,7 @@ import { SPECTATOR_WORDS, createSpectatorBadge } from './spectator';
 import { watchTopStack } from './topStack';
 import { createTurnPhone } from './turnPhone';
 import { owlBox, toastLift, type Box } from './toastLift';
+import { toastToReplace } from './toastStack';
 
 /** The highest the tips go, lifted clear of the chips (OP-415): under the bar along the top. */
 const TOASTS_TOP = 64;
@@ -305,8 +306,18 @@ export interface Hud {
   /** The room picked a spot. */
   selectDecorateSpot(spot: NestSpotId): void;
   closeDecorate(): void;
-  /** How far the HUD's controls (the owl count, the feathers, Menu, Emotes and Say) reach in from the top and bottom of the screen, in CSS px (OP-278). */
+  /**
+   * How far the HUD's controls (the owl count, the feathers, Menu, Emotes and Say) reach in from the top
+   * and bottom of the screen, in CSS px (OP-278); on a computer's screen narrower than it is tall, the
+   * action buttons in the bottom row too (OP-496).
+   */
   coveredEdges(): CoveredEdges;
+  /**
+   * `cb` each time the bar or the bottom row changes size (OP-496): on a narrow screen the row wraps
+   * onto two lines as an action button joins it (standing at a doorway or a leaf pile), so what it
+   * covers grows. Returns the way to stop.
+   */
+  onCoveredChange(cb: () => void): () => void;
   /**
    * Where the HUD's own buttons stand on the screen (CSS px): Menu, Emotes, Say, a game's Start or Join,
    * and on a touch screen the face buttons shown. The hint chips keep off them (OP-467).
@@ -550,6 +561,14 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
   const questDot = $<HTMLElement>('[data-quest-dot]');
   const notices = $<HTMLElement>('[data-notices]');
   const actionsEl = $<HTMLElement>('[data-actions]');
+  // What the HUD covers changes as the bar or the bottom row changes size (onCoveredChange, OP-496).
+  const coverWatchers = new Set<() => void>();
+  if (typeof ResizeObserver === 'function') {
+    const sizes = new ResizeObserver(() => {
+      for (const cb of [...coverWatchers]) cb();
+    });
+    for (const el of [$<HTMLElement>('.bar'), $<HTMLElement>('.bottom .left'), actionsEl]) if (el) sizes.observe(el);
+  }
   const hintsEl = $<HTMLElement>('[data-hints]');
   const hintEls = new Map<string, HTMLButtonElement>();
   /** Where the visitor's own owl stands on the screen, for the tips to stay clear of (OP-291). */
@@ -1020,13 +1039,24 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
     const next = toasts.childElementCount ? toastLift(column, chips, TOASTS_TOP) : 0;
     if (Math.abs(next - lift) >= 0.5) toasts.style.setProperty('--toasts-lift', `${next.toFixed(1)}px`);
   };
+  const toastTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
   const dropToast = (el: HTMLElement, ms: number) =>
-    setTimeout(() => {
-      el.remove();
-      liftToasts();
-    }, ms);
+    toastTimers.set(
+      el,
+      setTimeout(() => {
+        el.remove();
+        liftToasts();
+      }, ms),
+    );
 
   const toast = (message: string, ms = 2600, accent?: string) => {
+    // The same news once (OP-458, toastStack.ts): a tip already saying it, or saying the park could not connect, makes way.
+    const plain = [...toasts.children].filter((c): c is HTMLElement => c instanceof HTMLElement && c.dataset['spectatorOffer'] === undefined);
+    const old = plain[toastToReplace(plain.map((c) => c.textContent ?? ''), message)];
+    if (old) {
+      clearTimeout(toastTimers.get(old));
+      old.remove();
+    }
     const el = document.createElement('div');
     el.className = accent ? 'toast accent' : 'toast';
     if (accent) el.style.setProperty('--accent', accent);
@@ -1515,11 +1545,21 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
         .map((el) => el.getBoundingClientRect())
         .filter((r) => r.width > 0 && r.height > 0)
         .map((r) => ({ left: r.left, top: r.top, right: r.right, bottom: r.bottom })),
-    coveredEdges: () =>
-      coveredBy(
-        [...root.querySelectorAll<HTMLElement>('.bar .pill, .bar .feathers, [data-menu-btn], [data-emotes-btn], [data-say-btn]')].map((el) => el.getBoundingClientRect()),
+    coveredEdges: () => {
+      // The action buttons share the row on a computer (a phone stands them above its pad, OP-242); on a
+      // screen narrower than it is tall they may be its tallest part (OP-496). A wide screen keeps its measure.
+      const row = !window.matchMedia?.('(pointer: coarse)').matches && rowAcross({ w: window.innerWidth, h: window.innerHeight }) ? ', [data-actions] > button' : '';
+      return coveredBy(
+        [...root.querySelectorAll<HTMLElement>(`.bar .pill, .bar .feathers, [data-menu-btn], [data-emotes-btn], [data-say-btn]${row}`)].map((el) => el.getBoundingClientRect()),
         window.innerHeight,
-      ),
+      );
+    },
+    onCoveredChange: (cb) => {
+      coverWatchers.add(cb);
+      return () => {
+        coverWatchers.delete(cb);
+      };
+    },
   };
 }
 

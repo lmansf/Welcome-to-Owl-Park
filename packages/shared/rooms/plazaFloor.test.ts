@@ -187,7 +187,7 @@ const OWN_KIT: Readonly<Record<string, readonly string[]>> = {
   homes: ['kit-clearing-', 'kit-ground-', 'kit-low-', 'kit-seat-', 'kit-entrance-bird-bath'],
   grove: ['kit-clearing-', 'kit-ground-', 'kit-low-', 'kit-seat-'],
   arcade: ['kit-neon-', 'kit-under-'],
-  market: ['kit-neon-', 'kit-under-mushroom-cluster', 'kit-ground-water-barrel'],
+  market: ['kit-neon-', 'kit-ground-water-barrel'],
   glass: ['kit-glass-', 'kit-entrance-bird-bath'],
   ink: ['kit-ink-', 'kit-landmark-heron-ink'],
 };
@@ -200,6 +200,11 @@ describe("one story per room, not the same props in every one (OP-416, the owner
     const where: Record<string, string[]> = {};
     for (const id of rooms) for (const key of keysIn(id)) (where[key] ??= []).push(id);
     for (const [key, ids] of Object.entries(where)) expect(ids.length, `${key} in ${ids.join(', ')}`).toBeLessThanOrEqual(2);
+  });
+
+  it('grows no mushrooms anywhere on the neon street (OP-482, OP-511)', () => {
+    for (const key of keysIn('market')) expect(key, key).not.toMatch(/mushroom/);
+    for (const t of FLOOR_INTERACTABLES.filter((i) => i.room === 'market')) expect(t.kind, t.id).not.toBe('mushroom');
   });
 
   it('keeps the brass telescope to the entrance, aimed at the moon over the gate', () => {

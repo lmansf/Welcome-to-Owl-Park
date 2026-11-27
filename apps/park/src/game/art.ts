@@ -243,6 +243,23 @@ export const ART: Record<string, ArtSpec> = {
   'glass-idol': { w: 520, h: 416, kind: 'piece' },
   // The ink garden's idol (OP-402), a snowy owl on the plinth of its first screen.
   'ink-idol': { w: 520, h: 416, kind: 'piece' },
+  // The Great Hollow's games, painted as one set (Nov 26): the Old Stump and its seats, feather tag's
+  // station and the bowling lane, each drawn by its layer with its foot on its spot (standIn.ts); the
+  // party board, its seven spaces, the Acorn and the Moon Perch, drawn on the party screen's board.
+  'party-old-stump': { w: 336, h: 188, kind: 'piece' },
+  'party-stump-seat': { w: 100, h: 57, kind: 'piece' },
+  'tag-feather-station': { w: 184, h: 123, kind: 'piece' },
+  'bowl-lane': { w: 800, h: 96, kind: 'piece' },
+  'party-board': { w: 1000, h: 640, kind: 'piece' },
+  'party-space-berry': { w: 64, h: 44, kind: 'piece' },
+  'party-space-bramble': { w: 64, h: 44, kind: 'piece' },
+  'party-space-updraft': { w: 64, h: 44, kind: 'piece' },
+  'party-space-downdraft': { w: 64, h: 44, kind: 'piece' },
+  'party-space-fact': { w: 64, h: 44, kind: 'piece' },
+  'party-space-knot': { w: 64, h: 44, kind: 'piece' },
+  'party-space-hollow': { w: 64, h: 44, kind: 'piece' },
+  'party-acorn': { w: 90, h: 90, kind: 'piece' },
+  'party-moon-perch': { w: 48, h: 48, kind: 'piece' },
   // Nest furniture (`decor-<id>`), drawn with its bottom centre on its spot in a nest. The wall
   // pieces are the clock, the framed leaf, the window box, the lanterns and the feather mobile.
   'decor-rug': { w: 240, h: 100, kind: 'piece' },
@@ -261,9 +278,9 @@ export const ART: Record<string, ArtSpec> = {
   'decor-moss-rug': { w: 220, h: 100, kind: 'piece' },
   'decor-stump-table': { w: 160, h: 120, kind: 'piece' },
   'decor-feather-mobile': { w: 110, h: 160, kind: 'piece' },
-  // The minigames' own pieces (they were size boxes and shapes drawn in code): the sealed hollow's
-  // puzzle pieces, perches and doors (escapeRoom.ts), pinecone bowling's lane, pins and pinecone
-  // (bowlLayer.ts), feather tag's station and feather (tagLayer.ts), the Old Stump and its seats (partyLayer.ts).
+  // The minigames' moving and hollow pieces (they were size boxes and shapes drawn in code): the sealed
+  // hollow's puzzle pieces, perches and doors (escapeRoom.ts), pinecone bowling's pins and pinecone
+  // (bowlLayer.ts) and feather tag's feather (tagLayer.ts).
   'escape-root': { w: 90, h: 50, kind: 'piece' },
   'escape-moon': { w: 180, h: 120, kind: 'piece' },
   'escape-vine': { w: 40, h: 160, kind: 'piece' },
@@ -274,13 +291,9 @@ export const ART: Record<string, ArtSpec> = {
   'escape-round-door': { w: 120, h: 120, kind: 'piece' },
   'escape-stump': { w: 160, h: 116, kind: 'piece' },
   'escape-shelf': { w: 140, h: 96, kind: 'piece' },
-  'bowl-lane': { w: 800, h: 70, kind: 'piece' },
   'bowl-pin': { w: 24, h: 24, kind: 'piece' },
   'bowl-pinecone': { w: 24, h: 24, kind: 'piece' },
-  'tag-station': { w: 160, h: 110, kind: 'piece' },
   'tag-feather': { w: 48, h: 48, kind: 'piece' },
-  'party-stump': { w: 300, h: 150, kind: 'piece' },
-  'party-seat': { w: 80, h: 40, kind: 'piece' },
   // Construction blockades in the hub's two closed arches, each carrying its doorway's phrase.
   'blockade-not-yet-fledged': { w: 300, h: 300, kind: 'piece' },
   'blockade-hatching-soon': { w: 300, h: 300, kind: 'piece' },
@@ -1030,9 +1043,9 @@ export const CLIMB_ART_KEYS = Object.keys(ART).filter((k) => ART[k]!.kind === 'c
 /** The puzzle quests' pieces (OP-256): the lock post, the clue carving, the key and the six code symbols, drawn by the room's markers and the code pad. */
 export const PUZZLE_ART_KEYS = Object.keys(ART).filter((k) => k.startsWith('kit-puzzle-'));
 
-/** The address of a published piece's 1x raster for an element outside the game canvas (the code pad's symbols), or null when this build does not ship it. */
-export function publishedArtUrl(key: string): string | null {
-  const name = `${key}.webp`;
+/** The address of a published piece's 1x raster (or its 2x copy, `scale` 2) for an element outside the game canvas (the code pad's symbols, the party board), or null when this build does not ship it. */
+export function publishedArtUrl(key: string, scale: 1 | 2 = 1): string | null {
+  const name = scale === 2 ? `${key}@2x.webp` : `${key}.webp`;
   return PUBLISHED_ART.has(name) ? `${baseUrl()}${versioned(name)}` : null;
 }
 

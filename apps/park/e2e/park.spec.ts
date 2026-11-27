@@ -246,7 +246,10 @@ test.describe('single visitor', () => {
     await menu.locator('[data-tab="collection"]').click();
     await expect(menu.locator('[data-tab="collection"]')).toHaveAttribute('aria-selected', 'true');
     await expect(menu.locator('[data-tab="quests"]')).toHaveAttribute('aria-selected', 'false');
-    await expect(menu.locator('[data-panel="collection"] [role="progressbar"]')).toHaveCount(5);
+    // One bar for each kind; the headline counts what the owl has found up (OP-471), and no Sets card stands empty (OP-472).
+    await expect(menu.locator('[data-panel="collection"] [role="progressbar"]')).toHaveCount(4);
+    await expect(menu.locator('[data-panel="collection"] .mcollected')).toContainText('collected');
+    await expect(menu.locator('[data-panel="collection"]').getByRole('heading', { name: 'Sets', exact: true })).toHaveCount(0);
     await menu.locator('[data-tab="nest"]').click();
     await expect(menu.locator('[data-screen="map"]')).toBeVisible();
     await menu.locator('[data-tab="map"]').click();
@@ -631,6 +634,20 @@ test.describe('a first flight where owls arrive (OP-347)', () => {
     const log = roots.reduce((a, b) => (Math.hypot(last.x - a.x, last.y - a.y) < Math.hypot(last.x - b.x, last.y - b.y) ? a : b));
     await walkAndStop(page, log.x, log.y + 90);
     await expect.poll(async () => (await state(page)).tipShown, { timeout: 10_000 }).toBe(touch ? 'Hop up the roots. Tap Jump, and again in the air to flap.' : 'Hop up the roots. Space to jump, and again in the air to flap.');
+    // The tip never covers the owl it speaks to (OP-512): in front of the root, and along it either way.
+    const clear = async () => {
+      const s = await state(page);
+      if (!s.tipBox || !s.owlBox) return 'no tip or owl box';
+      const t = s.tipBox;
+      const o = s.owlBox;
+      return t.right <= o.left || t.left >= o.right || t.bottom <= o.top || t.top >= o.bottom ? 'clear' : `tip ${JSON.stringify(t)} over owl ${JSON.stringify(o)}`;
+    };
+    await expect.poll(clear, { timeout: 5_000 }).toBe('clear');
+    for (const dx of [-160, 160]) {
+      await walkAndStop(page, log.x + dx, log.y + 90);
+      if ((await state(page)).tipShown) await expect.poll(clear, { timeout: 5_000 }).toBe('clear');
+    }
+    await walkAndStop(page, log.x, log.y + 90);
     // Stood there, the roots are found: the trail leads on to a doorway.
     await expect.poll(async () => (await state(page)).trail?.glints.includes('play-roots') ?? true, { timeout: 10_000 }).toBe(false);
 

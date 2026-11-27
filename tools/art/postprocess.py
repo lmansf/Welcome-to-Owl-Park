@@ -2588,7 +2588,7 @@ def cmd_demo(ctx: Ctx, a: argparse.Namespace) -> int:
             print(f"demo FAILED at: {' '.join(step)}", file=sys.stderr)
             return 1
     # Contract assertions on what was published.
-    expect = {"hub.webp": (1600, 900), "guardian.png": (720, 820), "guardian@2x.png": (1440, 1640), "hub-fg.png": (1600, 900)}
+    expect = {"hub.webp": (1600, 900), "guardian.webp": (720, 820), "guardian@2x.webp": (1440, 1640), "hub-fg.png": (1600, 900)}
     for name in OWL_LAYERS:
         expect[f"{name}.png"] = (200, 240)
         expect[f"{name}@2x.png"] = (400, 480)

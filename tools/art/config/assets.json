@@ -8181,10 +8181,9 @@
     },
     "bowl-lane": {
       "w": 800,
-      "h": 70,
+      "h": 96,
       "kind": "piece",
       "format": "webp",
-      "key_colour": "#FF00FF",
       "with_2x": true
     },
     "bowl-pin": {
@@ -8203,14 +8202,6 @@
       "key_colour": "#FF00FF",
       "with_2x": true
     },
-    "tag-station": {
-      "w": 160,
-      "h": 110,
-      "kind": "piece",
-      "format": "webp",
-      "key_colour": "#FF00FF",
-      "with_2x": true
-    },
     "tag-feather": {
       "w": 48,
       "h": 48,
@@ -8219,20 +8210,95 @@
       "key_colour": "#FF00FF",
       "with_2x": true
     },
-    "party-stump": {
-      "w": 300,
-      "h": 150,
+    "party-space-berry": {
+      "w": 64,
+      "h": 44,
       "kind": "piece",
       "format": "webp",
-      "key_colour": "#FF00FF",
       "with_2x": true
     },
-    "party-seat": {
-      "w": 80,
-      "h": 40,
+    "party-space-hollow": {
+      "w": 64,
+      "h": 44,
       "kind": "piece",
       "format": "webp",
-      "key_colour": "#FF00FF",
+      "with_2x": true
+    },
+    "party-board": {
+      "w": 1000,
+      "h": 640,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "party-space-updraft": {
+      "w": 64,
+      "h": 44,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "party-space-knot": {
+      "w": 64,
+      "h": 44,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "party-stump-seat": {
+      "w": 100,
+      "h": 57,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "party-space-downdraft": {
+      "w": 64,
+      "h": 44,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "party-acorn": {
+      "w": 90,
+      "h": 90,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "tag-feather-station": {
+      "w": 184,
+      "h": 123,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "party-space-bramble": {
+      "w": 64,
+      "h": 44,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "party-old-stump": {
+      "w": 336,
+      "h": 188,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "party-space-fact": {
+      "w": 64,
+      "h": 44,
+      "kind": "piece",
+      "format": "webp",
+      "with_2x": true
+    },
+    "party-moon-perch": {
+      "w": 48,
+      "h": 48,
+      "kind": "piece",
+      "format": "webp",
       "with_2x": true
     }
   },

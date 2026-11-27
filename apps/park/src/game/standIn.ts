@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { BOWLING_LANE } from '@owl-park/shared';
 import type { ParkConfig } from '../config';
 import { artScale, loadArtKey } from './art';
 
@@ -64,4 +65,21 @@ export function artOrShape(
     box.remove(shape, true);
   });
   return box;
+}
+
+/** The bowling lane's art is 96 tall: its wood fills the lane's 70, from this far below the art's top (its root curl rises above it, its shadow falls below). */
+const LANE_ART_H = 96;
+const LANE_ART_TOP = 12;
+
+/**
+ * The bowling lane on the floor for every visitor: a soft worn strip, and the lane's own art over it
+ * once it has loaded, its wood on the lane, at the lane's depth (an owl on the lane is drawn over it).
+ */
+export function laneArt(scene: Phaser.Scene, into: Phaser.GameObjects.GameObject[]): void {
+  const L = BOWLING_LANE;
+  const worn = scene.add.graphics();
+  worn.fillStyle(0xffd36a, 0.07).fillRoundedRect(L.x, L.y, L.w, L.h, L.h / 2);
+  worn.setDepth(L.y);
+  into.push(worn);
+  standIn(scene, 'bowl-lane', { x: L.x + L.w / 2, y: L.y - LANE_ART_TOP + LANE_ART_H }, L.w, L.y, into);
 }

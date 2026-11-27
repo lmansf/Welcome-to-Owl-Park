@@ -11,7 +11,7 @@ import { AirTrack, LANDING, WING_TURN, landingHardness, landingSquash, shadowFad
 import { createFx, type AnchorName, type FxHandle, type FxHost } from './fx';
 import { EYE_SPREAD, FEET, solidTop, wornAt } from './fit';
 import type { OwlFit } from './fitOverlay';
-import { ensureVariantTexture, owlAnchors } from './items';
+import { ensureVariantTexture, owlAnchors, owlRowSpan } from './items';
 import { Pet } from './Pet';
 import { symbolTexture } from './symbols';
 import { walkPose } from './walkPose';
@@ -33,7 +33,7 @@ const GLIDE_LEAN = 0.07;
  * sit `shoulder` of the chest's width either side of its middle and `drop` below its top (owl canvas
  * units); a held wing eases to where it is held at `ease` a second.
  */
-const WING = { root: { x: 12, y: 72 }, scale: 0.85, shoulder: 0.24, drop: 10, ease: 10 } as const;
+const WING = { root: { x: 12, y: 72 }, scale: 0.85, shoulder: 0.24, out: 0.45, drop: 10, ease: 10 } as const;
 
 /** How long an owl waits before asking again for flight layers that failed to load (ms, OP-136). */
 const FLIGHT_ASK_MS = 2000;
@@ -371,6 +371,22 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
       void loadFlightArt(this.scene, species);
     }
     return null;
+  }
+
+  /**
+   * The wings' shoulders on the flight body `bodyKey`: either side of that body's own middle at the
+   * shoulder row, `WING.out` of its half-width out, so both roots sit the same way inside its outline.
+   * The chest (the belly's top) is off the middle of a three-quarter owl, so shoulders measured from it
+   * hid one wing's inner half behind the body and left the other's root at its edge.
+   */
+  private placeWings(bodyKey: string): void {
+    const chest = this.anchors.neck;
+    const y = chest.y + WING.drop;
+    const span = owlRowSpan(this.scene, bodyKey, y);
+    if (!span) return;
+    const mid = (span.l + span.r) / 2;
+    const half = ((span.r - span.l) / 2) * WING.out;
+    for (const w of this.wingSides) w.side.setPosition(mid - FEET.x + w.dir * half, y - FEET.y);
   }
 
   /** Load its kind's flight layers ahead of a first take-off (OP-136): the room asks once its own art is in. */
@@ -857,7 +873,10 @@ export class Owl extends Phaser.GameObjects.Container implements FxHost, EmoteHo
       this.wings.setVisible(false);
       this.wingAt = WING_TURN.fall;
     } else {
-      if (this.worn !== flightSet) this.wearBody(flightSet);
+      if (this.worn !== flightSet) {
+        this.wearBody(flightSet);
+        this.placeWings(flightSet[0]!);
+      }
       this.wings.setVisible(true);
       this.wingAt = wingPose.beating ? wingPose.turn : this.wingAt + (wingPose.turn - this.wingAt) * Math.min(1, dt * WING.ease);
       for (const w of this.wingSides) w.side.rotation = this.wingAt * w.dir;

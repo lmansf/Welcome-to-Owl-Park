@@ -53,18 +53,18 @@ describe('the work boxes (the Nov 25 QA walk: size boxes showed to every visitor
     expect(workBoxesShown('?room=m3-hall&keeper=1')).toBe(true);
   });
 
-  it('draw the feather station, the lane and the feather in their art, with the game’s name and no size on them', async () => {
+  it('draw the feather station’s and the lane’s own art, the game’s name over the station, and the feather’s art, no size on any', async () => {
     vi.stubGlobal('location', { search: '?room=m3-hall' });
     const { TagLayer } = await import('./tagLayer');
     const { scene, texts, images } = recordingScene();
     new TagLayer({ scene: scene as never, hudRoot: () => null, toast: () => undefined, me: () => 'me', posOf: () => null });
     await settle();
     expect(sized(texts)).toEqual([]);
-    expect([...images].sort()).toEqual(['bowl-lane', 'tag-feather', 'tag-station']);
+    expect([...images].sort()).toEqual(['bowl-lane', 'tag-feather', 'tag-feather-station']);
     expect(texts).toEqual(['Feather tag']);
   });
 
-  it('draw the Old Stump and its four seats in their art', async () => {
+  it('draw the Old Stump and its four seats as their own art', async () => {
     vi.stubGlobal('location', { search: '' });
     const { PartyLayer } = await import('./partyLayer');
     const { STUMP_ROOM } = await import('@owl-park/shared');
@@ -72,15 +72,18 @@ describe('the work boxes (the Nov 25 QA walk: size boxes showed to every visitor
     new PartyLayer({ scene: scene as never, room: STUMP_ROOM, hudRoot: () => null, toast: () => undefined, walkTo: () => undefined, goTo: () => undefined, back: () => undefined });
     await settle();
     expect(sized(texts)).toEqual([]);
-    expect(images).toEqual(['party-stump', 'party-seat', 'party-seat', 'party-seat', 'party-seat']);
+    expect(images).toEqual(['party-old-stump', 'party-stump-seat', 'party-stump-seat', 'party-stump-seat', 'party-stump-seat']);
   });
 
-  it('draw the bowling lane with no outline’s size on it', async () => {
+  it('draw the bowling lane, its pins and the pinecone with no outline’s size on them', async () => {
     vi.stubGlobal('location', { search: '' });
     const { BowlLayer } = await import('./bowlLayer');
-    const { scene, texts } = recordingScene();
+    const { scene, texts, images } = recordingScene();
     new BowlLayer({ scene: scene as never, hudRoot: () => null, myPos: () => ({ x: 0, y: 0 }), drawLane: true });
+    await settle();
     expect(sized(texts)).toEqual([]);
+    expect(images[0]).toBe('bowl-lane');
+    expect([...new Set(images)].sort()).toEqual(['bowl-lane', 'bowl-pin', 'bowl-pinecone']);
   });
 
   it('keep every size box for a painter', async () => {

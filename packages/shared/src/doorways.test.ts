@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { arrivalPoint, doorAxis, entryPoint, inExit, laneThrough, walkCrossesExit } from './doorways';
+import { arrivalPoint, doorAxis, doorRects, entryPoint, inDoorway, inExit, laneThrough, walkCrossesExit } from './doorways';
 import type { RoomDef } from './room';
 
 /** A room with one doorway back to `other`: in the far wall, or in the west wall. */
@@ -87,6 +87,25 @@ describe('doorways keep the lane (OP-124)', () => {
     r.doors.push({ id: 'shop', rect: { x: 500, y: 660, w: 100, h: 80 } }, { id: 'nest-door-2', rect: { x: 300, y: 660, w: 100, h: 80 } });
     expect(walkCrossesExit(r, spawn, { x: 450, y: 700 })).toBe(false);
     expect(walkCrossesExit(r, spawn, { x: 250, y: 700 })).toBe(true);
+  });
+
+  it("takes in the rest of a side's edge beside a doorway's rect, and keeps the lane to the rect (OP-499)", () => {
+    const r = room('side');
+    const door = r.doors[0]!;
+    expect(doorRects(door)).toEqual([door.rect]);
+    expect(inDoorway({ x: 50, y: 850 }, door)).toBe(false);
+    // The floor below the arch, down the west edge, takes the owl through too.
+    r.doors[0] = { ...door, alsoAt: [{ x: 0, y: 800, w: 100, h: 80 }] };
+    const edge = r.doors[0];
+    expect(doorRects(edge)).toEqual([door.rect, { x: 0, y: 800, w: 100, h: 80 }]);
+    expect(inDoorway({ x: 50, y: 650 }, edge)).toBe(true);
+    expect(inDoorway({ x: 50, y: 850 }, edge)).toBe(true);
+    expect(inDoorway({ x: 150, y: 850 }, edge)).toBe(false);
+    expect(inExit(r, { x: 50, y: 850 })).toBe(true);
+    expect(walkCrossesExit(r, { x: 400, y: 850 }, { x: 40, y: 850 })).toBe(true);
+    expect(walkCrossesExit(r, { x: 400, y: 850 }, { x: 140, y: 850 })).toBe(false);
+    // Its lane is the rect's: from below it, the rect's lower end.
+    expect(laneThrough(r, edge, { x: 50, y: 850 })).toEqual({ axis: 'y', t: 1 });
   });
 });
 

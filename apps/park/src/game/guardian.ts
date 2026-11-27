@@ -28,7 +28,8 @@
  * works it out for itself.
  */
 import type { Rect, Vec2 } from '@owl-park/shared';
-import { HALL_MIDDLE, HALL_ROOM, RUN_Y } from '@owl-park/shared/rooms';
+import { HALL_MIDDLE, HALL_ROOM, RUN_HALF, RUN_Y } from '@owl-park/shared/rooms';
+import { IDOL_PARTS, WING_OPEN_MAX, reach } from './idolParts';
 import { OWL_BODY } from './seeThrough';
 import type { Look } from './townView';
 
@@ -103,6 +104,32 @@ export function guardianShade(pad = 40, at: Vec2 = GUARDIAN_AT, scale = GUARDIAN
   return guardianBoxes(at, scale).map((b) => ({ x: b.x - pad, y: b.y - pad, w: b.w + pad * 2, h: b.h + pad * 2 }));
 }
 
+/** The root line: the back edge of the root runs' strips, and the foot (so the depth) of each root piece on them (hollowHall.ts). */
+export const ROOT_LINE = RUN_Y - RUN_HALF;
+/** How far under an owl's depth the guardian is drawn when it goes behind that owl. */
+const DEPTH_BEHIND = 0.5;
+
+/**
+ * The depth the guardian is drawn at while the visitor's own owl stands with its feet at `feet`
+ * (OP-497). It stands among the owls with its foot as its depth, like any tall piece, and its foot is
+ * the front of its bough, out in front of the root runs it sits between. But its wings hang at its
+ * sides over those runs, and open wide with a hoot: sorted by its foot alone, an owl stood on the log
+ * beside it, or on the floor just in front of that log, was drawn under its wing, its feet all that
+ * showed. So for an owl beside its bough, within its wings' reach, on the root line or in front of
+ * it, the guardian is drawn just behind the owl: still over the logs (whose foot is the root line),
+ * under the owl. Anywhere else it is sorted by its foot, as before.
+ */
+export function guardianDepth(feet: Vec2, at: Vec2 = GUARDIAN_AT, scale = GUARDIAN_SCALE): number {
+  if (feet.y >= at.y || feet.y < ROOT_LINE) return at.y;
+  const { base } = IDOL_PARTS.guardian.parts;
+  const wings = reach(IDOL_PARTS.guardian, WING_OPEN_MAX);
+  const x = (px: number) => inRoom({ x: px, y: 0 }, at, scale).x;
+  const half = OWL_BODY.w / 2;
+  const underWings = feet.x + half >= x(wings.x0) && feet.x - half <= x(wings.x1);
+  const besideBough = feet.x < x(base.x) || feet.x > x(base.x + base.w);
+  return underWings && besideBough ? feet.y - DEPTH_BEHIND : at.y;
+}
+
 /**
  * Near the guardian the camera keeps its face in view. Followed as in any room, an owl a few strides
  * out in front of it has the guardian's head off the top of the screen, and everything the guardian
@@ -122,6 +149,8 @@ export const GUARDIAN_VIEW = {
   beside: 150,
   /** The camera is drawn back no further than this share of the owl's own zoom: an owl is never drawn much smaller for it. */
   least: 0.72,
+  /** On a screen held upright, how far under the middle of the view the owl may stand, as a share of the view's height, before the view draws back for its head (OP-497, lookOnOwl). */
+  low: 0.1,
   /** How fast the camera goes to it and from it (1/s). */
   rate: 2.6,
 } as const;
@@ -165,14 +194,47 @@ export function lookShowing(near: Look, must: { owl: Rect; head: Rect }, screen:
   const w = Math.max(owl.x + owl.w, head.x + head.w) - x0;
   const h = Math.max(owl.y + owl.h, head.y + head.h) - y0;
   const zoom = Math.max(near.zoom * least, Math.min(near.zoom, screen.w / w, screen.h / h));
-  // Along one way of the screen: the middle that holds both where the view can, else the owl and what it can of the head.
-  const along = (c: number, lo: number, span: number, owlLo: number, owlSpan: number, headMid: number, view: number) =>
-    span <= view ? clamp(c, lo + span - view / 2, lo + view / 2) : clamp(headMid, owlLo + Math.min(owlSpan, view) - view / 2, owlLo + view / 2);
   return {
     zoom,
     x: along(near.x, x0, w, owl.x, owl.w, head.x + head.w / 2, screen.w / zoom),
     y: along(near.y, y0, h, owl.y, owl.h, head.y + head.h / 2, screen.h / zoom),
   };
+}
+
+/**
+ * The camera's look near the guardian on a screen held upright (taller than it is wide: a phone),
+ * OP-497. Moved to bring its head in as on a wider screen (lookShowing), the owl went off the middle
+ * of an upright screen and the guardian filled it. So here the owl stays near where its own view has
+ * it, the middle of the screen unless the room's edge holds the view: the view moves up for its head
+ * by no more than `low` of the view's height, and past that draws back (no further than `least` of
+ * its zoom, as on a wider screen) rather than move on. Across, it moves as on a wider screen.
+ */
+export function lookOnOwl(near: Look, must: { owl: Rect; head: Rect }, screen: { w: number; h: number }, least: number = GUARDIAN_VIEW.least, low: number = GUARDIAN_VIEW.low): Look {
+  const { owl, head } = must;
+  const x0 = Math.min(owl.x, head.x);
+  const w = Math.max(owl.x + owl.w, head.x + head.w) - x0;
+  const top = Math.min(owl.y, head.y);
+  const bottom = Math.max(owl.y + owl.h, head.y + head.h);
+  // The view's height (room px) that holds the two with its middle no more than `low` of it over the owl's own.
+  const tall = Math.max((near.y - top) / (0.5 + low), 2 * (bottom - near.y), bottom - top);
+  const zoom = Math.max(near.zoom * least, Math.min(near.zoom, screen.w / w, screen.h / tall));
+  const view = screen.h / zoom;
+  // Up only as far as brings its head in, and never so far the owl's feet and the room under them go off the foot of the screen.
+  const y = Math.max(clamp(top + view / 2, near.y - low * view, near.y), bottom - view / 2);
+  return { zoom, x: along(near.x, x0, w, owl.x, owl.w, head.x + head.w / 2, screen.w / zoom), y };
+}
+
+/**
+ * Where a look's middle goes along one way of the screen, for lookShowing and lookOnOwl: from `c`, the
+ * nearest middle that holds both where a `view` that long can, else the owl and what it can of the head.
+ */
+function along(c: number, lo: number, span: number, owlLo: number, owlSpan: number, headMid: number, view: number): number {
+  return span <= view ? clamp(c, lo + span - view / 2, lo + view / 2) : clamp(headMid, owlLo + Math.min(owlSpan, view) - view / 2, owlLo + view / 2);
+}
+
+/** Whether a screen is held upright: taller than it is wide. */
+export function upright(screen: { w: number; h: number }): boolean {
+  return screen.h > screen.w;
 }
 
 /** How its eyes are: open, half shut (dozing, or on the way), or shut. */

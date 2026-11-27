@@ -1,7 +1,7 @@
 /**
  * The minigames' pieces (the owner, November 2026: "they're barely cutouts of games right now"): the
- * sealed hollow, pinecone bowling, feather tag and the Old Stump, which drew size boxes and shapes in
- * code until now. A job list for
+ * sealed hollow's pieces, bowling's pins and pinecone and feather tag's feather, which drew size boxes
+ * and shapes in code until now (the Great Hollow's stump, seats, station and lane have their own art, #336). A job list for
  *
  *   NODE_USE_ENV_PROXY=1 node tools/art/generate.mjs --prompts tools/art/gemini-minigames.mjs --provider gemini --model gemini-3.1-flash-image
  *
@@ -36,13 +36,9 @@ export const PIECES = {
   'escape-round-door': `a round wooden door with a large brass keyhole at its centre, set in a ring of fitted stones, closed, ${ABOVE}`,
   'escape-stump': `an old tree stump with a flat ring-marked top wide enough to sit on and moss round its base, ${ABOVE}`,
   'escape-shelf': `a sturdy shelf of stacked wooden planks on two short posts, its flat top bare, ${ABOVE}`,
-  'bowl-lane': `a long narrow bowling lane of polished honey-coloured planks laid lengthwise, with a low rounded wooden bumper rail along each long side, running from the left edge to the right edge, ${STRAIGHT}`,
   'bowl-pin': `one small wooden bowling pin, ${STRAIGHT}: a round cream top with a red band round it`,
   'bowl-pinecone': `one round brown pinecone, its scales spiralling out from the middle, ${STRAIGHT}`,
-  'tag-station': `a small wooden stand holding a woven basket full of colourful feathers, with a blank wooden signboard above it on two posts, ${ABOVE}`,
   'tag-feather': 'one bright golden feather, gently curved, glowing softly at its edges',
-  'party-stump': `a wide low tree stump used as a party table, its flat top showing the tree rings, moss and small mushrooms round its base, a lantern glowing on one side, ${ABOVE}`,
-  'party-seat': `a short round log seat with a soft green moss cushion on top, ${ABOVE}`,
 };
 
 function job(key, i) {

@@ -75,6 +75,17 @@ export const COURSE_WORDS = {
   mouse: 'Every course cleared! The Golden Mouse is yours.',
 } as const;
 
+/** A line said one way on a keyboard and another with the touch pad's buttons. */
+export type DeviceWords = { readonly keys: string; readonly touch: string };
+
+/**
+ * The words for what this device plays with: `touch` when it plays with the pad's buttons (RoomScene's
+ * TOUCH_SCREEN, the same `(pointer: coarse)` that shows the pad), else the keyboard's (OP-498).
+ */
+export function forDevice(words: DeviceWords, touch: boolean): string {
+  return touch ? words.touch : words.keys;
+}
+
 /** A clear's time as m:ss. */
 export function clearTime(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));

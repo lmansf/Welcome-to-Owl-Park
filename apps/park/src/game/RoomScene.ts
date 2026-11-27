@@ -46,6 +46,7 @@ import {
   cabinetAt,
   closestPointOnSegment,
   distance,
+  doorRects,
   entryPoint,
   filterOwnedWear,
   foregroundTiles,
@@ -65,7 +66,7 @@ import {
   npcsIn,
   parkwardDoor,
   parseVariant,
-  pointInRect,
+  inDoorway,
   isWalkable,
   positionAlongWalk,
   putOn,
@@ -184,7 +185,7 @@ import type { ParkConfig } from '../config';
 import { saveLook } from '../identity';
 import { OPEN_ENTRY, type ConnectionStatus, type Entry, type ParkTransport, type RoomConnection, type RoomHandlers, type ScanReply, type WalletEntry } from '../net';
 import type { Ribbon } from '../ui/ribbon';
-import { COURSE_WORDS } from '../ui/courseWords';
+import { COURSE_WORDS, forDevice } from '../ui/courseWords';
 import { openPosOverlay, type PosOverlay } from '../ui/posOverlay';
 import { keeperToken } from '../net/keeper';
 import type { EscapeLink } from '../net/transport';
@@ -225,7 +226,7 @@ import { PUZZLE_ART_KEYS, artScale, drawnAsSizeBox, drawsSkinTrial, loadArt, ope
 import { SpeechBubbles } from './bubbles';
 import { backWaits, carriedIn, doorwayUnder, doorwaysOff, heldAtFall, roomsAhead, stillCarried, stillHeldSinceFall, takesDoorway, upCounts, type HeldAtFall } from './doors';
 import { PLAY_SPOTS, RISE_SPOT, ROOTS_SPOT, TriedDoors, doorSpot, leadsToPlay, playSpotsAt, trailTo, type PlaySpot } from './featherTrail';
-import { CALLS, GUARDIAN_ROOM, GUARDIAN_VIEW, guardianBoxes, guardianShade, lookShowing, mustShow, presence, type OwlSeen } from './guardian';
+import { CALLS, GUARDIAN_ROOM, GUARDIAN_VIEW, guardianBoxes, guardianShade, lookOnOwl, lookShowing, mustShow, presence, upright, type OwlSeen } from './guardian';
 import { GuardianView, type GuardianState } from './guardianView';
 import { VOTE_DESK_ROOM, type DeskState } from './voteDesk';
 import { VoteDeskView } from './voteDeskView';
@@ -253,25 +254,26 @@ import { OWL_SCALE, OWL_W, Owl } from './Owl';
 import { QuestItemMarker, RisingLight, SpotGlow } from './QuestItem';
 import { PuzzleMarker, markKey, type PuzzleMarkKind, type PuzzleMarkLook } from './PuzzleMarker';
 import { StreetDoors, addNestsSign, addParkSign } from './street';
-import { FOLLOW_EASE, cameraBounds, followEaseAt, followLead, type CoveredEdges } from './hudInset';
+import { FOLLOW_EASE, cameraBounds, followEaseAt, followLead, rowAcross, type CoveredEdges } from './hudInset';
 import { RISE_HEAD, lookBetween, openingAt, restAt, riseBack, screenZoom, townZoom, wholeLook, wholeZoom, type Look } from './townView';
 import { SizeLabels } from './sizeLabels';
-import { CourseTipSigns } from './courseTipSigns';
+import { CourseTipSigns, type Box } from './courseTipSigns';
 import { courseTips, tipFor } from './courseTips';
 import { DoorSigns } from './doorSigns';
 import { ReachPrompt, promptPlace, promptWords } from './reachPrompt';
 import { SeeThrough } from './seeThroughArt';
+import { OWL_BODY } from './seeThrough';
 import { parkSfx, type Sfx } from './sfx';
 import { STEP_MOST_MS, sideCamAt, sideCamStep, speedAlong, type SideCam } from './sideCamera';
 import { airCues, type CueName } from './sfxCues';
-import { sideEdges } from './sideEdges';
+import { sideEdges, walkAim } from './sideEdges';
 import { drawWalkFloor } from './walkFloor';
 import { BOWL_BEYOND, BOWL_SHADOW, drawBowl } from './bowlView';
 import { artTrialFor, drawArtTrial, hidePaintedPieces } from './artTrial';
 import { drawEdges } from './edgeView';
 import { drawSkirts } from './plazaSkirt';
 import { setVignette } from './vignette';
-import { ROOM_DOWN } from './roomDown';
+import { ROOM_DOWN, WANDERING_ALONE } from './roomDown';
 import { doorPromptAt } from './doorPrompt';
 import { MOTION, motion } from '../calmMotion';
 
@@ -771,6 +773,8 @@ export class RoomScene extends Phaser.Scene {
   private decorSpot: NestSpotId = 'f1';
   /** CSS pixels the Decorate sheet covers at the bottom of the screen. */
   private sheetPx = 0;
+  /** How far up the screen the HUD's bottom row reaches where it runs right across it (CSS px), else 0 (fitCamera, OP-496). */
+  private rowCovered = 0;
   /**
    * The opening look under way (OP-336, townView.ts): when the room has faded in (its time is counted from
    * then), and when the player first moved, in that time (which brings it in early); null when there is
@@ -1354,6 +1358,7 @@ export class RoomScene extends Phaser.Scene {
       room.size.h + 135,
       () => this.cfg.pixelRatio / this.cameras.main.zoom,
       () => promptPlace({ x: this.me.x, y: this.me.y - this.me.flightHeight() }, this.doorSigns?.shownBox() ?? null, this.cfg.pixelRatio / this.cameras.main.zoom),
+      () => this.rowFloor(),
     );
     // The Great Hollow's own tips (OP-347): how to hop up its roots and glide off them, until this device's owl has done it once.
     const hall = courseDef ? [] : hallTips(room, TOUCH_SCREEN);
@@ -1363,7 +1368,9 @@ export class RoomScene extends Phaser.Scene {
     const pick = tips.length
       ? () => tipFor(tips, this.me.pos.x, this.flier.air.z)?.id ?? null
       : () => (this.firstFlown ? null : (hallTipFor(hall, this.me.pos, this.flier.air.z)?.id ?? null));
-    this.tips = tips.length || hall.length ? new CourseTipSigns(this, tips.length ? tips : hall, () => this.cfg.pixelRatio / this.cameras.main.zoom, pick, room.size.h + 130) : null;
+    // The tips keep off the visitor's own owl (OP-512).
+    this.tips =
+      tips.length || hall.length ? new CourseTipSigns(this, tips.length ? tips : hall, () => this.cfg.pixelRatio / this.cameras.main.zoom, pick, room.size.h + 130, () => this.ownOwlBox()) : null;
     const settings = this.registry.get('settings') as SettingsStore | undefined;
     if (settings) {
       ambience.setCalm(settings.get().calm);
@@ -1564,6 +1571,8 @@ export class RoomScene extends Phaser.Scene {
     this.posOverlay?.frame(this.me.pos, now, this.room.id, pace);
     this.tag?.update(now);
     this.bowl?.update(now);
+    // The guardian sorted for the owl first (OP-497): an owl it is drawn behind is not one it hides.
+    this.guardian?.sortFor(this.me.pos);
     this.seeThrough?.frame(this.me.pos, this.flier.air.z);
     this.guardian?.frame(now, this.owlsSeen());
     this.frameGuardianCam(now);
@@ -1835,7 +1844,7 @@ export class RoomScene extends Phaser.Scene {
     if (s === 'online') this.takeKeptTravel();
     // The quest board says it isn't answering instead of loading for ever (OP-280); a board clears it.
     if (wentOffline) this.quests.setOffline(true);
-    if (wentOffline && !this.leaving) this.hud.toast('You are wandering alone for now: the park could not connect.', 4000);
+    if (wentOffline && !this.leaving) this.hud.toast(WANDERING_ALONE, 4000);
   }
 
   private async roomFull(roomId: string, spectators = false): Promise<void> {
@@ -2283,7 +2292,7 @@ export class RoomScene extends Phaser.Scene {
 
   /** At a hazard's edge in a course (OP-422): a jump crosses. */
   private sayJumpHere(): void {
-    this.hud.toast(TOUCH_SCREEN ? COURSE_WORDS.jumpHere.touch : COURSE_WORDS.jumpHere.keys, 3500);
+    this.hud.toast(forDevice(COURSE_WORDS.jumpHere, TOUCH_SCREEN), 3500);
   }
 
   /** The Menu's ways out from here: leaving inside the park, going home anywhere but the owl's own nest. */
@@ -2453,7 +2462,7 @@ export class RoomScene extends Phaser.Scene {
     const spot = doorSpot(to);
     if (this.sideView()) return trail.lay([from, spot]);
     const f = this.footingNow();
-    const aim = snapToWalkable(spot, f.walkable);
+    const aim = this.openAim(spot, f.walkable);
     // Round the guardian, where it is (OP-359): no feather is laid behind it.
     const shade = this.guardian ? guardianShade() : [];
     const legs = wayAround(from, aim, f.walkable, [...f.shut, ...shade, ...doorwaysOff(this.room, from, aim, (id) => this.realmClosed(id), this.walking())]) ?? [];
@@ -2835,6 +2844,8 @@ export class RoomScene extends Phaser.Scene {
     /** Snowballs this page threw and saw land, and who each landing hit (OP-074). */
     snowballs: { thrown: number; landed: number; hits: string[] };
     pos: Vec2;
+    /** The depth the visitor's own owl is drawn at among the room's art and owls (OP-497). */
+    depth: number;
     walking: boolean;
     look: OwlLook;
     /** How high the owl is drawn above the floor (OP-084), in room pixels; its place stays at `pos`. */
@@ -2913,6 +2924,9 @@ export class RoomScene extends Phaser.Scene {
     signBox: { left: number; right: number; top: number; bottom: number } | null;
     /** The words of the course's tip showing now (OP-344), if any. */
     tipShown: string | null;
+    /** The showing tip's words as drawn (room px), and the visitor's own owl as drawn (OP-512). */
+    tipBox: Box | null;
+    owlBox: Box | null;
     /**
      * The movers (OP-287): null on a page without the `movers` flag. Else the pieces drawn in this room, the
      * downdraft that has taken the owl down, the last dive one took it on as its flight stepped it (which
@@ -2940,6 +2954,8 @@ export class RoomScene extends Phaser.Scene {
     firstRise: boolean | null;
     /** The words of the prompt over the visitor's own owl (OP-344), if any. */
     promptShown: string | null;
+    /** Where that prompt lies (room px), if it shows (OP-496). */
+    promptBox: { left: number; top: number; right: number; bottom: number } | null;
     /** The tall art gone see-through because the visitor's own owl is behind it (OP-346), by its art's key. */
     seeThrough: string[];
     /** The guardian at the heart of the Great Hollow (OP-359), where it is: null in any other room. */
@@ -3005,6 +3021,7 @@ export class RoomScene extends Phaser.Scene {
       room: this.room.id,
       doors: this.room.doors.map((d) => ({ id: d.id, x: d.rect.x + d.rect.w / 2, y: d.rect.y + d.rect.h / 2, to: this.doorTo(d)?.room, shut: this.realmClosed(this.doorTo(d)?.room) })),
       pos: { ...this.me.pos },
+      depth: this.me.depth,
       walking: this.me.walking,
       look: this.look,
       height: this.me.flightHeight(),
@@ -3050,6 +3067,8 @@ export class RoomScene extends Phaser.Scene {
       firstWays: [...this.firstNamed],
       signBox: this.doorSigns?.shownBox() ?? null,
       tipShown: this.tips?.shown() ?? null,
+      tipBox: this.tips?.shownBox() ?? null,
+      owlBox: this.ownOwlBox(),
       movers: this.moversOn
         ? {
             pieces: this.moversView?.pieces() ?? [],
@@ -3067,6 +3086,7 @@ export class RoomScene extends Phaser.Scene {
       firstFlight: this.firstFlown,
       firstRise: marksFirstRise(this.room, this.rootTips) ? !this.riseWaits : null,
       promptShown: this.reach?.shown() ?? null,
+      promptBox: this.reach?.box() ?? null,
       seeThrough: this.seeThrough?.faded() ?? [],
       guardian: this.guardian?.state() ?? null,
       desk: this.desk?.state() ?? null,
@@ -4280,7 +4300,8 @@ export class RoomScene extends Phaser.Scene {
     this.wayTo = null;
     // A tap that a straight walk stops short of, at a bend in the floor: there by the way around it,
     // the first leg now (OP-148). A perch's top asked for from the floor has no way round: its face.
-    const aim = snapToWalkable(target, f.walkable);
+    // Aimed into a side strip (a doorway at the room's very side), the way is to the strip's edge (OP-499).
+    const aim = this.openAim(target, f.walkable);
     if (!fromKeys && distance(to, aim) > WAY_SHORT_PX) {
       const legs = wayAround({ ...this.me.pos }, aim, f.walkable, [...f.shut, ...doorwaysOff(this.room, this.me.pos, aim, (id) => this.realmClosed(id), this.walking())]);
       if (legs?.[0]) {
@@ -4361,9 +4382,11 @@ export class RoomScene extends Phaser.Scene {
     }
     for (const door of this.room.doors) {
       const to = this.doorTo(door);
-      const inside = pointInRect(pos, door.rect);
-      // A doorway to another room takes the owl from where its step came in, a step across it included.
-      const cameIn = (to && stepFrom ? entryPoint(door.rect, stepFrom, pos) : null) ?? (inside ? pos : null);
+      const inside = inDoorway(pos, door);
+      // A doorway to another room takes the owl from where its step came in, a step across it included,
+      // anywhere on its floor (its rect, and the rest of its side's edge: doorRects, OP-499).
+      const crossed = to && stepFrom ? doorRects(door).map((r) => entryPoint(r, stepFrom, pos)).find((p) => p !== null) : null;
+      const cameIn = crossed ?? (inside ? pos : null);
       if (!cameIn || !this.atDoorLevel(door)) continue;
       // The way back, to an owl still holding the keys it came in with: not until it lets go (a new press of up is a new push).
       if (this.backWaiting && !pressed && this.leadsBack(door)) continue;
@@ -4373,7 +4396,7 @@ export class RoomScene extends Phaser.Scene {
       if (up) this.upAt = 0;
       const nestDoor = isStreetRoom(this.room.id) ? nestDoorIndex(door.id) : null;
       if (nestDoor !== null) {
-        if ((up || takesDoorway(door.rect, this.me.walk?.to ?? null, this.keyWalk, this.errand !== null, side)) && this.enterNest(nestDoor, said)) return;
+        if ((up || takesDoorway(doorRects(door), this.me.walk?.to ?? null, this.keyWalk, this.errand !== null, side)) && this.enterNest(nestDoor, said)) return;
         continue;
       }
       if (to) {
@@ -4383,7 +4406,7 @@ export class RoomScene extends Phaser.Scene {
           continue;
         }
         // A walk that ended past a doorway it crossed in its last frame goes through only as one that ends there would.
-        if (!up && !takesDoorway(door.rect, (this.me.walk ?? (stepFrom ? walk : null))?.to ?? null, this.keyWalk, this.errand !== null, side)) continue;
+        if (!up && !takesDoorway(doorRects(door), (this.me.walk ?? (stepFrom ? walk : null))?.to ?? null, this.keyWalk, this.errand !== null, side)) continue;
         // A course's doorway that waits on its run (the way to the finish with parts left, OP-343): its words, and no way through yet.
         const waits = this.course?.holds(to.room) ?? null;
         if (waits !== null) {
@@ -5022,14 +5045,22 @@ export class RoomScene extends Phaser.Scene {
    */
   private backFloor(): Rect[] {
     if (!this.backWaiting || !this.me || this.sideView()) return [];
-    return this.room.doors.filter((d) => this.leadsBack(d) && !pointInRect(this.me.pos, d.rect)).map((d) => d.rect);
+    return this.room.doors.filter((d) => this.leadsBack(d) && !inDoorway(this.me.pos, d)).flatMap(doorRects);
   }
 
   /** Where the owl can walk at the height it is now (OP-084, perches.ts): the floor and the perch tops at or below it, less the floor shut for now. */
   private footingNow(): { walkable: Polygon[]; shut: Shut[] } {
-    // The room's two sides, so the whole owl stays on screen at the end of a floor (OP-296).
-    const edges = sideEdges(this.room, this.me ? (OWL_W * Math.abs(this.me.scaleX)) / 2 : 0);
-    return footing(this.room, this.flier.air.z, [...edges, ...this.shutFloor(), ...this.backFloor(), ...(this.course?.shut() ?? [])]);
+    return footing(this.room, this.flier.air.z, [...this.sideStrips(), ...this.shutFloor(), ...this.backFloor(), ...(this.course?.shut() ?? [])]);
+  }
+
+  /** The room's two sides, so the whole owl stays on screen at the end of a floor (OP-296). */
+  private sideStrips(): Rect[] {
+    return sideEdges(this.room, this.me ? (OWL_W * Math.abs(this.me.scaleX)) / 2 : 0);
+  }
+
+  /** Where a walk to `target` heads, on `walkable`: onto it, and in off a side strip (sideEdges.ts, walkAim; OP-499). */
+  private openAim(target: Vec2, walkable: Polygon[]): Vec2 {
+    return walkAim(target, walkable, this.sideStrips());
   }
 
   /** What the owl stands on, or would come down on, now: a perch's top, else the floor (0). */
@@ -5190,7 +5221,14 @@ export class RoomScene extends Phaser.Scene {
     this.followOwl();
     const fit = () => this.fitCamera();
     this.scale.on(Phaser.Scale.Events.RESIZE, fit);
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.scale.off(Phaser.Scale.Events.RESIZE, fit));
+    // And as the HUD's bar or bottom row changes size (OP-496): on a narrow screen the row wraps onto a
+    // second line as an action button joins it, and the camera keeps the room's front above it. Not
+    // while the owner decorates: the sheet hides the row, and its own resize fits the camera and its look.
+    const stop = this.hud.onCoveredChange(() => !this.decorating && fit());
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.scale.off(Phaser.Scale.Events.RESIZE, fit);
+      stop();
+    });
   }
 
   /**
@@ -5220,6 +5258,7 @@ export class RoomScene extends Phaser.Scene {
   private fitCamera(): void {
     const cam = this.cameras.main;
     const { width, height } = this.scale.gameSize;
+    this.rowCovered = 0;
     const f = this.mirrorFrame;
     if (f) {
       // The stage's rectangle, zoomed in on the owl (and its mirror, in a nest), from a hat's height to the floor.
@@ -5257,11 +5296,40 @@ export class RoomScene extends Phaser.Scene {
     // seen from the side (OP-278) or from above (OP-292); the
     // Decorate sheet's own view stops above it already.
     const covered = this.sheetPx > 0 ? { top: 0, bottom: 0 } : this.viewEdges(this.hud.coveredEdges());
-    const b = cameraBounds(this.room.size, covered, this.cfg.pixelRatio / cam.zoom);
+    // On a screen narrower than it is tall the row of Menu, Emotes and Say runs right across its foot:
+    // a room seen from above whose whole depth is on screen keeps its front edge, and all along it,
+    // above the row (OP-496). The prompt at the owl's feet keeps above it too (rowFloor).
+    const across = rowAcross({ w: width, h });
+    this.rowCovered = across ? covered.bottom : 0;
+    const frontUp = across && this.townViewed() ? { viewH: h / cam.zoom } : undefined;
+    const b = cameraBounds(this.room.size, covered, this.cfg.pixelRatio / cam.zoom, frontUp);
     cam.setBounds(b.x, b.y, b.w, b.h);
     // A plaza (seen from above, taller than a screen): the owl stands lower on screen, the back of the room in view (hudInset.ts).
     cam.setFollowOffset(0, this.leadOver(h / cam.zoom));
     for (const { t, img } of this.parallax) this.placeParallax(t, img);
+  }
+
+  /**
+   * The visitor's own owl as drawn now (room px): from its feet, up in the air as it flies, to the top
+   * of its head or hat, and as wide as its body or two thirds of its height, whichever is more. Null
+   * before it has one. What a course's tips keep off (OP-512).
+   */
+  private ownOwlBox(): Box | null {
+    if (!this.me) return null;
+    const feet = this.me.y - this.me.flightHeight();
+    const tall = Math.max(OWL_BODY.h, -this.me.crown());
+    const half = Math.max(OWL_BODY.w, tall * (2 / 3)) / 2;
+    return { left: this.me.x - half, right: this.me.x + half, top: feet - tall, bottom: feet };
+  }
+
+  /**
+   * The lowest room y the prompt at the owl's feet may reach this frame, or null for anywhere (OP-496):
+   * above the HUD's bottom row where it runs right across the screen (fitCamera, rowCovered).
+   */
+  private rowFloor(): number | null {
+    if (!(this.rowCovered > 0)) return null;
+    const cam = this.cameras.main;
+    return cam.worldView.bottom - this.rowCovered * (this.cfg.pixelRatio / cam.zoom);
   }
 
   /** How far above the owl the camera rests in a view `viewH` of the room tall (hudInset.ts, followLead): not at all in an oval with ways all round it. */
@@ -5436,7 +5504,10 @@ export class RoomScene extends Phaser.Scene {
     const near = this.nearLook(g.covered);
     const edges = this.viewEdges(g.covered);
     const toRoom = this.cfg.pixelRatio / near.zoom;
-    const far = lookShowing(near, mustShow(this.me.pos, this.flier.air.z, { over: g.covered.top * toRoom, under: g.covered.bottom * toRoom }), { w: width, h: height });
+    const must = mustShow(this.me.pos, this.flier.air.z, { over: g.covered.top * toRoom, under: g.covered.bottom * toRoom });
+    // On a screen held upright the owl stays at the middle and the view draws back for its head (OP-497).
+    const screen = { w: width, h: height };
+    const far = upright(screen) ? lookOnOwl(near, must, screen) : lookShowing(near, must, screen);
     // Held to the room, as the owl's own view is.
     const held = { zoom: far.zoom, ...restAt(far, { w: width / far.zoom, h: height / far.zoom }, cameraBounds(this.room.size, edges, this.cfg.pixelRatio / far.zoom)) };
     const look = lookBetween(near, held, g.hold);

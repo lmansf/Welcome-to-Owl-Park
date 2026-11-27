@@ -102,7 +102,8 @@ export interface Faq {
 
 /**
  * What Owl Park is, in one "Owl Park is ..." sentence and one after it (the SEO audit: a page opens with
- * a definition a search engine can quote). About's first part and the first question both say it.
+ * a definition a search engine can quote). About's first part says it, and so does the first question on the
+ * page for search engines.
  */
 export const WHAT_IT_IS = 'Owl Park is a cozy park you visit in your browser, with no download. You make an owl, then wander the park alongside everyone else who is here right now.';
 
@@ -135,6 +136,16 @@ export function faq(price: string | null = DAY_TICKET_PRICE, keeper: typeof KEEP
   return list;
 }
 
+/**
+ * The questions whose answers the screen has not already said (OP-459): About's own parts say what the
+ * park is and the ticket's terms word for word, so on the park's screen those questions would only
+ * repeat them. The page for search engines keeps every question (faq()), as its markup needs them all.
+ */
+export function freshFaq(said: readonly string[], list: readonly Faq[] = faq()): Faq[] {
+  const before = new Set(said);
+  return list.filter((f) => !before.has(f.a));
+}
+
 /** One part of a screen: a heading and its short paragraphs. */
 export interface AboutPart {
   heading: string;
@@ -162,7 +173,7 @@ export function aboutParts(now: number = Date.now()): AboutPart[] {
   ];
   if (KEEPER) parts.push({ heading: 'Who keeps the park', lines: [`${KEEPER.name}. ${KEEPER.line}`] });
   if (PLAYER_QUOTES.length) parts.push({ heading: 'What owls say', lines: PLAYER_QUOTES.map((q) => `“${q.words}” ${q.who}`) });
-  parts.push({ heading: 'Questions', lines: faq().flatMap((f) => [f.q, f.a]), faq: true });
+  parts.push({ heading: 'Questions', lines: freshFaq(parts.flatMap((p) => p.lines)).flatMap((f) => [f.q, f.a]), faq: true });
   parts.push({ heading: 'Contact', lines: contactLines(now) });
   parts.push({ heading: 'What is coming', lines: ['New rooms and things to do arrive as they are ready. Every change, with its date, is listed at exploreowlpark.com/changelog.'] });
   return parts;

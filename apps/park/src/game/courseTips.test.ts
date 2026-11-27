@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { courseParts } from '@owl-park/shared';
 import { COURSES, ROOMS, groundOf } from '../rooms';
-import { COURSE_WORDS } from '../ui/courseWords';
+import { COURSE_WORDS, forDevice, type DeviceWords } from '../ui/courseWords';
 import { TIP_REACH, courseName, courseTips, tipFor, type CourseTip } from './courseTips';
 
 const rooms = (id: string) => ROOMS[id];
@@ -121,6 +121,71 @@ describe("a course's tips (OP-344)", () => {
       expect(tipFor(tips, way.x, 0)?.id, def.id).toBe('start');
       const bank = Math.min(...room.course!.pits!.map((p) => Math.min(...p.map((v) => v.x))));
       expect(tipFor(tips, bank - 20, 0)?.id, def.id).toBe('pit');
+    }
+  });
+});
+
+/** A keyboard's words: none of them may reach a player on a touch screen (OP-498). */
+const KEYBOARD = /\b(space|shift|press(es|ed)?|keys?|click|arrows?|enter|esc)\b/i;
+/** The touch pad's buttons by their own names (hud.ts: the pad's aria-labels). */
+const PAD_BUTTONS = ['Jump', 'Dash'];
+const isDeviceWords = (v: unknown): v is DeviceWords => typeof v === 'object' && v !== null && typeof (v as DeviceWords).keys === 'string' && typeof (v as DeviceWords).touch === 'string';
+
+/** Every line in COURSE_WORDS by its path: a keyboard/touch pair as one, a line said on every device as its words (a function's with sample numbers). */
+function courseLines(v: unknown = COURSE_WORDS, path = 'COURSE_WORDS'): { path: string; pair?: DeviceWords; words?: string }[] {
+  if (typeof v === 'string') return [{ path, words: v }];
+  if (typeof v === 'function') {
+    const out = (v as (...a: unknown[]) => unknown)(3, 5);
+    return typeof out === 'string' ? [{ path, words: out }] : [];
+  }
+  if (isDeviceWords(v)) return [{ path, pair: v }];
+  if (typeof v === 'object' && v !== null) return Object.entries(v).flatMap(([k, w]) => courseLines(w, `${path}.${k}`));
+  return [];
+}
+
+describe('a course tip on a touch screen (OP-498)', () => {
+  it('every line a course says with a keyboard has a touch line with no keyboard words, naming the pad by its buttons', () => {
+    const pairs = courseLines().filter((l) => l.pair);
+    // The moves at the way in and the walk stopped at a hazard's edge, at least.
+    expect(pairs.map((l) => l.path)).toEqual(expect.arrayContaining(['COURSE_WORDS.tips.moves', 'COURSE_WORDS.jumpHere']));
+    for (const { path, pair } of pairs) {
+      expect(pair!.keys, path).toMatch(KEYBOARD);
+      expect(pair!.touch, path).not.toMatch(KEYBOARD);
+      expect(pair!.touch, path).toMatch(/\b(tap|hold)\b/i);
+      expect(pair!.touch, path).toContain('Jump');
+    }
+    // The moves name both of the pad's buttons a course has, and nothing else as a button.
+    for (const b of PAD_BUTTONS) expect(COURSE_WORDS.tips.moves.touch).toContain(b);
+    expect(COURSE_WORDS.jumpHere.touch).toBe('Jump here to cross: tap Jump.');
+  });
+
+  it('every line a course says on every device has no keyboard words, so none is missing its touch line', () => {
+    const shared = courseLines().filter((l) => l.words !== undefined);
+    expect(shared.length).toBeGreaterThan(10);
+    for (const { path, words } of shared) expect(words, path).not.toMatch(KEYBOARD);
+  });
+
+  it('the chooser picks the touch line when the device plays with the pad, and the keyboard line when not', () => {
+    expect(forDevice(COURSE_WORDS.jumpHere, true)).toBe(COURSE_WORDS.jumpHere.touch);
+    expect(forDevice(COURSE_WORDS.jumpHere, false)).toBe(COURSE_WORDS.jumpHere.keys);
+    expect(forDevice(COURSE_WORDS.tips.moves, true)).toBe(COURSE_WORDS.tips.moves.touch);
+    expect(forDevice(COURSE_WORDS.tips.moves, false)).toBe(COURSE_WORDS.tips.moves.keys);
+  });
+
+  it('in every course, Brushstroke Bridges among them, no tip on a touch screen has a keyboard word, and the moves are the touch ones', () => {
+    const all = Object.values(COURSES);
+    expect(all.map((c) => c.id)).toContain('brush');
+    for (const def of all) {
+      const touch = courseTips(def, rooms, groundOf, true);
+      const keys = courseTips(def, rooms, groundOf, false);
+      expect(touch.length, def.id).toBeGreaterThan(0);
+      // The same tips at the same places; only the words for the moves differ.
+      expect(touch.map((t) => [t.id, t.room, t.at]), def.id).toEqual(keys.map((t) => [t.id, t.room, t.at]));
+      for (const t of touch) expect(t.words, `${def.id} ${t.id}`).not.toMatch(KEYBOARD);
+      const start = touch.find((t) => t.id === 'start');
+      if (!start) continue;
+      expect(start.words, def.id).toContain(COURSE_WORDS.tips.moves.touch);
+      expect(keys.find((t) => t.id === 'start')!.words, def.id).toContain(COURSE_WORDS.tips.moves.keys);
     }
   });
 });

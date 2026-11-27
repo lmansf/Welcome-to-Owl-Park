@@ -187,6 +187,31 @@ test.describe('the nests (this device)', () => {
   });
 });
 
+test.describe("the street's way to the park, along its whole east edge (OP-499)", () => {
+  test('walked right along the lower ground, the owl goes on to the Treetop Commons, where it stood pinned at the edge', async ({ page }) => {
+    await openPark(page, { room: 'homes', collector: 'e2e-street-east-low', tz: 'UTC' });
+    // Out on the plaza's lower ground, below the mossy bank in the street's east corner.
+    const at = await walkAndStop(page, 2880, 1120);
+    expect(at.y, 'on the lower ground').toBeGreaterThan(1000);
+    await page.keyboard.down('ArrowRight');
+    await inRoom(page, 'lobby');
+    await page.keyboard.up('ArrowRight');
+  });
+
+  test("the To the park chip, tapped on the lower ground in front of the bird bath's log, walks the owl round the log and out", async ({ page }) => {
+    await openPark(page, { room: 'homes', collector: 'e2e-street-chip-low', tz: 'UTC' });
+    // Down onto the lower ground, then along it, clear of the log: the straight line from here to the doorway meets the log.
+    await walkAndStop(page, 2000, 1250);
+    const at = await walkAndStop(page, 1600, 1220);
+    expect(Math.hypot(at.x - 1600, at.y - 1220), 'in front of the log').toBeLessThan(8);
+    await settleCamera(page);
+    const chip = page.locator('[data-hint="to-lobby"]');
+    await expect(chip).toHaveText('To the park');
+    await chip.click();
+    await inRoom(page, 'lobby');
+  });
+});
+
 test.describe('decorating on a phone', () => {
   test('the chosen spot stays in view above the Decorate sheet', async ({ page }) => {
     await openPark(page, { room: 'homes', collector: 'e2e-nest-phone', tz: 'UTC' });

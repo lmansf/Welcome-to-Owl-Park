@@ -31,7 +31,7 @@ import {
   type BowlRoll,
   type Vec2,
 } from '@owl-park/shared';
-import { artOrShape, standIn } from './standIn';
+import { artOrShape, laneArt } from './standIn';
 import { workBoxesShown } from './workBoxes';
 
 export interface BowlLayerOpts {
@@ -122,9 +122,9 @@ export class BowlLayer {
   /** The lane as a size box with its dimensions on it, when feather tag is not drawing it. */
   private drawLane(): void {
     const s = this.o.scene;
-    // For every visitor but a painter or a keeper (workBoxes.ts), the lane's art, no outline or size.
+    // For every visitor but a painter or a keeper (workBoxes.ts), the lane's own art (laneArt), no outline or size.
     if (!workBoxesShown()) {
-      drawLaneArt(s, this.drawn);
+      laneArt(s, this.drawn);
       return;
     }
     const lane = s.add.graphics();
@@ -299,13 +299,4 @@ export class BowlLayer {
     this.line?.remove();
     this.line = null;
   }
-}
-
-/** The bowling lane's art (bowl-lane) over a soft worn strip that shows until it loads: shared with feather tag, which draws the lane when it is on. */
-export function drawLaneArt(s: Phaser.Scene, into: Phaser.GameObjects.GameObject[]): void {
-  const worn = s.add.graphics();
-  worn.fillStyle(0xffd36a, 0.07).fillRoundedRect(BOWLING_LANE.x, BOWLING_LANE.y, BOWLING_LANE.w, BOWLING_LANE.h, BOWLING_LANE.h / 2);
-  worn.setDepth(BOWLING_LANE.y);
-  into.push(worn);
-  standIn(s, 'bowl-lane', { x: BOWLING_LANE.x + BOWLING_LANE.w / 2, y: BOWLING_LANE.y + BOWLING_LANE.h }, BOWLING_LANE.w, BOWLING_LANE.y + 0.1, into);
 }

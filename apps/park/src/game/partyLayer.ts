@@ -1,6 +1,6 @@
 /**
  * The party game in the park (OP-314), on for every visitor since Nov 20: the Old Stump and its
- * four seats in the Great Hollow, drawn as size boxes; the stump's card, where owls sit, stand and the
+ * four seats in the Great Hollow, painted (size boxes on a painter's tab); the stump's card, where owls sit, stand and the
  * first to sit starts the game; and, in a game's own room, the party screen over everything.
  *
  * The room server keeps the seats and the games; this layer asks it (`party` frames through the room's
@@ -33,6 +33,13 @@ import type { RoomConnection } from '../net/transport';
 import { createPartyScreen, type PartyScreen } from '../ui/partyScreen';
 import { standIn } from './standIn';
 import { workBoxesShown } from './workBoxes';
+
+/** The stump's art: as wide as its painting is (more than the 300 box), its foot this far below the box's. */
+const STUMP_ART_W = 336;
+const STUMP_ART_DROP = 13;
+/** A seat's art, the same way (its box is 80 wide). */
+const SEAT_ART_W = 100;
+const SEAT_ART_DROP = 7;
 
 export interface PartyLayerOpts {
   scene: Phaser.Scene;
@@ -100,14 +107,16 @@ export class PartyLayer {
     if (this.inGame) conn.party.send('view');
   }
 
-  /** The Old Stump and its seats as size boxes on the plaza's floor. */
+  /** The Old Stump and its seats on the plaza's floor: their art, or size boxes on a painter's tab. */
   private drawStump(): void {
     const s = this.o.scene;
-    // For every visitor but a painter or a keeper (workBoxes.ts), the Old Stump's art in the box's place,
-    // its foot where the box's was, and a log seat at each of its four seats.
+    // For every visitor but a painter or a keeper (workBoxes.ts), the stump's and the seats' own art,
+    // each a little wider than its box (the roots and the moss spread past it), its foot just below
+    // the box's. A seat is drawn just behind its spot, so an owl sitting there is drawn over it.
     if (!workBoxesShown()) {
-      standIn(s, 'party-stump', { x: STUMP_AT.x, y: STUMP_AT.y + STUMP_SIZE.h / 2 }, STUMP_SIZE.w, STUMP_AT.y + STUMP_SIZE.h / 2, this.boxes);
-      for (const p of STUMP_SEATS) standIn(s, 'party-seat', { x: p.x, y: p.y + SEAT_SIZE.h / 2 }, SEAT_SIZE.w, p.y + SEAT_SIZE.h / 2 - 1, this.boxes);
+      const foot = STUMP_AT.y + STUMP_SIZE.h / 2;
+      standIn(s, 'party-old-stump', { x: STUMP_AT.x, y: foot + STUMP_ART_DROP }, STUMP_ART_W, foot, this.boxes);
+      for (const p of STUMP_SEATS) standIn(s, 'party-stump-seat', { x: p.x, y: p.y + SEAT_SIZE.h / 2 + SEAT_ART_DROP }, SEAT_ART_W, p.y - 1, this.boxes);
       return;
     }
     const box = (x: number, y: number, w: number, h: number, name: string) => {

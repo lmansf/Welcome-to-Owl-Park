@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { HELD_FRAME_MS, heldPass as pass, heldUntil as until, holdTheClock, openHeld, openPark, state, stateNow as now } from './helpers';
+import { HALL_ROOM, rootId } from '../../../packages/shared/rooms/hollowHall';
+import { HELD_FRAME_MS, heldPass as pass, heldStandingAt, heldUntil as until, holdTheClock, openHeld, openPark, state, stateNow as now } from './helpers';
 
 /**
  * The guardian alive at the heart of the Great Hollow (OP-359), on for every visitor since Nov 20 (it
@@ -150,5 +151,37 @@ test.describe('the guardian at the heart of the Great Hollow (OP-359)', () => {
     const rest = tops.at(-1)!;
     const near = tops.findIndex((top) => Math.abs(top - rest) <= 3);
     expect(Math.max(...tops.slice(near).map((top) => Math.abs(top - rest)))).toBeLessThanOrEqual(3);
+  });
+});
+
+/**
+ * The guardian's wings hang over the inner root runs either side of it, and its foot is in front of
+ * them: sorted by its foot alone it drew over an owl on the inner log west of it, or just in front of
+ * that log, its feet all that showed, and on a phone held upright the owl was off the middle of the
+ * screen (OP-497). Its rules are in src/game/guardian.test.ts (guardianDepth, lookOnOwl); here it is
+ * in the room, on a phone-sized screen held upright.
+ */
+test.describe('an owl beside the guardian, on a screen held upright (OP-497)', () => {
+  test('in front of the inner log west of it the owl is drawn over the guardian and the log, at the middle of the screen', async ({ page }) => {
+    test.slow(); // a walk across the hall a frame at a go
+    await page.setViewportSize({ width: 360, height: 740 });
+    await holdTheClock(page);
+    await openHeld(page, { room: 'm3-hall', newmap: '1' });
+    const id = rootId('ink', 'log');
+    const log = HALL_ROOM.pieces!.find((p) => p.id === id)!;
+    const perch = HALL_ROOM.perches!.find((p) => p.id === id)!;
+    // On the floor just in front of the log's east end, where the feather trail leads a new owl: under the guardian's wing.
+    const spot = { x: Math.max(...perch.area.map((p) => p.x)) - 50, y: Math.max(...perch.area.map((p) => p.y)) + 54 };
+    const at = await heldStandingAt(page, spot);
+    const s = await now(page);
+    const g = s.guardian!;
+    // The guardian goes behind the owl, and stays over the log; the owl is over both.
+    expect(g.depth).toBeLessThan(g.at.y);
+    expect(s.depth).toBeGreaterThan(g.depth);
+    expect(g.depth).toBeGreaterThan(log.y);
+    expect(s.depth).toBeGreaterThan(log.y);
+    // And the owl stands about the middle of the screen, not off toward its top or its foot.
+    expect(at.down).toBeGreaterThan(0.4);
+    expect(at.down).toBeLessThan(0.62);
   });
 });
