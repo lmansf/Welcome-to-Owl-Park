@@ -277,9 +277,19 @@ test.describe('travel from the map (OP-130)', () => {
     const walk = card.locator('[data-walk="lobby"]');
     await expect(walk).toHaveText('Walk there');
     await expect(card.locator('[data-travel]')).toBeVisible();
+    const thrown: string[] = [];
+    page.on('pageerror', (e) => thrown.push(e.message));
     if (isMobile) await walk.tap();
     else await walk.click();
-    await expect(menu).toBeHidden();
+    // Closed, or why not: the card's line when the walk was refused, an error thrown by the press, or the room the owl is in.
+    await expect
+      .poll(async () => {
+        if (!(await menu.isVisible())) return 'closed';
+        const line = card.locator('[data-travel-line]');
+        const said = (await line.isVisible()) ? await line.textContent() : null;
+        return `open; card says ${JSON.stringify(said)}; thrown ${JSON.stringify(thrown)}; in ${(await state(page)).room}; walk still shown ${await walk.isVisible()}`;
+      }, { timeout: 10_000 })
+      .toBe('closed');
     await expect.poll(async () => (await state(page)).lead).toEqual({ place: 'lobby', room: 'lobby', next: 'lobby' });
     // Walked in, not travelled: the street's doorway takes the owl into the Treetop Commons, and the walk ends there.
     await inRoom(page, 'lobby');
