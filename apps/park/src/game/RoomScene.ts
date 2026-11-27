@@ -46,6 +46,7 @@ import {
   cabinetAt,
   closestPointOnSegment,
   distance,
+  doorRects,
   entryPoint,
   filterOwnedWear,
   foregroundTiles,
@@ -64,7 +65,7 @@ import {
   npcsIn,
   parkwardDoor,
   parseVariant,
-  pointInRect,
+  inDoorway,
   isWalkable,
   positionAlongWalk,
   putOn,
@@ -262,7 +263,7 @@ import { SeeThrough } from './seeThroughArt';
 import { parkSfx, type Sfx } from './sfx';
 import { STEP_MOST_MS, sideCamAt, sideCamStep, speedAlong, type SideCam } from './sideCamera';
 import { airCues, type CueName } from './sfxCues';
-import { sideEdges } from './sideEdges';
+import { sideEdges, walkAim } from './sideEdges';
 import { drawWalkFloor } from './walkFloor';
 import { BOWL_BEYOND, BOWL_SHADOW, drawBowl } from './bowlView';
 import { artTrialFor, drawArtTrial, hidePaintedPieces } from './artTrial';
@@ -2451,7 +2452,7 @@ export class RoomScene extends Phaser.Scene {
     const spot = doorSpot(to);
     if (this.sideView()) return trail.lay([from, spot]);
     const f = this.footingNow();
-    const aim = snapToWalkable(spot, f.walkable);
+    const aim = this.openAim(spot, f.walkable);
     // Round the guardian, where it is (OP-359): no feather is laid behind it.
     const shade = this.guardian ? guardianShade() : [];
     const legs = wayAround(from, aim, f.walkable, [...f.shut, ...shade, ...doorwaysOff(this.room, from, aim, (id) => this.realmClosed(id), this.walking())]) ?? [];
@@ -4281,7 +4282,8 @@ export class RoomScene extends Phaser.Scene {
     this.wayTo = null;
     // A tap that a straight walk stops short of, at a bend in the floor: there by the way around it,
     // the first leg now (OP-148). A perch's top asked for from the floor has no way round: its face.
-    const aim = snapToWalkable(target, f.walkable);
+    // Aimed into a side strip (a doorway at the room's very side), the way is to the strip's edge (OP-499).
+    const aim = this.openAim(target, f.walkable);
     if (!fromKeys && distance(to, aim) > WAY_SHORT_PX) {
       const legs = wayAround({ ...this.me.pos }, aim, f.walkable, [...f.shut, ...doorwaysOff(this.room, this.me.pos, aim, (id) => this.realmClosed(id), this.walking())]);
       if (legs?.[0]) {
@@ -4362,9 +4364,11 @@ export class RoomScene extends Phaser.Scene {
     }
     for (const door of this.room.doors) {
       const to = this.doorTo(door);
-      const inside = pointInRect(pos, door.rect);
-      // A doorway to another room takes the owl from where its step came in, a step across it included.
-      const cameIn = (to && stepFrom ? entryPoint(door.rect, stepFrom, pos) : null) ?? (inside ? pos : null);
+      const inside = inDoorway(pos, door);
+      // A doorway to another room takes the owl from where its step came in, a step across it included,
+      // anywhere on its floor (its rect, and the rest of its side's edge: doorRects, OP-499).
+      const crossed = to && stepFrom ? doorRects(door).map((r) => entryPoint(r, stepFrom, pos)).find((p) => p !== null) : null;
+      const cameIn = crossed ?? (inside ? pos : null);
       if (!cameIn || !this.atDoorLevel(door)) continue;
       // The way back, to an owl still holding the keys it came in with: not until it lets go (a new press of up is a new push).
       if (this.backWaiting && !pressed && this.leadsBack(door)) continue;
@@ -4374,7 +4378,7 @@ export class RoomScene extends Phaser.Scene {
       if (up) this.upAt = 0;
       const nestDoor = isStreetRoom(this.room.id) ? nestDoorIndex(door.id) : null;
       if (nestDoor !== null) {
-        if ((up || takesDoorway(door.rect, this.me.walk?.to ?? null, this.keyWalk, this.errand !== null, side)) && this.enterNest(nestDoor, said)) return;
+        if ((up || takesDoorway(doorRects(door), this.me.walk?.to ?? null, this.keyWalk, this.errand !== null, side)) && this.enterNest(nestDoor, said)) return;
         continue;
       }
       if (to) {
@@ -4384,7 +4388,7 @@ export class RoomScene extends Phaser.Scene {
           continue;
         }
         // A walk that ended past a doorway it crossed in its last frame goes through only as one that ends there would.
-        if (!up && !takesDoorway(door.rect, (this.me.walk ?? (stepFrom ? walk : null))?.to ?? null, this.keyWalk, this.errand !== null, side)) continue;
+        if (!up && !takesDoorway(doorRects(door), (this.me.walk ?? (stepFrom ? walk : null))?.to ?? null, this.keyWalk, this.errand !== null, side)) continue;
         // A course's doorway that waits on its run (the way to the finish with parts left, OP-343): its words, and no way through yet.
         const waits = this.course?.holds(to.room) ?? null;
         if (waits !== null) {
@@ -5023,14 +5027,22 @@ export class RoomScene extends Phaser.Scene {
    */
   private backFloor(): Rect[] {
     if (!this.backWaiting || !this.me || this.sideView()) return [];
-    return this.room.doors.filter((d) => this.leadsBack(d) && !pointInRect(this.me.pos, d.rect)).map((d) => d.rect);
+    return this.room.doors.filter((d) => this.leadsBack(d) && !inDoorway(this.me.pos, d)).flatMap(doorRects);
   }
 
   /** Where the owl can walk at the height it is now (OP-084, perches.ts): the floor and the perch tops at or below it, less the floor shut for now. */
   private footingNow(): { walkable: Polygon[]; shut: Shut[] } {
-    // The room's two sides, so the whole owl stays on screen at the end of a floor (OP-296).
-    const edges = sideEdges(this.room, this.me ? (OWL_W * Math.abs(this.me.scaleX)) / 2 : 0);
-    return footing(this.room, this.flier.air.z, [...edges, ...this.shutFloor(), ...this.backFloor(), ...(this.course?.shut() ?? [])]);
+    return footing(this.room, this.flier.air.z, [...this.sideStrips(), ...this.shutFloor(), ...this.backFloor(), ...(this.course?.shut() ?? [])]);
+  }
+
+  /** The room's two sides, so the whole owl stays on screen at the end of a floor (OP-296). */
+  private sideStrips(): Rect[] {
+    return sideEdges(this.room, this.me ? (OWL_W * Math.abs(this.me.scaleX)) / 2 : 0);
+  }
+
+  /** Where a walk to `target` heads, on `walkable`: onto it, and in off a side strip (sideEdges.ts, walkAim; OP-499). */
+  private openAim(target: Vec2, walkable: Polygon[]): Vec2 {
+    return walkAim(target, walkable, this.sideStrips());
   }
 
   /** What the owl stands on, or would come down on, now: a perch's top, else the floor (0). */

@@ -90,8 +90,18 @@ export function doorLabel(door: DoorDef, map: WalkMap): string | undefined {
   return map === 3 ? (door.labelNew ?? door.label) : door.label;
 }
 
+/** All the floor a doorway takes an owl through from: its rect and the rest of its side's edge (DoorDef.alsoAt, OP-499). */
+export function doorRects(door: Pick<DoorDef, 'rect' | 'alsoAt'>): Rect[] {
+  return door.alsoAt?.length ? [door.rect, ...door.alsoAt] : [door.rect];
+}
+
+/** Whether `p` is in a doorway: in its rect, or in the rest of its side's edge (doorRects). */
+export function inDoorway(p: Vec2, door: Pick<DoorDef, 'rect' | 'alsoAt'>): boolean {
+  return doorRects(door).some((r) => pointInRect(p, r));
+}
+
 export function inExit(room: RoomDef, p: Vec2): boolean {
-  return room.doors.some((d) => leadsOut(d) && pointInRect(p, d.rect));
+  return room.doors.some((d) => leadsOut(d) && inDoorway(p, d));
 }
 
 /** A doorway that takes an owl out of its room: one that leads somewhere, or a nest's door on the street. */
@@ -103,7 +113,7 @@ const leadsOut = (d: DoorDef): boolean => d.to !== undefined || nestDoorIndex(d.
  * has only just come into: the room server puts no arrival where its step aside would do that.
  */
 export function walkCrossesExit(room: RoomDef, from: Vec2, to: Vec2): boolean {
-  return room.doors.some((d) => leadsOut(d) && segmentTouchesRect(from, to, d.rect));
+  return room.doors.some((d) => leadsOut(d) && doorRects(d).some((r) => segmentTouchesRect(from, to, r)));
 }
 
 /**
