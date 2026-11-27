@@ -124,6 +124,8 @@ export interface ParkState {
   } | null;
   /** The words of the prompt over the visitor's own owl (OP-344), if any. */
   promptShown: string | null;
+  /** Where that prompt lies (room px), if it shows (OP-496). */
+  promptBox: { left: number; top: number; right: number; bottom: number } | null;
   /** The tall art gone see-through because the visitor's own owl is behind it (OP-346), by its art's key. */
   seeThrough: string[];
   /** The guardian at the heart of the Great Hollow (OP-359): null in any other room. */

@@ -251,7 +251,7 @@ import { OWL_SCALE, OWL_W, Owl } from './Owl';
 import { QuestItemMarker, RisingLight, SpotGlow } from './QuestItem';
 import { PuzzleMarker, markKey, type PuzzleMarkKind, type PuzzleMarkLook } from './PuzzleMarker';
 import { StreetDoors, addNestsSign, addParkSign } from './street';
-import { FOLLOW_EASE, cameraBounds, followEaseAt, followLead, type CoveredEdges } from './hudInset';
+import { FOLLOW_EASE, cameraBounds, followEaseAt, followLead, rowAcross, type CoveredEdges } from './hudInset';
 import { RISE_HEAD, lookBetween, openingAt, restAt, riseBack, screenZoom, townZoom, wholeLook, wholeZoom, type Look } from './townView';
 import { SizeLabels } from './sizeLabels';
 import { CourseTipSigns } from './courseTipSigns';
@@ -769,6 +769,8 @@ export class RoomScene extends Phaser.Scene {
   private decorSpot: NestSpotId = 'f1';
   /** CSS pixels the Decorate sheet covers at the bottom of the screen. */
   private sheetPx = 0;
+  /** How far up the screen the HUD's bottom row reaches where it runs right across it (CSS px), else 0 (fitCamera, OP-496). */
+  private rowCovered = 0;
   /**
    * The opening look under way (OP-336, townView.ts): when the room has faded in (its time is counted from
    * then), and when the player first moved, in that time (which brings it in early); null when there is
@@ -1349,6 +1351,7 @@ export class RoomScene extends Phaser.Scene {
       room.size.h + 135,
       () => this.cfg.pixelRatio / this.cameras.main.zoom,
       () => promptPlace({ x: this.me.x, y: this.me.y - this.me.flightHeight() }, this.doorSigns?.shownBox() ?? null, this.cfg.pixelRatio / this.cameras.main.zoom),
+      () => this.rowFloor(),
     );
     // The Great Hollow's own tips (OP-347): how to hop up its roots and glide off them, until this device's owl has done it once.
     const hall = courseDef ? [] : hallTips(room, TOUCH_SCREEN);
@@ -2935,6 +2938,8 @@ export class RoomScene extends Phaser.Scene {
     firstRise: boolean | null;
     /** The words of the prompt over the visitor's own owl (OP-344), if any. */
     promptShown: string | null;
+    /** Where that prompt lies (room px), if it shows (OP-496). */
+    promptBox: { left: number; top: number; right: number; bottom: number } | null;
     /** The tall art gone see-through because the visitor's own owl is behind it (OP-346), by its art's key. */
     seeThrough: string[];
     /** The guardian at the heart of the Great Hollow (OP-359), where it is: null in any other room. */
@@ -3062,6 +3067,7 @@ export class RoomScene extends Phaser.Scene {
       firstFlight: this.firstFlown,
       firstRise: marksFirstRise(this.room, this.rootTips) ? !this.riseWaits : null,
       promptShown: this.reach?.shown() ?? null,
+      promptBox: this.reach?.box() ?? null,
       seeThrough: this.seeThrough?.faded() ?? [],
       guardian: this.guardian?.state() ?? null,
       desk: this.desk?.state() ?? null,
@@ -5185,7 +5191,14 @@ export class RoomScene extends Phaser.Scene {
     this.followOwl();
     const fit = () => this.fitCamera();
     this.scale.on(Phaser.Scale.Events.RESIZE, fit);
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.scale.off(Phaser.Scale.Events.RESIZE, fit));
+    // And as the HUD's bar or bottom row changes size (OP-496): on a narrow screen the row wraps onto a
+    // second line as an action button joins it, and the camera keeps the room's front above it. Not
+    // while the owner decorates: the sheet hides the row, and its own resize fits the camera and its look.
+    const stop = this.hud.onCoveredChange(() => !this.decorating && fit());
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.scale.off(Phaser.Scale.Events.RESIZE, fit);
+      stop();
+    });
   }
 
   /**
@@ -5215,6 +5228,7 @@ export class RoomScene extends Phaser.Scene {
   private fitCamera(): void {
     const cam = this.cameras.main;
     const { width, height } = this.scale.gameSize;
+    this.rowCovered = 0;
     const f = this.mirrorFrame;
     if (f) {
       // The stage's rectangle, zoomed in on the owl (and its mirror, in a nest), from a hat's height to the floor.
@@ -5252,11 +5266,27 @@ export class RoomScene extends Phaser.Scene {
     // seen from the side (OP-278) or from above (OP-292); the
     // Decorate sheet's own view stops above it already.
     const covered = this.sheetPx > 0 ? { top: 0, bottom: 0 } : this.viewEdges(this.hud.coveredEdges());
-    const b = cameraBounds(this.room.size, covered, this.cfg.pixelRatio / cam.zoom);
+    // On a screen narrower than it is tall the row of Menu, Emotes and Say runs right across its foot:
+    // a room seen from above whose whole depth is on screen keeps its front edge, and all along it,
+    // above the row (OP-496). The prompt at the owl's feet keeps above it too (rowFloor).
+    const across = rowAcross({ w: width, h });
+    this.rowCovered = across ? covered.bottom : 0;
+    const frontUp = across && this.townViewed() ? { viewH: h / cam.zoom } : undefined;
+    const b = cameraBounds(this.room.size, covered, this.cfg.pixelRatio / cam.zoom, frontUp);
     cam.setBounds(b.x, b.y, b.w, b.h);
     // A plaza (seen from above, taller than a screen): the owl stands lower on screen, the back of the room in view (hudInset.ts).
     cam.setFollowOffset(0, this.leadOver(h / cam.zoom));
     for (const { t, img } of this.parallax) this.placeParallax(t, img);
+  }
+
+  /**
+   * The lowest room y the prompt at the owl's feet may reach this frame, or null for anywhere (OP-496):
+   * above the HUD's bottom row where it runs right across the screen (fitCamera, rowCovered).
+   */
+  private rowFloor(): number | null {
+    if (!(this.rowCovered > 0)) return null;
+    const cam = this.cameras.main;
+    return cam.worldView.bottom - this.rowCovered * (this.cfg.pixelRatio / cam.zoom);
   }
 
   /** How far above the owl the camera rests in a view `viewH` of the room tall (hudInset.ts, followLead): not at all in an oval with ways all round it. */

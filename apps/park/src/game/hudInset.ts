@@ -23,12 +23,42 @@ export interface Bounds {
 /**
  * The camera's bounds for a room `size` wide and tall. `cssToWorld` is room units per CSS pixel
  * (the device's pixel ratio over the camera's zoom).
+ *
+ * `frontUp` (OP-496) is for a screen narrower than it is tall, where Menu, Emotes and Say make a row
+ * right across the foot of the screen: the view's height in room px. Where the room's whole depth is on
+ * screen at once (a plaza seen from above), the view is held with the room's front edge on the row's
+ * top, wherever the owl is, rather than leaving the bottom of the room under the row until the owl
+ * walks down to it: the sealed hollow's doorway, the owl at it and its prompt, and the neon street's
+ * leaf piles all lie along the front. What that hides is the top of the back wall (as deep as the row
+ * is tall), which nothing an owl uses is on. A room deeper than the view scrolls as before.
+ *
+ * TODO-DOCS (OP-496): docs/ARCHITECTURE.md's camera notes say that in a window narrower than it is tall,
+ * a room seen from above whose depth is all on screen rests with its front edge on the HUD's bottom row,
+ * the row measured again whenever it changes size (an action button wrapping it onto two lines).
  */
-export function cameraBounds(size: { w: number; h: number }, covered: CoveredEdges, cssToWorld: number): Bounds {
+export function cameraBounds(size: { w: number; h: number }, covered: CoveredEdges, cssToWorld: number, frontUp?: { viewH: number }): Bounds {
   if (!(cssToWorld > 0)) return { x: 0, y: 0, w: size.w, h: size.h };
   const top = Math.max(0, covered.top) * cssToWorld;
   const bottom = Math.max(0, covered.bottom) * cssToWorld;
+  const viewH = frontUp?.viewH ?? 0;
+  // Bounds exactly the view's height hold the camera still up and down, the room's front on the row.
+  if (bottom > 0 && viewH > 0 && viewH >= size.h - 0.5) return { x: 0, y: size.h + bottom - viewH, w: size.w, h: viewH };
   return { x: 0, y: -top, w: size.w, h: size.h + top + bottom };
+}
+
+/** Whether the HUD's bottom row runs right across a screen this size (CSS or game px): it is narrower than it is tall (OP-496). */
+export function rowAcross(screen: { w: number; h: number }): boolean {
+  return screen.w < screen.h;
+}
+
+/**
+ * The lowest the top of a label `tall` room px high may lie so that it ends above `floor` (room px),
+ * or where it is (`y`) when that is higher already, or when there is no floor (OP-496): the prompt at
+ * an owl's feet on the floor's front edge stays above the HUD's row rather than under it.
+ */
+export function keptAbove(y: number, tall: number, floor: number | null): number {
+  if (floor === null || !Number.isFinite(floor) || !(tall >= 0)) return y;
+  return Math.min(y, floor - tall);
 }
 
 /**
