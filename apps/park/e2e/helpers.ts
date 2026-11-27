@@ -159,6 +159,7 @@ export interface ParkState {
   pet: { x: number; y: number } | null;
   petSize: { w: number; h: number; owlW: number } | null;
   trail: { feathers: Array<{ x: number; y: number }>; glints: string[]; on: boolean } | null;
+  lead: { place: string; room: string; next: string | null } | null;
   floorShown: boolean;
   /** How many pieces shaping the room's edges seen from above were drawn (edges.ts). */
   edges: number;

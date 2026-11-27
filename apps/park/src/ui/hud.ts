@@ -64,6 +64,10 @@ export interface WayOutActions {
   leave(): void;
   /** Travel from the map (OP-130), its button held: null when the owl is on its way, otherwise why not. */
   travel(place: string): TravelRefusal | null;
+  /** Walk there from the map (OP-513): null when the owl is on its way on foot, otherwise why not. */
+  walk(place: string): TravelRefusal | null;
+  /** Whether a way on foot leads from where the owl stands to a place of the map. */
+  canWalk(place: string): boolean;
   /** "Home screen" (OP-065): out of the room as through a door, to the home screen. */
   title(): void;
 }
@@ -635,6 +639,16 @@ export function createHud(parent: HTMLElement, initialLook: OwlLook, settings: S
       go: (place) => {
         const why = wayOut ? wayOut.travel(place) : 'busy';
         // On its way: the Menu closes, so the owl is seen going, and the map opens next time with no card.
+        if (why === null) {
+          picked = null;
+          closeScreens();
+        }
+        return why;
+      },
+      canWalk: (place) => wayOut?.canWalk(place) ?? false,
+      walk: (place) => {
+        const why = wayOut ? wayOut.walk(place) : 'busy';
+        // On its way on foot: the Menu closes so the owl is seen walking, and the map opens next time with no card.
         if (why === null) {
           picked = null;
           closeScreens();

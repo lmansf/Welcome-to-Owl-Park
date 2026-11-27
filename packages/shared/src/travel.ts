@@ -158,4 +158,8 @@ export const TRAVEL_WORDS = {
   newGateFirst: 'Walk through the turnstiles in the Treetop Commons first.',
   /** The new map's way to its gate: the Treetop Commons. */
   newGate: 'Travel to the Treetop Commons',
+  /** The map card's way there on foot (OP-513): the owl walks, room by room, with the feathers leading. */
+  walk: 'Walk there',
+  /** Said once a walk there from the map has brought the owl into the place. */
+  walkedThere: 'Here you are.',
 } as const;

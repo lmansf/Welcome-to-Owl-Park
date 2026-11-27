@@ -250,6 +250,58 @@ test.describe('travel from the map (OP-130)', () => {
     await inRoom(page, 'circuit-1');
   });
 
+  test('each course has its own mark on the map, and Walk there walks the owl on foot, room by room, with the feathers leading (OP-513)', async ({ page, isMobile }) => {
+    test.skip(isEdge(), 'on this device');
+    test.slow(); // three rooms drawn with software WebGL on CI runners
+    await page.addInitScript(() => {
+      try {
+        sessionStorage.setItem('owl-park-map', '3');
+      } catch {
+        // A browser that keeps nothing walks today's park.
+      }
+    });
+    // On the nests' street: the Treetop Commons is one doorway away, on foot.
+    await openPark(page, { room: 'homes', collector: `e2e-travel-walk-${test.info().project.name}` });
+    const menu = page.getByRole('dialog', { name: 'Menu' });
+    let card = await mapCard(page, 'lobby');
+    // The three courses each with a mark of its own; no realm or other place has one.
+    for (const course of ['brush-1', 'canopy-1', 'circuit-1']) {
+      const mark = menu.locator(`button.pin[data-place="${course}"] [data-course-icon="${course}"]`);
+      await expect(mark, course).toBeVisible();
+      await expect(mark).toHaveAttribute('aria-label', /^Course: /);
+    }
+    await expect(menu.locator('[data-course-icon]')).toHaveCount(3);
+    await expect(menu.locator('button.pin[data-place="ink"] [data-course-icon]')).toHaveCount(0);
+    await page.screenshot({ path: `e2e-screenshots/${test.info().project.name}-travel-walk-map.png` });
+    // The card offers Walk there beside its travel button; one press closes the Menu and the owl walks.
+    const walk = card.locator('[data-walk="lobby"]');
+    await expect(walk).toHaveText('Walk there');
+    await expect(card.locator('[data-travel]')).toBeVisible();
+    if (isMobile) await walk.tap();
+    else await walk.click();
+    await expect(menu).toBeHidden();
+    await expect.poll(async () => (await state(page)).lead).toEqual({ place: 'lobby', room: 'lobby', next: 'lobby' });
+    // Walked in, not travelled: the street's doorway takes the owl into the Treetop Commons, and the walk ends there.
+    await inRoom(page, 'lobby');
+    await expect(page.getByText('Here you are.')).toBeVisible({ timeout: 15_000 });
+    await expect.poll(async () => (await state(page)).lead).toBeNull();
+    // Where the owl stands, the card offers no walk.
+    card = await mapCard(page, 'lobby');
+    await expect(card.locator('[data-walk]')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+
+    // In the Great Hollow, by keys: Enter on Walk there leads to the Blackout Circuit's doorway, the feathers to it.
+    await openPark(page, { room: 'm3-hall', spawn: 'from-lobby', collector: `e2e-travel-walk-${test.info().project.name}` });
+    card = await mapCard(page, 'circuit-1');
+    const there = card.locator('[data-walk="circuit-1"]');
+    await there.focus();
+    await page.keyboard.press('Enter');
+    await expect(menu).toBeHidden();
+    await expect.poll(async () => (await state(page)).lead).toEqual({ place: 'circuit-1', room: 'circuit-1', next: 'circuit-1' });
+    await expect.poll(async () => (await state(page)).walking, { timeout: 10_000 }).toBe(true);
+    await expect.poll(async () => (await state(page)).trail?.glints ?? [], { timeout: 10_000 }).toEqual(['course-market']);
+  });
+
   test('through the room server: the map stays with the owl, realm to realm, and a travel into the park without the gate is turned away', async ({ page }) => {
     test.skip(!isEdge(), 'the room server only');
     // In at the spawn the turnstiles let owls in at (walked through the gate), then on to the clearing.

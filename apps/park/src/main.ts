@@ -358,6 +358,8 @@ hud.attachWayOut({
     const room = roomScene();
     return room ? room.travel(place) : 'busy';
   },
+  walk: (place) => roomScene()?.walkThere(place) ?? 'busy',
+  canWalk: (place) => roomScene()?.canWalkThere(place) ?? false,
   title: () => void roomScene()?.toHomeScreen(),
 });
 
