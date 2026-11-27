@@ -183,7 +183,7 @@ import type { ParkConfig } from '../config';
 import { saveLook } from '../identity';
 import { OPEN_ENTRY, type ConnectionStatus, type Entry, type ParkTransport, type RoomConnection, type RoomHandlers, type ScanReply, type WalletEntry } from '../net';
 import type { Ribbon } from '../ui/ribbon';
-import { COURSE_WORDS } from '../ui/courseWords';
+import { COURSE_WORDS, forDevice } from '../ui/courseWords';
 import { openPosOverlay, type PosOverlay } from '../ui/posOverlay';
 import { keeperToken } from '../net/keeper';
 import type { EscapeLink } from '../net/transport';
@@ -2278,7 +2278,7 @@ export class RoomScene extends Phaser.Scene {
 
   /** At a hazard's edge in a course (OP-422): a jump crosses. */
   private sayJumpHere(): void {
-    this.hud.toast(TOUCH_SCREEN ? COURSE_WORDS.jumpHere.touch : COURSE_WORDS.jumpHere.keys, 3500);
+    this.hud.toast(forDevice(COURSE_WORDS.jumpHere, TOUCH_SCREEN), 3500);
   }
 
   /** The Menu's ways out from here: leaving inside the park, going home anywhere but the owl's own nest. */
