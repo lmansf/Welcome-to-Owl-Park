@@ -180,8 +180,20 @@ describe('doorwaysOff (OP-148)', () => {
   it('is each doorway a tap’s way round could take the owl through but the one it is aimed at, a little wider than drawn', () => {
     const off = doorwaysOff(street, { x: 470, y: 870 }, middle('nest-door-0'), () => false);
     const door1 = street.doors.find((d) => d.id === 'nest-door-1')!.rect;
-    expect(off).toHaveLength(6); // the other five nest doors and the way to the lobby
+    // The other five nest doors, and the way to the lobby: its arch and the rest of the street's east edge (OP-499).
+    expect(off).toHaveLength(7);
     expect(off).toContainEqual({ x: door1.x - WAY_DOOR_PX, y: door1.y - WAY_DOOR_PX, w: door1.w + 2 * WAY_DOOR_PX, h: door1.h + 2 * WAY_DOOR_PX });
+    const edge = street.doors.find((d) => d.id === 'to-lobby')!.alsoAt![0]!;
+    expect(off).toContainEqual({ x: edge.x - WAY_DOOR_PX, y: edge.y - WAY_DOOR_PX, w: edge.w + 2 * WAY_DOOR_PX, h: edge.h + 2 * WAY_DOOR_PX });
+  });
+
+  it('keeps a doorway out that the tap is aimed beside on any of its floor, and takes a walk ending there (OP-499)', () => {
+    const lobby = street.doors.find((d) => d.id === 'to-lobby')!;
+    // Aimed at the street's lower ground by its east edge: the way to the lobby is the tap's own.
+    const low = { x: 3140, y: 1100 };
+    expect(doorwaysOff(street, { x: 2000, y: 1100 }, low, () => false).some((r) => r.x <= low.x && low.x <= r.x + r.w && r.y <= low.y && low.y <= r.y + r.h)).toBe(false);
+    expect(takesDoorway(lobby.alsoAt!, low, false, false)).toBe(true);
+    expect(takesDoorway(lobby.rect, low, false, false)).toBe(false);
   });
 
   it('leaves out an arch whose realm is closed (its floor is shut already), the idol and other spots, and a doorway the owl stands in', () => {

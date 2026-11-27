@@ -1,22 +1,23 @@
 import { describe, expect, inject, it } from 'vitest';
 import { CABINETS } from '../src/arcade';
-import { arrivalPoint, doorAxis, doorTarget, inExit, laneThrough } from '../src/doorways';
+import { arrivalPoint, doorAxis, doorRects, doorTarget, inDoorway, inExit, laneThrough } from '../src/doorways';
 import { distance, distanceToRect, isWalkable, pointInRect, rectCenter } from '../src/geometry';
 import { FURNITURE, NEST_SPOTS, isStreetRoom, nestDoorIndex } from '../src/homes';
 import type { Vec2 } from '../src/protocol';
 import { ROOM_H, ROOM_MAX_H, ROOM_MAX_W, ROOM_W, backgroundTiles, findSpawn, foregroundTiles, mapOf, seenFromSide, tileFade, tilePlacement, type DoorDef, type RoomDef } from '../src/room';
 import { OWL_SPECIES, SPECIES } from '../src/species';
 import { ANCHORS, CLOSED_SIGNS, GATED_ROOMS, GUARDIANS, NEST_MIRROR, NEST_PARK_SIGN, NEST_ROOM, ROOMS, STREET_DOORS, STREET_ROOM, TREE_ARRIVAL, TREE_GROUND, TREE_REALMS, ARCADE_PLAZA, GLASS_PLAZA, HOMES_PLAZA, getRoom, roomFor } from './index';
-import { INTERACTABLES } from '../src/interactables';
-import { resolveTarget, steerTarget } from '../src/resolveTarget';
+import { INTERACTABLES, interactablesIn } from '../src/interactables';
+import { WALK_SAMPLE_PX, resolveTarget, steerTarget } from '../src/resolveTarget';
 import { NPCS } from '../src/npcs';
 import { FLIGHT_STEP_MS, GLIDE_SLOPE, GROUNDED, MAX_RISE, newFlier, stepFlier, type Flier, type FlightInput } from '../src/flight';
-import { PERCH_SLACK, footing, groundAt, perchTopLimit, type Raised } from '../src/perches';
+import { PERCH_SLACK, footing, groundAt, onSomeFooting, perchTopLimit, type Raised } from '../src/perches';
 import { gapBetween, perchTiers } from '../src/routes';
 import { pointInPolygon } from '../src/geometry';
 import { WALK_SPEED } from '../src/walk';
 import { treeLevelOf, treeSpotsFor } from '../src/treeSpots';
 import { NEW_MAP, NEW_MAP_HALL, isNewMapRoom } from '../src/newMap';
+import { WAY_SHORT_PX, wayAround } from '../src/wayAround';
 
 /** Every room an owl can stand in: the registry's, and the one every nest is made from. */
 const ALL_ROOMS: readonly RoomDef[] = [...Object.values(ROOMS), NEST_ROOM];
@@ -351,6 +352,55 @@ describe('the street and the nests', () => {
     }
     const out = door(NEST_ROOM, 'to-street');
     expect(pointInRect(resolveTarget(NEST_ROOM.spawns['default']!, rectCenter(out.rect), NEST_ROOM.walkable), out.rect)).toBe(true);
+  });
+
+  /** How far in from a room's side the page keeps an owl (half its width, OP-296), and the 10 of a doorway there it leaves open. */
+  const KEPT_IN = 50;
+
+  it("takes an owl to the lobby from anywhere along the street's east edge, the lower ground too (OP-499)", () => {
+    const back = door(street, 'to-lobby');
+    // Down the whole edge, and far enough in that an owl kept half its width off the side still stands in it.
+    for (const r of doorRects(back)) {
+      expect(r.x + r.w).toBe(street.size.w);
+      expect(r.x).toBeLessThanOrEqual(street.size.w - KEPT_IN - 10);
+    }
+    // Every point of the edge an owl can stand on: the lane's path, the mossy bank in the corner and the plaza's lower ground.
+    const edge: Vec2[] = [];
+    for (let y = 0; y <= street.size.h; y += 2) for (let x = street.size.w - KEPT_IN - 10; x <= street.size.w; x += 5) if (onSomeFooting(street, { x, y })) edge.push({ x, y });
+    const out = edge.filter((p) => !inDoorway(p, back));
+    expect(out, 'points of the east edge outside the doorway').toEqual([]);
+    const ys = edge.map((p) => p.y);
+    expect(Math.min(...ys)).toBeLessThan(back.rect.y);
+    expect(Math.max(...ys)).toBeGreaterThan(HOMES_PLAZA.front - 100);
+    // The arch itself, where a walk there aims and the lane it keeps, is as it was.
+    expect(back.rect).toEqual({ x: 3130, y: 670, w: 70, h: 66 });
+  });
+
+  it("leaves a way round the bird bath's log, from the lower ground to the way to the lobby (OP-499)", () => {
+    const back = door(street, 'to-lobby');
+    const ground = footing(street, 0);
+    // Where a walk to the doorway aims: its middle, as far in from the side as an owl is kept.
+    const aim = { x: street.size.w - KEPT_IN - 1, y: back.rect.y + back.rect.h / 2 };
+    expect(isWalkable(aim, ground.walkable, ground.shut)).toBe(true);
+    expect(inDoorway(aim, back)).toBe(true);
+    const bath = interactablesIn(STREET_ROOM).find((t) => t.kind === 'bird-bath')!;
+    // From the bath, and from the lower ground in front of it and beside the log, where a straight walk there stops at the log.
+    const fromLog = [
+      { x: 1500, y: 1200 },
+      { x: 1700, y: 1180 },
+      { x: 1690, y: 1150 },
+    ];
+    for (const from of fromLog) expect(distance(resolveTarget(from, aim, ground.walkable, ground.shut), aim), `straight from ${from.x}, ${from.y}`).toBeGreaterThan(WAY_SHORT_PX);
+    for (const from of [bath.pos, ...fromLog]) {
+      const legs = wayAround(from, aim, ground.walkable, ground.shut);
+      expect(legs, `a way from ${from.x}, ${from.y}`).not.toBeNull();
+      // Each leg a straight walk on from the last, and the last on to the doorway.
+      let here = from;
+      for (const p of [...legs!, aim]) {
+        expect(distance(resolveTarget(here, p, ground.walkable, ground.shut), p), `from ${from.x}, ${from.y} to ${p.x}, ${p.y}`).toBeLessThanOrEqual(WALK_SAMPLE_PX);
+        here = p;
+      }
+    }
   });
 
   it('a nest is one screen painted as nest, with a spawn inside, the door out to the street and the mirror', () => {

@@ -560,6 +560,13 @@ export interface DoorDef {
   id: string;
   /** Trigger area in room pixels. */
   rect: Rect;
+  /**
+   * More floor that takes an owl through, beside `rect` (OP-499): where a doorway in a room's side wall
+   * has floor running to that side above or below its arch, the rest of that edge, so an owl walked
+   * to the side anywhere along it goes through and is never pinned there. Only being in the doorway
+   * reads it (doorRects); where a walk there aims, the doorway's sign and the lane it keeps are `rect`'s.
+   */
+  alsoAt?: readonly Rect[];
   /** Open doors lead somewhere. Closed doors show an under-construction sign. */
   to?: { room: string; spawn: string };
   /**

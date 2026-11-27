@@ -1,4 +1,4 @@
-import { isStreetRoom, distanceToRect, doorTarget, nestDoorIndex, pointInRect, type DoorDef, type Rect, type RoomDef, type Vec2, type WalkMap } from '@owl-park/shared';
+import { isStreetRoom, distanceToRect, doorRects, doorTarget, inDoorway, nestDoorIndex, pointInRect, type DoorDef, type Rect, type RoomDef, type Vec2, type WalkMap } from '@owl-park/shared';
 import { NEST_ROOM, roomFor } from '../rooms';
 
 /**
@@ -16,10 +16,12 @@ export const DOOR_AIM_PX = 48;
  * In a room seen from the side (the tree, map 2: `sideView`), walking along a level passes its
  * doorways and stairs by (OP-212): neither the held keys nor an owl standing in one takes it, only a
  * tap aimed at the doorway itself. The up key (or the Go in action) takes the rest (`upTakes`).
+ * `rect` may be all of the doorway's floor (doorRects, OP-499): a walk ending at any of it is aimed there.
  */
-export function takesDoorway(rect: Rect, walkTo: Vec2 | null, fromKeys: boolean, onErrand: boolean, sideView = false): boolean {
+export function takesDoorway(rect: Rect | readonly Rect[], walkTo: Vec2 | null, fromKeys: boolean, onErrand: boolean, sideView = false): boolean {
   if (onErrand) return false;
-  const aimed = walkTo !== null && distanceToRect(walkTo, rect) <= DOOR_AIM_PX;
+  const rects: readonly Rect[] = 'x' in rect ? [rect] : rect;
+  const aimed = walkTo !== null && rects.some((r) => distanceToRect(walkTo, r) <= DOOR_AIM_PX);
   if (sideView) return !fromKeys && aimed;
   return fromKeys || walkTo === null || aimed;
 }
@@ -125,7 +127,7 @@ export function upCounts(pressedAt: number, now: number): boolean {
  * (`leads`: an open doorway to another room, or a nest's door on the street). Null for none.
  */
 export function doorwayUnder(doors: readonly DoorDef[], pos: Vec2, atLevel: (door: DoorDef) => boolean, leads: (door: DoorDef) => boolean): DoorDef | null {
-  return doors.find((d) => pointInRect(pos, d.rect) && atLevel(d) && leads(d)) ?? null;
+  return doors.find((d) => inDoorway(pos, d) && atLevel(d) && leads(d)) ?? null;
 }
 
 /** How much wider than drawn a doorway is kept out of a tap's way around a bend (OP-148). */
@@ -144,8 +146,9 @@ export function doorwaysOff(room: RoomDef, pos: Vec2, aim: Vec2, closed: (roomId
       const to = doorTarget(d, map);
       return to ? !closed(to.room) : isStreetRoom(room.id) && nestDoorIndex(d.id) !== null;
     })
-    .filter((d) => distanceToRect(aim, d.rect) > DOOR_AIM_PX)
-    .map((d) => ({ x: d.rect.x - m, y: d.rect.y - m, w: d.rect.w + 2 * m, h: d.rect.h + 2 * m }))
+    .filter((d) => doorRects(d).every((r) => distanceToRect(aim, r) > DOOR_AIM_PX))
+    .flatMap(doorRects)
+    .map((r) => ({ x: r.x - m, y: r.y - m, w: r.w + 2 * m, h: r.h + 2 * m }))
     .filter((r) => !pointInRect(pos, r));
 }
 
@@ -175,9 +178,10 @@ export function roomsAhead(
   const out: RoomDef[] = [];
   if (!walkTo && !sideView) return out;
   for (const door of room.doors) {
-    const aimed = walkTo !== null && distanceToRect(walkTo, door.rect) <= 2 * DOOR_AIM_PX;
-    const near = walkTo !== null && fromKeys && distanceToRect(pos, door.rect) <= AHEAD_PX;
-    const standing = sideView && walkTo === null && pointInRect(pos, door.rect);
+    const rects = doorRects(door);
+    const aimed = walkTo !== null && rects.some((r) => distanceToRect(walkTo, r) <= 2 * DOOR_AIM_PX);
+    const near = walkTo !== null && fromKeys && rects.some((r) => distanceToRect(pos, r) <= AHEAD_PX);
+    const standing = sideView && walkTo === null && inDoorway(pos, door);
     if (!aimed && !near && !standing) continue;
     const way = doorTarget(door, map);
     const to = way ? (closed(way.room) ? undefined : roomFor(way.room)) : isStreetRoom(room.id) && nestDoorIndex(door.id) !== null ? NEST_ROOM : undefined;
