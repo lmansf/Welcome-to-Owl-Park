@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { LANE_SPEED, ROOM_H, WALK_SPEED } from '@owl-park/shared';
 import { ROOMS } from '../rooms';
-import { FOLLOW_EASE, cameraBounds, coveredBy, followEaseAt, followLead } from './hudInset';
+import { ESCAPE_DOOR, interactablesIn } from '@owl-park/shared';
+import { FOLLOW_EASE, cameraBounds, coveredBy, followEaseAt, followLead, keptAbove, rowAcross } from './hudInset';
+import { restAt, townZoom } from './townView';
 
 describe('the HUD safe area (OP-278)', () => {
   it('a side-view room lets the camera scroll past its top and bottom by what the HUD covers', () => {
@@ -44,6 +46,92 @@ describe('the HUD safe area (OP-278)', () => {
 
   it('neither edge takes more than a quarter of the screen', () => {
     expect(coveredBy([{ top: 300, bottom: 400, width: 50, height: 100 }], 400)).toEqual({ top: 0, bottom: 100 });
+  });
+});
+
+describe('a screen narrower than it is tall: the room’s front edge above Menu, Emotes and Say (OP-496)', () => {
+  // A computer's window at 360x740 and the owner's 500x860 (pixel ratio 1): Menu, Emotes and Say make a row 64 px
+  // up from the foot of the screen, and 124 px once it wraps onto two lines as an action button joins it.
+  const screens = [
+    { w: 360, h: 740 },
+    { w: 500, h: 860 },
+  ];
+  /** Where a room point `y` is on the screen (CSS px down from its top) with the owl at `owlY`, the camera at rest. */
+  function screenY(room: { size: { w: number; h: number } }, screen: { w: number; h: number }, row: number, owlY: number, y: number, frontUp = true): number {
+    const zoom = townZoom(room.size, screen, 1);
+    const view = { w: screen.w / zoom, h: screen.h / zoom };
+    const b = cameraBounds(room.size, { top: 0, bottom: row }, 1 / zoom, frontUp ? { viewH: view.h } : undefined);
+    // The plaza's camera centres above the owl (followLead); the bounds hold it.
+    const at = restAt({ x: room.size.w / 2, y: owlY - followLead(room.size.h, false, view.h, ROOM_H) }, view, b);
+    return (y - (at.y - view.h / 2)) * zoom;
+  }
+
+  it('is what a screen narrower than it is tall has; a computer held wide, or a phone on its side, has none', () => {
+    expect(rowAcross({ w: 360, h: 740 })).toBe(true);
+    expect(rowAcross({ w: 500, h: 860 })).toBe(true);
+    expect(rowAcross({ w: 1280, h: 800 })).toBe(false);
+    expect(rowAcross({ w: 915, h: 412 })).toBe(false);
+  });
+
+  it.each(screens)('in the clearing at $w wide, the sealed hollow’s doorway and an owl at it stand above the row, wrapped or not, wherever the owl is', (screen) => {
+    const grove = ROOMS[ESCAPE_DOOR.room]!;
+    const foot = ESCAPE_DOOR.rect.y + ESCAPE_DOOR.rect.h;
+    for (const row of [64, 124]) {
+      const top = screen.h - row;
+      // The owl anywhere from the back of the clearing's floor to its front edge.
+      for (const owlY of [ROOM_H, 1000, ESCAPE_DOOR.at.y, grove.size.h - 15]) {
+        expect(screenY(grove, screen, row, owlY, foot), `doorway's foot, row ${row}, owl at ${owlY}`).toBeLessThanOrEqual(top);
+        expect(screenY(grove, screen, row, owlY, grove.size.h), `front edge, row ${row}, owl at ${owlY}`).toBeCloseTo(top, 5);
+      }
+      expect(screenY(grove, screen, row, ESCAPE_DOOR.at.y, ESCAPE_DOOR.at.y), `owl at the doorway, row ${row}`).toBeLessThan(top - 30);
+    }
+  });
+
+  it.each(screens)('on the neon street at $w wide, every leaf pile stands above the row, wherever the owl is', (screen) => {
+    const market = ROOMS['market']!;
+    const piles = interactablesIn('market').filter((d) => d.kind === 'leaf-pile');
+    expect(piles.length).toBeGreaterThan(0);
+    for (const row of [64, 124]) {
+      for (const owlY of [ROOM_H, 1100, market.size.h - 15]) {
+        for (const p of piles) expect(screenY(market, screen, row, owlY, p.pos.y + 4), `${p.id}, row ${row}, owl at ${owlY}`).toBeLessThanOrEqual(screen.h - row);
+      }
+    }
+  });
+
+  it('the bug before: with only room to scroll, the clearing’s front lay under the row while the owl stood up the clearing', () => {
+    const grove = ROOMS['grove']!;
+    const screen = { w: 360, h: 740 };
+    expect(screenY(grove, screen, 64, ROOM_H, ESCAPE_DOOR.rect.y + ESCAPE_DOOR.rect.h, false)).toBeGreaterThan(screen.h - 64);
+  });
+
+  it('hides no more of the back wall than the row is deep, and holds the view still up and down', () => {
+    const size = { w: 4800, h: 1250 };
+    const zoom = 740 / 1250;
+    const viewH = 740 / zoom;
+    const b = cameraBounds(size, { top: 0, bottom: 64 }, 1 / zoom, { viewH });
+    expect(b.h).toBeCloseTo(viewH);
+    expect(b.y).toBeCloseTo(64 / zoom);
+    expect(b.y + b.h).toBeCloseTo(size.h + 64 / zoom);
+    expect(b.x).toBe(0);
+    expect(b.w).toBe(size.w);
+  });
+
+  it('leaves alone a room deeper than the view (it scrolls), and a screen with nothing along its foot (a phone)', () => {
+    // The Great Hollow at 360x740: deeper than the town view shows.
+    const hall = ROOMS['m3-hall']!;
+    const zoom = townZoom(hall.size, { w: 360, h: 740 }, 1);
+    const viewH = 740 / zoom;
+    expect(viewH).toBeLessThan(hall.size.h);
+    expect(cameraBounds(hall.size, { top: 0, bottom: 64 }, 1 / zoom, { viewH })).toEqual(cameraBounds(hall.size, { top: 0, bottom: 64 }, 1 / zoom));
+    // A phone: Menu and Say up top, nothing covered along the foot.
+    const size = { w: 4800, h: 1250 };
+    expect(cameraBounds(size, { top: 0, bottom: 0 }, 1, { viewH: 1250 })).toEqual(cameraBounds(size, { top: 0, bottom: 0 }, 1));
+  });
+
+  it('the prompt at an owl’s feet on the floor’s front edge rises to end above the row, and is left where it is when it clears it', () => {
+    expect(keptAbove(1240, 40, 1250)).toBe(1210);
+    expect(keptAbove(1100, 40, 1250)).toBe(1100);
+    expect(keptAbove(1240, 40, null)).toBe(1240);
   });
 });
 

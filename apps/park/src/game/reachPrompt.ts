@@ -10,6 +10,7 @@
  * (doorSigns.ts), it lies just under the sign.
  */
 import Phaser from 'phaser';
+import { keptAbove } from './hudInset';
 
 /** The key that does the first action where the owl stands, on a computer. */
 export const INTERACT_KEY = 'E';
@@ -55,6 +56,12 @@ export class ReachPrompt {
     private readonly scale: () => number,
     /** Where the middle of the prompt's top goes now (room px): the floor just in front of the owl's feet, or under a sign that lies there. */
     private readonly at: () => { x: number; y: number },
+    /**
+     * The lowest room y the prompt may reach now, or null for anywhere: above the HUD's row of buttons
+     * where it runs right across the screen (OP-496), so the prompt of an owl on the floor's front edge
+     * rises over its feet rather than lying under Menu.
+     */
+    private readonly floor: () => number | null = () => null,
   ) {
     this.text = scene.add
       .text(0, 0, '', {
@@ -87,6 +94,13 @@ export class ReachPrompt {
     return this.words;
   }
 
+  /** Where the prompt lies (room px) while it shows, else null (the page's debug state and its tests, OP-496). */
+  box(): { left: number; top: number; right: number; bottom: number } | null {
+    if (this.words === null) return null;
+    const b = this.text.getBounds();
+    return { left: b.left, top: b.top, right: b.right, bottom: b.bottom };
+  }
+
   private update(): void {
     const s = this.scale();
     if (s !== this.scaleNow) {
@@ -96,6 +110,6 @@ export class ReachPrompt {
     }
     if (this.words === null && this.text.alpha === 0) return;
     const at = this.at();
-    this.text.setPosition(at.x, at.y);
+    this.text.setPosition(at.x, keptAbove(at.y, this.text.displayHeight, this.floor()));
   }
 }
