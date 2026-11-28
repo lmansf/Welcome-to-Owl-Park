@@ -86,9 +86,10 @@
     // ticket holders come in, up to the full cap. Nobody already inside is sent out.
     "SPECTATOR_SHARE": "0.75",
     // Bring a friend (OP-056): "off", "preview" (it works for everyone, but the page shows it only with
-    // ?friends=1, for a play-with-your-friends night) or "on". Its free Day Ticket needs REFERRAL_CODE
-    // (a secret, below): the store's discount code that takes one Day Ticket off.
-    "REFERRALS": "preview"
+    // ?friends=1, for a play-with-your-friends night) or "on" (the Menu's card for every owl). Its free
+    // Day Ticket needs REFERRAL_CODE (a secret, below): the store's discount code that takes one Day
+    // Ticket off; until that is set the card says free tickets open soon.
+    "REFERRALS": "on"
     // Optional: "ROOM_CAPS": "{\"hub\":80,\"grove\":40,\"market\":40}"
     // Local load tests only: run  wrangler dev --var TRUST_FORWARDED_FOR:true  so the swarm's --ip-header works.
   },
