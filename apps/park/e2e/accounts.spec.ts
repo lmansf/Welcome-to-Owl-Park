@@ -263,22 +263,16 @@ test.describe('sign in with Google beside the email box (OP-313), Google stood i
   });
 });
 
-test.describe('bringing a friend (OP-056), a preview with ?friends=1', () => {
-  test('the Menu’s card shows only with the flag; a new owl types a friend’s code and its free Day Ticket waits', async ({ browser }) => {
-    test.slow(); // Three browser contexts render the park before checking the offer.
-    const plain = await screen(browser);
-    await openMenu(plain, 'nest');
-    await expect(plain.locator('[data-friend-code]')).toBeVisible();
-    await expect(plain.locator('[data-referral]')).toHaveCount(0);
-    await plain.context().close();
-
-    const alice = await screen(browser, { friends: '1' });
+test.describe('bringing a friend (OP-056), on for every owl', () => {
+  test('the Menu’s card shows on a plain address; a new owl types a friend’s code and its free Day Ticket waits', async ({ browser }) => {
+    test.slow(); // Two browser contexts render the park before checking the offer.
+    const alice = await screen(browser);
     const aliceCard = (await openMenu(alice, 'nest')).locator('[data-referral]');
     await expect(aliceCard).toBeVisible({ timeout: 15_000 });
     const code = await aliceCard.locator('[data-referral-code]').getAttribute('data-referral-code');
     expect(code).toMatch(/^[A-HJ-NP-Z]{4}$/);
 
-    const bea = await screen(browser, { friends: '1' });
+    const bea = await screen(browser);
     const beaCard = (await openMenu(bea, 'nest')).locator('[data-referral]');
     await expect(beaCard).toBeVisible({ timeout: 15_000 });
     // Its own code is refused, and says why.
